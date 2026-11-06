@@ -1,0 +1,5 @@
+# First initialization only; never leave this override active after handover.
+services:
+  crew:
+    command: [init]
+    restart: "no"

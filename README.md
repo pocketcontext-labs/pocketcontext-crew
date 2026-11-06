@@ -32,7 +32,7 @@ approval boundary is between owner credentials and the MCP OAuth connection.
 ## Connect and use
 
 Sign in to the deployed application's reader with the bound owner email. Connect
-an assistant to `https://crew.pocketcontext.com/mcp` and authorize it in that
+an assistant to `https://YOUR_HOST/mcp` and authorize it in that
 signed-in browser. The two Crew tools are `crew_read` and `crew_write`; their
 schemas describe collections, operations and revision requirements. The browser
 provides the same work and memory operations plus owner-only decisions.
@@ -42,6 +42,13 @@ buckets yourself. Each agent should read its brief and bucket, track work in a
 task, save only durable decisions/findings, and request review for the finished
 draft. Agent execution, recurrence, calendar sync and notifications are external.
 See [Crew data and API contract](docs/crew.md).
+
+## Install your own copy
+
+Follow the [public Docker Compose installation guide](docs/install.md) for a fresh
+Linux server installation with your own domain, owner email, SMTP and private S3
+backups. It uses a pinned public Crew image and needs no private deployment scaffold.
+Crew is single-owner self-hosted software; there is no public signup service.
 
 ## Hosting
 

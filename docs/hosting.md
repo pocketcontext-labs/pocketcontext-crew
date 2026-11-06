@@ -1,5 +1,9 @@
 # Hosted containers
 
+For a fresh installation without private infrastructure, use the
+[public Crew Docker Compose guide](install.md). The ONCE procedures below are
+for operators who already manage PocketDeploy.
+
 Hosted mode is an explicit alternative to the local binary. Each instance has one
 owner email, domain, container and persistent volume. PocketDeploy/ONCE terminates
 HTTPS and forwards HTTP port 80 on its private Docker network. Do not publish that
@@ -9,8 +13,8 @@ HTTPS and project layout do not change.
 
 The image contains the Go binary and its embedded reader, plus a small Python
 container supervisor for complete S3 backups. It contains no Litestream or Node
-runtime. Operators either pin a verified multi-platform image digest or explicitly
-enroll existing instances in PocketDeploy delivery of validated `:latest` releases.
+runtime. Operators pin a verified multi-platform image digest for deliberate
+manual deployment.
 There is no automatic signup or container creation.
 
 ## Runtime configuration
@@ -93,7 +97,7 @@ Example desired configuration (replace placeholders; values reference private
 once:
   applications:
     - host: knowledge.example.com
-      image: ghcr.io/pocketcontext-labs/pocketcontext@sha256:REPLACE_WITH_VERIFIED_DIGEST
+      image: ghcr.io/pocketcontext-labs/pocketcontext-crew@sha256:REPLACE_WITH_VERIFIED_DIGEST
       health-path: /up
       deploy-strategy: stop-first
       deploy-stop-timeout: 300
@@ -124,47 +128,13 @@ setting does not extend ONCE's internal budget. `/up` accepts internal container
 health probes; all application routes require the configured public Host. Public
 `/up` does not expose knowledge or credentials.
 
-## Automatic release enrollment
+## Release delivery
 
-Enroll only initialized, healthy instances already owned by the deployment.
-The application entries for a shared repository use one GitHub environment and
-restricted SSH key; their configured order determines sequential rollout. Keep
-separate domains, volumes, owner bindings and backup buckets. Add these fields to
-each enrolled application's existing configuration:
-
-```yaml
-image: ghcr.io/pocketcontext-labs/pocketcontext:latest
-github: pocketcontext-labs/pocketcontext
-deploy-strategy: stop-first
-deploy-prepare-command: [pocketcontext-container, prepare-upgrade]
-deploy-prepare-timeout: 900
-```
-
-Use a PocketDeploy release supporting grouped repository targets and preparation
-hooks. Its convergence installs the host policy and GitHub environment, including
-`SSH_PRIVATE_KEY`, pinned `SSH_KNOWN_HOSTS`, `SERVER_IP`, `SERVER_USER`, and the
-`SITE_URLS` JSON array. Set the repository variable `COLORS_PROFILE` to that
-managed environment's name. Set repository variable `CONTEXT_DEPLOY_PAUSED=true`
-to pause CI delivery; this does not prevent operator convergence or publication
-of `:latest`.
-
-The image workflow runs the application checks, native AMD64/ARM64 container
-checks and populated backup/restore rehearsals before publication. A current-main
-check protects publication of the source tag and `:latest`; a second check protects
-deployment. CI sends the resulting immutable manifest digest through the restricted
-SSH dispatcher, rather than resolving a mutable tag during deployment. Main
-workflows and deploy jobs serialize without cancelling an active deployment.
-
-Under the host lock, PocketDeploy prepares one instance, replaces it stop-first,
-checks health and volume continuity, then advances to the next. Preparation must
-succeed before replacement. A failed or uncertain deployment stops the remaining
-targets for operator inspection; previously completed targets remain upgraded.
-Never automatically downgrade a volume that a newer release has opened. Public
-HTTPS health is checked for every configured target after the dispatcher succeeds.
-
-Initialization and disaster recovery remain explicit operator operations. An
-ordinary convergence follows the enrolled `:latest` channel; reverting the scaffold
-to an old digest is not a safe rollback procedure.
+Crew's image workflow publishes validated source-tagged and immutable-digest
+images. It does **not** configure a deployment dispatcher or enroll instances in
+automatic upgrades. Keep the tested digest pin in Compose or PocketDeploy and
+perform deliberate stop-first upgrades after a verified complete backup. Do not
+configure an inherited PocketContext `:latest` enrollment for Crew.
 
 ## Complete backups and upgrades
 
@@ -189,8 +159,7 @@ untouched. Bucket versioning can retain old versions beyond this application pol
 configure provider lifecycle deliberately if strict physical deletion is required.
 A daily schedule can lose up to a day of writes after total volume loss.
 
-For manual upgrades, run this command in the current container (the configured
-automatic deployment hook runs it for enrolled instances):
+For manual upgrades, run this command in the current container:
 
 ```sh
 pocketcontext-container prepare-upgrade
