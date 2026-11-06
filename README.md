@@ -55,6 +55,19 @@ private bucket and immutable image pin. This repository's image workflow publish
 validated source-tagged multi-platform images; it does not deploy siblings or
 follow upstream PocketContext releases automatically.
 
+## Local project backups and moving computers
+
+For a consistent backup, stop the server and wait for successful shutdown. Copy
+`pocketcontext.db`, `pocketcontext.json`, `storage/` and the matching binary. Keep
+that complete stopped backup together. Restart the original only after the copy
+finishes. Hosted containers use the supervisor's verified complete-backup procedure
+instead, including their private authorization state.
+
+Only one computer may run a project at a time. Stop the previous server and wait
+for file synchronization before switching computers. Restore a local project with
+its matching binary; recreate machine-local profiles and credentials separately.
+Never substitute a live private working database for a clean project backup.
+
 ## Development
 
 Go version is pinned in `go.mod`; CGO and `build-tags.txt` are required. Build the
