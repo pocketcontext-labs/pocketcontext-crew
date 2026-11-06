@@ -104,6 +104,11 @@ jobs:
           "$PY" tests/release013.py --binary "dist/$RELEASE_PLATFORM/$exe"
           "$PY" tests/navigation_references.py --binary "dist/$RELEASE_PLATFORM/$exe"
           "$PY" tests/obsidian_import_e2e.py --binary "dist/$RELEASE_PLATFORM/$exe"
+      - name: Native Linux backup and restore rehearsal
+        if: runner.os == 'Linux'
+        run: |
+          python3 tests/native_backup_test.py
+          python3 tests/native_install.py --binary "dist/$RELEASE_PLATFORM/pocketcontext-crew"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: native-${{ matrix.platform }}
@@ -200,3 +205,7 @@ jobs:
         run: |
           $PY tests/crew_e2e.py --binary "$EXE"
           $PY tests/e2e.py --binary "$EXE"
+      - name: Native Linux restore with the published binary
+        if: runner.os == 'Linux'
+        shell: bash
+        run: python3 tests/native_install.py --binary "$EXE"
