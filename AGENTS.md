@@ -1,0 +1,23 @@
+# PocketContext Crew
+
+Single-owner shared memory, tasks and human review, derived from PocketContext.
+Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
+
+- Work on main when authorized. Keep all records synthetic in tests.
+- Preserve the inherited single-writer, private working copy, atomic snapshot and
+  complete-backup contracts. Never open a synced database directly.
+- Auth stays on. Default users is the sole auth collection; crew_agents is role
+  metadata, never credentials. Buckets are not security boundaries.
+- All Crew mutations use revision-checked custom operations. Generic REST/batch
+  writes remain disabled. History is immutable. Archive, never purge.
+- MCP uses only the agent-write route. Never expose owner decisions, local keys,
+  administration, shell, arbitrary host paths or network fetching through MCP.
+- Owner tokens must not be shared with agents. Reported names are not identity.
+- External platforms run agents. Crew never posts, sends or pays.
+- Keep runtime credentials and OAuth state private and out of Git and knowledge.
+- Tests: build ui/dist first; pnpm test/build in ui; CGO_ENABLED=1 go test with
+  build-tags.txt; tests/crew_e2e.py and inherited tests/e2e.py with built binary.
+  Preserve Windows support. Hosted releases require image lifecycle and populated
+  backup/restore gates before deployment. Pin the exact tested OCI digest.
+- No databases, generated ui/dist, bin, credentials or user data in commits.
+- Historical upstream docs describe inherited infrastructure, not a Crew release.

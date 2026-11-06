@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""Synthetic Crew workflow and API-boundary checks; no production data."""
+import argparse
+import json
+from pathlib import Path
+import subprocess
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from e2e import Project, PASSWORD, IDENTITY
+
+
+def scenario(pc):
+    pc.json('init', '--port', str(pc.port), '--password-stdin', stdin=PASSWORD + '\n')
+    pc.json('open', '--no-browser')
+    status, body = pc.http('POST', '/api/collections/users/auth-with-password', {'identity': IDENTITY, 'password': PASSWORD})
+    assert status == 200, (status, body)
+    headers = {'Authorization': json.loads(body)['token']}
+
+    def request(path, body, expected=200):
+        status, data = pc.http('POST', path, body, headers)
+        assert status == expected, (path, body, status, data)
+        return json.loads(data)
+
+    def write(action, data=None, record=None, agent=True, expected=200):
+        body = {'action': action, 'data': data or {}, 'reported_agent': 'Network', 'reason': 'Synthetic workflow'}
+        if record:
+            body.update(id=record['id'], expected_revision=record['revision'])
+        return request('/api/crew/agent-write' if agent else '/api/crew/write', body, expected)
+
+    def read(collection, **kwargs):
+        return request('/api/crew/read', {'collection': collection, **kwargs})['items']
+
+    def current(collection, record, archived=False):
+        rows = read(collection, id=record['id'], archived=archived)
+        assert len(rows) == 1, (collection, record['id'], rows)
+        return rows[0]
+
+    for path in ['/api/crew/read', '/api/crew/write', '/api/crew/agent-write']:
+        assert pc.http('POST', path, {'collection': 'notes'})[0] in (401, 403), path
+
+    assert pc.http('POST', '/api/context/query', {'sql': 'SELECT id FROM crew_notes'}, headers)[0] == 400
+    request('/api/crew/agent-write', {'action': 'agent.create', 'data': {'name': 'Forged'}, 'actor': 'owner:forged'}, 400)
+
+    network = write('agent.create', {'name': 'Network', 'brief': 'Maintain NETWORK; propose changes elsewhere.'})
+    design = write('agent.create', {'name': 'Design'})
+    bucket = write('bucket.create', {'name': 'NETWORK', 'purpose': 'Voice and audience', 'responsible_agent': network['id']})
+    note = write('note.create', {'bucket': bucket['id'], 'title': 'Launch voice', 'body': 'Write for independent founders.', 'links': []})
+    first = read('note_revisions', parent=note['id'])[0]
+    assert first['body'] == note['body'] and first['revision'] == 1
+    assert first['reported_agent'] == 'Network' and first['actor'].startswith('mcp:')
+    assert read('notes', query='independent')[0]['id'] == note['id']
+    edited = write('note.update', {'body': 'Use concrete examples.'}, note)
+    write('note.update', {'body': 'Stale overwrite'}, note, expected=409)
+    restored = write('note.restore', {'revision_id': first['id']}, edited)
+    assert restored['body'] == note['body'] and restored['revision'] == 3
+    assert len(read('note_revisions', parent=note['id'])) == 3
+    linked = write('note.create', {'bucket': bucket['id'], 'title': 'Audience', 'body': 'Founders', 'links': [note['id']]})
+    other = read('note_revisions', parent=linked['id'])[0]
+    linked = write('note.restore', {'revision_id': other['id']}, linked)
+    assert linked['links'] == [note['id']]
+    write('note.restore', {'revision_id': other['id']}, restored, expected=400)
+    archived = write('note.update', {'archived': True}, restored)
+    assert not read('notes', id=note['id'])
+    assert read('notes', id=note['id'], archived=True)[0]['archived_at']
+    assert current('notes', linked)['links'] == [note['id']]
+    unarchived = write('note.restore', {'revision_id': first['id']}, archived)
+    assert not unarchived['archived_at'] and current('notes', note)['id'] == note['id']
+
+    write('bucket.update', {'archived': True}, bucket, expected=403)
+    write('bucket.update', {'responsible_agent': design['id']}, bucket, expected=403)
+    bucket = write('bucket.update', {'archived': True}, bucket, agent=False)
+    assert not read('notes') and len(read('notes', archived=True)) == 2
+    write('note.update', {'body': 'Blocked by ancestor archive'}, unarchived, expected=400)
+    write('note.create', {'bucket': bucket['id'], 'title': 'Blocked'}, expected=400)
+    bucket = write('bucket.update', {'archived': False}, bucket, agent=False)
+    assert len(read('notes')) == 2
+    write('agent.update', {'archived': True}, network, expected=403)
+    historical = write('task.create', {'title': 'Existing assignment', 'assigned_agent': design['id']})
+    design = write('agent.update', {'archived': True}, design, agent=False)
+    historical = write('task.update', {'title': 'Still editable', 'assigned_agent': design['id']}, historical)
+    long_note = write('note.create', {'bucket': bucket['id'], 'title': 'Long synthetic note', 'body': 'x' * 90000, 'links': []})
+    assert len(long_note['body']) == 90000
+    write('note.update', {'archived': True}, long_note)
+    write('task.create', {'title': 'Inactive assignee', 'assigned_agent': design['id']}, expected=400)
+
+    task = write('task.create', {'title': 'Launch post', 'description': 'Draft from the brief', 'labels': ['Network'], 'links': [note['id']]})
+    assert task['status'] == 'todo' and task['created_by_agent'] == 'Network'
+    for label in ['Human', 'human', 'HUMAN']:
+        write('task.update', {'labels': [label]}, task, expected=400)
+    # Two callers with the same read cannot both claim the task.
+    payload = {'action': 'task.claim', 'id': task['id'], 'expected_revision': task['revision'], 'reported_agent': 'Network', 'data': {'assigned_agent': network['id']}}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(lambda _: pc.http('POST', '/api/crew/agent-write', payload, headers)[0], range(2)))
+    assert sorted(outcomes) == [200, 409], outcomes
+    task = current('tasks', task)
+    assert task['assigned_agent'] == network['id'] and task['status'] == 'in_progress'
+    write('task.comment', {'body': 'Research complete.'}, task)
+    assert any(e['action'] == 'task.comment' and e['body'] == 'Research complete.' for e in read('events', parent=task['id']))
+    task = write('task.update', {'draft': 'Draft one'}, task)
+    review = write('review.request', record=task)
+    assert review['draft'] == 'Draft one' and review['status'] == 'pending'
+    task = current('tasks', task)
+    assert task['status'] == 'needs_review'
+    write('review.decide', {'decision': 'approved'}, review, expected=403)
+    write('task.update', {'status': 'done'}, task, expected=400)
+    write('task.update', {'status': 'todo'}, task, expected=400)
+    write('task.update', {'draft': 'Attempted review bypass', 'status': 'done'}, task, expected=400)
+    assert current('tasks', task)['draft'] == 'Draft one'
+    assert current('reviews', review)['status'] == 'pending'
+    write('review.request', record=task, expected=409)
+    task = write('task.update', {'draft': 'Draft two'}, task)
+    assert current('reviews', review)['status'] == 'withdrawn'
+    write('review.decide', {'decision': 'approved'}, current('reviews', review), agent=False, expected=400)
+    review = write('review.request', record=task)
+    approved = write('review.decide', {'decision': 'approved', 'note': 'Ready for me to publish.'}, review, agent=False)
+    assert approved['draft'] == 'Draft two' and approved['status'] == 'approved'
+    assert approved['decided_by'].startswith('owner:') and approved['decided_at']
+    assert current('tasks', task)['status'] != 'done', 'Approval must not complete external action'
+    write('review.decide', {'decision': 'rejected'}, approved, agent=False, expected=400)
+    task = current('tasks', task)
+    task = write('task.update', {'status': 'done'}, task)
+    assert task['status'] == 'done'
+
+    # Archive closes a pending review and restoring does not revive it.
+    task = write('task.update', {'draft': 'Draft three', 'status': 'in_progress'}, task)
+    pending = write('review.request', record=task)
+    task = write('task.update', {'archived': True}, current('tasks', task))
+    assert not read('tasks', id=task['id'])
+    assert current('reviews', pending)['status'] == 'withdrawn'
+    task = write('task.update', {'archived': False}, task)
+    assert current('reviews', pending)['status'] == 'withdrawn'
+    assert current('reviews', approved)['status'] == 'approved'
+
+    # Generic REST and batch cannot create decisions or modify immutable history.
+    for collection, record in [('crew_notes', note), ('crew_note_revisions', first), ('crew_reviews', approved), ('crew_events', read('events', parent=task['id'])[0])]:
+        base = '/api/collections/' + collection + '/records'
+        for method, path, data in [('POST', base, {'draft': 'Forged', 'status': 'approved'}), ('PATCH', base + '/' + record['id'], {'body': 'Forged', 'status': 'approved'}), ('DELETE', base + '/' + record['id'], None)]:
+            status, _ = pc.http(method, path, data, headers)
+            assert status in (400, 403, 404), (collection, method, status)
+        status, _ = pc.http('POST', '/api/batch', {'requests': [{'method': 'PATCH', 'url': base + '/' + record['id'], 'body': {'status': 'approved', 'body': 'Forged'}}]}, headers)
+        assert status >= 400, (collection, 'batch', status)
+    assert current('reviews', pending)['status'] == 'withdrawn'
+    assert current('notes', note)['body'] == 'Write for independent founders.'
+    pc.json('stop')
+    pc.json('ensure-running')
+    pc.json('open', '--no-browser')
+    assert current('reviews', approved)['status'] == 'approved'
+    assert len(read('note_revisions', parent=note['id'])) == 5
+    print('Crew end-to-end workflow, conflicts, archive/restore and authorization checks passed.')
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--binary', required=True, type=Path)
+    binary = parser.parse_args().binary.resolve()
+    with tempfile.TemporaryDirectory(prefix='crew-e2e-') as temp:
+        pc = Project(binary, Path(temp))
+        try:
+            scenario(pc)
+        finally:
+            subprocess.run([str(binary), '--db', str(pc.db), 'stop'], env=pc.env, capture_output=True, timeout=60)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,72 @@
+name: Test
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    env:
+      PY: ${{ matrix.runner == 'windows-2025' && 'python' || 'python3' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Build and test the reader
+        working-directory: ui
+        run: |
+          npm install --global pnpm@10.33.2
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
+          pnpm build
+      - name: Launcher, reference, and importer tests
+        run: |
+          node --test tests/dev_launcher.test.mjs tests/navigation_references.test.mjs
+          $PY tests/obsidian_import_test.py
+      # Windows runners provide MinGW-w64 gcc for CGO. The vendored server's
+      # upstream tests assume POSIX permissions, so Windows runs the bundle's own.
+      - name: Unit tests
+        run: |
+          packages=./...
+          if [ "$RUNNER_OS" = Windows ]; then packages="./internal/bundle ./internal/client ./internal/tunnel ./internal/profiles"; fi
+          CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" $packages
+      - name: Build the binary
+        run: |
+          exe=pocketcontext
+          if [ "$RUNNER_OS" = Windows ]; then exe=pocketcontext.exe; fi
+          # Match release stripping so binary checks inspect the shipped content,
+          # without arbitrary byte sequences from compressed debug sections.
+          CGO_ENABLED=1 go build -trimpath -tags "$(cat build-tags.txt)" -ldflags "-s -w" -o "bin/$exe" ./cmd/pocketcontext
+          echo "EXE=bin/$exe" >> "$GITHUB_ENV"
+      - name: Crew authenticated browser workflow
+        if: matrix.runner == 'ubuntu-24.04'
+        run: |
+          pnpm --dir ui exec playwright install --with-deps chromium
+          python3 tests/crew_browser.py --binary "$EXE"
+      - name: Name check of the repository and binary
+        run: $PY tests/name_check.py --binary "$EXE"
+      - name: End-to-end test with synthetic notes
+        run: |
+          POCKETCONTEXT_REHEARSAL_BINARY="$PWD/$EXE" CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" ./internal/client -run TestInvitationCLIRehearsal -count=1 -timeout 4m
+          $PY tests/installers.py --binary "$EXE"
+          $PY tests/crew_e2e.py --binary "$EXE"
+          $PY tests/e2e.py --binary "$EXE"
+          $PY tests/upgrades.py --binary "$EXE"
+          $PY tests/release013.py --binary "$EXE"
+          $PY tests/source_search.py --binary "$EXE"
+          $PY tests/navigation_references.py --binary "$EXE"
+          $PY tests/obsidian_import_e2e.py --binary "$EXE"

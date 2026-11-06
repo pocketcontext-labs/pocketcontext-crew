@@ -1,0 +1,72 @@
+# Installs a fixed PocketContext release on Windows.
+# Usage: irm https://github.com/pocketcontext-labs/pocketcontext/releases/download/v@VERSION@/install.ps1 | iex
+# Target folder (required): $env:POCKETCONTEXT_INSTALL_DIR, the project folder beside
+# pocketcontext.db, for example inside OneDrive, iCloud Drive, Dropbox or Google Drive.
+& {
+    $ErrorActionPreference = 'Stop'
+    Set-StrictMode -Version 3
+    $version = '@VERSION@'
+    if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'pocketcontext: invalid release version' }
+    if (-not [Environment]::Is64BitOperatingSystem) { throw 'pocketcontext: 64-bit Windows is required' }
+    $arch = $env:PROCESSOR_ARCHITEW6432
+    if (-not $arch) { $arch = $env:PROCESSOR_ARCHITECTURE }
+    # Windows on ARM runs the amd64 build through emulation.
+    if ($arch -notin @('AMD64', 'ARM64')) { throw "pocketcontext: unsupported architecture $arch" }
+    $dir = $env:POCKETCONTEXT_INSTALL_DIR
+    if (-not $dir) { throw 'pocketcontext: set $env:POCKETCONTEXT_INSTALL_DIR to the installation directory (the project folder)' }
+    if (-not [System.IO.Path]::IsPathRooted($dir)) { throw 'pocketcontext: the installation directory must be an absolute path' }
+    $destination = Join-Path $dir 'pocketcontext.exe'
+    $replacing = $false
+    function Assert-PocketContextDestination {
+        $item = Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue
+        if ($item) {
+            if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'pocketcontext: destination must be a regular file or absent' }
+            if (-not $env:POCKETCONTEXT_REPLACE_VERSION) { throw 'pocketcontext: executable already exists; stop its servers and tunnels, back up the complete projects and matching binary, then set POCKETCONTEXT_REPLACE_VERSION to its inspected --version (or choose a new directory)' }
+            $observed = & $destination --version
+            if ($LASTEXITCODE -ne 0 -or (($observed -join "`n") -notmatch '^pocketcontext ([^\s]+)(?:\s|$)') -or $Matches[1] -cne $env:POCKETCONTEXT_REPLACE_VERSION) { throw 'pocketcontext: existing executable version differs from POCKETCONTEXT_REPLACE_VERSION; nothing replaced' }
+            return $true
+        }
+        if ($env:POCKETCONTEXT_REPLACE_VERSION) { throw 'pocketcontext: replacement requested but no executable exists in this directory' }
+        return $false
+    }
+    $replacing = Assert-PocketContextDestination
+    $archive = "pocketcontext_${version}_windows_amd64.zip"
+    $base = "https://github.com/pocketcontext-labs/pocketcontext/releases/download/v$version"
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("pocketcontext-install-" + [Guid]::NewGuid())
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+    $stage = $null
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -UseBasicParsing -Uri "$base/checksums.txt" -OutFile "$tmp\checksums.txt"
+        $lines = @(Get-Content "$tmp\checksums.txt" | Where-Object { $_ -match "^([0-9a-f]{64})  $([regex]::Escape($archive))$" })
+        if ($lines.Count -ne 1) { throw 'pocketcontext: archive is missing from checksums.txt' }
+        $expected = ($lines[0] -split '  ')[0]
+        Invoke-WebRequest -UseBasicParsing -Uri "$base/$archive" -OutFile "$tmp\$archive"
+        $actual = (Get-FileHash -Algorithm SHA256 "$tmp\$archive").Hash.ToLowerInvariant()
+        if ($actual -ne $expected) { throw 'pocketcontext: archive checksum mismatch' }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zip = [System.IO.Compression.ZipFile]::OpenRead("$tmp\$archive")
+        try {
+            # Compare as a set: Sort-Object orders names case-insensitively.
+            $names = @($zip.Entries | ForEach-Object { $_.FullName })
+            if ($names.Count -ne 2 -or -not ($names -ccontains 'pocketcontext.exe') -or -not ($names -ccontains 'THIRD_PARTY_NOTICES.txt')) { throw 'pocketcontext: unexpected release archive layout' }
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $stage = Join-Path $dir ('.pocketcontext-' + [Guid]::NewGuid() + '.exe')
+            # Extract only the executable into our own file name.
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($zip.GetEntry('pocketcontext.exe'), $stage)
+        } finally { $zip.Dispose() }
+        if ((Get-Item $stage).Length -eq 0) { throw 'pocketcontext: archive executable is empty' }
+        Unblock-File -Path $stage
+        $replacing = Assert-PocketContextDestination
+        Move-Item -Force -LiteralPath $stage -Destination $destination
+        Write-Output "Installed PocketContext $version at $destination"
+        if ($replacing -or (Test-Path -LiteralPath (Join-Path $dir 'pocketcontext.db'))) {
+            Write-Output 'Next: verify --version, restart the existing project, refresh its skill/profile and check it; do not initialize it again.'
+        } else {
+            Write-Output "Next: & '$destination' init   (new local project only; clients use tunnel join)"
+        }
+    } finally {
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmp
+        if ($stage -and (Test-Path $stage)) { Remove-Item -Force $stage }
+    }
+}
