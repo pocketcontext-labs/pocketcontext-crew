@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build, assemble and publish the PocketContext release assets.
+"""Build, assemble and publish PocketContext Crew release assets.
 
 Adapted from the vendored server's release process (github.com/pocketcontext/pocketcontext),
 with a native Windows build.
@@ -23,14 +23,14 @@ import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-REPOSITORY = "pocketcontext-labs/pocketcontext"
+REPOSITORY = "pocketcontext-labs/pocketcontext-crew"
 PLATFORMS = ("linux_amd64", "linux_arm64", "darwin_arm64", "windows_amd64")
 # build-tags.txt is the one list of Go build tags: SQLite features and the
 # tailscale.com features the tunnel omits.
 TAGS = (ROOT / "build-tags.txt").read_text(encoding="utf-8").strip()
 GO_VERSION = "go1.27.3"
 GO_IMAGE = "golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb"
-PACKAGE = "github.com/pocketcontext-labs/pocketcontext/internal/bundle"
+PACKAGE = "github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
 VERSION_RE = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 # A static MinGW build may only import Windows system libraries.
@@ -64,12 +64,12 @@ def commit(value):
 
 
 def executable(target):
-    return "pocketcontext.exe" if target.startswith("windows_") else "pocketcontext"
+    return "pocketcontext-crew.exe" if target.startswith("windows_") else "pocketcontext-crew"
 
 
 def archive_name(release_version, target):
     suffix = "zip" if target.startswith("windows_") else "tar.gz"
-    return f"pocketcontext_{release_version}_{target}.{suffix}"
+    return f"pocketcontext-crew_{release_version}_{target}.{suffix}"
 
 
 def sha256(path):
@@ -101,7 +101,7 @@ def third_party_notices(target):
         if module and not module.get("Main"):
             require("Replace" not in module, "Release dependencies must not use local module replacements")
             modules[module["Path"]] = module
-    sections = ["PocketContext third-party license and copyright notices\n",
+    sections = ["PocketContext Crew third-party license and copyright notices\n",
                 "\n--- PocketContext (vendored in internal/pocketcontext) ---\n\n"
                 + (ROOT / "internal/pocketcontext/LICENSE").read_text(encoding="utf-8")]
     for name, module in sorted(modules.items()):
@@ -249,8 +249,8 @@ def build(args):
         # native musl compiler; CGO remains enabled for the SQLite authorizer.
         script = f'''apk add --no-cache build-base
 test "$(go env GOVERSION)" = {GO_VERSION}
-CGO_ENABLED=1 go build -trimpath -buildvcs=false -tags "$1" -ldflags "$2" -o /out/pocketcontext ./cmd/pocketcontext
-chown "$3:$4" /out/pocketcontext
+CGO_ENABLED=1 go build -trimpath -buildvcs=false -tags "$1" -ldflags "$2" -o /out/pocketcontext-crew ./cmd/pocketcontext
+chown "$3:$4" /out/pocketcontext-crew
 '''
         run(["docker", "run", "--rm", "--mount", f"type=bind,src={ROOT},dst=/src,readonly",
              "--mount", f"type=bind,src={binary_dir},dst=/out", "--workdir", "/src",
@@ -306,7 +306,7 @@ def check_archive(archive, target):
                     and all(not e.is_dir() and e.file_size > 0 for e in entries), f"Unexpected archive layout: {archive.name}")
             require(bundle.testzip() is None, f"Corrupt archive: {archive.name}")
         return
-    modes = {"pocketcontext": 0o755, "THIRD_PARTY_NOTICES.txt": 0o644}
+    modes = {executable(target): 0o755, "THIRD_PARTY_NOTICES.txt": 0o644}
     with tarfile.open(archive, "r:gz") as bundle:
         entries = bundle.getmembers()
         require(len(entries) == len(expected) and {entry.name for entry in entries} == expected
@@ -431,7 +431,7 @@ def publish(args):
     require(remote_commit(tag) == revision, "Remote tag changed since validation")
     directory = Path(args.assets)
     expected = validate_assets(directory, release_version)
-    marker = f"<!-- pocketcontext-release:{revision} -->"
+    marker = f"<!-- pocketcontext-crew-release:{revision} -->"
     release = find_release(tag)
     if release is not None:
         require(marker in (release.get("body") or ""), "Existing release was not created for this validated commit")
@@ -442,11 +442,11 @@ def publish(args):
             return
     else:
         base = f"https://github.com/{REPOSITORY}/releases/download/{tag}"
-        body = (f"PocketContext {release_version}: a local knowledge base: server, reader and CLI in one binary.\n\n"
+        body = (f"PocketContext Crew {release_version}: shared agent memory, tasks and human review in one binary.\n\n"
                 "Linux amd64 and arm64: static musl binaries. macOS arm64: macOS 15 or later, ad hoc signed. "
                 "Windows amd64: statically linked MinGW build, unsigned.\n\n"
                 f"Install on Linux or macOS into the project folder: `curl -fsSL {base}/install.sh | sh -s -- /absolute/project/folder`\n\n"
-                f"Install on Windows (PowerShell): `$env:POCKETCONTEXT_INSTALL_DIR = 'C:\\absolute\\project\\folder'; irm {base}/install.ps1 | iex`\n\n"
+                f"Install on Windows (PowerShell): `$env:CREW_INSTALL_DIR = 'C:\\absolute\\project\\folder'; irm {base}/install.ps1 | iex`\n\n"
                 "Both installers require the target folder, usually the project folder beside pocketcontext.db "
                 "(it may be inside iCloud Drive, OneDrive, Dropbox or Google Drive).\n\n"
                 f"See the [README](https://github.com/{REPOSITORY}/blob/{tag}/README.md).\n\n{marker}")
@@ -454,7 +454,7 @@ def publish(args):
         if notes.is_file():
             body = notes.read_text(encoding="utf-8").strip() + "\n\n---\n\n" + body
         release = api("releases", "POST", {"tag_name": tag, "target_commitish": revision,
-                      "name": f"PocketContext {release_version}", "body": body, "draft": True, "prerelease": False})
+                      "name": f"PocketContext Crew {release_version}", "body": body, "draft": True, "prerelease": False})
     require({asset["name"] for asset in release.get("assets", [])} <= set(expected), "Draft contains unexpected assets")
     # Retry only repairs this unpublished, commit-marked draft. Published assets
     # never pass this branch and are never overwritten or deleted.

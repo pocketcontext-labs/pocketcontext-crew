@@ -24,21 +24,21 @@ def main():
         root = Path(temp)
         assets, mocks, target = root / 'assets', root / 'mocks', root / 'Cloud Drive' / 'Project'
         assets.mkdir(); mocks.mkdir(); target.mkdir(parents=True)
-        exe = 'pocketcontext.exe' if windows else 'pocketcontext'
+        exe = 'pocketcontext-crew.exe' if windows else 'pocketcontext-crew'
         payload = assets / exe
         shutil.copyfile(binary, payload)
         payload.chmod(0o755)
         (assets / 'THIRD_PARTY_NOTICES.txt').write_text('synthetic test notices')
         release_version = '0.15.0'
         if windows:
-            archive = assets / f'pocketcontext_{release_version}_windows_amd64.zip'
+            archive = assets / f'pocketcontext-crew_{release_version}_windows_amd64.zip'
             with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as bundle:
                 for name in (exe, 'THIRD_PARTY_NOTICES.txt'):
                     bundle.write(assets / name, name)
         else:
             system = 'darwin' if platform.system() == 'Darwin' else 'linux'
             arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'amd64'
-            archive = assets / f'pocketcontext_{release_version}_{system}_{arch}.tar.gz'
+            archive = assets / f'pocketcontext-crew_{release_version}_{system}_{arch}.tar.gz'
             with tarfile.open(archive, 'w:gz') as bundle:
                 for name in (exe, 'THIRD_PARTY_NOTICES.txt'):
                     bundle.add(assets / name, arcname=name)
@@ -48,8 +48,8 @@ def main():
         installer = root / f'install.{extension}'
         installer.write_text((ROOT / 'scripts' / f'install.{extension}.in').read_text().replace('@VERSION@', release_version))
         env = os.environ.copy()
-        env.pop('POCKETCONTEXT_REPLACE_VERSION', None)
-        env.update(POCKETCONTEXT_INSTALL_DIR=str(target), PC_TEST_ASSETS=str(assets), PC_TEST_LOG=str(root / 'downloads'))
+        env.pop('CREW_REPLACE_VERSION', None)
+        env.update(CREW_INSTALL_DIR=str(target), PC_TEST_ASSETS=str(assets), PC_TEST_LOG=str(root / 'downloads'))
         if windows:
             wrapper = root / 'run.ps1'
             wrapper.write_text('''$ErrorActionPreference = 'Stop'
@@ -78,7 +78,7 @@ cp "$PC_TEST_ASSETS/${url##*/}" "$output"
         def run(expected=None, success=True):
             invocation = env.copy()
             if expected is not None:
-                invocation['POCKETCONTEXT_REPLACE_VERSION'] = expected
+                invocation['CREW_REPLACE_VERSION'] = expected
             result = subprocess.run(command, env=invocation, text=True, capture_output=True, timeout=120)
             assert (result.returncode == 0) == success, result.stdout + result.stderr
             return result.stdout + result.stderr
@@ -89,6 +89,7 @@ cp "$PC_TEST_ASSETS/${url##*/}" "$output"
         original = destination.read_bytes()
         log = root / 'downloads'
         downloads = log.read_text()
+        assert all('/pocketcontext-labs/pocketcontext-crew/releases/' in url for url in downloads.splitlines())
         assert 'already exists' in run(success=False)
         assert destination.read_bytes() == original and log.read_text() == downloads
         assert 'differs' in run(expected='not-the-installed-version', success=False)
@@ -102,6 +103,11 @@ cp "$PC_TEST_ASSETS/${url##*/}" "$output"
         assert destination.read_bytes() == original
         destination.unlink()
         assert 'no executable exists' in run(expected=version, success=False)
+        database = target / 'pocketcontext.db'
+        database.write_text('synthetic existing project')
+        assert 'existing database' in run(success=False)
+        assert database.read_text() == 'synthetic existing project'
+        database.unlink()
         destination.mkdir()
         assert 'regular file' in run(expected=version, success=False)
         destination.rmdir()

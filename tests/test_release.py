@@ -53,13 +53,16 @@ class AssembleTest(unittest.TestCase):
         self.assemble()
         names = {path.name for path in self.output.iterdir()}
         self.assertEqual(names, release.expected_names(VERSION))
-        self.assertEqual({name for name in names if name.startswith("pocketcontext_")}, {
-            "pocketcontext_1.2.3_linux_amd64.tar.gz", "pocketcontext_1.2.3_linux_arm64.tar.gz",
-            "pocketcontext_1.2.3_darwin_arm64.tar.gz", "pocketcontext_1.2.3_windows_amd64.zip"})
+        self.assertEqual({name for name in names if name.startswith("pocketcontext-crew_")}, {
+            "pocketcontext-crew_1.2.3_linux_amd64.tar.gz", "pocketcontext-crew_1.2.3_linux_arm64.tar.gz",
+            "pocketcontext-crew_1.2.3_darwin_arm64.tar.gz", "pocketcontext-crew_1.2.3_windows_amd64.zip"})
         for installer in release.INSTALLERS:
             text = (self.output / installer).read_text(encoding="utf-8")
             self.assertNotIn("@VERSION@", text)
             self.assertIn(VERSION, text)
+            self.assertIn("pocketcontext-labs/pocketcontext-crew/releases", text)
+            self.assertNotIn("pocketcontext-labs/pocketcontext/releases", text)
+            self.assertIn("CREW_INSTALL_DIR", text)
 
     def test_tampered_asset_is_rejected(self):
         self.assemble()
@@ -91,12 +94,12 @@ class AssembleTest(unittest.TestCase):
 
 class NamesTest(unittest.TestCase):
     def test_names(self):
-        self.assertEqual(release.REPOSITORY, "pocketcontext-labs/pocketcontext")
-        self.assertEqual(release.executable("linux_amd64"), "pocketcontext")
-        self.assertEqual(release.executable("darwin_arm64"), "pocketcontext")
-        self.assertEqual(release.executable("windows_amd64"), "pocketcontext.exe")
-        self.assertEqual(release.archive_name("0.4.0", "linux_arm64"), "pocketcontext_0.4.0_linux_arm64.tar.gz")
-        self.assertEqual(release.archive_name("0.4.0", "windows_amd64"), "pocketcontext_0.4.0_windows_amd64.zip")
+        self.assertEqual(release.REPOSITORY, "pocketcontext-labs/pocketcontext-crew")
+        self.assertEqual(release.executable("linux_amd64"), "pocketcontext-crew")
+        self.assertEqual(release.executable("darwin_arm64"), "pocketcontext-crew")
+        self.assertEqual(release.executable("windows_amd64"), "pocketcontext-crew.exe")
+        self.assertEqual(release.archive_name("0.4.0", "linux_arm64"), "pocketcontext-crew_0.4.0_linux_arm64.tar.gz")
+        self.assertEqual(release.archive_name("0.4.0", "windows_amd64"), "pocketcontext-crew_0.4.0_windows_amd64.zip")
 
 
 class VersionTest(unittest.TestCase):
