@@ -31,7 +31,8 @@ approval boundary is between owner credentials and the MCP OAuth connection.
 
 ## Connect and use
 
-Sign in to the deployed application's reader with the bound owner email. Connect
+Sign in with the native owner password/sign-in link, or the configured owner email
+for a hosted container. Connect
 an assistant to `https://YOUR_HOST/mcp` and authorize it in that
 signed-in browser. The two Crew tools are `crew_read` and `crew_write`; their
 schemas describe collections, operations and revision requirements. The browser
@@ -45,9 +46,11 @@ See [Crew data and API contract](docs/crew.md).
 
 ## Install your own copy
 
-Follow the [public Docker Compose installation guide](docs/install.md) for a fresh
-Linux server installation with your own domain, owner email, SMTP and private S3
-backups. It uses a pinned public Crew image and needs no private deployment scaffold.
+Start with the [native Linux installation guide](docs/native-install.md): one
+Crew binary, native HTTPS/MCP, password access and separately scheduled verified
+backups. The [Docker Compose alternative](docs/install.md) supplies email login
+and integrated private S3 backups. Both use your own domain and need no private
+deployment scaffold.
 Crew is single-owner self-hosted software; there is no public signup service.
 
 ## Hosting

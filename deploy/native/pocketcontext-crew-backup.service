@@ -1,0 +1,19 @@
+[Unit]
+Description=Verified stopped-project backup of PocketContext Crew
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HOME=/var/lib/pocketcontext-crew
+UMask=0077
+RuntimeDirectory=pocketcontext-crew-backup
+RuntimeDirectoryMode=0700
+ExecCondition=/usr/bin/python3 /usr/local/lib/pocketcontext-crew/service-control.py prepare --service pocketcontext-crew.service --state /run/pocketcontext-crew-backup
+ExecStartPre=/usr/bin/systemctl stop pocketcontext-crew.service
+# Only fixed service control runs as root; file copying runs as the project owner.
+ExecStart=/usr/sbin/runuser -u pocketcontext-crew -- /usr/bin/python3 /usr/local/lib/pocketcontext-crew/backup.py --service pocketcontext-crew.service --project /var/lib/pocketcontext-crew/project --destination /var/backups/pocketcontext-crew
+# Conditional restart also runs after errors/timeouts, but never starts an app
+# that was already inactive when this backup began.
+ExecStopPost=/usr/bin/python3 /usr/local/lib/pocketcontext-crew/service-control.py resume --service pocketcontext-crew.service --state /run/pocketcontext-crew-backup
+TimeoutStartSec=30min
+TimeoutStopSec=300

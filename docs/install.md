@@ -1,4 +1,7 @@
-# Install your own PocketContext Crew
+# Install PocketContext Crew with Docker Compose
+
+For the recommended lightweight service, see [native binary installation](native-install.md).
+Choose this Docker path when you want its packaged email login and S3 backups.
 
 This guide installs one person's private Crew workspace on a Linux server using
 Docker Compose and Caddy. It needs no PocketDeploy account or private repository.
