@@ -10,6 +10,9 @@ schema and application UI. Use a new project database; do not point it at an
 existing PocketContext installation. Existing evidence APIs remain available for
 immutable source ingestion and provenance; ordinary Crew notes need no publication run.
 
+See [Crew 0.1.1 release notes](docs/releases/0.1.1.md) for hosted bulk budgets
+and actionable HTTP/MCP retry information.
+
 ## First version
 
 - Memory buckets with editable Markdown notes, immutable versions and restoration.

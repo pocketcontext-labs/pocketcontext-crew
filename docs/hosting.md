@@ -17,6 +17,9 @@ runtime. Operators pin a verified multi-platform image digest for deliberate
 manual deployment or explicitly enroll a Crew instance in validated CI delivery.
 There is no automatic signup or container creation.
 
+See [hosted Crew rate limits](rate-limits.md) for authenticated operation budgets,
+anonymous protection and HTTP/MCP retry information.
+
 ## Runtime configuration
 
 Inject settings privately through PocketDeploy bindings. Do not put secret values
