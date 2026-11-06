@@ -57,6 +57,9 @@ jobs:
         run: |
           pnpm --dir ui exec playwright install --with-deps chromium
           python3 tests/crew_browser.py --binary "$EXE"
+      - name: MCP OAuth browser callback regression
+        if: matrix.runner == 'ubuntu-24.04'
+        run: POCKETCONTEXT_MCP_BROWSER_TEST=1 CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" ./internal/bundle -run '^TestMCPOAuthBrowser$' -count=1
       - name: Name check of the repository and binary
         run: $PY tests/name_check.py --binary "$EXE"
       - name: End-to-end test with synthetic notes

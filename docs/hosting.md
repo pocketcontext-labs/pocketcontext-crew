@@ -14,7 +14,7 @@ HTTPS and project layout do not change.
 The image contains the Go binary and its embedded reader, plus a small Python
 container supervisor for complete S3 backups. It contains no Litestream or Node
 runtime. Operators pin a verified multi-platform image digest for deliberate
-manual deployment.
+manual deployment or explicitly enroll a Crew instance in validated CI delivery.
 There is no automatic signup or container creation.
 
 ## Runtime configuration
@@ -131,10 +131,39 @@ health probes; all application routes require the configured public Host. Public
 ## Release delivery
 
 Crew's image workflow publishes validated source-tagged and immutable-digest
-images. It does **not** configure a deployment dispatcher or enroll instances in
-automatic upgrades. Keep the tested digest pin in Compose or PocketDeploy and
-perform deliberate stop-first upgrades after a verified complete backup. Do not
-configure an inherited PocketContext `:latest` enrollment for Crew.
+images. Unenrolled installations retain deliberate manual upgrades. An operator
+can enroll an initialized, healthy PocketDeploy Crew instance by adding
+`github: pocketcontext-labs/pocketcontext-crew` to that instance's application
+entry, retaining its digest pin and these stop-first preparation settings:
+
+```yaml
+deploy-strategy: stop-first
+deploy-prepare-command: [pocketcontext-container, prepare-upgrade]
+deploy-prepare-timeout: 900
+```
+
+Use the scaffold-pinned controller to install a repository-specific SSH key and
+forced command scoped only to the enrolled Crew host. The GitHub environment
+must contain `SSH_PRIVATE_KEY`, pinned `SSH_KNOWN_HOSTS`, `SERVER_IP`, `SERVER_USER`
+and `SITE_URLS` (a JSON array of enrolled HTTPS origins). Set repository variable
+`COLORS_PROFILE` to that environment's name. Until explicitly configured, the
+deployment job skips. `CONTEXT_DEPLOY_PAUSED=true` pauses delivery without stopping
+image publication. Never reuse a sibling application's deployment key or policy.
+
+After application, native container and populated recovery gates pass, CI checks
+that its source is still current `main` and sends the published immutable digest
+to the forced command. The controller prepares and verifies a complete backup,
+stops the old writer and replaces it on the same volume. The new image verifies
+the backup receipt before opening the project. Deployment jobs serialize without
+cancellation; a failed backup prevents replacement. CI verifies every enrolled
+public `/up` endpoint. The dispatcher cannot execute arbitrary SSH commands,
+change other products or deploy an image outside the Crew repository.
+
+Record the delivered digest in the scaffold's pin and private deployment state.
+Its enrolled release policy can override that recorded pin with the next validated
+Crew digest. Crew never follows upstream PocketContext releases. Preserve any
+private OAuth callback exceptions in both operator and CI deployment configuration;
+see [MCP callback policy](mcp.md#native-desktop-clients).
 
 ## Complete backups and upgrades
 

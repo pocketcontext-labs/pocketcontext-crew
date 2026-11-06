@@ -62,8 +62,10 @@ remain outside the database and Git. Existing environment names, internal execut
 with that runtime; the image is `ghcr.io/pocketcontext-labs/pocketcontext-crew`.
 See [hosting procedures](docs/hosting.md). The deployment scaffold owns the domain,
 private bucket and immutable image pin. This repository's image workflow publishes
-validated source-tagged multi-platform images; it does not deploy siblings or
-follow upstream PocketContext releases automatically.
+validated source-tagged multi-platform images. Explicitly enrolled Crew instances
+can deploy that exact digest through a repository-scoped SSH forced command after
+all checks pass. This does not deploy sibling products or follow upstream
+PocketContext releases. See the hosting guide for enrollment and pause controls.
 
 ## Local project backups and moving computers
 
