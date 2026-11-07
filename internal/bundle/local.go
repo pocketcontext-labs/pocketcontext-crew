@@ -167,6 +167,12 @@ func (l *localRoutes) register(e *core.ServeEvent) {
 		re.Response.Header().Set("Cache-Control", "no-store")
 		return re.JSON(http.StatusOK, map[string]string{"mode": mode})
 	})
+	// Publicly reachable build metadata still requires the owner's signed-in session.
+	// Keep it separate from local instance metadata (which contains private paths/keys).
+	e.Router.GET("/api/bundle/version", func(re *core.RequestEvent) error {
+		re.Response.Header().Set("Cache-Control", "no-store")
+		return re.JSON(http.StatusOK, map[string]string{"version": Version, "commit": Commit})
+	}).Bind(apis.RequireAuth("users"))
 	e.Router.GET("/api/bundle/instance", func(re *core.RequestEvent) error {
 		l.nameMu.RLock()
 		defer l.nameMu.RUnlock()

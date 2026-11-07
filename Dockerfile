@@ -20,8 +20,10 @@ COPY . .
 COPY --from=reader /ui/dist ./ui/dist
 ARG REVISION
 RUN test -n "$REVISION" && \
+    release_version=$(sed -n 's/.*"version": "\([0-9][0-9.]*\)".*/\1/p' ui/package.json) && \
+    test -n "$release_version" && \
     go build -trimpath -tags "$(cat build-tags.txt)" \
-    -ldflags "-s -w -X github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle.Version=hosted-$REVISION" \
+    -ldflags "-s -w -X github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle.Version=$release_version -X github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle.Commit=$REVISION" \
     -o /out/pocketcontext ./cmd/pocketcontext
 
 FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4

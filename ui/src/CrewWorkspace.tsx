@@ -13,6 +13,7 @@ import { api } from "./api";
 import { crewApi, val, list, statuses, lineDiff, type Row } from "./crewApi";
 import "./crew.css";
 import WebhookStatus from "./WebhookStatus";
+import type { ServerVersion } from "./crewApi";
 type View = "board" | "memory" | "reviews" | "agents" | "archive";
 type Kind = "task" | "note" | "bucket" | "agent" | "review";
 type Data = Record<string, Row[]>;
@@ -117,10 +118,20 @@ export default function CrewWorkspace() {
     [query, setQuery] = useState(""),
     [bucket, setBucket] = useState(""),
     [assignmentFilter, setAssignmentFilter] = useState("all");
+  const [serverVersion, setServerVersion] = useState<ServerVersion | null>();
   const [dialog, setDialog] = useState<{ kind: Kind; row?: Row } | null>(null),
     generation = useRef(0);
   const load = useCallback(async () => {
     const ticket = ++generation.current;
+    setServerVersion(undefined);
+    void crewApi
+      .serverVersion()
+      .then((version) => {
+        if (ticket === generation.current) setServerVersion(version);
+      })
+      .catch(() => {
+        if (ticket === generation.current) setServerVersion(null);
+      });
     try {
       const result = await Promise.all(
         ["agents", "buckets", "notes", "tasks", "reviews"].map(
@@ -718,6 +729,33 @@ export default function CrewWorkspace() {
             </>
           )}
         </section>
+        <footer
+          className="crew-server-version"
+          role="contentinfo"
+          aria-label="Running server"
+        >
+          {serverVersion === undefined ? (
+            "Checking server version…"
+          ) : serverVersion === null ? (
+            "Server version unavailable"
+          ) : (
+            <>
+              Server {serverVersion.version}
+              {serverVersion.commit && (
+                <>
+                  {" · Build "}
+                  <span
+                    title={serverVersion.commit}
+                    role="note"
+                    aria-label={`Build ${serverVersion.commit}`}
+                  >
+                    {serverVersion.commit.slice(0, 12)}
+                  </span>
+                </>
+              )}
+            </>
+          )}
+        </footer>
       </main>
       {dialog && (
         <Modal

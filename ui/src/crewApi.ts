@@ -18,7 +18,23 @@ export function list(row: Row | undefined, key: string): string[] {
   }
   return [];
 }
+export type ServerVersion = { version: string; commit: string };
 export const crewApi = {
+  async serverVersion(): Promise<ServerVersion> {
+    const result = await pb.send<Partial<ServerVersion>>(
+      "/api/bundle/version",
+      {
+        method: "GET",
+        cache: "no-store",
+      },
+    );
+    if (typeof result.version !== "string" || !result.version.trim())
+      throw new Error("Server version unavailable");
+    return {
+      version: result.version,
+      commit: typeof result.commit === "string" ? result.commit : "",
+    };
+  },
   async read(
     collection: string,
     filters: Record<string, unknown> = {},

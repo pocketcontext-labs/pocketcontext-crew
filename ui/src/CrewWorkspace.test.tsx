@@ -42,6 +42,10 @@ const review: Row = {
 };
 let fixtures: Record<string, Row[]>;
 beforeEach(() => {
+  vi.spyOn(crewApi, "serverVersion").mockResolvedValue({
+    version: "0.3.1",
+    commit: "synthetic-build",
+  });
   fixtures = {
     agents: [agent],
     buckets: [bucket],
@@ -494,4 +498,58 @@ it("opens webhook task links and clears the route when the editor closes", async
   expect(location.hash).toBe("#/");
   fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+it("displays the running server release and build and refreshes them", async () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  vi.mocked(crewApi.serverVersion).mockResolvedValueOnce({
+    version: "0.2.0",
+    commit,
+  });
+  render(<CrewWorkspace />);
+  const footer = screen.getByRole("contentinfo", { name: "Running server" });
+  await waitFor(() =>
+    expect(footer).toHaveTextContent("Server 0.2.0 · Build 0123456789ab"),
+  );
+  expect(within(footer).getByLabelText(`Build ${commit}`)).toHaveAttribute(
+    "title",
+    commit,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await waitFor(() =>
+    expect(footer).toHaveTextContent("Server 0.3.1 · Build synthetic-bu"),
+  );
+  expect(crewApi.serverVersion).toHaveBeenCalledTimes(2);
+});
+
+it("keeps the workspace usable when server metadata is missing and never substitutes the UI release", async () => {
+  vi.mocked(crewApi.serverVersion).mockRejectedValue(
+    new Error("Synthetic metadata unavailable"),
+  );
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  const footer = screen.getByRole("contentinfo", { name: "Running server" });
+  await waitFor(() =>
+    expect(footer).toHaveTextContent("Server version unavailable"),
+  );
+  expect(footer).not.toHaveTextContent("0.3.1");
+  expect(footer).not.toHaveTextContent("Synthetic metadata unavailable");
+  fireEvent.click(screen.getByRole("button", { name: /Launch post/ }));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+});
+
+it("renders development and older hosted version strings without inventing a release or commit", async () => {
+  vi.mocked(crewApi.serverVersion).mockResolvedValue({
+    version: "hosted-0123456789ab",
+    commit: "",
+  });
+  render(<CrewWorkspace />);
+  await waitFor(() =>
+    expect(
+      screen.getByRole("contentinfo", { name: "Running server" }),
+    ).toHaveTextContent("Server hosted-0123456789ab"),
+  );
+  expect(
+    screen.getByRole("contentinfo", { name: "Running server" }),
+  ).not.toHaveTextContent("Build");
 });

@@ -49,7 +49,7 @@ func publicRequest(r *http.Request) bool {
 // public merely because it was registered on the application's router.
 func publicRoute(method, p string) bool {
 	read := method == http.MethodGet || method == http.MethodHead
-	if read && (p == "/" || p == "/api/bundle/auth-mode" || p == "/bundle/login" || p == "/bundle/login.js") {
+	if read && (p == "/" || p == "/api/bundle/auth-mode" || p == "/api/bundle/version" || p == "/bundle/login" || p == "/bundle/login.js") {
 		return true
 	}
 	if read && strings.HasPrefix(p, "/assets/") && readerAssetName.MatchString(strings.TrimPrefix(p, "/assets/")) {

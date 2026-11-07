@@ -3,6 +3,8 @@
 import argparse
 import http.client
 import json
+from pathlib import Path
+import re
 import subprocess
 import time
 import uuid
@@ -16,10 +18,13 @@ def docker(*args, check=True, input=None):
     return result
 
 
-def request(port, path):
+def request(port, path, token=None):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
     try:
-        connection.request("GET", path, headers={"Host": "synthetic.example.test"})
+        headers = {"Host": "synthetic.example.test"}
+        if token:
+            headers["Authorization"] = token
+        connection.request("GET", path, headers=headers)
         response = connection.getresponse()
         return response.status, response.read()
     finally:
@@ -46,6 +51,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True)
     args = parser.parse_args()
+    # Inspect only the image's public source label; never print container env.
+    revision = docker("image", "inspect", "--format", '{{index .Config.Labels "org.opencontainers.image.revision"}}', args.image).stdout.strip()
+    assert re.fullmatch(r"[0-9a-f]{40}", revision), "Image source revision label is missing or invalid"
+    package = Path(__file__).resolve().parents[1] / "ui" / "package.json"
+    expected_version = json.loads(package.read_text())["version"]
     suffix = uuid.uuid4().hex[:12]
     volume, name = "pocketcontext-smoke-" + suffix, "pocketcontext-smoke-" + suffix
     env = {
@@ -71,10 +81,14 @@ def main():
         docker("run", "-d", "--name", name, "-p", "127.0.0.1::80", "-v", volume + ":/storage", *options, "-e", "POCKETCONTEXT_CONTAINER_COMMAND=init", args.image)
         port = wait_ready(name)
         assert request(port, "/api/bundle/auth-mode")[0] == 200
+        assert request(port, "/api/bundle/version")[0] in (401, 403), "Running version metadata must require authentication"
         assert api_request(port, "/api/crew/read", {"collection": "notes"})[0] in (401, 403)
         assert request(port, "/_/")[0] == 404
         assert request(port, "/.well-known/oauth-authorization-server")[0] == 200
         token = local_token(name)
+        status, body = request(port, "/api/bundle/version", token)
+        assert status == 200, "Authenticated running version metadata unavailable"
+        assert json.loads(body) == {"version": expected_version, "commit": revision}, "Running binary version must match release package and image source revision"
         status, bucket = api_request(port, "/api/crew/write", {"action": "bucket.create", "data": {"name": "SMOKE"}}, token)
         assert status == 200
         status, note = api_request(port, "/api/crew/write", {"action": "note.create", "data": {"bucket": bucket["id"], "title": "Synthetic hosted persistence", "body": "Durable synthetic memory"}}, token)
@@ -97,7 +111,7 @@ def main():
         assert status == 200 and result["items"][0]["body"] == "Durable synthetic memory"
         docker("stop", "--time", "100", name)
         assert docker("inspect", "--format", "{{.State.ExitCode}}", name).stdout.strip() == "0"
-        print("Hosted container init, authentication boundary, MCP discovery, persistence, SIGKILL recovery and clean shutdown passed.")
+        print("Hosted container init, authenticated running version, authentication boundary, MCP discovery, persistence, SIGKILL recovery and clean shutdown passed.")
     finally:
         docker("rm", "-f", name, check=False)
         docker("volume", "rm", volume, check=False)

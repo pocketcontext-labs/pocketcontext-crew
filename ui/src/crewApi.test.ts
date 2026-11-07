@@ -51,3 +51,21 @@ it("preserves duplicate lines and ordering in revision comparisons", () => {
   expect(lineDiff("a\na", "a")).toEqual({ removed: ["a"], added: [] });
   expect(lineDiff("a\nb", "a\nb")).toEqual({ removed: [], added: [] });
 });
+
+it("fetches uncached running-server metadata and rejects missing versions", async () => {
+  const send = vi
+    .spyOn(pb, "send")
+    .mockResolvedValueOnce({ version: "0.3.1", commit: "synthetic-revision" })
+    .mockResolvedValueOnce({});
+  expect(await crewApi.serverVersion()).toEqual({
+    version: "0.3.1",
+    commit: "synthetic-revision",
+  });
+  expect(send).toHaveBeenCalledWith("/api/bundle/version", {
+    method: "GET",
+    cache: "no-store",
+  });
+  await expect(crewApi.serverVersion()).rejects.toThrow(
+    "Server version unavailable",
+  );
+});

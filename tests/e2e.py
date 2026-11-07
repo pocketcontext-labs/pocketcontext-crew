@@ -272,7 +272,7 @@ def scenario(pc):
     auth = token(pc)
     check(pc.http('GET', '/api/collections/users/records', headers=auth)[0] == 403, 'owner account cannot be listed')
     for path in ('/api/context/query', '/api/context/search', '/api/spaces/default', '/api/pocketcontext/runs/aaaaaaaaaaaaaaa/check'):
-        check(pc.http('POST' if path.endswith(('query','search')) else 'GET', path, {'sql':'SELECT 1'}, auth)[0] in (404,410), f'{path} is retired')
+        check(pc.http('POST' if path.endswith(('query','search')) else 'GET', path, None, auth)[0] in (404,410), f'{path} is retired')
     status, body = pc.http('POST', '/api/crew/write', {'action':'bucket.create','data':{'name':'Lifecycle'}}, auth)
     check(status == 200, 'owner creates a bucket')
     bucket = json.loads(body)

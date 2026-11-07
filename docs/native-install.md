@@ -17,15 +17,15 @@ replace existing services or assume a server behind CGNAT is reachable. Agree on
 costs before provisioning new resources. The native server obtains and renews
 Let's Encrypt certificates; `--domain` accepts its subscriber agreement.
 
-Install only Crew **v0.3.0**, from
-<https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.3.0>.
+Install only Crew **v0.3.1**, from
+<https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.3.1>.
 Download `install.sh` and `checksums.txt` from that release, verify the installer's
 SHA-256 against the manifest, inspect it, then run it with the new absolute project
 directory. The installer verifies the selected archive and installs
 `pocketcontext-crew`; do not use PocketContext's installers. Keep the release
 manifest and source revision with your operating notes. Do not substitute `latest`.
 The executable currently reports the compatibility prefix `pocketcontext` in
-`--version`; require version `0.3.0` and the release's source revision.
+`--version`; require version `0.3.1` and the release's source revision.
 
 ```sh
 sh /private/downloads/install.sh /var/lib/pocketcontext-crew/project

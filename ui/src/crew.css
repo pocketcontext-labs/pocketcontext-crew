@@ -1025,3 +1025,11 @@
 .crew-webhook-card li {
   margin: 8px 0;
 }
+
+.crew-server-version {
+  border-top: 1px solid #e1e5dc;
+  padding: 16px 24px;
+  color: #6b7866;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
