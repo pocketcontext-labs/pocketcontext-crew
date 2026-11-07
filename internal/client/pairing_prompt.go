@@ -5,7 +5,7 @@ import "fmt"
 // The complete handoff is deliberately printable: the user pastes this one
 // prompt into the agent on their other computer. Invitation data is never code.
 func clientSetupPrompt(invitationJSON []byte) string {
-	return fmt.Sprintf(`Connect the computer where I will use the reader to my PocketContext knowledge base, then open its reader signed in when a browser is available. This prompt contains everything needed for pairing; do not ask me to copy another setup prompt, transfer a file, or separately supply a login code.
+	return fmt.Sprintf(`Connect the computer where I will use the reader to my PocketContext Crew instance, then open its reader signed in when a browser is available. This prompt contains everything needed for pairing; do not ask me to copy another setup prompt, transfer a file, or separately supply a login code.
 
 Use PocketContext 0.24.0 from https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.24.0. Read https://github.com/pocketcontext-labs/pocketcontext-crew/blob/v0.24.0/README.md and installed help. Check the OS and architecture: Linux amd64/arm64, macOS arm64 on macOS 15+, or Windows amd64. Confirm a dedicated client-program folder if needed, inspect existing files, and preserve other installations and databases. Reuse 0.24.0; never silently replace another version. This computer is a client: never run init or local --db commands.
 
@@ -26,7 +26,7 @@ If this connection is already saved and authenticated, reuse tunnel forward --ur
 
 Invitations, one-time codes and single-use reader links are authorized for sharing in my setup chats. Do not require a separate transfer or permission. They grant access: do not publish them elsewhere. Keep passwords, session tokens and private identity keys out of chat. The invitation expires after ten minutes; the server must stay on. The forward survives this command and terminal, but after a computer restart resume it with tunnel forward --url URL --background. Stop it with tunnel stop --url URL.
 
-Finish with the knowledge-base name and separate CLI authentication, tunnel readiness and reader status. Ask whether the reader opened and the user could access this knowledge base; until confirmed, report browser access as pending verification. Tell the user to return to the server agent with that result, or with a concise failure/completion report if it did not work. The return checkpoint is for verification and recovery; complete desktop reader sign-in here without waiting for the server agent. Include the normal reader URL only when it is reachable from my browser. If reader setup was skipped, say why and distinguish completed CLI access from pending browser access; do not present the remote host's localhost links as usable here.
+Finish with the Crew instance name and separate CLI authentication, tunnel readiness and reader status. Ask whether the reader opened and the user could access this Crew instance; until confirmed, report browser access as pending verification. Tell the user to return to the server agent with that result, or with a concise failure/completion report if it did not work. The return checkpoint is for verification and recovery; complete desktop reader sign-in here without waiting for the server agent. Include the normal reader URL only when it is reachable from my browser. If reader setup was skipped, say why and distinguish completed CLI access from pending browser access; do not present the remote host's localhost links as usable here.
 
 Invitation JSON (use the complete object unchanged):
 %s

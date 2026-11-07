@@ -3,7 +3,6 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,7 +25,7 @@ import (
 // must never retain one HTTP request's identity for the next one.
 func mcpTestHandler(api http.Handler) http.Handler {
 	s := mcp.NewServer(&mcp.Implementation{Name: "PocketContext test", Version: "test"}, nil)
-	addMCPTools(s, api)
+	s.AddReceivingMiddleware(observeMCPMethods)
 	addCrewMCPTools(s, api)
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: mcpInputLimit})
 }
@@ -87,16 +85,6 @@ func TestMCPToolAnnotations(t *testing.T) {
 	// struct defaults: clients use this metadata for action permission groups.
 	wantReadOnly := map[string]bool{
 		"crew_read": true, "crew_write": false,
-		"whoami": true, "schema": true, "query": true, "search": true,
-		"search_sources": true, "get": true, "new_id": true,
-		"list_spaces": true, "default_space": true, "pending": true,
-		"original": true, "passages": true, "get_page": true,
-		"lint": true, "check_run": true,
-		"create": false, "update": false, "batch": false,
-		"create_space": false, "rename_space": false, "archive_space": false,
-		"restore_space": false, "set_default_space": false,
-		"ingest_text": false, "ingest_file": false, "extract": false,
-		"stage": false, "publish": false, "stage_home": false,
 	}
 	h := mcpTestHandler(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("tool discovery must not call the knowledge API")
@@ -119,6 +107,9 @@ func TestMCPToolAnnotations(t *testing.T) {
 				t.Errorf("%s: %s = %v, want explicit %t", name, hint, got, want)
 			}
 		}
+		if dig(tool, "inputSchema", "properties", "space") != nil {
+			t.Errorf("%s exposes a space argument", name)
+		}
 		delete(wantReadOnly, name)
 	}
 }
@@ -140,7 +131,7 @@ func TestMCPProtocolAndPrincipalIsolation(t *testing.T) {
 	}
 	listed := mcpRequest(t, h, "first", "tools/list", map[string]any{})
 	tools, _ := dig(listed, "result", "tools").([]any)
-	if len(tools) < 25 {
+	if len(tools) != 2 {
 		t.Fatalf("missing tools: %v", listed)
 	}
 	for _, tool := range tools {
@@ -148,12 +139,12 @@ func TestMCPProtocolAndPrincipalIsolation(t *testing.T) {
 		if strings.Contains(name, "password") || strings.Contains(name, "shell") || strings.Contains(name, "stop") {
 			t.Fatalf("administration exposed: %s", name)
 		}
-		if name == "ingest_text" && dig(tool, "annotations", "readOnlyHint") != false {
+		if name == "crew_write" && dig(tool, "annotations", "readOnlyHint") != false {
 			t.Fatal("write marked read-only")
 		}
 	}
 	for _, token := range []string{"first", "second", "third"} {
-		v := mcpCall(t, h, token, "schema", map[string]any{}, false)
+		v := mcpCall(t, h, token, "crew_read", map[string]any{"collection": "agents"}, false)
 		if dig(v, "token_seen_by_api") != token {
 			t.Fatalf("cross-request identity leak: %v", v)
 		}
@@ -208,8 +199,8 @@ func TestMCPTransportDirectRouterRequestBodies(t *testing.T) {
 		}
 		return e.JSON(http.StatusOK, map[string]string{"body": string(body), "token": e.Request.Header.Get("Authorization")})
 	}
-	routes.GET("/api/context/schema", handler)
-	routes.POST("/api/context/query", handler)
+	routes.POST("/api/crew/agent-write", handler)
+	routes.POST("/api/crew/read", handler)
 	api, err := routes.BuildMux()
 	if err != nil {
 		t.Fatal(err)
@@ -218,9 +209,9 @@ func TestMCPTransportDirectRouterRequestBodies(t *testing.T) {
 		name, method, path, wantBody string
 		body                         io.Reader
 	}{
-		{"nil GET body", "GET", "/api/context/schema", "", nil},
-		{"explicit empty GET body", "GET", "/api/context/schema", "", http.NoBody},
-		{"JSON POST body", "POST", "/api/context/query", `{"sql":"SELECT 1"}`, strings.NewReader(`{"sql":"SELECT 1"}`)},
+		{"nil POST body", "POST", "/api/crew/read", "", nil},
+		{"explicit empty POST body", "POST", "/api/crew/read", "", http.NoBody},
+		{"JSON POST body", "POST", "/api/crew/read", `{"collection":"agents"}`, strings.NewReader(`{"collection":"agents"}`)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tr := &mcpTransport{ctx: context.Background(), caller: &mcpCaller{ctx: context.Background(), host: "knowledge.example.com", token: "synthetic"}, api: api}
@@ -255,7 +246,7 @@ func TestMCPTransportBoundsAndCancellation(t *testing.T) {
 	cancel()
 	var called bool
 	tr := &mcpTransport{ctx: context.Background(), caller: &mcpCaller{ctx: ctx, host: "knowledge.example.com", token: "synthetic"}, api: http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })}
-	req, _ := http.NewRequest("POST", "https://knowledge.example.com/api/context/query", strings.NewReader(`{}`))
+	req, _ := http.NewRequest("POST", "https://knowledge.example.com/api/crew/read", strings.NewReader(`{}`))
 	if _, err := tr.RoundTrip(req); !errors.Is(err, context.Canceled) || called {
 		t.Fatalf("cancelled operation reached router: %v", err)
 	}
@@ -284,8 +275,7 @@ func TestMCPTransportBoundsAndCancellation(t *testing.T) {
 	}
 }
 
-// A real headless server fixture exercises the same JS request hooks, SQL
-// authorizer, protected file path and publication transactions used in release.
+// A real headless server exercises Crew transactions and access boundaries.
 func mcpRealAPI(t *testing.T) (http.Handler, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -341,7 +331,7 @@ func mcpRealAPI(t *testing.T) (http.Handler, string) {
 	if _, err := bundle.LocalCall(p, "/api/bundle/account", map[string]string{"password": "synthetic-mcp-password"}); err != nil {
 		t.Fatal(err)
 	}
-	c, err := New(p, "")
+	c, err := New(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,124 +359,6 @@ func mcpRealAPI(t *testing.T) (http.Handler, string) {
 		_, _ = io.Copy(w, response.Body)
 	})
 	return api, c.token
-}
-
-func TestMCPKnowledgePublicationAndFiles(t *testing.T) {
-	api, token := mcpRealAPI(t)
-	h := mcpTestHandler(api)
-	call := func(name string, args map[string]any) any { return mcpCall(t, h, token, name, args, false) }
-	denied := func(name string, args map[string]any) { mcpCall(t, h, token, name, args, true) }
-	call("schema", map[string]any{})
-	denied("query", map[string]any{"sql": "SELECT * FROM users"})
-	denied("query", map[string]any{"sql": "DELETE FROM sources"})
-	note := "# Synthetic MCP evidence\n\nThe synthetic reading routine runs every Friday.\n"
-	ingested := call("ingest_text", map[string]any{"text": note, "filename": "mcp-note.md", "title": "Synthetic MCP evidence"})
-	source := dig(ingested, "source").(string)
-	again := call("ingest_text", map[string]any{"text": note, "filename": "mcp-note.md"})
-	if dig(again, "source") != source {
-		t.Fatal("ingest did not deduplicate")
-	}
-	passages := call("passages", map[string]any{"source": source, "limit": 1})
-	rows := dig(passages, "passages").([]any)
-	if len(rows) != 1 {
-		t.Fatal("passages missing")
-	}
-	passage := dig(rows[0], "id").(string)
-	original := call("original", map[string]any{"source": source})
-	if dig(original, "content_base64") != base64.StdEncoding.EncodeToString([]byte(note)) {
-		t.Fatal("original bytes changed")
-	}
-	spec := map[string]any{"run_key": "synthetic-mcp-run", "description": "MCP protocol rehearsal", "sources": []string{source}, "pages": []any{map[string]any{"slug": "mcp-reading", "kind": "concept", "title": "Synthetic reading", "summary": "A synthetic routine", "body": "The synthetic reading routine runs every Friday.[^1]", "citations": map[string]string{"1": passage}}}}
-	dry := call("stage", map[string]any{"spec": spec, "dry_run": true})
-	if dig(dry, "problems") != nil {
-		t.Logf("dry run: %v", dry)
-	}
-	staged := call("stage", map[string]any{"spec": spec})
-	run := dig(staged, "run").(string)
-	checked := call("check_run", map[string]any{"run": run})
-	if dig(checked, "ok") != true {
-		t.Fatalf("check: %v", checked)
-	}
-	record := call("get", map[string]any{"collection": "ingestion_runs", "id": run})
-	revision := dig(record, "revision")
-	call("publish", map[string]any{"run": run, "expected_revision": revision})
-	page := call("get_page", map[string]any{"slug": "mcp-reading"})
-	if dig(page, "page", "body") != "The synthetic reading routine runs every Friday.[^1]" {
-		t.Fatalf("page: %v", page)
-	}
-	call("search", map[string]any{"query": "Friday"})
-	call("search_sources", map[string]any{"query": "Friday"})
-	call("lint", map[string]any{})
-	if !strings.Contains(dig(page, "url").(string), "&space=") {
-		t.Fatal("page link lost its space")
-	}
-	// Two competing runs start from the same published revision. Publishing the
-	// first must make the second conflict without exposing a partial revision.
-	competing := func(key, body string) string {
-		value := call("stage", map[string]any{"spec": map[string]any{"run_key": key, "pages": []any{map[string]any{"slug": "mcp-reading", "body": body, "citations": map[string]string{"1": passage}}}}})
-		return dig(value, "run").(string)
-	}
-	first := competing("mcp-conflict-first", "First revised synthetic statement.[^1]")
-	second := competing("mcp-conflict-second", "Second competing synthetic statement.[^1]")
-	firstRun := call("get", map[string]any{"collection": "ingestion_runs", "id": first})
-	secondRun := call("get", map[string]any{"collection": "ingestion_runs", "id": second})
-	call("publish", map[string]any{"run": first, "expected_revision": dig(firstRun, "revision")})
-	denied("publish", map[string]any{"run": second, "expected_revision": dig(secondRun, "revision")})
-	current := call("get_page", map[string]any{"slug": "mcp-reading"})
-	if dig(current, "page", "body") != "First revised synthetic statement.[^1]" {
-		t.Fatal("conflicting publication changed selected page")
-	}
-	// Citation structural validation still runs through the request hooks.
-	bad := call("stage", map[string]any{"spec": map[string]any{"run_key": "mcp-invalid-citation", "pages": []any{map[string]any{"slug": "unsupported", "kind": "concept", "title": "Unsupported", "summary": "Synthetic invalid", "body": "Unsupported prose."}}}})
-	badID, _ := dig(bad, "run").(string)
-	if badID != "" {
-		badRecord := call("get", map[string]any{"collection": "ingestion_runs", "id": badID})
-		denied("publish", map[string]any{"run": badID, "expected_revision": dig(badRecord, "revision")})
-	}
-	// Publication cannot be replayed and immutable sources cannot be edited.
-	denied("publish", map[string]any{"run": run, "expected_revision": revision})
-	denied("update", map[string]any{"collection": "sources", "id": source, "fields": map[string]any{"expected_revision": 1, "title": "Changed"}})
-	binary := call("ingest_file", map[string]any{"filename": "synthetic.pdf", "content_base64": base64.StdEncoding.EncodeToString([]byte("synthetic non-PDF bytes"))})
-	binaryID := dig(binary, "source").(string)
-	call("pending", map[string]any{})
-	call("extract", map[string]any{"source": binaryID, "text": "Synthetic agent-derived text.", "tool": "synthetic fixture; not a real PDF conversion", "original_sha256": dig(binary, "sha256")})
-	derived := call("passages", map[string]any{"source": binaryID})
-	if dig(derived, "derived") != true {
-		t.Fatal("derived evidence not labelled")
-	}
-	other := call("create_space", map[string]any{"name": "Other synthetic space"})
-	otherID := dig(other, "id").(string)
-	call("rename_space", map[string]any{"target": otherID, "name": "Renamed synthetic space"})
-	call("set_default_space", map[string]any{"target": otherID})
-	call("default_space", map[string]any{})
-	// Space argument is request-local even when calls are concurrent.
-	var wg sync.WaitGroup
-	for i := 0; i < 4; i++ {
-		wg.Add(1)
-		go func() { defer wg.Done(); call("whoami", map[string]any{"space": otherID}) }()
-	}
-	wg.Wait()
-}
-
-func TestMCPOriginalTransportErrorsDoNotExposeFileTokens(t *testing.T) {
-	for _, kind := range []string{"oversized", "cancelled"} {
-		t.Run(kind, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			tr := &mcpTransport{ctx: ctx, caller: &mcpCaller{ctx: ctx, host: "knowledge.example.com", token: "synthetic-account-token"}, api: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if kind == "cancelled" {
-					cancel()
-					return
-				}
-				_, _ = w.Write(bytes.Repeat([]byte("x"), mcpAPILimit+1))
-			})}
-			c := &Client{Base: "https://knowledge.example.com", http: &http.Client{Transport: tr}}
-			_, err := c.download("/api/files/sources/aaaaaaaaaaaaaaa/note.pdf?token=synthetic-file-secret")
-			if err == nil || strings.Contains(err.Error(), "synthetic-file-secret") || strings.Contains(err.Error(), "token=") {
-				t.Fatalf("file token leaked: %v", err)
-			}
-		})
-	}
 }
 
 func TestMCPRejectsOversizedAndMalformedProtocolBodies(t *testing.T) {

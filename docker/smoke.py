@@ -6,6 +6,7 @@ import json
 import subprocess
 import time
 import uuid
+from recovery import local_token, request as api_request
 
 
 def docker(*args, check=True, input=None):
@@ -70,27 +71,30 @@ def main():
         docker("run", "-d", "--name", name, "-p", "127.0.0.1::80", "-v", volume + ":/storage", *options, "-e", "POCKETCONTEXT_CONTAINER_COMMAND=init", args.image)
         port = wait_ready(name)
         assert request(port, "/api/bundle/auth-mode")[0] == 200
-        assert request(port, "/api/context/schema")[0] in (401, 403)
+        assert api_request(port, "/api/crew/read", {"collection": "notes"})[0] in (401, 403)
         assert request(port, "/_/")[0] == 404
         assert request(port, "/.well-known/oauth-authorization-server")[0] == 200
-        docker("exec", "-i", name, "sh", "-c", "cat > /tmp/synthetic-note.txt", input="Hosted persistence synthetic evidence.\n")
-        docker("exec", name, "pocketcontext", "ingest", "/tmp/synthetic-note.txt", "--title", "Synthetic hosted persistence")
+        token = local_token(name)
+        status, bucket = api_request(port, "/api/crew/write", {"action": "bucket.create", "data": {"name": "SMOKE"}}, token)
+        assert status == 200
+        status, note = api_request(port, "/api/crew/write", {"action": "note.create", "data": {"bucket": bucket["id"], "title": "Synthetic hosted persistence", "body": "Durable synthetic memory"}}, token)
+        assert status == 200
         docker("stop", "--time", "100", name)
         assert docker("inspect", "--format", "{{.State.ExitCode}}", name).stdout.strip() == "0"
         docker("rm", name)
         repeated = docker("run", "--rm", "-v", volume + ":/storage", *options, "-e", "POCKETCONTEXT_CONTAINER_COMMAND=init", args.image, check=False)
         assert repeated.returncode != 0
         docker("run", "-d", "--name", name, "-p", "127.0.0.1::80", "-v", volume + ":/storage", *options, args.image)
-        wait_ready(name)
-        result = docker("exec", name, "pocketcontext", "sql", "SELECT title FROM sources").stdout
-        assert "Synthetic hosted persistence" in result or "Hosted persistence" in result
+        port = wait_ready(name)
+        status, result = api_request(port, "/api/crew/read", {"collection": "notes", "id": note["id"]}, local_token(name))
+        assert status == 200 and result["items"][0]["body"] == "Durable synthetic memory"
         # Kill/recreate changes container hostname. Persistent lease and cache must recover.
         docker("kill", name)
         docker("rm", name)
         docker("run", "-d", "--name", name, "-p", "127.0.0.1::80", "-v", volume + ":/storage", *options, args.image)
-        wait_ready(name)
-        result = docker("exec", name, "pocketcontext", "sql", "SELECT title FROM sources").stdout
-        assert "Synthetic hosted persistence" in result or "Hosted persistence" in result
+        port = wait_ready(name)
+        status, result = api_request(port, "/api/crew/read", {"collection": "notes", "id": note["id"]}, local_token(name))
+        assert status == 200 and result["items"][0]["body"] == "Durable synthetic memory"
         docker("stop", "--time", "100", name)
         assert docker("inspect", "--format", "{{.State.ExitCode}}", name).stdout.strip() == "0"
         print("Hosted container init, authentication boundary, MCP discovery, persistence, SIGKILL recovery and clean shutdown passed.")

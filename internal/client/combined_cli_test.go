@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -132,7 +133,7 @@ func rehearseCombinedService(t *testing.T, binary, root, db, cache string, env, 
 		}
 		defer snapshot.Close()
 		var count int
-		if err := snapshot.QueryRow("SELECT count(*) FROM spaces WHERE name = ?", name).Scan(&count); err != nil || count != 1 {
+		if err := snapshot.QueryRow("SELECT count(*) FROM crew_buckets WHERE name = ?", name).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("final snapshot missing write: count=%d, error=%v", count, err)
 		}
 	}
@@ -162,17 +163,49 @@ func rehearseCombinedService(t *testing.T, binary, root, db, cache string, env, 
 			out, err := cmd.Output()
 			cancel()
 			var who map[string]any
-			if err == nil && json.Unmarshal(out, &who) == nil && who["knowledgeBaseName"] == "Pairing rehearsal" {
+			if err == nil && json.Unmarshal(out, &who) == nil && who["name"] == "Pairing rehearsal" {
 				return
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
 		t.Fatal("authenticated remote access through combined tunnel did not recover")
 	}
+	writeBucket := func(name string) {
+		t.Helper()
+		opened := run(clientEnv, "", "open", "--url", url, "--no-browser")
+		link, _ := opened["signInLink"].(string)
+		_, code, ok := strings.Cut(link, "#")
+		if !ok {
+			t.Fatal("missing reader code")
+		}
+		body, _ := json.Marshal(map[string]any{"code": code})
+		response, err := http.Post(url+"/api/bundle/redeem", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var auth map[string]any
+		err = json.NewDecoder(response.Body).Decode(&auth)
+		response.Body.Close()
+		if err != nil || response.StatusCode != 200 {
+			t.Fatalf("reader redemption: %v status %d", err, response.StatusCode)
+		}
+		body, _ = json.Marshal(map[string]any{"action": "bucket.create", "data": map[string]any{"name": name}})
+		req, _ := http.NewRequest("POST", url+"/api/crew/write", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", auth["token"].(string))
+		response, err = http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != 200 {
+			t.Fatalf("Crew write: %d", response.StatusCode)
+		}
+	}
 	remoteAccess()
 	refuse("already running")
 	unchangedIdentity()
-	run(env, "", "create-space", "combined authenticated stop", "--db", db)
+	writeBucket("combined authenticated stop")
 	run(env, "", "stop", "--db", db)
 	wait(done)
 	checkSnapshot("combined authenticated stop")
@@ -183,7 +216,7 @@ func rehearseCombinedService(t *testing.T, binary, root, db, cache string, env, 
 	if runtime.GOOS != "windows" {
 		cmd, done := start("combined-interrupt")
 		remoteAccess()
-		run(env, "", "create-space", "combined interrupt", "--db", db)
+		writeBucket("combined interrupt")
 		if err := cmd.Process.Signal(os.Interrupt); err != nil {
 			t.Fatal(err)
 		}

@@ -58,9 +58,8 @@ func TestEveryCommandHasHelp(t *testing.T) {
 			t.Errorf("help of %q needs a usage line starting with the command, a description and an example", command)
 		}
 	}
-	// help, version and newid are handled before the dispatch table; stage,
-	// check-run and page are added to it on their own branches.
-	outside := map[string]bool{"help": true, "version": true, "newid": true, "stage": true, "check-run": true, "page": true}
+	// help and version are handled before the dispatch table.
+	outside := map[string]bool{"help": true, "version": true}
 	for command := range commandHelp {
 		if !commands[command] && !outside[command] {
 			t.Errorf("help entry %q names no command", command)
@@ -68,12 +67,17 @@ func TestEveryCommandHasHelp(t *testing.T) {
 	}
 }
 
-func TestBatchHelpDocumentsRequestShape(t *testing.T) {
-	text := commandHelp["batch"].text
-	for _, want := range []string{`"method"`, `"url"`, `"body"`, "/api/collections/", "expected_revision", "20"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("batch help lacks %s", want)
+func TestRetiredKnowledgeCommandsRejected(t *testing.T) {
+	for _, name := range []string{"spaces", "create-space", "rename-space", "archive-space", "restore-space", "default-space", "query", "sql", "schema", "check", "ingest", "extract", "pending", "original", "passages", "search", "lint", "stage", "publish", "stage-home", "page", "get", "create", "update", "batch", "newid"} {
+		if _, exists := commandHelp[name]; exists {
+			t.Errorf("retired command %s has help", name)
 		}
+		if err := run([]string{name}); err == nil || !strings.Contains(err.Error(), "unknown command") {
+			t.Errorf("retired command %s accepted: %v", name, err)
+		}
+	}
+	if _, err := parseArgs([]string{"--space", "Default"}, nil, nil); err == nil {
+		t.Fatal("retired space flag accepted")
 	}
 }
 

@@ -17,13 +17,11 @@ windows:
 		$(GOBUILD) -o bin/windows_amd64/pocketcontext.exe ./cmd/pocketcontext
 test:
 	CGO_ENABLED=1 go test -tags $(TAGS) ./...
-	node --test tests/dev_launcher.test.mjs tests/navigation_references.test.mjs
-	python3 tests/obsidian_import_test.py
+	node --test tests/dev_launcher.test.mjs
 # The repository and the binary must not contain the retired product name.
 names: build
 	python3 tests/name_check.py --binary bin/pocketcontext
 e2e: names
 	python3 tests/e2e.py --binary bin/pocketcontext
-	python3 tests/source_search.py --binary bin/pocketcontext
-	python3 tests/navigation_references.py --binary bin/pocketcontext
-	python3 tests/obsidian_import_e2e.py --binary bin/pocketcontext
+	python3 tests/crew_e2e.py --binary bin/pocketcontext
+	python3 tests/upgrades.py --binary bin/pocketcontext

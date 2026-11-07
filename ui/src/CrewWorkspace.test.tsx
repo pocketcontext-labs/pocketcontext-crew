@@ -232,3 +232,75 @@ it("preserves an inactive assignment visibly without offering new inactive assig
     ),
   );
 });
+
+it("shows bucket responsibility and saves a changed or cleared assignment", async () => {
+  const design: Row = { id: "agent0000000002", revision: 1, name: "Design" };
+  fixtures.agents.push(design);
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  fireEvent.click(screen.getByRole("button", { name: "Shared memory" }));
+  expect(screen.getByText("Network · responsible agent")).toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
+  );
+  let dialog = within(screen.getByRole("dialog"));
+  expect(dialog.getByLabelText("Responsible agent")).toHaveValue(agent.id);
+  fireEvent.change(dialog.getByLabelText("Responsible agent"), {
+    target: { value: design.id },
+  });
+  fireEvent.click(dialog.getByRole("button", { name: "Save bucket" }));
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "bucket.update",
+      {
+        name: "NETWORK",
+        purpose: "Voice and audiences",
+        responsible_agent: design.id,
+      },
+      bucket,
+      "",
+    ),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  fireEvent.click(
+    screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
+  );
+  dialog = within(screen.getByRole("dialog"));
+  fireEvent.change(dialog.getByLabelText("Responsible agent"), {
+    target: { value: "" },
+  });
+  fireEvent.click(dialog.getByRole("button", { name: "Save bucket" }));
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenLastCalledWith(
+      "bucket.update",
+      {
+        name: "NETWORK",
+        purpose: "Voice and audiences",
+        responsible_agent: "",
+      },
+      bucket,
+      "",
+    ),
+  );
+});
+
+it("keeps bucket assignment conflicts visible for reassessment", async () => {
+  vi.mocked(crewApi.write).mockRejectedValue(
+    new Error("Revision conflict; reread and reassess"),
+  );
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  fireEvent.click(screen.getByRole("button", { name: "Shared memory" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
+  );
+  const dialog = within(screen.getByRole("dialog"));
+  fireEvent.change(dialog.getByLabelText("Responsible agent"), {
+    target: { value: "" },
+  });
+  fireEvent.click(dialog.getByRole("button", { name: "Save bucket" }));
+  await waitFor(() =>
+    expect(dialog.getByRole("alert")).toHaveTextContent("Revision conflict"),
+  );
+  expect(screen.queryByText("Saved.")).toBeNull();
+});

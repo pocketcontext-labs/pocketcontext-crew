@@ -140,17 +140,10 @@ func TestHostedCrewBurstAndAuthority(t *testing.T) {
 		t.Fatalf("generic write: %d %s", w.Code, w.Body)
 	}
 	w = request(raw, "/api/batch", map[string]any{"requests": []any{map[string]any{"method": "POST", "url": "/api/collections/crew_tasks/records", "body": body}}}, a.token)
-	if w.Code != 400 {
+	if w.Code != 403 {
 		t.Fatalf("generic batch: %d %s", w.Code, w.Body)
 	}
-	var batch map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &batch); err != nil {
-		t.Fatal(err)
-	}
-	response := batch["data"].(map[string]any)["requests"].(map[string]any)["0"].(map[string]any)["response"].(map[string]any)
-	if response["status"] != float64(403) {
-		t.Fatalf("generic batch bypass: %v", response)
-	}
+
 }
 
 func TestHostedCrewSharedBudgetAndCooldown(t *testing.T) {
@@ -162,10 +155,10 @@ func TestHostedCrewSharedBudgetAndCooldown(t *testing.T) {
 	}
 	now := time.Now()
 	registerHostedRateLimitsClock(&core.ServeEvent{App: a.app, Router: router}, func() time.Time { return now })
-	// Consume batch reservations without database work, then exercise real Crew
+	// Consume operation reservations without database work, then exercise real Crew
 	// routes at the boundary. Time is frozen so slow CI cannot replenish budget.
 	router.Bind(&hook.Handler[*core.RequestEvent]{Id: "budgetProbe", Priority: apis.DefaultLoadAuthTokenMiddlewarePriority + 7, Func: func(e *core.RequestEvent) error {
-		if e.Request.URL.Path == "/api/batch" {
+		if e.Request.URL.Path == "/api/budget-probe" {
 			return e.NoContent(204)
 		}
 		return e.Next()
@@ -189,8 +182,8 @@ func TestHostedCrewSharedBudgetAndCooldown(t *testing.T) {
 		}
 		return w
 	}
-	for range 59 {
-		request("/api/batch", "{}", 204)
+	for range 1180 {
+		request("/api/budget-probe", "{}", 204)
 	}
 	read := `{"collection":"agents"}`
 	write := `{"action":"task.create","reported_agent":"Synthetic worker","data":{"title":"Budget boundary"}}`

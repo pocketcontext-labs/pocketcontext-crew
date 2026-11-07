@@ -90,6 +90,40 @@ func TestCrewMCPRealWorkflowAndApprovalBoundary(t *testing.T) {
 	}
 	agent := write("agent.create", nil, map[string]any{"name": "Network"})
 	bucket := write("bucket.create", nil, map[string]any{"name": "NETWORK", "responsible_agent": dig(agent, "id")})
+
+	otherAgent := write("agent.create", nil, map[string]any{"name": "Design"})
+	oldBucket := bucket
+	bucket = write("bucket.assign", bucket, map[string]any{"agent": "Design"})
+	if dig(bucket, "responsible_agent") != dig(otherAgent, "id") {
+		t.Fatal("MCP assignment did not resolve exact name")
+	}
+	rows := read("buckets", map[string]any{"responsible_agent": "Design"})
+	if len(rows) != 1 || dig(rows[0], "responsible_agent_details", "id") != dig(otherAgent, "id") || dig(rows[0], "responsible_agent_details", "name") != "Design" {
+		t.Fatal("MCP assignment read round-trip lost expanded agent")
+	}
+	denied("crew_write", writeArgs("bucket.assign", oldBucket, map[string]any{"agent": dig(agent, "id")}))
+	denied("crew_write", writeArgs("bucket.assign", bucket, map[string]any{}))
+	denied("crew_write", writeArgs("bucket.assign.extra", bucket, map[string]any{"agent": dig(agent, "id")}))
+	denied("crew_write", writeArgs("bucket.assign", bucket, map[string]any{"agent": "Missing agent"}))
+	bucket = write("bucket.update", bucket, map[string]any{"responsible_agent": nil})
+	if dig(bucket, "responsible_agent") != "" || dig(bucket, "responsible_agent_details") != nil {
+		t.Fatal("MCP clear failed")
+	}
+	if len(read("buckets", map[string]any{"responsible_agent": ""})) != 1 {
+		t.Fatal("MCP unassigned filter failed")
+	}
+	bucket = write("bucket.assign", bucket, map[string]any{"agent": dig(otherAgent, "id")})
+	assignmentEvents := read("events", map[string]any{"parent": dig(bucket, "id")})
+	found := false
+	for _, ev := range assignmentEvents {
+		if dig(ev, "action") == "bucket.assign" && dig(ev, "changes", "responsible_agent", "old") == dig(agent, "id") && dig(ev, "changes", "responsible_agent", "new") == dig(otherAgent, "id") && dig(ev, "reported_agent") == "Network" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("MCP assignment event omitted old/new attribution")
+	}
+	// Reported Network continues to write into the bucket assigned to Design.
 	note := write("note.create", nil, map[string]any{"bucket": dig(bucket, "id"), "title": "Synthetic launch voice", "body": "Speak to independent founders."})
 	if len(read("notes", map[string]any{"query": "independent"})) != 1 {
 		t.Fatal("MCP memory search omitted note")
@@ -101,6 +135,7 @@ func TestCrewMCPRealWorkflowAndApprovalBoundary(t *testing.T) {
 	note = write("note.update", archived, map[string]any{"archived": false})
 	denied("crew_write", writeArgs("bucket.update", bucket, map[string]any{"archived": true}))
 	bucket = owner(writeArgs("bucket.update", bucket, map[string]any{"archived": true}))
+	denied("crew_write", writeArgs("bucket.assign", bucket, map[string]any{"agent": dig(agent, "id")}))
 	if len(read("notes", nil)) != 0 {
 		t.Fatal("Archived ancestor leaked notes through MCP")
 	}

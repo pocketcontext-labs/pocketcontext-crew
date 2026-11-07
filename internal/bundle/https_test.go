@@ -18,8 +18,6 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/apis"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
-	"ganigeorgiev.com/pocketbase/pocketbase/tools/filesystem"
-	contextserver "github.com/pocketcontext-labs/pocketcontext-crew/internal/pocketcontext/server"
 )
 
 func TestHTTPSDomain(t *testing.T) {
@@ -37,37 +35,6 @@ func TestHTTPSDomain(t *testing.T) {
 
 func TestPublicHTTPSReaderAndBoundary(t *testing.T) {
 	a := newTestApp(t)
-	spaces, err := a.app.FindRecordsByFilter("spaces", "", "", 1, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	collection, err := a.app.FindCollectionByNameOrId("sources")
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := core.NewRecord(collection)
-	source.Set("space", spaces[0].Id)
-	source.Set("title", "Synthetic HTTPS note")
-	source.Set("original_name", "note.foo+bar")
-	source.Set("media_type", "text/plain")
-	source.Set("revision", 1)
-	file, err := filesystem.NewFileFromBytes([]byte("Synthetic source over HTTPS."), "note.foo+bar")
-	if err != nil {
-		t.Fatal(err)
-	}
-	source.Set("original", file)
-	if err := a.app.Save(source); err != nil {
-		t.Fatal(err)
-	}
-	config, _ := filepath.Abs("../../server.json")
-	contextserver.RegisterDatabase(a.app, config, filepath.Join(a.app.DataDir(), "data.db"))
-	// RegisterDatabase owns read/search connections outside PocketBase's pool.
-	// Terminate them before newTestApp resets its database and removes fixtures.
-	t.Cleanup(func() {
-		if err := a.app.OnTerminate().Trigger(&core.TerminateEvent{App: a.app}); err != nil {
-			t.Error(err)
-		}
-	})
 	router, err := apis.NewRouter(a.app)
 	if err != nil {
 		t.Fatal(err)
@@ -175,26 +142,14 @@ func TestPublicHTTPSReaderAndBoundary(t *testing.T) {
 			t.Fatalf("removed local endpoint %s %s: %d", endpoint.method, endpoint.path, rec.Code)
 		}
 	}
-	request("GET", "/api/spaces/default", a.token, "", "127.0.0.1:8096", "", 403)
-	request("GET", "/api/spaces/default", a.token, "", domain, "https://evil.example", 403)
-	request("GET", "/api/spaces/default", "", "", domain, "", 401)
-	request("GET", "/api/spaces/default", a.token, "", domain, "https://"+domain, 200)
-	if strings.Contains(request("GET", "/api/collections/sources/records", "", "", domain, "", 200), "Synthetic HTTPS note") {
-		t.Fatal("anonymous source metadata leaked")
+	request("POST", "/api/crew/read", a.token, `{"collection":"buckets"}`, "127.0.0.1:8096", "", 403)
+	request("POST", "/api/crew/read", a.token, `{"collection":"buckets"}`, domain, "https://evil.example", 403)
+	request("POST", "/api/crew/read", "", `{"collection":"buckets"}`, domain, "", 401)
+	request("POST", "/api/crew/read", a.token, `{"collection":"buckets"}`, domain, "https://"+domain, 200)
+	for _, path := range []string{"/api/spaces/default", "/api/collections/sources/records", "/api/context/schema", "/api/files/sources/id/original.txt"} {
+		request("GET", path, a.token, "", domain, "", 404)
 	}
-	if !strings.Contains(request("GET", "/api/collections/sources/records", a.token, "", domain, "", 200), "Synthetic HTTPS note") {
-		t.Fatal("authenticated source missing")
-	}
-	filePath := "/api/files/" + collection.Id + "/" + source.Id + "/" + url.PathEscape(source.GetString("original"))
-	request("GET", filePath, "", "", domain, "", 404)
-	fileResult := request("POST", "/api/files/token", a.token, `{}`, domain, "", 200)
-	var fileToken map[string]string
-	_ = json.Unmarshal([]byte(fileResult), &fileToken)
-	if got := request("GET", filePath+"?token="+fileToken["token"], "", "", domain, "", 200); got != "Synthetic source over HTTPS." {
-		t.Fatal("wrong protected source bytes")
-	}
-	request("POST", "/api/context/query", "", `{"sql":"select id from spaces"}`, domain, "", 401)
-	request("POST", "/api/context/query", a.token, `{"sql":"select id from spaces"}`, domain, "", 200)
+	request("POST", "/api/context/query", a.token, `{"sql":"select id from spaces"}`, domain, "", 404)
 	request("POST", "/api/collections/users/auth-with-password", "", `{"identity":"me@pocketcontext.localhost","password":"synthetic-password"}`, domain, "", 200)
 	redeem := `{"code":"` + link.Fragment + `"}`
 	request("POST", "/api/bundle/redeem", "", redeem, domain, "", 200)

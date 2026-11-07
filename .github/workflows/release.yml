@@ -9,7 +9,7 @@ on:
       version:
         description: 'Version to build and validate (X.Y.Z); manual runs never publish'
         required: true
-        default: '0.1.1'
+        default: '0.2.0'
         type: string
 
 permissions:
@@ -84,10 +84,6 @@ jobs:
           packages=./...
           if [ "$RUNNER_OS" = Windows ]; then packages="./internal/bundle ./internal/client ./internal/tunnel ./internal/profiles"; fi
           CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" $packages
-      - name: Reference and importer tests
-        run: |
-          node --test tests/navigation_references.test.mjs
-          $PY tests/obsidian_import_test.py
       - name: Build and inspect the release binary; package notices
         run: $PY scripts/release.py build --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --platform "$RELEASE_PLATFORM" --output dist
       - name: End-to-end test of the release binary
@@ -101,9 +97,6 @@ jobs:
           "$PY" tests/crew_e2e.py --binary "dist/$RELEASE_PLATFORM/$exe"
           "$PY" tests/e2e.py --binary "dist/$RELEASE_PLATFORM/$exe"
           "$PY" tests/upgrades.py --binary "dist/$RELEASE_PLATFORM/$exe"
-          "$PY" tests/release013.py --binary "dist/$RELEASE_PLATFORM/$exe"
-          "$PY" tests/navigation_references.py --binary "dist/$RELEASE_PLATFORM/$exe"
-          "$PY" tests/obsidian_import_e2e.py --binary "dist/$RELEASE_PLATFORM/$exe"
       - name: Native Linux backup and restore rehearsal
         if: runner.os == 'Linux'
         run: |

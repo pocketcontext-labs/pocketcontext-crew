@@ -2,13 +2,8 @@ package bundle
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"io/fs"
-	"mime/multipart"
-	"net/http"
-	"net/http/httptest"
-	"net/textproto"
 	"regexp"
 	"strings"
 	"testing"
@@ -85,46 +80,5 @@ func TestReaderSHA256MatchesPreviousDigests(t *testing.T) {
 		if err != nil || got != c.want {
 			t.Errorf("%s: %q, %v; want %s", c.name, got, err, c.want)
 		}
-	}
-}
-
-// The real hooks hash an uploaded original in-process and store the same digest.
-func TestSourceOriginalHash(t *testing.T) {
-	a := newTestApp(t)
-	app, handler, token := a.app, a.handler, a.token
-
-	var body bytes.Buffer
-	w := multipart.NewWriter(&body)
-	_ = w.WriteField("title", "Synthetic note")
-	_ = w.WriteField("original_name", "note.md")
-	_ = w.WriteField("media_type", "text/markdown")
-	header := textproto.MIMEHeader{}
-	header.Set("Content-Disposition", `form-data; name="original"; filename="note.md"`)
-	header.Set("Content-Type", "application/octet-stream")
-	part, err := w.CreatePart(header)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = part.Write([]byte(syntheticNote))
-	_ = w.Close()
-	req := httptest.NewRequest(http.MethodPost, "/api/collections/sources/records", &body)
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	req.Header.Set("Authorization", token)
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, req)
-	if response.Code != http.StatusOK {
-		t.Fatalf("upload: %d %s", response.Code, response.Body)
-	}
-	var created map[string]any
-	if err := json.Unmarshal(response.Body.Bytes(), &created); err != nil {
-		t.Fatal(err)
-	}
-	stored, err := app.FindRecordById("sources", created["id"].(string))
-	if err != nil {
-		t.Fatal(err)
-	}
-	const want = "f07b4bcb6d3e4ef1378a96d7975e0b6174d31780dd5435ac8be90493744d18f4"
-	if got := stored.GetString("sha256"); got != want {
-		t.Fatalf("stored sha256 = %q; want %s", got, want)
 	}
 }

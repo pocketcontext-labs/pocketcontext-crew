@@ -43,15 +43,16 @@ func TestMCPDiagnosticsResultsAndPrivacy(t *testing.T) {
 		status          int
 		outcome, reason string
 	}{
-		{"schema", map[string]any{}, 200, "success", "none"},
-		{"query", map[string]any{"sql": "SECRET_QUERY"}, 409, "tool_error", "conflict"},
-		{"query", map[string]any{"sql": map[string]any{"SECRET_ARGUMENT": "SECRET_VALUE"}}, 200, "tool_error", "invalid_input"},
+		{"crew_read", map[string]any{"collection": "agents"}, 200, "success", "none"},
+		{"crew_read", map[string]any{"collection": "SECRET_QUERY"}, 409, "tool_error", "conflict"},
+		{"crew_read", map[string]any{"collection": map[string]any{"SECRET_ARGUMENT": "SECRET_VALUE"}}, 200, "tool_error", "invalid_input"},
 		{"SECRET_TOOL", map[string]any{}, 200, "protocol_error", "unknown_tool"},
 	} {
 		t.Run(tc.name+tc.outcome, func(t *testing.T) {
 			var logs bytes.Buffer
 			s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-			addMCPTools(s, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			s.AddReceivingMiddleware(observeMCPMethods)
+			addCrewMCPTools(s, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.status)
 				_, _ = w.Write([]byte(`{"message":"SECRET_RESULT","value":"SECRET_RESULT"}`))
@@ -75,7 +76,7 @@ func TestMCPDiagnosticsResultsAndPrivacy(t *testing.T) {
 				t.Fatal("diagnostic leaked request, response, tool name or token")
 			}
 			if tc.status == 409 {
-				if len(events) != 2 || events[0]["api_status"] != float64(409) || events[0]["api_route"] != "/api/context/query" || last["api_calls"] != float64(1) {
+				if len(events) != 2 || events[0]["api_status"] != float64(409) || events[0]["api_route"] != "/api/crew/read" || last["api_calls"] != float64(1) {
 					t.Fatalf("missing API failure metadata: %v", events)
 				}
 			}
@@ -93,8 +94,8 @@ func TestMCPDiagnosticsWriteUncertainty(t *testing.T) {
 				w.WriteHeader(201)
 				_, _ = w.Write([]byte(`{"id":"SECRET_RECORD"}`))
 			})
-			addMCPTool(s, api, "create", "test", false, func(c *Client, _ mcpSpace) (any, error) {
-				if _, err := c.Must("POST", "/api/collections/pages/records", map[string]any{"slug": "SECRET_SLUG"}); err != nil {
+			addMCPTool(s, api, "crew_write", "test", false, func(c *Client, _ struct{}) (any, error) {
+				if _, err := c.Must("POST", "/api/crew/agent-write", map[string]any{"slug": "SECRET_SLUG"}); err != nil {
 					return nil, err
 				}
 				switch reason {
@@ -108,7 +109,7 @@ func TestMCPDiagnosticsWriteUncertainty(t *testing.T) {
 					return nil, errors.New("SECRET_ERROR")
 				}
 			})
-			mcpCall(t, diagnosticMCPHandler(s, &logs), "SECRET_TOKEN", "create", map[string]any{}, true)
+			mcpCall(t, diagnosticMCPHandler(s, &logs), "SECRET_TOKEN", "crew_write", map[string]any{}, true)
 			events := diagnosticEvents(t, &logs)
 			last := events[len(events)-1]
 			if last["reason"] != reason || last["write_may_have_succeeded"] != true || last["api_calls"] != float64(1) {
@@ -128,13 +129,13 @@ func TestMCPDiagnosticsAPILimitsAndTemplates(t *testing.T) {
 	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(strings.Repeat("x", mcpAPILimit+1)))
 	})
-	addMCPTool(s, api, "original", "test", true, func(c *Client, _ mcpSpace) (any, error) {
-		return c.Must("GET", "/api/files/sources/abcdefghijklmno/SECRET_FILENAME", nil)
+	addMCPTool(s, api, "crew_read", "test", true, func(c *Client, _ struct{}) (any, error) {
+		return c.Must("POST", "/api/crew/read", map[string]any{"id": "SECRET_ID"})
 	})
-	mcpCall(t, diagnosticMCPHandler(s, &logs), "SECRET_TOKEN", "original", map[string]any{}, true)
+	mcpCall(t, diagnosticMCPHandler(s, &logs), "SECRET_TOKEN", "crew_read", map[string]any{}, true)
 	events := diagnosticEvents(t, &logs)
 	last := events[len(events)-1]
-	if last["reason"] != "limit_exceeded" || last["api_route"] != "/api/files/sources/{id}/{filename}" || last["write_may_have_succeeded"] != nil {
+	if last["reason"] != "limit_exceeded" || last["api_route"] != "/api/crew/read" || last["write_may_have_succeeded"] != nil {
 		t.Fatalf("unexpected limit metadata: %v", events)
 	}
 	if strings.Contains(logs.String(), "SECRET_") || strings.Contains(logs.String(), "abcdefghijklmno") {
@@ -148,7 +149,8 @@ func TestMCPDiagnosticsPreDispatchBoundary(t *testing.T) {
 	// separate transport observation and deliberately never buffers response bodies.
 	var logs bytes.Buffer
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-	addMCPTools(s, http.NotFoundHandler())
+	s.AddReceivingMiddleware(observeMCPMethods)
+	addCrewMCPTools(s, http.NotFoundHandler())
 	req := httptest.NewRequest("POST", "https://knowledge.example.com/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"SECRET_METHOD","params":{}}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
@@ -163,19 +165,21 @@ func TestMCPDiagnosticsPreDispatchBoundary(t *testing.T) {
 	}
 }
 
-func TestMCPDiagnosticsBatchConflict(t *testing.T) {
+func TestMCPDiagnosticsRevisionConflict(t *testing.T) {
 	var logs bytes.Buffer
 	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
 	s.AddReceivingMiddleware(observeMCPMethods)
 	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(400)
-		_, _ = w.Write([]byte(`{"data":{"requests":{"0":{"response":{"status":409,"message":"SECRET_CONFLICT"}}}}}`))
+		w.WriteHeader(409)
+		_, _ = w.Write([]byte(`{"message":"SECRET_CONFLICT"}`))
 	})
-	addMCPTool(s, api, "batch", "test", false, func(c *Client, _ mcpSpace) (any, error) { return c.Must("POST", "/api/batch", map[string]any{}) })
-	mcpCall(t, diagnosticMCPHandler(s, &logs), "SECRET_TOKEN", "batch", map[string]any{}, true)
+	addMCPTool(s, api, "crew_write", "test", false, func(c *Client, _ struct{}) (any, error) {
+		return c.Must("POST", "/api/crew/agent-write", map[string]any{})
+	})
+	mcpCall(t, diagnosticMCPHandler(s, &logs), "SECRET_TOKEN", "crew_write", map[string]any{}, true)
 	events := diagnosticEvents(t, &logs)
 	last := events[len(events)-1]
-	if last["reason"] != "conflict" || last["api_status"] != float64(400) || last["write_may_have_succeeded"] != nil {
+	if last["reason"] != "conflict" || last["api_status"] != float64(409) || last["write_may_have_succeeded"] != nil {
 		t.Fatalf("missing batch conflict classification: %v", events)
 	}
 	if strings.Contains(logs.String(), "SECRET_") {

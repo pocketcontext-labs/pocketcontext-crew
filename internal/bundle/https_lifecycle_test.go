@@ -113,8 +113,8 @@ func TestPublicHTTPSRejectsAmbiguousPaths(t *testing.T) {
 		r := httptest.NewRequest("GET", "https://knowledge.example.com"+p, nil)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != 204 {
-			t.Errorf("valid escaped filename %s rejected: %d", p, w.Code)
+		if w.Code != 404 {
+			t.Errorf("retired file route %s exposed: %d", p, w.Code)
 		}
 	}
 }

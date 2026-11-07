@@ -31,6 +31,17 @@ class NativeBackupTests(unittest.TestCase):
         (self.project / 'storage/source.txt').write_text('synthetic original')
     def tearDown(self):
         self.temp.cleanup()
+    def test_missing_required_migration_archive_fails(self):
+        with sqlite3.connect(self.project / 'pocketcontext.db') as db:
+            db.execute('CREATE TABLE _crew_legacy_archive(id INTEGER PRIMARY KEY, archive TEXT, manifest_sha256 TEXT)')
+            db.execute('INSERT INTO _crew_legacy_archive VALUES(1,?,?)', ('a' * 64, 'b' * 64))
+        with self.assertRaises(ValueError):
+            backup.snapshot(self.project, self.destination)
+        root = self.project / 'legacy-knowledge'
+        root.mkdir()
+        (root / 'current.json').write_text('{"archive":"' + 'a' * 64 + '"}')
+        with self.assertRaises((ValueError, FileNotFoundError)):
+            backup.snapshot(self.project, self.destination)
     def test_snapshot_restore_and_tamper(self):
         result = backup.snapshot(self.project, self.destination)
         backup.verify(result)

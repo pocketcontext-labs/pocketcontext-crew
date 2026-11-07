@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase/apis"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -43,7 +45,7 @@ func TestMaintenanceRequestDrain(t *testing.T) {
 }
 
 func TestMaintenanceReadClassification(t *testing.T) {
-	for _, p := range []string{"/api/context/query", "/api/context/search", "/api/files/token", "/api/realtime", "/api/collections/users/auth-refresh"} {
+	for _, p := range []string{"/api/crew/read", "/api/realtime", "/api/collections/users/auth-refresh"} {
 		if !maintenanceRead(httptest.NewRequest(http.MethodPost, p, nil)) {
 			t.Fatalf("blocked reader %s", p)
 		}
@@ -191,7 +193,7 @@ func TestMaintenanceAPI(t *testing.T) {
 	if _, err := app.DB().NewQuery("INSERT INTO documents (id,title) VALUES ('abcdefghijklmno','bypass')").Execute(); err == nil {
 		t.Fatal("direct SQL bypassed freeze")
 	}
-	read := request(h, "POST", "/api/context/query", userToken, `{"sql":"SELECT id,title FROM documents"}`)
+	read := request(h, "GET", "/api/collections/documents/records", userToken, "")
 	if read.Code != 200 {
 		t.Fatalf("read while frozen: %d %s", read.Code, read.Body)
 	}
@@ -270,4 +272,26 @@ func TestMaintenanceDropsPersistentLogs(t *testing.T) {
 	}
 	persist()
 	count(2)
+}
+
+func startRouter(t *testing.T, app *tests.TestApp, _ map[string][]string) (http.Handler, error) {
+	t.Helper()
+	router, err := apis.NewRouter(app)
+	if err != nil {
+		return nil, err
+	}
+	if err = app.OnServe().Trigger(&core.ServeEvent{App: app, Router: router}); err != nil {
+		return nil, err
+	}
+	return router.BuildMux()
+}
+func request(h http.Handler, method, path, token, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", token)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
 }

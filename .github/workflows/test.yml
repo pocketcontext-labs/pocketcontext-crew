@@ -33,10 +33,9 @@ jobs:
           pnpm typecheck
           pnpm test
           pnpm build
-      - name: Launcher, reference, and importer tests
+      - name: Launcher tests
         run: |
-          node --test tests/dev_launcher.test.mjs tests/navigation_references.test.mjs
-          $PY tests/obsidian_import_test.py
+          node --test tests/dev_launcher.test.mjs
       # Windows runners provide MinGW-w64 gcc for CGO. The vendored server's
       # upstream tests assume POSIX permissions, so Windows runs the bundle's own.
       - name: Unit tests
@@ -69,7 +68,8 @@ jobs:
           $PY tests/crew_e2e.py --binary "$EXE"
           $PY tests/e2e.py --binary "$EXE"
           $PY tests/upgrades.py --binary "$EXE"
-          $PY tests/release013.py --binary "$EXE"
-          $PY tests/source_search.py --binary "$EXE"
-          $PY tests/navigation_references.py --binary "$EXE"
-          $PY tests/obsidian_import_e2e.py --binary "$EXE"
+      - name: Native Linux backup and restore
+        if: runner.os == 'Linux'
+        run: |
+          python3 tests/native_backup_test.py
+          python3 tests/native_install.py --binary "$EXE"

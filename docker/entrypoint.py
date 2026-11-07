@@ -147,7 +147,66 @@ def integrity(path):
             raise Failure("database integrity check failed")
 
 
+def validate_archive_anchor(db_path, project):
+    with sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True) as db:
+        exists = db.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='_crew_legacy_archive'").fetchone()[0]
+        if not exists:
+            return
+        anchors = db.execute("SELECT id, archive, manifest_sha256 FROM _crew_legacy_archive").fetchall()
+        if len(anchors) != 1 or anchors[0][0] != 1:
+            raise ValueError("Invalid legacy archive anchor")
+        _, archive, manifest_hash = anchors[0]
+        if not re.fullmatch(r"[0-9a-f]{64}", archive) or not re.fullmatch(r"[0-9a-f]{64}", manifest_hash):
+            raise ValueError("Invalid legacy archive anchor hashes")
+        root = project / "legacy-knowledge"
+        if root.is_symlink() or not root.is_dir():
+            raise ValueError("Required legacy archive is missing")
+        pointer = root / "current.json"
+        if pointer.is_symlink() or json.loads(pointer.read_text()).get("archive") != archive:
+            raise ValueError("Required legacy archive pointer does not match")
+        manifest = root / archive / "manifest.json"
+        if manifest.is_symlink() or not manifest.is_file() or digest(manifest) != manifest_hash:
+            raise ValueError("Required legacy archive manifest does not match")
+
+
+def validate_legacy_archives(project):
+    root = project / "legacy-knowledge"
+    if not root.exists():
+        return
+    if root.is_symlink():
+        raise ValueError("Legacy archive root must not be a symlink")
+    current = json.loads((root / "current.json").read_text()).get("archive", "")
+    if not re.fullmatch(r"[0-9a-f]{64}", current) or not (root / current).is_dir():
+        raise ValueError("Legacy archive pointer is invalid")
+    for archive in root.iterdir():
+        if archive.name == "current.json":
+            continue
+        if archive.is_symlink() or not archive.is_dir() or not re.fullmatch(r"[0-9a-f]{64}", archive.name):
+            raise ValueError("Unexpected legacy archive entry")
+        manifest = json.loads((archive / "manifest.json").read_text())
+        files = manifest.get("files", {})
+        if manifest.get("format") != 1 or not files.get("pocketcontext.db") or not files.get("pocketcontext.json"):
+            raise ValueError("Invalid legacy archive manifest")
+        actual = {}
+        for directory, dirs, names in os.walk(archive, followlinks=False):
+            for name in dirs:
+                if (Path(directory) / name).is_symlink():
+                    raise ValueError("Symlink in legacy archive")
+            for name in names:
+                path = Path(directory) / name
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError("Non-regular legacy archive file")
+                if path != archive / "manifest.json":
+                    actual[path.relative_to(archive).as_posix()] = digest(path)
+        if actual != files or files["pocketcontext.db"] != archive.name:
+            raise ValueError("Legacy archive hashes do not match")
+        with sqlite3.connect((archive / "pocketcontext.db").as_uri() + "?mode=ro", uri=True) as db:
+            if db.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
+                raise ValueError("Legacy archive database is corrupt")
+
+
 def validate_databases(root):
+    validate_legacy_archives(root / "project")
     db = root / "project" / "pocketcontext.db"
     if not db.is_file():
         raise Failure("backup is missing its project database")
@@ -156,10 +215,15 @@ def validate_databases(root):
         integrity(path)
         if path.name == "auxiliary.db":
             continue
+        validate_archive_anchor(path, root / "project")
         with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as connection:
             row = connection.execute("SELECT id FROM _collections WHERE name='sources'").fetchone()
             if not row:
-                raise Failure("backup database has no sources collection")
+                required = {"crew_agents", "crew_buckets", "crew_notes", "crew_note_revisions", "crew_tasks", "crew_events", "crew_reviews"}
+                present = {r[0] for r in connection.execute("SELECT name FROM _collections")}
+                if not required.issubset(present):
+                    raise Failure("backup database is missing Crew collections")
+                continue
             collection = row[0]
             for record, original, checksum in connection.execute("SELECT id, original, sha256 FROM sources"):
                 if any(not part or "/" in part or "\\" in part or part in (".", "..") for part in (collection, record, original)):

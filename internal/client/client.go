@@ -1,5 +1,5 @@
-// Package client is the PocketContext command-line client: SQL reads, records API
-// writes, text ingestion, search and lint. It talks to the local server with a
+// Package client provides Crew administration and authenticated MCP operations.
+// It talks to the local server with a
 // token obtained through the private local key, or, in remote mode (--url), to
 // a forwarded server with a stored session token; never with a stored password.
 package client
@@ -7,11 +7,9 @@ package client
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -39,20 +37,14 @@ func fail(code int, format string, args ...any) error {
 type Client struct {
 	Base        string // server URL without a trailing slash
 	DB          string // local database; empty in remote mode
-	Space       string
 	token       string
 	remote      bool
-	spaceOK     bool
 	http        *http.Client
 	LongTimeout time.Duration
 }
 
-func newClient(base, space string) (*Client, error) {
-	if space == "" {
-		space = os.Getenv("POCKETCONTEXT_SPACE")
-	}
-	space = strings.TrimSpace(space)
-	return &Client{Base: base, Space: space, http: &http.Client{
+func newClient(base string) (*Client, error) {
+	return &Client{Base: base, http: &http.Client{
 		Timeout: 30 * time.Second,
 		// A followed redirect could send the token elsewhere.
 		CheckRedirect: noRedirect,
@@ -60,8 +52,8 @@ func newClient(base, space string) (*Client, error) {
 }
 
 // New ensures the server is running and obtains a token for the local account.
-func New(p *bundle.Project, space string) (*Client, error) {
-	c, err := newClient(p.URL(), space)
+func New(p *bundle.Project) (*Client, error) {
+	c, err := newClient(p.URL())
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +158,7 @@ func (c *Client) Must(method, path string, body any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	safeRead := method == "GET" || path == "/api/context/query" || path == "/api/context/search"
+	safeRead := method == "GET" || path == "/api/crew/read"
 	for attempt := 0; safeRead && status == 503 && attempt < 3; attempt++ {
 		time.Sleep(time.Duration(500*(attempt+1)) * time.Millisecond)
 		if status, data, err = c.send(method, path, body, nil, "", nil); err != nil {
@@ -186,19 +178,7 @@ func checked(method, path string, status int, data any) (any, error) {
 	pretty, _ := json.MarshalIndent(data, "", "  ")
 	lines := []string{fmt.Sprintf("HTTP %d from %s %s", status, method, path), string(pretty)}
 	conflict := status == 409
-	if path == "/api/batch" {
-		lines = append(lines, "Nothing in this batch was saved.")
-		if requests, ok := dig(data, "data", "requests").(map[string]any); ok {
-			for index, entry := range requests {
-				response, _ := dig(entry, "response").(map[string]any)
-				inner, _ := response["status"].(json.Number)
-				lines = append(lines, fmt.Sprintf("Failed request index %s: HTTP %s: %s", index, inner, message(response)))
-				if inner.String() == "409" {
-					conflict = true
-				}
-			}
-		}
-	}
+
 	if conflict {
 		lines = append(lines, "HTTP 409: another request changed the record first. Read it again, confirm the change still applies, then retry.")
 		return nil, &Fail{4, strings.Join(lines, "\n")}
@@ -217,131 +197,6 @@ func dig(value any, keys ...string) any {
 	return value
 }
 
-// Query runs one SQL SELECT and returns the raw result.
-func (c *Client) Query(sql string) (map[string]any, error) {
-	data, err := c.Must("POST", "/api/context/query", map[string]string{"sql": sql})
-	if err != nil {
-		return nil, err
-	}
-	result, ok := data.(map[string]any)
-	if !ok {
-		return nil, fail(1, "unexpected SQL response")
-	}
-	return result, nil
-}
-
-// Rows runs SQL and returns row objects; truncated results are an error.
-func (c *Client) Rows(sql string) ([]map[string]any, error) {
-	result, err := c.Query(sql)
-	if err != nil {
-		return nil, err
-	}
-	if t, _ := result["truncated"].(bool); t {
-		return nil, fail(1, "query was truncated; narrow the selection before continuing")
-	}
-	columns, _ := result["columns"].([]any)
-	raw, _ := result["rows"].([]any)
-	rows := make([]map[string]any, 0, len(raw))
-	for _, r := range raw {
-		values, _ := r.([]any)
-		row := map[string]any{}
-		for i, col := range columns {
-			if name, ok := col.(string); ok && i < len(values) {
-				row[name] = values[i]
-			}
-		}
-		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
-// SpaceID returns the selected space: --space or POCKETCONTEXT_SPACE (an ID or
-// a unique name), else the project's default space.
-func (c *Client) SpaceID() (string, error) {
-	if c.spaceOK {
-		return c.Space, nil
-	}
-	if c.Space == "" {
-		data, err := c.Must("GET", "/api/spaces/default", nil)
-		if err != nil {
-			return "", err
-		}
-		id, _ := dig(data, "id").(string)
-		if !idPattern.MatchString(id) {
-			return "", fail(1, "unexpected default space response")
-		}
-		c.Space, c.spaceOK = id, true
-		return id, nil
-	}
-	space, err := c.ResolveSpace(c.Space)
-	if err != nil {
-		return "", err
-	}
-	c.Space, c.spaceOK = space["id"].(string), true
-	return c.Space, nil
-}
-
-// ResolveSpace finds one space by ID, or else by its exact name, and returns
-// its id, name, archived and revision. An unknown or ambiguous name is an error.
-func (c *Client) ResolveSpace(ref string) (map[string]any, error) {
-	ref = strings.TrimSpace(ref)
-	if ref == "" || len(ref) > 200 {
-		return nil, fail(2, "a space is an ID or a name of 1-200 characters")
-	}
-	rows, err := c.Rows("SELECT id, name, archived, revision FROM spaces WHERE id = " + literal(ref) + " OR name = " + literal(ref) + " ORDER BY id LIMIT 100")
-	if err != nil {
-		return nil, err
-	}
-	var named []map[string]any
-	for _, row := range rows {
-		row["archived"] = truthy(row["archived"])
-		if row["id"] == ref {
-			return row, nil
-		}
-		named = append(named, row)
-	}
-	switch len(named) {
-	case 0:
-		return nil, fail(2, "no space with ID or name %q; run `pocketcontext spaces`", ref)
-	case 1:
-		return named[0], nil
-	}
-	return nil, fail(2, "%d spaces are named %q (%s); choose one by ID", len(named), ref, spaceIDs(named))
-}
-
-func spaceIDs(rows []map[string]any) string {
-	ids := make([]string, 0, len(rows))
-	for _, row := range rows {
-		ids = append(ids, fmt.Sprint(row["id"]))
-	}
-	return strings.Join(ids, ", ")
-}
-
-// truthy reads an SQL boolean, which arrives as a number or a bool.
-func truthy(v any) bool {
-	switch b := v.(type) {
-	case bool:
-		return b
-	case string:
-		return b == "1" || b == "true"
-	}
-	n, ok := asInt(v)
-	return ok && n != 0
-}
-
-func literal(value any) string {
-	return "'" + strings.ReplaceAll(fmt.Sprint(value), "'", "''") + "'"
-}
-
-func records(collection string, id ...string) string {
-	path := "/api/collections/" + url.PathEscape(collection) + "/records"
-	if len(id) > 0 {
-		path += "/" + url.PathEscape(id[0])
-	}
-	return path
-}
-
-// Print writes JSON to stdout, compact or indented.
 func Print(data any, pretty bool) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
@@ -352,16 +207,3 @@ func Print(data any, pretty bool) {
 	_ = encoder.Encode(data)
 	os.Stdout.Write(buf.Bytes())
 }
-
-func asInt(v any) (int64, bool) {
-	switch n := v.(type) {
-	case json.Number:
-		i, err := n.Int64()
-		return i, err == nil
-	case float64:
-		return int64(n), n == float64(int64(n))
-	}
-	return 0, false
-}
-
-var errUsage = errors.New("usage")

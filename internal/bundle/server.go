@@ -233,6 +233,9 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	if err := prepareKnowledgeArchive(p, store); err != nil {
+		return fmt.Errorf("preserving retired knowledge: %w", err)
+	}
 	appDir, err := unpack(p)
 	if err != nil {
 		return fmt.Errorf("unpacking application files: %w", err)
@@ -260,8 +263,8 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 			return controller.Connect(filepath.Join(live, filepath.Base(path)))
 		},
 	})
-	// SQL/search engines and plugin resources register their own termination
-	// hooks; clearing PocketBase alone does not close those independent pools.
+	// Plugin resources register their own termination hooks; clearing PocketBase
+	// alone does not close those independent resources.
 	// Cover bootstrap/serve failures too, and run the hooks at most once.
 	appClosed := false
 	closeApp := func() error {
@@ -287,7 +290,7 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 	app.OnCollectionAfterDeleteSuccess().Unbind(notifyWatcher)
 	server.RegisterMaintenance(app, controller)
 	jsvm.MustRegister(app, hooksConfig(appDir, p.Cache))
-	server.RegisterDatabase(app, filepath.Join(appDir, "server.json"), store.livePath())
+	// Crew reads use revision-aware custom routes; no inherited SQL/search routes.
 
 	changed := func(e *core.ModelEvent) error {
 		if _, isLog := e.Model.(*core.Log); !isLog {

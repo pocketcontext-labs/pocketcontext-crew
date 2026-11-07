@@ -25,9 +25,6 @@ def main():
         restored = None
         try:
             scenario(original)
-            evidence = root / 'synthetic-original.txt'
-            evidence.write_text('Native backup synthetic original.\n')
-            original.json('ingest', str(evidence), '--title', 'Native backup synthetic evidence')
             original.json('stop')
             shutil.copy2(binary, original.project / 'pocketcontext-crew')
             result = backup.snapshot(original.project, root / 'backups')

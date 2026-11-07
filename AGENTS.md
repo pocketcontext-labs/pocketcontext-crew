@@ -16,8 +16,13 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
 - External platforms run agents. Crew never posts, sends or pays.
 - Keep runtime credentials and OAuth state private and out of Git and knowledge.
 - Tests: build ui/dist first; pnpm test/build in ui; CGO_ENABLED=1 go test with
-  build-tags.txt; tests/crew_e2e.py and inherited tests/e2e.py with built binary.
+  build-tags.txt; tests/crew_e2e.py, tests/upgrades.py and tests/e2e.py with built binary.
   Preserve Windows support. Hosted releases require image lifecycle and populated
   backup/restore gates before deployment. Pin the exact tested OCI digest.
 - No databases, generated ui/dist, bin, credentials or user data in commits.
 - Historical upstream docs describe inherited infrastructure, not a Crew release.
+
+- Crew has no spaces or inherited knowledge APIs. Upgrades must verify a private
+  legacy-knowledge archive before retiring populated knowledge collections.
+  Production-data rehearsals require explicit authorization and isolated copies;
+  never commit their data or use them as test fixtures.

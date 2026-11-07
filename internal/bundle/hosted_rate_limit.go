@@ -88,12 +88,6 @@ func registerHostedRateLimitsClock(e *core.ServeEvent, clock func() time.Time) {
 			}
 			mu.Unlock()
 			cost := 1
-			if re.Request.URL.Path == "/api/batch" {
-				// Reserve the server's maximum batch size before any operation runs. This
-				// bounds multipart and JSON batches equally without reparsing their bodies.
-				// Inner record handlers are guest-only, so they do not charge a second time.
-				cost = max(1, re.App.Settings().Batch.MaxRequests)
-			}
 			now := clock()
 			if !bucket.AllowN(now, cost) {
 				tokens := bucket.TokensAt(now)
@@ -101,7 +95,7 @@ func registerHostedRateLimitsClock(e *core.ServeEvent, clock func() time.Time) {
 				info := rateLimitInfo{"authenticated_knowledge", retry, hostedKnowledgeBurst, max(0, int(tokens)), max(1, int(math.Ceil((hostedKnowledgeBurst-tokens)/hostedKnowledgeRate)))}
 				info.headers(re.Response.Header())
 				logRateLimit(re.App, key, re.Request.Pattern, info)
-				return re.JSON(http.StatusTooManyRequests, map[string]any{"status": 429, "message": "Knowledge request budget exhausted. Retry after the indicated delay.", "data": map[string]any{"rate_limit": info}})
+				return re.JSON(http.StatusTooManyRequests, map[string]any{"status": 429, "message": "Crew request budget exhausted. Retry after the indicated delay.", "data": map[string]any{"rate_limit": info}})
 			}
 		}
 		err := re.Next()

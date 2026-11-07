@@ -4,10 +4,10 @@ package assets
 
 import "embed"
 
-// Assets holds the hooks, migrations, SQL configuration and built reader.
+// Assets holds the hooks, migrations and built reader.
 // Build the reader (ui/dist) before compiling.
 //
-//go:embed pb_hooks pb_migrations server.json ui/dist
+//go:embed pb_hooks pb_migrations ui/dist
 var Assets embed.FS
 
 // Skill is the agent skill template that `pocketcontext skill` installs with this
@@ -19,5 +19,5 @@ var Skill embed.FS
 // ManualSources embeds the exact release documentation. Export transforms it
 // deterministically; there is no independently maintained documentation copy.
 //
-//go:embed README.md docs/spaces.md docs/import-obsidian.md docs/upgrades.md docs/reader-setup.md docs/service.md docs/https.md docs/mcp.md docs/hosting.md docs/releases/0.24.0.md
+//go:embed README.md docs/crew.md docs/data-model.md docs/upgrades.md docs/reader-setup.md docs/service.md docs/https.md docs/mcp.md docs/hosting.md docs/releases/0.2.0.md
 var ManualSources embed.FS

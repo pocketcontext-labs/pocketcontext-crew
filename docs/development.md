@@ -1,6 +1,6 @@
 # Local development
 
-Use a dedicated development knowledge base containing synthetic notes. Keep it
+Use a dedicated development Crew instance containing synthetic notes. Keep it
 outside a synced or production project. The source checkout and development
 project are separate: Go compiles the application; the application owns its
 working database, snapshots and private machine cache.
@@ -106,7 +106,7 @@ validates loopback Host/Origin, and Vite's hot-reload client normally uses the
 reader's local port.
 
 A development gateway must validate the exact temporary HTTPS hostname and
-browser Origin, proxy only reader/authentication/knowledge routes and development
+browser Origin, proxy only reader/authentication/Crew routes and development
 assets, and block local administration and the PocketBase dashboard. Configure
 the hot-reload WebSocket for WSS on external port 443. Do not disable backend
 authentication or globally allow arbitrary Hosts/Origins to make a tunnel work.
@@ -118,8 +118,8 @@ before using it. It is distinct from the committed `scripts/dev.mjs` launcher.
 
 [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
 change hostname on restart and do not support Server-Sent Events. Vite hot reload
-uses WebSockets, but cross-client PocketBase realtime updates need a refresh
-through such a preview. Keep full realtime checks on the loopback/SSH path.
+uses WebSockets. Use Crew’s Refresh button to read changes made by another
+client through the preview.
 
 ## Validation
 

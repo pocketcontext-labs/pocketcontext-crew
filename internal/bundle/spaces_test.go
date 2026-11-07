@@ -91,166 +91,23 @@ func (a *testApp) request(t *testing.T, method, path, token, body string, want i
 	return data
 }
 
-func TestSingleUserSpaces(t *testing.T) {
+func TestCrewHasNoKnowledgeCollections(t *testing.T) {
 	a := newTestApp(t)
-	token := a.token
-	req := func(method, path, body string, want int) map[string]any {
-		t.Helper()
-		return a.request(t, method, path, token, body, want)
-	}
-
-	// A new database has one space, "Default", named by the settings row.
-	spaces, err := a.app.FindAllRecords("spaces")
-	if err != nil || len(spaces) != 1 || spaces[0].GetString("name") != "Default" || spaces[0].GetBool("archived") {
-		t.Fatalf("new database spaces: %v, %v", spaces, err)
-	}
-	def := req(http.MethodGet, "/api/spaces/default", "", 200)
-	first := def["id"].(string)
-	if first != spaces[0].Id || def["name"] != "Default" || def["archived"] != false {
-		t.Fatalf("default: %v", def)
-	}
-	settings := req(http.MethodGet, "/api/collections/settings/records/projectsettings", "", 200)
-	if settings["default_space"] != first {
-		t.Fatalf("settings: %v", settings)
-	}
-
-	// Authentication stays required everywhere.
-	for _, path := range []string{"/api/spaces/default", "/api/collections/spaces/records", "/api/collections/pages/records",
-		"/api/collections/settings/records", "/api/pocketcontext/runs/aaaaaaaaaaaaaaa/check"} {
-		status := 401
-		if strings.HasPrefix(path, "/api/collections/") {
-			status = 200 // list rules filter anonymous requests to nothing
-		}
-		data := a.request(t, http.MethodGet, path, "", "", status)
-		if status == 200 && len(data["items"].([]any)) != 0 {
-			t.Fatalf("%s leaked records anonymously: %v", path, data)
-		}
-	}
-	a.request(t, http.MethodGet, "/api/spaces/default", "bad-token", "", 401)
-	a.request(t, http.MethodPost, "/api/collections/spaces/records", "", `{"name":"Anonymous"}`, 400)
-	a.request(t, http.MethodPost, "/api/collections/pages/records", "", `{"slug":"anon","kind":"concept"}`, 400)
-
-	// The account is hidden and unique.
-	req(http.MethodGet, "/api/collections/users/records", "", 403)
-	req(http.MethodGet, "/api/collections/users/records/"+a.user.Id, "", 200)
-	req(http.MethodPost, "/api/collections/users/records", `{"email":"second@example.localhost","password":"synthetic-password","passwordConfirm":"synthetic-password"}`, 403)
-	users, _ := a.app.FindCollectionByNameOrId("users")
-	second := core.NewRecord(users)
-	second.SetEmail("second@example.localhost")
-	second.SetPassword("synthetic-password")
-	if err := a.app.Save(second); err == nil || !strings.Contains(err.Error(), "exactly one") {
-		t.Fatalf("second account: %v", err)
-	}
-	if err := a.app.Delete(a.user); err == nil {
-		t.Fatal("the account was deleted")
-	}
-
-	// Creation validates names; creation fields are server managed.
-	created := req(http.MethodPost, "/api/collections/spaces/records", `{"name":"  Research  "}`, 200)
-	research := created["id"].(string)
-	if created["name"] != "Research" || created["revision"] != float64(1) || created["archived"] != false {
-		t.Fatalf("created: %v", created)
-	}
-	req(http.MethodPost, "/api/collections/spaces/records", `{"name":"   "}`, 400)
-	req(http.MethodPost, "/api/collections/spaces/records", `{"name":"`+strings.Repeat("x", 201)+`"}`, 400)
-	req(http.MethodPost, "/api/collections/spaces/records", `{"name":`+`"`+strings.Repeat("x", 200)+`"}`, 200)
-	req(http.MethodPost, "/api/collections/spaces/records", `{"name":"Bad","archived":true}`, 400)
-	req(http.MethodPost, "/api/collections/spaces/records", `{"name":"Bad","kind":"group"}`, 400)
-
-	// Rename and archive need the current revision.
-	endpoint := "/api/collections/spaces/records/" + research
-	renamed := req(http.MethodPatch, endpoint, `{"name":"Reading","expected_revision":1}`, 200)
-	if renamed["name"] != "Reading" || renamed["revision"] != float64(2) {
-		t.Fatal(renamed)
-	}
-	req(http.MethodPatch, endpoint, `{"name":"Stale","expected_revision":1}`, 409)
-	req(http.MethodPatch, endpoint, `{"name":"Missing revision"}`, 400)
-	req(http.MethodPatch, endpoint, `{"revision":9,"expected_revision":2}`, 400)
-	req(http.MethodPatch, endpoint, `{"name":"","expected_revision":2}`, 400)
-
-	// Root records default to the default space; children inherit their parent's.
-	implicit := req(http.MethodPost, "/api/collections/pages/records", `{"slug":"implicit","kind":"concept"}`, 200)
-	explicit := req(http.MethodPost, "/api/collections/pages/records", `{"slug":"implicit","kind":"concept","space":"`+research+`"}`, 200)
-	if implicit["space"] != first || explicit["space"] != research {
-		t.Fatalf("root spaces: %v / %v", implicit, explicit)
-	}
-	req(http.MethodPost, "/api/collections/pages/records", `{"slug":"implicit","kind":"concept"}`, 400) // per-space unique slug
-	req(http.MethodPost, "/api/collections/pages/records", `{"slug":"nowhere","kind":"concept","space":"aaaaaaaaaaaaaaa"}`, 404)
-	req(http.MethodPost, "/api/collections/pages/records", `{"slug":"x","kind":"concept","created_by":"someone"}`, 200)
-
-	// References never cross spaces.
-	run := req(http.MethodPost, "/api/collections/ingestion_runs/records", `{"key":"run-1","status":"staging","description":"Synthetic"}`, 200)
-	foreign := req(http.MethodPost, "/api/collections/page_revisions/records",
-		`{"run":"`+run["id"].(string)+`","page":"`+explicit["id"].(string)+`","title":"T","summary":"S","body":"[needs verification]"}`, 404)
-	_ = foreign
-	req(http.MethodPost, "/api/collections/ingestion_runs/records", `{"key":"run-2","status":"staging","description":"Synthetic","home":"`+explicit["id"].(string)+`"}`, 404)
-	req(http.MethodPost, "/api/collections/page_revisions/records",
-		`{"run":"`+run["id"].(string)+`","page":"`+implicit["id"].(string)+`","space":"`+research+`","title":"T","summary":"S","body":"[needs verification]"}`, 404)
-	revision := req(http.MethodPost, "/api/collections/page_revisions/records",
-		`{"run":"`+run["id"].(string)+`","page":"`+implicit["id"].(string)+`","title":"T","summary":"S","body":"[needs verification]"}`, 200)
-	if revision["space"] != first {
-		t.Fatalf("child space: %v", revision)
-	}
-	req(http.MethodPost, "/api/collections/page_links/records", `{"page_revision":"`+revision["id"].(string)+`","target":"`+explicit["id"].(string)+`"}`, 404)
-
-	// Records are immutable and history is retained.
-	req(http.MethodPatch, "/api/collections/pages/records/"+implicit["id"].(string), `{"slug":"renamed","expected_revision":1}`, 400)
-	req(http.MethodDelete, "/api/collections/pages/records/"+implicit["id"].(string), "", 403)
-	req(http.MethodPost, "/api/collections/publications/records", `{"run":"`+run["id"].(string)+`","sequence":1,"manifest":{}}`, 403)
-	req(http.MethodPost, "/api/collections/audit_log/records", `{"action":"create","collection":"pages","record":"x"}`, 403)
-
-	// Publishing works and the audit has no actor.
-	published := req(http.MethodPatch, "/api/collections/ingestion_runs/records/"+run["id"].(string), `{"status":"published","expected_revision":1}`, 200)
-	if published["status"] != "published" {
-		t.Fatal(published)
-	}
-	audit, err := a.app.FindRecordsByFilter("audit_log", "record = {:id}", "created", 0, 0, map[string]any{"id": run["id"]})
-	if err != nil || len(audit) != 2 || audit[0].Collection().Fields.GetByName("actor") != nil {
-		t.Fatalf("audit: %v %v", audit, err)
-	}
-
-	// The default space cannot be archived; archiving another one blocks writes.
-	req(http.MethodPatch, "/api/collections/spaces/records/"+first, `{"archived":true,"expected_revision":1}`, 400)
-	archived := req(http.MethodPatch, endpoint, `{"archived":true,"expected_revision":2}`, 200)
-	if archived["archived"] != true || archived["revision"] != float64(3) {
-		t.Fatal(archived)
-	}
-	req(http.MethodGet, endpoint, "", 200)
-	req(http.MethodGet, "/api/collections/pages/records/"+explicit["id"].(string), "", 200)
-	req(http.MethodPost, "/api/collections/pages/records", `{"slug":"archived-write","kind":"concept","space":"`+research+`"}`, 403)
-	// An archived space cannot become the default.
-	settingsPath := "/api/collections/settings/records/projectsettings"
-	req(http.MethodPatch, settingsPath, `{"default_space":"`+research+`","expected_revision":1}`, 400)
-	req(http.MethodPatch, endpoint, `{"archived":false,"expected_revision":3}`, 200)
-	req(http.MethodPost, "/api/collections/pages/records", `{"slug":"restored-write","kind":"concept","space":"`+research+`"}`, 200)
-
-	// Changing the default moves implicit root records and frees the old default.
-	req(http.MethodPatch, settingsPath, `{"default_space":"`+research+`"}`, 400)
-	req(http.MethodPatch, settingsPath, `{"default_space":"aaaaaaaaaaaaaaa","expected_revision":1}`, 404)
-	req(http.MethodPatch, settingsPath, `{"default_space":"`+research+`","expected_revision":1}`, 200)
-	req(http.MethodPatch, settingsPath, `{"default_space":"`+first+`","expected_revision":1}`, 409)
-	if got := req(http.MethodGet, "/api/spaces/default", "", 200); got["id"] != research || got["name"] != "Reading" {
-		t.Fatalf("new default: %v", got)
-	}
-	moved := req(http.MethodPost, "/api/collections/pages/records", `{"slug":"after-default","kind":"concept"}`, 200)
-	if moved["space"] != research {
-		t.Fatalf("root default after change: %v", moved)
-	}
-	req(http.MethodPatch, endpoint, `{"archived":true,"expected_revision":4}`, 400)
-	req(http.MethodPatch, "/api/collections/spaces/records/"+first, `{"archived":true,"expected_revision":1}`, 200)
-
-	// Spaces and settings are retained.
-	req(http.MethodDelete, endpoint, "", 403)
-	req(http.MethodDelete, settingsPath, "", 403)
-	req(http.MethodPost, "/api/collections/settings/records", `{"default_space":"`+first+`"}`, 403)
-	for _, name := range []string{"space_members", "user_directory", "project_policy"} {
+	for _, name := range retiredKnowledge {
 		if _, err := a.app.FindCollectionByNameOrId(name); err == nil {
-			t.Fatalf("collection %s exists", name)
+			t.Errorf("retired collection %s remains", name)
 		}
 	}
-	if spaces, _ := a.app.FindCollectionByNameOrId("spaces"); spaces.Fields.GetByName("kind") != nil || spaces.Fields.GetByName("created_by") != nil {
-		t.Fatal("spaces keeps removed fields")
+	for _, name := range []string{"crew_agents", "crew_buckets", "crew_notes", "crew_note_revisions", "crew_tasks", "crew_reviews", "crew_events"} {
+		if _, err := a.app.FindCollectionByNameOrId(name); err != nil {
+			t.Errorf("missing %s: %v", name, err)
+		}
 	}
+	for _, endpoint := range []string{"/api/spaces/default", "/api/context/schema", "/api/pocketcontext/runs/synthetic/check"} {
+		a.request(t, "GET", endpoint, a.token, "", 404)
+	}
+	a.request(t, "POST", "/api/context/query", a.token, `{"sql":"SELECT 1"}`, 404)
+	a.request(t, "POST", "/api/context/search", a.token, `{}`, 404)
 }
 
 // A database from an earlier release is refused before PocketBase opens it,

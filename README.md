@@ -7,11 +7,10 @@ run the agents; Crew stores their context and coordinates work.
 Crew is a separate product derived from PocketContext source
 `b72e3ff5c96d9ba8792a89be6da724f27ffdc088`. It introduces its own work/memory
 schema and application UI. Use a new project database; do not point it at an
-existing PocketContext installation. Existing evidence APIs remain available for
-immutable source ingestion and provenance; ordinary Crew notes need no publication run.
+existing PocketContext installation. Crew has no spaces or inherited knowledge APIs. Notes need no publication run.
 
-See [Crew 0.1.1 release notes](docs/releases/0.1.1.md) for hosted bulk budgets
-and actionable HTTP/MCP retry information.
+See [Crew 0.2.0 release notes](docs/releases/0.2.0.md) for the standalone model,
+bucket reassignment and archive-preserving upgrade.
 
 ## First version
 
@@ -45,7 +44,7 @@ Create the optional five-agent starter setup in the UI, or create agents and
 buckets yourself. Each agent should read its brief and bucket, track work in a
 task, save only durable decisions/findings, and request review for the finished
 draft. Agent execution, recurrence, calendar sync and notifications are external.
-See [Crew data and API contract](docs/crew.md).
+See [Crew data and API contract](docs/crew.md) and [data-model diagram](docs/data-model.md).
 
 ## Install your own copy
 
@@ -73,7 +72,7 @@ PocketContext releases. See the hosting guide for enrollment and pause controls.
 ## Local project backups and moving computers
 
 For a consistent backup, stop the server and wait for successful shutdown. Copy
-`pocketcontext.db`, `pocketcontext.json`, `storage/` and the matching binary. Keep
+`pocketcontext.db`, `pocketcontext.json`, `storage/`, `legacy-knowledge/` (when present) and the matching binary. Keep
 that complete stopped backup together. Restart the original only after the copy
 finishes. Hosted containers use the supervisor's verified complete-backup procedure
 instead, including their private authorization state.

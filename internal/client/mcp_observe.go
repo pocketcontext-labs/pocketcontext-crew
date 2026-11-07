@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"time"
 
@@ -105,9 +104,8 @@ func (o *mcpObservation) api(method, route string, status int, size int64, dispa
 		o.calls++
 	}
 	o.bytes += size
-	// POST query/search/token routes do not mutate knowledge. Other allowed
-	// POST/PATCH operations may have committed before a failure reaches us.
-	mutation := (method == "POST" || method == "PATCH") && route != "/api/crew/read" && route != "/api/context/query" && route != "/api/context/search" && route != "/api/files/token"
+	// Only the agent-write route mutates Crew records.
+	mutation := method == "POST" && route == "/api/crew/agent-write"
 	if dispatched && mutation && (status == 0 || status >= 500 || status >= 200 && status < 300 || err != nil) {
 		o.possibleWrite = true
 	}
@@ -166,23 +164,10 @@ func observeMCPMethods(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
-// Route templates retain diagnostic value without IDs, filenames or queries.
+// Crew routes contain no record IDs or content.
 func mcpAPIRoute(method, path string) string {
-	if !mcpAPIAllowed(method, path) {
-		return "unknown"
-	}
-	switch path {
-	case "/api/crew/read", "/api/crew/agent-write", "/api/context/schema", "/api/spaces/default", "/api/context/query", "/api/context/search", "/api/batch", "/api/files/token":
+	if mcpAPIAllowed(method, path) {
 		return path
 	}
-	if strings.HasPrefix(path, "/api/files/sources/") {
-		return "/api/files/sources/{id}/{filename}"
-	}
-	if strings.HasPrefix(path, "/api/pocketcontext/runs/") {
-		return "/api/pocketcontext/runs/{id}/check"
-	}
-	if strings.HasSuffix(path, "/records") {
-		return "/api/collections/{collection}/records"
-	}
-	return "/api/collections/{collection}/records/{id}"
+	return "unknown"
 }

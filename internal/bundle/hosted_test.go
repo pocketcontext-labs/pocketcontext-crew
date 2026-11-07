@@ -79,7 +79,7 @@ func TestHostedBoundaryAndAuthentication(t *testing.T) {
 		{"POST", "/api/collections/users/auth-with-password", `{"identity":"owner@example.test","password":"synthetic-password"}`, 404},
 		{"POST", "/api/bundle/redeem", `{"code":"x"}`, 404}, {"GET", "/bundle/login", "", 404},
 		{"POST", "/api/bundle/account", `{}`, 404}, {"GET", "/_/", "", 404},
-		{"POST", "/api/files/token", "{}", 401},
+		{"POST", "/api/files/token", "{}", 404},
 	} {
 		w := hostedRequest(h, tc.method, tc.path, tc.body)
 		if w.Code != tc.status {
@@ -232,7 +232,7 @@ func TestHostedRestoreInvalidatesCredentialsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spacesBefore, err := a.app.FindAllRecords("spaces")
+	agentsBefore, err := a.app.FindAllRecords("crew_agents")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,8 +257,8 @@ func TestHostedRestoreInvalidatesCredentialsOnly(t *testing.T) {
 	if _, err = os.Stat(state); !os.IsNotExist(err) {
 		t.Fatal("restore retained OAuth grants", err)
 	}
-	spacesAfter, err := a.app.FindAllRecords("spaces")
-	if err != nil || len(spacesAfter) != len(spacesBefore) || spacesAfter[0].Id != spacesBefore[0].Id {
+	agentsAfter, err := a.app.FindAllRecords("crew_agents")
+	if err != nil || len(agentsAfter) != len(agentsBefore) {
 		t.Fatal("restore changed knowledge", err)
 	}
 	// Regular startup configuration must not invalidate browser credentials.
@@ -315,9 +315,8 @@ func TestHostedInitialAccountAndLocalModeGuard(t *testing.T) {
 	if err = configureHosted(app, "knowledge.example.com", syntheticHostedConfig(), true); err == nil {
 		t.Fatal("initialization repeated")
 	}
-	spaces, err := app.FindAllRecords("spaces")
-	if err != nil || len(spaces) != 1 {
-		t.Fatal("missing initial space", err)
+	if _, err := app.FindCollectionByNameOrId("crew_buckets"); err != nil {
+		t.Fatal("missing Crew buckets", err)
 	}
 	p := &Project{Cache: t.TempDir()}
 	if err = CheckLocalProject(p); err != nil {

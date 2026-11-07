@@ -32,12 +32,12 @@ try {
   await page.getByLabel('Password', {exact:true}).waitFor();
   await page.goto(signIn);
   await page.waitForURL(`${origin}/`);
-  await page.goto(`${origin}/#/sources/`);
-  await page.getByRole('link', {name:'Synthetic phone evidence',exact:true}).waitFor();
+  await page.getByRole('button', {name:'New task',exact:false}).click();
+  await page.getByLabel('Title', {exact:true}).fill('Synthetic phone task');
+  await page.getByRole('button', {name:'Save task',exact:true}).click();
+  await page.getByText('Synthetic phone task', {exact:true}).waitFor();
   await page.reload();
-  await page.getByRole('link', {name:'Synthetic phone evidence',exact:true}).waitFor();
-  await page.getByRole('link', {name:'Synthetic phone evidence',exact:true}).click();
-  await page.getByRole('heading', {name:'Synthetic phone evidence',exact:true}).waitFor();
+  await page.getByText('Synthetic phone task', {exact:true}).waitFor();
   assert.equal(await page.evaluate(async () => (await fetch('/api/bundle/instance')).status),404);
   assert.equal(await page.evaluate(() => location.protocol),'https:');
   await context.close();
@@ -46,9 +46,8 @@ try {
   await fresh.page.getByLabel('Password', {exact:true}).fill('synthetic-password');
   await fresh.page.getByRole('button', {name:'Sign in',exact:true}).click();
   await fresh.page.getByRole('button', {name:'Sign in',exact:true}).waitFor({state:'hidden'});
-  await fresh.page.goto(`${origin}/#/sources/`);
-  await fresh.page.getByRole('link', {name:'Synthetic phone evidence',exact:true}).waitFor();
+  await fresh.page.getByText('Synthetic phone task', {exact:true}).waitFor();
   await fresh.context.close();
   assert.deepEqual(problems,[]);
-  console.log('ok - mobile HTTPS sign-in link, persistent session, sources, password login, private route isolation');
+  console.log('ok - mobile HTTPS sign-in link, persistent Crew task, password login, private route isolation');
 } finally { await browser.close(); }

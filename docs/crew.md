@@ -1,8 +1,7 @@
 # Crew v1 data and access contract
 
 The `crew_*` collections are accessed through authenticated operations, never
-through generic record writes. SQL is read-only and does not expose these
-collections. Existing knowledge collections are separate provenance infrastructure.
+through generic record writes. There are no spaces, SQL endpoints or inherited knowledge collections.
 
 | Collection | Purpose |
 | --- | --- |
@@ -14,21 +13,21 @@ collections. Existing knowledge collections are separate provenance infrastructu
 | events | Immutable changes/comments, actor and reported attribution |
 | reviews | Immutable draft snapshot with monotonic decision state |
 
-`POST /api/crew/read` accepts collection, optional id/parent/query/archived/offset.
+`POST /api/crew/read` accepts collection, optional id/parent/query/archived/offset and responsible_agent for buckets.
 It returns items, has_more and next_offset (100 records per page). Default note
 reads exclude archived notes and notes in archived buckets. Explicit history
 reads retain revisions, events and closed review snapshots. Search scans note
 content, task text or agent/bucket names; semantic ranking is not provided.
 
 `POST /api/crew/write` is the owner path. MCP only forwards to
-`POST /api/crew/agent-write`, which denies decisions, bucket archival/reassignment
+`POST /api/crew/agent-write`, which denies decisions, bucket archival
 and agent deactivation. All use the same transaction and revision checks.
 MCP OAuth credentials cannot authenticate ordinary REST; internal owner-account
 tokens are never returned by MCP. Direct owner credentials carry owner authority
 and must not be shared with agents. Claimed agent names never grant authority.
 
 Writes have action, optional id/expected_revision/reported_agent/reason, and data.
-Actions: agent.create/update; bucket.create/update; note.create/update/restore;
+Actions: agent.create/update; bucket.create/update/assign; note.create/update/restore;
 task.create/update/claim/comment; review.request/decide/withdraw. A restore names
 revision_id and creates a new note revision. Claim requires an unassigned task.
 Comments preserve task revision; append-only events record them. Link arrays hold
@@ -58,3 +57,15 @@ transport allowlists and the agent path. Hosted image gates additionally rehears
 complete backup/restore, credential revocation on restore, one writer and clean
 shutdown. Actual owner inbox delivery and third-party client sign-in require a
 real user confirmation; automated checks must not be presented as that confirmation.
+
+## Bucket responsibility
+
+bucket.assign uses data.agent; bucket.update uses data.responsible_agent. Both
+accept an ID or unique exact name. IDs take precedence; ambiguous names fail and
+require an ID. Explicit null or empty string clears; omitted assign input fails.
+New assignments require active agents. Retaining an already assigned archived
+agent is permitted when editing a bucket. Assignment to an archived bucket requires
+restoration first. Every accepted update increments revision and records an event,
+including unchanged assignments; events include normalized old/new responsibility IDs.
+Reads preserve responsible_agent as an ID and add responsible_agent_details with
+id/name or null. The optional filter accepts an ID or unique exact name.

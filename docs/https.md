@@ -130,7 +130,7 @@ selected platform's listener permissions and restart behavior.
 
 If a link expires, issue `open --public` again. Keep passwords, reusable tokens,
 certificate private keys and the local key out of chat. Existing reader sessions
-retain the ordinary single-user access model; spaces are not security boundaries.
+retain the single-owner model; bucket responsibility is behavioral.
 
 ## Troubleshooting
 

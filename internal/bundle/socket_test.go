@@ -150,8 +150,9 @@ func TestSocketLifecycleAndTCPActivation(t *testing.T) {
 	// Ordinary authenticated APIs work over the socket without a local-key header.
 	client := socketHTTPClient(info.Socket, time.Second)
 	defer client.CloseIdleConnections()
-	req, _ := http.NewRequest("GET", p.URL()+"/api/collections/spaces/records", nil)
+	req, _ := http.NewRequest("POST", p.URL()+"/api/crew/read", strings.NewReader(`{"collection":"buckets"}`))
 	req.Header.Set("Authorization", a.token)
+	req.Header.Set("Content-Type", "application/json")
 	resp, err = client.Do(req)
 	if err != nil {
 		t.Fatal(err)

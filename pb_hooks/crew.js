@@ -41,7 +41,7 @@ function check(r, b) {
   )
     throw new ApiError(409, "Revision conflict; reread and reassess", {});
 }
-function event(app, r, action, b, actor) {
+function event(app, r, action, b, actor, changes) {
   const ev = new Record(app.findCollectionByNameOrId("crew_events"));
   ev.set("parent", r.id);
   ev.set("action", action);
@@ -49,7 +49,7 @@ function event(app, r, action, b, actor) {
   ev.set("actor", actor);
   ev.set("reported_agent", b.reported_agent || "");
   ev.set("reason", b.reason || "");
-  ev.set("changes", b.data || {});
+  ev.set("changes", changes || b.data || {});
   ev.set("revision", 1);
   app.save(ev);
 }
@@ -58,6 +58,38 @@ function active(app, col, id) {
   const r = get(app, col, id);
   if (r.getBool("archived")) bad("Restore the " + col + " record first");
   return r;
+}
+// IDs take precedence; exact names must be unique, including inactive records.
+function resolveAgent(app, ref) {
+  if (ref === null || ref === "") return "";
+  if (typeof ref !== "string" || ref.length > 200)
+    bad("Agent must be an ID, exact name, null or empty string");
+  if (/^[a-z0-9]{15}$/.test(ref)) {
+    const ids = app.findRecordsByFilter("crew_agents", "id={:id}", "", 1, 0, {
+      id: ref,
+    });
+    if (ids.length) return ids[0].id;
+  }
+  const rows = app.findRecordsByFilter(
+    "crew_agents",
+    "name={:name}",
+    "",
+    2,
+    0,
+    { name: ref },
+  );
+  if (!rows.length) bad("Agent not found");
+  if (rows.length > 1) bad("Agent name is ambiguous; use an agent ID");
+  return rows[0].id;
+}
+function bucketExport(app, r) {
+  const result = r.publicExport();
+  const id = r.getString("responsible_agent");
+  const agent = id ? get(app, "agents", id) : null;
+  result.responsible_agent_details = agent
+    ? { id: agent.id, name: agent.getString("name") }
+    : null;
+  return result;
 }
 function validateData(app, col, d, r) {
   if (d.archived !== undefined && typeof d.archived !== "boolean")
@@ -116,11 +148,25 @@ function withdraw(app, t, b, actor) {
 }
 function read(e) {
   const b = e.requestInfo().body;
-  only(b, ["collection", "id", "parent", "query", "archived", "offset"]);
+  only(b, [
+    "collection",
+    "id",
+    "parent",
+    "query",
+    "archived",
+    "offset",
+    "responsible_agent",
+  ]);
   if (!names.includes(b.collection)) bad("Unknown collection");
   const col = b.collection,
     params = {},
     clauses = [];
+  if (b.responsible_agent !== undefined) {
+    if (col !== "buckets")
+      bad("Responsible agent filter is only supported for buckets");
+    params.agent = resolveAgent(e.app, b.responsible_agent);
+    clauses.push("responsible_agent={:agent}");
+  }
   if (b.id) {
     clauses.push("id={:id}");
     params.id = b.id;
@@ -172,7 +218,9 @@ function read(e) {
     params,
   );
   return e.json(200, {
-    items: rows.slice(0, 100),
+    items: rows
+      .slice(0, 100)
+      .map((r) => (col === "buckets" ? bucketExport(e.app, r) : r)),
     has_more: rows.length > 100,
     next_offset: rows.length > 100 ? offset + 100 : null,
   });
@@ -203,6 +251,7 @@ function write(e, isAgent) {
     const parts = b.action.split("."),
       kind = parts[0],
       op = parts[1];
+    if (parts.length !== 2) bad("Unknown action");
     const col = {
       agent: "agents",
       bucket: "buckets",
@@ -211,10 +260,11 @@ function write(e, isAgent) {
     }[kind];
     if (
       col &&
-      ["create", "update", "restore", "claim", "comment"].includes(op)
+      ["create", "update", "restore", "claim", "comment", "assign"].includes(op)
     ) {
       if (
         (op === "restore" && kind !== "note") ||
+        (op === "assign" && kind !== "bucket") ||
         (["claim", "comment"].includes(op) && kind !== "task")
       )
         bad("Unsupported operation");
@@ -226,9 +276,7 @@ function write(e, isAgent) {
       if (
         isAgent &&
         ((kind === "agent" && d.archived !== undefined) ||
-          (kind === "bucket" &&
-            (d.archived !== undefined ||
-              (op !== "create" && d.responsible_agent !== undefined))))
+          (kind === "bucket" && d.archived !== undefined))
       )
         throw new ForbiddenError("Owner action required");
       if (
@@ -257,7 +305,12 @@ function write(e, isAgent) {
         return;
       }
       let values = d;
-      if (op === "restore") {
+      if (op === "assign") {
+        only(d, ["agent"]);
+        if (d.agent === undefined)
+          bad("agent is required; use null or empty string to clear");
+        values = { responsible_agent: d.agent };
+      } else if (op === "restore") {
         only(d, ["revision_id"]);
         const old = get(app, "note_revisions", d.revision_id);
         if (old.getString("note") !== r.id)
@@ -281,6 +334,12 @@ function write(e, isAgent) {
             op === "create" && kind === "note" ? ["bucket"] : [],
           ),
         );
+      const oldAgent = r.getString("responsible_agent");
+      if (kind === "bucket" && values.responsible_agent !== undefined)
+        values = {
+          ...values,
+          responsible_agent: resolveAgent(app, values.responsible_agent),
+        };
       validateData(app, col, values, r);
       if (op === "create") {
         r.set("revision", 1);
@@ -316,8 +375,14 @@ function write(e, isAgent) {
       }
       app.save(r);
       if (kind === "note") snapshot(app, r, b, actor);
-      event(app, r, b.action, b, actor);
-      result = r;
+      const changes = { ...d };
+      if (kind === "bucket" && values.responsible_agent !== undefined)
+        changes.responsible_agent = {
+          old: oldAgent,
+          new: r.getString("responsible_agent"),
+        };
+      event(app, r, b.action, b, actor, changes);
+      result = kind === "bucket" ? bucketExport(app, r) : r;
       return;
     }
     if (kind === "review" && op === "request") {

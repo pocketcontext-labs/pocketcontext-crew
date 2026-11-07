@@ -9,22 +9,19 @@ import (
 type helpEntry struct{ usage, text, example string }
 
 // commandHelp has one entry for every command in the dispatch table of run
-// and for the commands handled before it (help, version, newid).
+// and for the commands handled before it (help and version).
 var commandHelp = map[string]helpEntry{
 	"environment": {"environment [--pretty]", "Report session and browser capability signals without opening a database, starting a server or browser or issuing credentials. SSH takes precedence over display signals; unknown is not a confirmed desktop. No environment values are exposed.", "pocketcontext environment --pretty"},
 	"manual":      {"manual --out NEW_DIRECTORY", "Export the embedded versioned user manual and hash manifest without a server. Refuses an existing directory.", "pocketcontext manual --out manual-0.18.0"},
 	"name":        {"name [NAME]", "Show or change the project name. Stable project identity stays unchanged; reconcile profiles explicitly after renaming.", "pocketcontext name Research"},
-	"profile":     {"profile add|update|list|remove|default|check|repair [NAME] [--binary PATH] [--skill-dir DIR]", "Manage private named knowledge-base registrations. add/update accept --db or --url. Removing a profile never deletes data. check verifies identity, name, binary and running server versions, and skill before use; repair reinstalls the router.", "pocketcontext profile list"},
+	"profile":     {"profile add|update|list|remove|default|check|repair [NAME] [--binary PATH] [--skill-dir DIR]", "Manage private named Crew instance registrations. add/update accept --db or --url. Removing a profile never deletes data. check verifies identity, name, binary and running server versions, and skill before use; repair reinstalls the router.", "pocketcontext profile list"},
 	"help": {"help [COMMAND]",
 		"Print the command overview, or the usage, description and an example of one command. `COMMAND --help` does the same.",
-		"pocketcontext help batch"},
+		"pocketcontext help serve"},
 	"version": {"version", "Print the version and commit of this binary.", "pocketcontext version"},
-	"newid": {"newid",
-		"Print a new random 15-character record ID. Use it to choose IDs before a `batch`, so later entries can refer to earlier ones.",
-		"pocketcontext newid"},
 
 	"init": {"init [--name NAME] [--port N] [--password-stdin]",
-		"Create the project (database with a first space named Default, storage/ and pocketcontext.json) and its one account, then start the server. The account has no email to choose: the reader asks only for its password. An existing account keeps its password unless --password-stdin is given.",
+		"Create the project (database, storage/ and pocketcontext.json) and its one account, then start the server. The account has no email to choose: the reader asks only for its password. An existing account keeps its password unless --password-stdin is given.",
 		"printf '%s\\n' \"$PASSWORD\" | pocketcontext init --password-stdin"},
 	"ensure-running": {"ensure-running [--take-over]",
 		"Start the server in the background unless it already runs for this database (alias: start). --take-over ignores a lease from another computer; use it only when that computer is off.",
@@ -57,89 +54,7 @@ var commandHelp = map[string]helpEntry{
 		"Run a single-service tunnel. For one supervised process owning both server and tunnel, use serve --headless --tunnel. tunnel serve starts a headless background server if needed for an initialized project, or reuses a compatible server with its listeners unchanged. The tunnel stays in the foreground; interruption or tunnel failure leaves the server running (use stop to flush and stop it). Supervise tunnel serve on the server, then tunnel invite prints one complete client setup prompt to share in your setup chat; --out FILE optionally writes invitation JSON instead. tunnel join --stdin (or --file FILE) verifies the server, redeems its single-use ten-minute code, saves the connection, starts a managed background forward and opens the signed-in reader only in a usable desktop session. SSH/headless/unknown sessions pair without a reader code. --skip-reader explicitly skips reader setup; --no-browser explicitly requests a sign-in link for a verified reachable browser (mutually exclusive); --foreground keeps the forward attached to this terminal. tunnel forward --url URL --background resumes a saved connection; tunnel status/stop --url URL inspect or stop only its managed forward. Without --background, forward stays in the foreground. Invitations, codes and reader links may be shared in your setup chats; passwords, tokens and private identity keys must not be displayed. The address remains usable after code expiry; rotate only for unintended disclosure. Clients never use a database or local key. A busy port is refused.",
 		"pocketcontext tunnel invite --db pocketcontext.db"},
 
-	"whoami": {"whoami", "Show the server URL, that you are signed in, and the selected space: its ID, name, and whether it is archived or the default.", "pocketcontext whoami"},
-	"spaces": {"spaces", "List every space with its ID, name, archived flag, whether it is the default and whether it is selected (--space SPACE or POCKETCONTEXT_SPACE selects another; without either, the default is selected).", "pocketcontext spaces"},
-	"create-space": {"create-space NAME",
-		"Create a space named NAME (1-200 characters, trimmed). If exactly one space already has that name it is returned with \"created\": false instead; several spaces with that name are an error that lists their IDs. Prints {\"id\", \"name\", \"archived\", \"revision\", \"created\"}.",
-		"pocketcontext create-space Research"},
-	"rename-space": {"rename-space SPACE NAME", "Rename a space, chosen by ID or unique name, at its current revision.", "pocketcontext rename-space Research \"Reading notes\""},
-	"archive-space": {"archive-space SPACE",
-		"Archive a space: it stays readable, but nothing can be written to it until it is restored. The default space cannot be archived; make another space the default first.",
-		"pocketcontext archive-space Research"},
-	"restore-space": {"restore-space SPACE", "Restore an archived space so it accepts writes again.", "pocketcontext restore-space Research"},
-	"default-space": {"default-space [SPACE]",
-		"Show the default space, or make SPACE (an unarchived space, by ID or unique name) the default. Commands without --space, and records created without a space, use the default.",
-		"pocketcontext default-space Research"},
-	"check":  {"check", "Compare the live schema with the reference schema shipped in this binary; exit 3 on differences.", "pocketcontext check"},
-	"schema": {"schema", "Print the live SQL-readable schema: tables, columns and types.", "pocketcontext schema"},
-	"query": {"query SQL|-",
-		"Run one read-only SELECT (alias: sql). Results are bounded: when `truncated` is true, select fewer columns or page with ORDER BY and LIMIT/OFFSET. `-` reads the query from standard input.",
-		"pocketcontext query \"SELECT id, slug FROM pages ORDER BY id LIMIT 20\""},
-	"sql": {"sql SQL|-", "Alias of query.", "pocketcontext sql \"SELECT count(*) FROM passages\""},
-	"get": {"get COLLECTION ID", "Read one record of an SQL-readable table by ID.", "pocketcontext get ingestion_runs RUN_ID_________"},
-	"create": {"create COLLECTION JSON|-",
-		"Create one record through the records API. sources, ingestion_runs and pages default to the selected space. `-` reads the JSON body from standard input.",
-		"pocketcontext create pages '{\"slug\":\"example-concept\",\"kind\":\"concept\"}'"},
-	"update": {"update COLLECTION ID JSON|-",
-		"Change fields of one record. The body must carry expected_revision from your last read; a stale revision fails with exit 4.",
-		"pocketcontext update ingestion_runs RUN_ID_________ '{\"status\":\"cancelled\",\"expected_revision\":2}'"},
-	"batch": {"batch JSON|-",
-		"Send up to 20 writes in one transaction: all succeed or none. The input is a JSON array of requests\n\n" +
-			"  [{\"method\": \"POST\" | \"PATCH\", \"url\": \"/api/collections/COLLECTION/records[/ID]\", \"body\": {...}}, ...]\n\n" +
-			"COLLECTION is one of sources, renditions, passages, ingestion_runs, pages, page_revisions, " +
-			"citations, page_links. POST creates a record (the URL has no ID; put a chosen ID from `newid` " +
-			"in the body as \"id\" so later entries can refer to it). PATCH changes the record named in the " +
-			"URL and needs expected_revision in the body. sources, ingestion_runs and pages default to the " +
-			"selected space. `-` reads the array from standard input. The output lists one {\"status\", \"body\"} " +
-			"response per request, in order.",
-		"pocketcontext batch - <<'EOF'\n" +
-			"  [{\"method\":\"POST\",\"url\":\"/api/collections/pages/records\",\"body\":{\"id\":\"pageid000000001\",\"slug\":\"plan-mode\",\"kind\":\"concept\"}},\n" +
-			"   {\"method\":\"POST\",\"url\":\"/api/collections/page_revisions/records\",\"body\":{\"id\":\"revid0000000001\",\"run\":\"RUN_ID_________\",\"page\":\"pageid000000001\",\"base_revision\":\"\",\"title\":\"Plan mode\",\"summary\":\"...\",\"body\":\"Text.[^1]\"}},\n" +
-			"   {\"method\":\"POST\",\"url\":\"/api/collections/citations/records\",\"body\":{\"page_revision\":\"revid0000000001\",\"passage\":\"PASSAGE_ID_____\",\"marker\":\"1\"}}]\n" +
-			"  EOF"},
-	"ingest": {"ingest PATH [--title T] [--date D] [--version V]",
-		"Store a file as an immutable original; it does not synthesize or publish. Text notes (.txt, .md, .markdown, .csv, .json, .rst, .log, .srt, .org, or a UTF-8 file without extension) are extracted into passages. Any other file (PDF, image, audio, office document, ...; at most 50 MiB) is stored as it is, with a media type chosen by its extension, and gets no rendition: the result has status \"stored\" and names the next step, reading it with `original`, converting it to UTF-8 text or Markdown with your own tools and recording that text with `extract`; --version does not apply to it. Repeating the command for a stored file reports its agent-text versions once extracted. Markdown front matter supplies the title (`title:`) and the source date (`published:`, else `date:`); --title and --date override it. Passages follow headings and paragraphs and are labelled with heading path and line range; a passage under 200 characters, such as a lone link after the front matter, joins the next passage of the same or a deeper heading (else the previous one), and its locator covers both. Repeating the command deduplicates by content and resumes an interrupted extraction; without --version an existing rendition is reused (v3, else v2, else the latest). Earlier extractions keep their renditions: v1 (fixed 24,000-character passages) and v2 (tiny passages kept apart); --version v3 adds a current one.",
-		"pocketcontext ingest notes/episode.md --date 2026-06-15"},
-	"extract": {"extract SOURCE_ID --text FILE --tool TOOL [--version LABEL] [--original-sha256 HEX] [--conversion TEXT]",
-		"Record UTF-8 text or Markdown that you produced from a stored original that is not text (PDF, image, audio, ...) as its agent-text rendition, split into passages like a text note (Markdown when FILE ends in .md or .markdown). These passages are derived evidence, not an exact copy of the original, and their locators refer to FILE's lines. --tool names how the text was produced (one line, at most 300 characters). --version defaults to agent-1. When the original was shrunk or converted before ingest (e.g. m4a to Opus), --original-sha256 gives the SHA-256 of the file before that and --conversion describes the step. Repeating the command with the same text and options resumes an interrupted extraction; different text under the same version exits 4, so record it with a new --version. A source that has a text rendition is refused: ingest extracts it. Prints {\"space\", \"source\", \"rendition\", \"version\", \"passages\", \"status\", \"derived\", \"next\"}.",
-		"pocketcontext extract SOURCE_ID______ --text report.md --tool \"claude-opus-5-5 read the PDF\""},
-	"pending": {"pending [--limit N]",
-		"List the sources of the selected space that have no rendition yet, newest first: originals waiting to be converted and recorded with `extract`. Prints {\"space\", \"sources\": [{\"id\", \"title\", \"original_name\", \"media_type\", \"source_date\", \"created\"}], \"truncated\"}; --limit defaults to 50 (at most 500).",
-		"pocketcontext pending --limit 20"},
-	"original": {"original SOURCE_ID --out FILE",
-		"Download the protected original of a source in the selected space, verify it against the source's SHA-256 and write it to FILE, which must not exist yet. Works with --url too. Prints {\"source\", \"sha256\", \"media_type\", \"bytes\", \"out\"}.",
-		"pocketcontext original SOURCE_ID______ --out report.pdf"},
-	"passages": {"passages SOURCE_ID [--version V] [--out FILE]",
-		"Print the passages of one source as plain text in ordinal order, each after a header line `=== ORDINAL · PASSAGE_ID · LOCATOR` (for example `=== 3 · PASSAGE_ID · # Episode > ## Transcript; lines 124-148`), with a blank line between passages and LF line endings. It reads the rendition ingest reuses (v3, else v2, else the newest) unless --version names one, through bounded SQL pages, so nothing is truncated. A source without a text rendition reads its newest agent-text rendition from `extract`; each header line then ends in ` · derived: agent text`, because those passages are derived from the original, not an exact copy. With --out FILE it writes the text there (UTF-8) and prints {\"source\", \"rendition\", \"version\", \"passages\", \"file\"} instead, plus \"derived\": true for agent text. Takes a source ID, not a title: `ingest` prints it as `source`, and `pocketcontext sql \"SELECT id, title FROM sources ORDER BY created DESC LIMIT 20\"` lists them.",
-		"pocketcontext passages SOURCE_ID______ --out episode-passages.txt"},
-	"search": {"search TERMS [--limit N] [--offset N --generation G --publication ID] [--sequence N]",
-		"Rank published pages of the latest (or the given) publication by full-text match of title, summary and body. 1-16 terms. To page, pass the returned publication and generation with --offset; a generation conflict (exit 4) means restart at offset 0.",
-		"pocketcontext search \"espresso descaling\" --limit 10"},
-	"lint": {"lint",
-		"Check the latest publication and print findings. Structure: broken-link, orphan (no incoming links), no-citations, needs-verification, missing-property-citation, invalid-property-target. Editorial hints: unlinked-mention (a page names another page's title, or its slug words, without linking it; whole words, case-insensitive, titles of two or more words or one word of 6+ characters, code ignored), missing-page (a term on 3+ pages with no page of that title or slug: **bold** text except field labels such as **Video:** opening a line or list item, Markdown link text, or a capitalized name in prose such as a run of title-case words or a single word not opening a sentence, product-like tokens such as OpenCode or GPT-5.5 included; names skip weekdays, months, pronouns and other common words, words written in lowercase elsewhere, and names that are whole words of a page title or slug with punctuation removed, so Anysphere is part of \"Cursor (Anysphere)\"; code, [[page]] links and headings ignored; reported with `term`, the most frequent spelling, and `pages`), stub (under 80 words of prose or exactly one citation; entity pages with a catalog_type excluded).",
-		"pocketcontext lint"},
-	"stage": {"stage SPEC|- [--dry-run]",
-		"Stage page revisions for one ingestion run from a JSON spec: creates missing page identities, sets base_revision from the latest publication, creates citations and the page_links derived from [[slug]] links and relationship properties, and resumes a run with the same run_key (pages already staged are skipped). Everything is validated before the first write; writes go through the batch API. With --dry-run nothing is written (exit 0 when clean); when checks fail nothing is written and it exits 3 with every problem. Prints {\"run\", \"revision\", \"staged\", \"skipped\", \"problems\"}. Spec:\n\n" +
-			"  {\"run_key\": \"stable-key\", \"description\": \"...\", \"sources\": [\"SOURCE_ID\"], \"home\": \"slug\",\n" +
-			"   \"pages\": [{\"slug\": \"plan-mode\", \"kind\": \"concept\", \"title\": \"...\", \"summary\": \"...\",\n" +
-			"              \"body\": \"... [^1] ... [[other-page]]\", \"citations\": {\"1\": \"PASSAGE_ID\"},\n" +
-			"              \"properties\": {}, \"property_evidence\": {}, \"archived\": false},\n" +
-			"             {\"slug\": \"existing-page\", \"edits\": [{\"old\": \"exact published text\", \"new\": \"replacement [^1]\"}],\n" +
-			"              \"append\": \"text with local markers [^2]\", \"citations\": {\"1\": \"PASSAGE_ID\", \"2\": \"PASSAGE_ID\"}}]}\n\n" +
-			"A page without `body` changes its published revision: `edits` are applied in order, each `old` matched against the published body as earlier edits left it and required to occur exactly once (\"new\": \"\" deletes it), then `append` adds text at the end. Markers in `new` and `append` are local and share one numbering: [^k] there means citations[k] and is renumbered after the highest existing marker (property_evidence uses the renumbered markers). Published markers outside `old` keep their numbers; a published marker that no longer appears in the body, and is not named by property_evidence, loses its citation. Fields not given are copied from the published revision. Relationship properties may only name pages that already exist; [[slug]] links may name pages staged in the same spec. Then run check-run and publish.",
-		"pocketcontext stage batch-01.json --dry-run"},
-	"check-run": {"check-run RUN_ID",
-		"Report every problem that would stop the run from publishing, for all its pages at once: missing or unused citation markers, footnote definitions in a body, uncited text without [needs verification], [[slug]] links without page_links records, link targets not published in the resulting manifest, stale base revisions and property rules. Prints {\"run\", \"ok\", \"problems\": [{\"page\", \"kind\", \"detail\"}]}; exit 3 when not ok.",
-		"pocketcontext check-run RUN_ID_________"},
-	"page": {"page SLUG [--publication ID] [--sequence N]",
-		"Print a published page (latest publication, or the given one) as one stage spec page object, with citations as marker to passage ID, ready to edit and pass to `stage`. For a targeted change, copy exact text from its body into `edits` of a spec page instead (see `stage --help`).",
-		"pocketcontext page plan-mode > plan-mode.json"},
-	"stage-home": {"stage-home RUN_ID --expected-revision N (--home SLUG | --clear-home) [--home-base ID]",
-		"Record the reader home page choice on a staging run. The expected current home is captured from the latest publication unless --home-base gives it (use '' for none).",
-		"pocketcontext stage-home RUN_ID_________ --home overview --expected-revision 1"},
-	"publish": {"publish RUN_ID --expected-revision N [--home SLUG | --clear-home --home-base ID]",
-		"Publish a staging run atomically after the server's integrity checks; the first problem refuses the publication (run check-run first to see all). A stale revision or a concurrent change fails with exit 4: re-read and reassess, never retry blindly.",
-		"pocketcontext publish RUN_ID_________ --expected-revision 3"},
+	"whoami": {"whoami", "Show the authenticated Crew instance URL, name and version.", "pocketcontext whoami"},
 }
 
 // printHelp prints the help of one command, or the overview for "".
@@ -153,8 +68,8 @@ func printHelp(command string) error {
 		return fail(2, "unknown command %q; run `pocketcontext help`", command)
 	}
 	fmt.Printf("usage: pocketcontext %s\n\n%s\n\nExample:\n  %s\n", h.usage, wrap(h.text, 78), h.example)
-	if command != "help" && command != "version" && command != "newid" {
-		fmt.Println("\nOptions for every command: --db PATH or --url URL, --space SPACE (ID or unique name), --pretty.")
+	if command != "help" && command != "version" {
+		fmt.Println("\nOptions for every command: --db PATH or --url URL, --pretty.")
 	}
 	return nil
 }

@@ -252,10 +252,27 @@ func TestInvitationCLIRehearsal(t *testing.T) {
 		t.Fatal("reader sign-in link reusable")
 	}
 	who := run(clientEnv, "", "whoami", "--url", url)
-	if who["knowledgeBaseName"] != "Pairing rehearsal" {
-		t.Fatalf("wrong project name: %v", who["knowledgeBaseName"])
+	if who["name"] != "Pairing rehearsal" {
+		t.Fatalf("wrong project name: %v", who["name"])
 	}
-	run(clientEnv, "", "sql", "SELECT count(*) AS n FROM sources", "--url", url)
+	read, err := http.NewRequest("POST", url+"/api/crew/read", strings.NewReader(`{"collection":"buckets"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	read.Header.Set("Content-Type", "application/json")
+	read.Header.Set("Authorization", browserSession["token"].(string))
+	response, err = http.DefaultClient.Do(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buckets struct {
+		Items []map[string]any `json:"items"`
+	}
+	err = json.NewDecoder(response.Body).Decode(&buckets)
+	response.Body.Close()
+	if err != nil || response.StatusCode != 200 || buckets.Items == nil {
+		t.Fatalf("paired session cannot read Crew buckets: status=%d error=%v", response.StatusCode, err)
+	}
 	run(clientEnv, "", "skill", "--url", url)
 	run(clientEnv, "", "profile", "check", "Pairing rehearsal")
 	if run(serverEnv, "", "status", "--db", db)["headless"] != true {

@@ -104,7 +104,7 @@ the private Docker network. Do not publish Crew directly or mount the Docker soc
 1. Open `https://YOUR_HOST/up`: expect HTTP 200 with a valid public certificate.
 2. Open `https://YOUR_HOST/`: expect the Crew sign-in screen. Confirm
    `/api/bundle/auth-mode` returns email mode, and anonymous requests to `/mcp`
-   and `/api/context/schema` are denied (401/403). The public reader must not
+   and `POST /api/crew/read` are denied (401/403). The public reader must not
    expose records before login.
 3. Have the owner request a login email and confirm successful sign-in. SMTP
    authentication alone does not prove inbox delivery. An agent must not copy

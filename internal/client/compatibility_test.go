@@ -33,7 +33,7 @@ func TestRemoteMismatchPreservesDiagnosticsAndCredentials(t *testing.T) {
 	if err := saveSession(&session{URL: server.URL, Instance: "expected", Token: "private", Refreshed: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewRemote(server.URL, ""); err == nil {
+	if _, err := NewRemote(server.URL); err == nil {
 		t.Fatal("accepted different server version")
 	}
 	if _, err := redeemCode(server.URL, "private-code", "expected"); err == nil {

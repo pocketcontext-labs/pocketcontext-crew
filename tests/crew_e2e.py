@@ -38,7 +38,7 @@ def scenario(pc):
     for path in ['/api/crew/read', '/api/crew/write', '/api/crew/agent-write']:
         assert pc.http('POST', path, {'collection': 'notes'})[0] in (401, 403), path
 
-    assert pc.http('POST', '/api/context/query', {'sql': 'SELECT id FROM crew_notes'}, headers)[0] == 400
+    assert pc.http('POST', '/api/context/query', {'sql': 'SELECT id FROM crew_notes'}, headers)[0] >= 400
     request('/api/crew/agent-write', {'action': 'agent.create', 'data': {'name': 'Forged'}, 'actor': 'owner:forged'}, 400)
 
     network = write('agent.create', {'name': 'Network', 'brief': 'Maintain NETWORK; propose changes elsewhere.'})
@@ -67,9 +67,49 @@ def scenario(pc):
     assert not unarchived['archived_at'] and current('notes', note)['id'] == note['id']
 
     write('bucket.update', {'archived': True}, bucket, expected=403)
-    write('bucket.update', {'responsible_agent': design['id']}, bucket, expected=403)
+    # Assignment is metadata, with the same concurrency/audit contract on both paths.
+    assert current('buckets', bucket)['responsible_agent_details'] == {'id': network['id'], 'name': 'Network'}
+    prior = bucket
+    bucket = write('bucket.assign', {'agent': 'Design'}, bucket)
+    assert bucket['responsible_agent'] == design['id'] and bucket['revision'] == prior['revision'] + 1
+    assert read('buckets', responsible_agent='Design')[0]['id'] == bucket['id']
+    assert read('buckets', responsible_agent=design['id'])[0]['id'] == bucket['id']
+    write('bucket.assign', {'agent': network['id']}, prior, expected=409)
+    count = len(read('events', parent=bucket['id']))
+    for invalid in ['Missing agent', 'a' * 15, 3, [], {}]:
+        write('bucket.assign', {'agent': invalid}, bucket, expected=400)
+    write('bucket.assign', {}, bucket, expected=400)
+    write('bucket.assign.extra', {'agent': network['id']}, bucket, expected=400)
+    write('bucket.assign', {'agent': network['id'], 'archived': True}, bucket, expected=403)
+    write('bucket.assign', {'agent': network['id'], 'unexpected': True}, bucket, expected=400)
+    write('note.assign', {'agent': network['id']}, note, expected=400)
+    assert len(read('events', parent=bucket['id'])) == count
+    write('agent.create', {'name': 'Duplicate'})
+    duplicate = write('agent.create', {'name': 'Duplicate'})
+    write('agent.create', {'name': network['id']})
+    write('bucket.assign', {'agent': 'Duplicate'}, bucket, expected=400)
+    duplicate = write('agent.update', {'archived': True}, duplicate, agent=False)
+    write('bucket.assign', {'agent': duplicate['id']}, bucket, expected=400)
+    write('bucket.assign', {'agent': 'Duplicate'}, bucket, expected=400)
+    bucket = write('bucket.update', {'responsible_agent': None}, bucket)
+    assert bucket['responsible_agent'] == '' and bucket['responsible_agent_details'] is None
+    assert read('buckets', responsible_agent='')[0]['id'] == bucket['id']
+    bucket = write('bucket.update', {'responsible_agent': 'Network'}, bucket)
+    bucket = write('bucket.assign', {'agent': ''}, bucket)
+    bucket = write('bucket.assign', {'agent': network['id']}, bucket)
+    assert bucket['responsible_agent'] == network['id'], 'IDs must take precedence over exact names'
+    bucket = write('bucket.assign', {'agent': None}, bucket)
+    bucket = write('bucket.update', {'responsible_agent': design['id']}, bucket)
+    assignment_events = read('events', parent=bucket['id'])
+    assert any(e['action'] == 'bucket.assign' and e['changes']['responsible_agent'] == {'old': network['id'], 'new': design['id']} for e in assignment_events)
+    assert any(e['action'] == 'bucket.update' and e['changes']['responsible_agent'] == {'old': design['id'], 'new': ''} for e in assignment_events)
+    assert all(e['reported_agent'] == 'Network' and e['reason'] == 'Synthetic workflow' and e['actor'].startswith('mcp:') for e in assignment_events)
+    # Reported Network can still write to a bucket assigned to Design.
+    shared = write('note.create', {'bucket': bucket['id'], 'title': 'Shared writes', 'body': 'Still allowed'})
+    shared = write('note.update', {'body': 'Changed by another reported agent'}, shared)
+    write('note.update', {'archived': True}, shared)
     bucket = write('bucket.update', {'archived': True}, bucket, agent=False)
-    assert not read('notes') and len(read('notes', archived=True)) == 2
+    assert not read('notes') and len(read('notes', archived=True)) == 3
     write('note.update', {'body': 'Blocked by ancestor archive'}, unarchived, expected=400)
     write('note.create', {'bucket': bucket['id'], 'title': 'Blocked'}, expected=400)
     bucket = write('bucket.update', {'archived': False}, bucket, agent=False)
@@ -77,6 +117,12 @@ def scenario(pc):
     write('agent.update', {'archived': True}, network, expected=403)
     historical = write('task.create', {'title': 'Existing assignment', 'assigned_agent': design['id']})
     design = write('agent.update', {'archived': True}, design, agent=False)
+    # An unchanged historical assignment stays editable, but cannot be newly assigned.
+    bucket = write('bucket.update', {'purpose': 'Updated purpose', 'responsible_agent': design['id']}, bucket)
+    bucket = write('bucket.assign', {'agent': design['id']}, bucket)
+    bucket = write('bucket.assign', {'agent': None}, bucket)
+    write('bucket.assign', {'agent': design['id']}, bucket, expected=400)
+    bucket = write('bucket.assign', {'agent': network['id']}, bucket)
     historical = write('task.update', {'title': 'Still editable', 'assigned_agent': design['id']}, historical)
     long_note = write('note.create', {'bucket': bucket['id'], 'title': 'Long synthetic note', 'body': 'x' * 90000, 'links': []})
     assert len(long_note['body']) == 90000

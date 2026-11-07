@@ -45,11 +45,9 @@ func publicRequest(r *http.Request) bool {
 	return v
 }
 
-var publicCollections = []string{"spaces", "settings", "sources", "renditions", "passages", "pages", "ingestion_runs", "page_revisions", "citations", "page_links", "publications", "audit_log"}
-
 // publicRoute is deliberately an allowlist. A future local API does not become
 // public merely because it was registered on the application's router.
-func publicRoute(method, p string, collections map[string]bool, sources map[string]bool) bool {
+func publicRoute(method, p string) bool {
 	read := method == http.MethodGet || method == http.MethodHead
 	if read && (p == "/" || p == "/api/bundle/auth-mode" || p == "/bundle/login" || p == "/bundle/login.js") {
 		return true
@@ -57,28 +55,16 @@ func publicRoute(method, p string, collections map[string]bool, sources map[stri
 	if read && strings.HasPrefix(p, "/assets/") && readerAssetName.MatchString(strings.TrimPrefix(p, "/assets/")) {
 		return true
 	}
-	if read && (p == "/api/context/schema" || p == "/api/spaces/default" || p == "/api/realtime") {
+	if read && p == "/api/realtime" {
 		return true
 	}
 	if method == http.MethodPost {
 		switch p {
-		case "/api/crew/read", "/api/crew/write", "/api/crew/agent-write", "/api/bundle/redeem", "/api/collections/users/auth-with-password", "/api/collections/users/auth-refresh", "/api/context/query", "/api/context/search", "/api/realtime", "/api/files/token":
+		case "/api/crew/read", "/api/crew/write", "/api/crew/agent-write", "/api/bundle/redeem", "/api/collections/users/auth-with-password", "/api/collections/users/auth-refresh", "/api/realtime":
 			return true
 		}
 	}
-	parts := strings.Split(strings.TrimPrefix(p, "/"), "/")
-	if len(parts) == 5 && parts[0] == "api" && parts[1] == "pocketcontext" && parts[2] == "runs" && parts[4] == "check" {
-		return read
-	}
-	if len(parts) >= 4 && parts[0] == "api" && parts[1] == "collections" && collections[parts[2]] && parts[3] == "records" {
-		if len(parts) == 4 {
-			return read || method == http.MethodPost
-		}
-		if len(parts) == 5 && parts[4] != "" {
-			return read || method == http.MethodPatch
-		}
-	}
-	return read && len(parts) == 5 && parts[0] == "api" && parts[1] == "files" && sources[parts[2]] && parts[3] != "" && parts[4] != ""
+	return false
 }
 
 type authAttempt struct {
@@ -129,17 +115,6 @@ func publicHandlerMode(app core.App, domain string, next http.Handler, hosted bo
 	if len(oauth) > 0 {
 		mcp = oauth[0]
 	}
-	collections := map[string]bool{}
-	sources := map[string]bool{"sources": true}
-	for _, name := range publicCollections {
-		collections[name] = true
-		if c, err := app.FindCollectionByNameOrId(name); err == nil {
-			collections[c.Id] = true
-			if name == "sources" {
-				sources[c.Id] = true
-			}
-		}
-	}
 	limiter := &publicAuthLimiter{}
 	emailLimiter := rate.NewLimiter(rate.Every(6*time.Second), 10)
 	redemptionLimiter := rate.NewLimiter(rate.Every(6*time.Second), 10)
@@ -172,7 +147,7 @@ func publicHandlerMode(app core.App, domain string, next http.Handler, hosted bo
 			http.NotFound(w, r)
 			return
 		}
-		if !isOAuth && !isOTP && !publicRoute(r.Method, r.URL.Path, collections, sources) {
+		if !isOAuth && !isOTP && !publicRoute(r.Method, r.URL.Path) {
 			http.NotFound(w, r)
 			return
 		}

@@ -3,130 +3,37 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
-// Exercises the real stage planner, immutable evidence hooks, MCP error path,
-// and same-run recovery. Hosted rate budgets are exercised separately against
-// the same API in bundle.TestHostedBulkConsecutiveBatches.
-func TestMCPBulkMigrationResume(t *testing.T) {
+// Concurrent Crew requests must retain all updates and surface revision conflicts.
+func TestMCPCrewConcurrentWrites(t *testing.T) {
 	api, token := mcpRealAPI(t)
-	batches, interrupted := 0, false
-	h := mcpTestHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/batch" {
-			batches++
-			if batches == 4 {
-				interrupted = true
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Retry-After", "1")
-				w.WriteHeader(429)
-				_, _ = w.Write([]byte(`{"status":429,"message":"Synthetic throttle","data":{"rate_limit":{"limit":"authenticated_knowledge","retry_after_seconds":1,"capacity":1200,"remaining":0,"reset_after_seconds":12}}}`))
-				return
-			}
-		}
-		api.ServeHTTP(w, r)
-	}))
-	call := func(name string, args map[string]any) any { t.Helper(); return mcpCall(t, h, token, name, args, false) }
-	sources, passages := make([]string, 40), make([]string, 40)
-	// A barrier starts eight independent MCP requests together. Workers return
-	// errors rather than calling testing.Fatal from outside the test goroutine.
-	type ingested struct {
-		index           int
-		source, passage string
-		err             error
-	}
-	ready := make(chan struct{})
-	results := make(chan ingested, 8)
+	h := mcpTestHandler(api)
+	bucket := mcpCall(t, h, token, "crew_write", map[string]any{"action": "bucket.create", "reported_agent": "Synthetic", "data": map[string]any{"name": "Shared"}}, false)
+	start := make(chan struct{})
+	results := make(chan error, 8)
 	for i := range 8 {
 		go func() {
-			<-ready
-			result, err := mcpBulkCall(h, token, "ingest_text", map[string]any{"filename": fmt.Sprintf("note-%d.md", i), "text": fmt.Sprintf("Synthetic migration evidence number %d is independently identifiable.\n", i)})
-			source, _ := dig(result, "source").(string)
-			if err != nil || source == "" {
-				results <- ingested{index: i, err: fmt.Errorf("source %d: %v (%v)", i, err, result)}
-				return
-			}
-			result, err = mcpBulkCall(h, token, "passages", map[string]any{"source": source})
-			rows, _ := dig(result, "passages").([]any)
-			if err != nil || len(rows) != 1 {
-				results <- ingested{index: i, err: fmt.Errorf("passages %d: %v (%v)", i, err, result)}
-				return
-			}
-			passage, _ := dig(rows[0], "id").(string)
-			results <- ingested{index: i, source: source, passage: passage}
+			<-start
+			_, err := mcpBulkCall(h, token, "crew_write", map[string]any{"action": "note.create", "reported_agent": fmt.Sprintf("Agent %d", i), "data": map[string]any{"bucket": dig(bucket, "id"), "title": fmt.Sprintf("Note %d", i), "body": "Synthetic concurrent note"}})
+			results <- err
 		}()
 	}
-	close(ready)
-	failedBurst := false
+	close(start)
 	for range 8 {
-		result := <-results
-		if result.err != nil {
-			t.Error(result.err)
-			failedBurst = true
-			continue
-		}
-		sources[result.index], passages[result.index] = result.source, result.passage
-	}
-	if failedBurst {
-		t.Fatal("parallel ingestion failed")
-	}
-	for i := 8; i < 40; i++ {
-		text := fmt.Sprintf("Synthetic migration evidence number %d is independently identifiable.\n", i)
-		var result any
-		if i < 32 {
-			result = call("ingest_text", map[string]any{"filename": fmt.Sprintf("note-%d.md", i), "text": text})
-		} else {
-			original := []byte(fmt.Sprintf("Synthetic binary original %d; not a real PDF.\x00", i))
-			result = call("ingest_file", map[string]any{"filename": fmt.Sprintf("note-%d.pdf", i), "content_base64": base64.StdEncoding.EncodeToString(original)})
-			call("extract", map[string]any{"source": dig(result, "source"), "text": text, "tool": "synthetic fixture conversion", "original_sha256": dig(result, "sha256")})
-		}
-		sources[i] = dig(result, "source").(string)
-		evidence := call("passages", map[string]any{"source": sources[i]})
-		rows := dig(evidence, "passages").([]any)
-		passages[i] = dig(rows[0], "id").(string)
-		if i >= 32 && dig(evidence, "derived") != true {
-			t.Fatalf("source %d lost derived evidence label", i)
+		if err := <-results; err != nil {
+			t.Error(err)
 		}
 	}
-	pages := make([]any, 30)
-	for i := range pages {
-		pages[i] = map[string]any{"slug": fmt.Sprintf("migration-%d", i), "kind": "concept", "title": fmt.Sprintf("Migration %d", i), "summary": "Synthetic migration", "body": fmt.Sprintf("Synthetic migration evidence number %d.[^1] Related: [[migration-%d]].", i, (i+1)%30), "citations": map[string]string{"1": passages[i]}}
+	notes := mcpCall(t, h, token, "crew_read", map[string]any{"collection": "notes", "parent": dig(bucket, "id")}, false)
+	if len(dig(notes, "items").([]any)) != 8 {
+		t.Fatalf("lost concurrent writes: %v", notes)
 	}
-	spec := map[string]any{"run_key": "bulk-migration-resume", "sources": sources, "pages": pages}
-	failed := mcpCall(t, h, token, "stage", map[string]any{"spec": spec}, true)
-	if !interrupted || !strings.Contains(fmt.Sprint(failed), "same run_key") {
-		t.Fatalf("missing resumable failure: %v", failed)
-	}
-	resumed := call("stage", map[string]any{"spec": spec})
-	run := dig(resumed, "run").(string)
-	if len(dig(resumed, "skipped").([]any)) == 0 {
-		t.Fatal("resume did not skip saved revisions")
-	}
-	before := batches
-	replay := call("stage", map[string]any{"spec": spec})
-	if dig(replay, "run") != run || len(dig(replay, "skipped").([]any)) != 30 || batches != before {
-		t.Fatalf("same-run replay wrote again: %v batches=%d->%d", replay, before, batches)
-	}
-	for collection, want := range map[string]int{"sources": 40, "renditions": 40, "passages": 40, "pages": 30, "page_revisions": 30, "citations": 30, "page_links": 30, "ingestion_runs": 1} {
-		result := call("query", map[string]any{"sql": "SELECT COUNT(*) FROM " + collection})
-		rows := dig(result, "rows").([]any)
-		got := rows[0].([]any)[0]
-		if got != float64(want) {
-			t.Fatalf("%s count=%v want=%d", collection, got, want)
-		}
-	}
-	checked := call("check_run", map[string]any{"run": run})
-	if dig(checked, "ok") != true {
-		t.Fatalf("check: %v", checked)
-	}
-	record := call("get", map[string]any{"collection": "ingestion_runs", "id": run})
-	call("publish", map[string]any{"run": run, "expected_revision": dig(record, "revision")})
 }
 
 // mcpBulkCall is the error-returning counterpart of mcpCall for burst workers.

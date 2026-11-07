@@ -23,8 +23,6 @@ import time
 from urllib.parse import parse_qs, urlencode, urlparse
 import uuid
 
-import boto3
-from botocore.config import Config
 
 MOTO_IMAGE = "motoserver/moto:5.1.15@sha256:8860b18917e1ee4d067df19a406ae95dc26037e6965d5b499e1cffd33755b914"
 DOMAIN = "synthetic.example.test"
@@ -115,6 +113,8 @@ def mcp_grant(port, reader_token):
 
 
 def main():
+    import boto3
+    from botocore.config import Config
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
     args = parser.parse_args()
@@ -171,16 +171,8 @@ def main():
                 docker("volume", "create", volume)
             docker("run", "-d", "--name", source_name, "-p", "127.0.0.1::80", "-v", source_volume + ":/storage", *options, args.image, "init")
             source_port = wait_ready(source_name)
-            originals = [("synthetic-evidence.log", b"Synthetic recovery evidence: preserve every original including .log files.\n"),
-                         ("synthetic-original.bin", bytes(range(256)) * 8)]
-            sources = []
-            for filename, content in originals:
-                script = "import base64,pathlib;pathlib.Path(" + repr("/tmp/" + filename) + ").write_bytes(base64.b64decode(" + repr(base64.b64encode(content).decode()) + "))"
-                docker("exec", "-i", source_name, "python3", "-", input=script)
-                result = json.loads(docker("exec", source_name, "pocketcontext", "ingest", "/tmp/" + filename, "--title", filename).stdout)
-                sources.append((result["source"], content))
             old_reader = local_token(source_name)
-            assert request(source_port, "/api/context/schema", token=old_reader)[0] == 200
+            assert request(source_port, "/api/crew/read", {"collection": "notes"}, old_reader)[0] == 200
             client, old_mcp = mcp_grant(source_port, old_reader)
             # Populate Crew too, then exercise OAuth-to-MCP authority on the actual image.
             def crew_write(action, data, row=None):
@@ -206,7 +198,7 @@ def main():
             backup = json.loads(docker("exec", source_name, "pocketcontext-container", "backup").stdout)
             assert backup["ok"] is True
             source_port = wait_ready(source_name)
-            assert request(source_port, "/api/context/schema", token=old_reader)[0] == 200, "normal backup restart preserves login"
+            assert request(source_port, "/api/crew/read", {"collection": "notes"}, old_reader)[0] == 200, "normal backup restart preserves login"
             remote = s3.get_object(Bucket=bucket, Key=backup["key"])
             archive = remote["Body"].read()
             assert hashlib.sha256(archive).hexdigest() == remote["Metadata"]["sha256"]
@@ -215,8 +207,6 @@ def main():
                 entries = {entry.name: tar.extractfile(entry).read() for entry in tar if entry.isfile() and entry.name != "manifest.json"}
             for name, entry in manifest["files"].items():
                 assert hashlib.sha256(entries[name]).hexdigest() == entry["sha256"]
-            for _, original in originals:
-                assert original in entries.values(), "complete archive includes each original"
             assert any("mcp-oauth-" in name for name in entries), "backup actually includes authorization state to invalidate"
             prepared = json.loads(docker("exec", source_name, "pocketcontext-container", "prepare-upgrade").stdout)
             assert prepared["ok"] and prepared["paused"]
@@ -226,12 +216,12 @@ def main():
             assert json.loads(result.stdout)["ok"]
             docker("run", "-d", "--name", restored_name, "-p", "127.0.0.1::80", "-v", restored_volume + ":/storage", *options, args.image)
             restored_port = wait_ready(restored_name)
-            assert request(restored_port, "/api/context/schema", token=old_reader)[0] in (401, 403), "restored browser token revoked"
+            assert request(restored_port, "/api/crew/read", {"collection": "notes"}, old_reader)[0] in (401, 403), "restored browser token revoked"
             assert request(restored_port, "/mcp", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}, old_mcp["access_token"])[0] == 401, "restored MCP access revoked"
             assert request(restored_port, "/oauth/token", {"grant_type": "refresh_token", "client_id": client,
                 "refresh_token": old_mcp["refresh_token"], "resource": ORIGIN + "/mcp"}, form=True)[0] in (400, 401), "restored MCP refresh revoked"
             fresh = local_token(restored_name)
-            assert request(restored_port, "/api/context/schema", token=fresh)[0] == 200
+            assert request(restored_port, "/api/crew/read", {"collection": "notes"}, fresh)[0] == 200
             for collection, expected_id in [("notes", note_row["id"]), ("reviews", review_row["id"])]:
                 status, restored = request(restored_port, "/api/crew/read", {"collection": collection, "id": expected_id}, fresh)
                 assert status == 200 and len(restored["items"]) == 1, "Crew data survives complete restore"
@@ -239,15 +229,9 @@ def main():
                     assert restored["items"][0]["status"] == "approved" and restored["items"][0]["draft"] == "Exact draft for recovery"
             _, new_mcp = mcp_grant(restored_port, fresh)
             assert new_mcp["access_token"] != old_mcp["access_token"], "restored instance supports a fresh MCP connection"
-            for source, original in sources:
-                result = json.loads(docker("exec", restored_name, "pocketcontext", "original", source, "--out", "/tmp/" + source).stdout)
-                assert result["sha256"] == hashlib.sha256(original).hexdigest()
-                recovered = docker("exec", restored_name, "python3", "-c", "import hashlib,pathlib;print(hashlib.sha256(pathlib.Path('/tmp/" + source + "').read_bytes()).hexdigest())").stdout.strip()
-                assert recovered == hashlib.sha256(original).hexdigest()
-            assert "preserve every original" in docker("exec", restored_name, "pocketcontext", "sql", "SELECT body FROM passages ORDER BY ordinal").stdout
             docker("stop", "--time", "100", restored_name)
             assert docker("inspect", "--format", "{{.State.ExitCode}}", restored_name).stdout.strip() == "0"
-            print("Actual-image populated HTTPS S3 backup, remote hashes, pre-upgrade checkpoint, empty-volume restore, original hashes and credential invalidation passed.")
+            print("Actual-image populated HTTPS S3 backup, remote hashes, pre-upgrade checkpoint, empty-volume restore, Crew history and credential invalidation passed.")
         finally:
             for container in containers:
                 docker("rm", "-f", container, check=False)

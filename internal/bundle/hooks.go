@@ -30,7 +30,9 @@ func registerHookBindings(vm *goja.Runtime) {
 	vm.Set("$pocketcontext", map[string]any{
 		// sha256(reader) streams the raw bytes of reader (for example a
 		// filesystem reader of an original) and returns the lowercase hex digest.
-		"sha256": readerSHA256,
+		"sha256":                 readerSHA256,
+		"verifyKnowledgeArchive": verifyKnowledgeArchive,
+		"recordKnowledgeArchive": recordKnowledgeArchive,
 	})
 }
 

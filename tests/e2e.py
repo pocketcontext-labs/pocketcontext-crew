@@ -213,52 +213,111 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--binary', required=True, type=Path)
     binary = parser.parse_args().binary.resolve()
-    with tempfile.TemporaryDirectory(prefix='pocketcontext-e2e-') as temp:
+    with tempfile.TemporaryDirectory(prefix='crew-e2e-') as temp:
         pc = Project(binary, Path(temp))
         try:
             scenario(pc)
-            pc.json('open', '--no-browser')
-            spaces_scenario(pc)
-            staging_scenario(pc)
-            binary_scenario(pc)
             remote = Remote(binary, Path(temp) / 'other-computer', pc.url)
             remote_scenario(pc, remote)
             tunnel_scenario(pc, remote)
             codes_scenario(pc, remote)
-            lint_scenario(pc)
-            navigation_scenario(pc)
             pc.json('stop')
             restored_default_scenario(pc)
             empty_database_scenario(binary, Path(temp) / 'empty')
             headless_collision_scenario(binary, Path(temp) / 'occupied-port')
             earlier_release_scenario(binary, Path(temp) / 'earlier')
-            leftovers = retired_names(pc.root)
-            check(not leftovers, f'no file or directory name contains the retired product name: {leftovers}')
         finally:
             subprocess.run([str(binary), '--db', str(pc.db), 'stop'], env=pc.env, capture_output=True, timeout=60)
-    print('all end-to-end checks passed')
+    print('all Crew lifecycle end-to-end checks passed')
 
+
+def token(pc):
+    status, body = pc.http('POST', '/api/collections/users/auth-with-password', {'identity': IDENTITY, 'password': PASSWORD})
+    assert status == 200, body
+    return {'Authorization': json.loads(body)['token']}
+
+
+def crew(pc, collection):
+    status, body = pc.http('POST', '/api/crew/read', {'collection': collection}, token(pc))
+    assert status == 200, body
+    return json.loads(body)['items']
+
+
+def scenario(pc):
+    help_text = pc.run('help').stdout
+    check('PocketContext Crew' in help_text and '--space' not in help_text, 'help describes Crew without spaces')
+    for command in ('spaces', 'schema', 'query', 'create', 'batch', 'ingest', 'extract', 'stage', 'publish', 'page'):
+        check('unknown command' in pc.run(command, expect=2).stderr, f'{command} is retired')
+    check(pc.run('help', 'serve').stdout == pc.run('serve', '--help').stdout, 'command help agrees')
+    saved_env = pc.env
+    pc.env = {**saved_env, 'SSH_CONNECTION': 'synthetic-ssh-session'}
+    try:
+        skipped = pc.json('open')
+        check(skipped['readerSkipped'] and 'signInLink' not in skipped and not pc.db.exists(), 'SSH reader setup does not create a database')
+    finally:
+        pc.env = saved_env
+    init = pc.json('init', '--name', 'synthetic', '--port', str(pc.port), '--password-stdin', stdin=PASSWORD + '\n')
+    check(init['accountCreated'] and init['url'] == pc.url and 'space' not in init, 'init creates a space-free Crew account')
+    me = pc.json('whoami')
+    check(me['name'] == 'synthetic' and me['signedIn'] and 'space' not in me, 'whoami describes the Crew instance')
+    transport = pc.json('status')
+    check(transport['headless'] and not transport['tcp'] and transport['socket'], 'local administration works without TCP')
+    pc.json('open', '--no-browser')
+    check(pc.json('status')['tcp'], 'open enables the reader')
+    check(pc.http('GET', '/')[0] == 200, 'reader is served')
+    check(pc.http('GET', '/api/bundle/instance', headers={'Host': f'attacker.example:{pc.port}'})[0] == 403, 'foreign Host is refused')
+    for headers in (None, {'Authorization': 'forged'}):
+        check(pc.http('POST', '/api/crew/read', {'collection': 'agents'}, headers)[0] == 401, 'Crew reads require authentication')
+    check(pc.http('POST', '/api/bundle/token')[0] == 403, 'local tokens require the private key')
+    auth = token(pc)
+    check(pc.http('GET', '/api/collections/users/records', headers=auth)[0] == 403, 'owner account cannot be listed')
+    for path in ('/api/context/query', '/api/context/search', '/api/spaces/default', '/api/pocketcontext/runs/aaaaaaaaaaaaaaa/check'):
+        check(pc.http('POST' if path.endswith(('query','search')) else 'GET', path, {'sql':'SELECT 1'}, auth)[0] in (404,410), f'{path} is retired')
+    status, body = pc.http('POST', '/api/crew/write', {'action':'bucket.create','data':{'name':'Lifecycle'}}, auth)
+    check(status == 200, 'owner creates a bucket')
+    bucket = json.loads(body)
+    status, body = pc.http('POST', '/api/crew/write', {'action':'note.create','data':{'bucket':bucket['id'],'title':'Persistence','body':'Synthetic durable note ✓'}}, auth)
+    check(status == 200, 'owner creates a note')
+    note = json.loads(body)
+    check(pc.http('PATCH', '/api/collections/crew_notes/records/' + note['id'], {'body':'Raw write'}, auth)[0] in (400,403), 'raw writes remain disabled')
+    pc.json('stop')
+    pc.json('ensure-running')
+    pc.json('open', '--no-browser')
+    check(crew(pc, 'notes')[0]['body'] == 'Synthetic durable note ✓', 'notes survive stop and restart')
+    pc.json('stop')
+    pc.db.with_name('pocketcontext.db.lease').write_text(json.dumps({'host':'other-laptop','pid':1,'heartbeat':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}))
+    check('other-laptop' in pc.run('ensure-running', expect=1).stderr, 'foreign active lease prevents a second writer')
+    pc.json('ensure-running', '--take-over')
+    pc.json('open', '--no-browser')
 
 
 def restored_default_scenario(pc):
-    """A copied complete backup uses a new machine cache and no project config."""
+    """A stopped complete backup retains Crew data and account credentials."""
     restored = Project(pc.binary, pc.root / 'restored')
     shutil.copy2(pc.db, restored.db)
-    shutil.copytree(pc.project / 'storage', restored.project / 'storage')
+    shutil.copy2(pc.project / 'pocketcontext.json', restored.project / 'pocketcontext.json')
+    if (pc.project / 'storage').exists():
+        shutil.copytree(pc.project / 'storage', restored.project / 'storage')
     try:
         result = restored.json('init', '--port', str(restored.port))
-        original = pc.json('whoami')['space']
-        check(not result['accountCreated'] and result['space'] == original,
-              'a restored database keeps its account and default space without the old config or cache')
-        check([page['slug'] for page in restored.json('search', 'espresso descaled')['pages']] == ['coffee-policy'],
-              'the restored default space reads the existing published knowledge')
-        check(restored.json('spaces') == pc.json('spaces'), 'restore keeps every space and the default')
+        check(not result['accountCreated'] and 'space' not in result, 'restore retains the account without spaces')
         restored.json('open', '--no-browser')
-        status, _ = restored.http('POST', '/api/collections/users/auth-with-password', {'identity': IDENTITY, 'password': PASSWORD})
-        check(status == 200, 'the restored account keeps its password')
+        check(crew(restored, 'notes')[0]['body'] == 'Synthetic durable note ✓', 'restored Crew notes retain their contents')
+        check(restored.http('POST', '/api/collections/users/auth-with-password', {'identity':IDENTITY,'password':PASSWORD})[0] == 200, 'restored password works')
     finally:
         restored.run('stop')
-        pc.run('stop')
+
+
+def empty_database_scenario(binary, root):
+    empty = Project(binary, root)
+    with closing(sqlite3.connect(empty.db)) as db:
+        db.execute('PRAGMA user_version=0')
+    try:
+        result = empty.json('init', '--port', str(empty.port), '--password-stdin', stdin=PASSWORD + '\n')
+        empty.json('open', '--no-browser')
+        check(result['accountCreated'] and crew(empty, 'buckets') == [], 'empty SQLite initializes as Crew')
+    finally:
+        empty.run('stop')
 
 
 def headless_collision_scenario(binary, root):
@@ -304,20 +363,6 @@ def headless_collision_scenario(binary, root):
         worker.join(timeout=5)
 
 
-def empty_database_scenario(binary, root):
-    """An empty SQLite file is a new project, not a database from an earlier release."""
-    empty = Project(binary, root)
-    with closing(sqlite3.connect(empty.db)) as db:
-        db.execute('PRAGMA user_version=0')
-    try:
-        result = empty.json('init', '--port', str(empty.port), '--password-stdin', stdin=PASSWORD + '\n')
-        spaces = empty.json('spaces')
-        check(result['accountCreated'] and len(spaces) == 1 and spaces[0]['name'] == 'Default' and spaces[0]['id'] == result['space'],
-              'an empty database initializes with the Default space')
-    finally:
-        empty.run('stop')
-
-
 def earlier_release_scenario(binary, root):
     """A database created by an earlier release is refused and never changed."""
     earlier = Project(binary, root)
@@ -340,669 +385,6 @@ def earlier_release_scenario(binary, root):
     check(not leftovers, f'no conflict copy, snapshot or lease is left beside a refused database: {leftovers}')
 
 
-def navigation_scenario(pc):
-    """Navigation metadata is versioned content, not a relation or schema change."""
-    def stage(key, pages):
-        return pc.json('stage', '-', stdin=json.dumps({'run_key': key, 'pages': pages}))
-
-    def publish(staged):
-        pc.json('publish', staged['run'], '--expected-revision', str(staged['revision']))
-        return pc.json('sql', 'SELECT id FROM publications ORDER BY sequence DESC LIMIT 1')['rows'][0][0]
-
-    membership = {'catalog_type': 'product', 'provider': 'Example',
-                  'topics': ['custom-research', 'other'], 'catalogs': ['custom-tools']}
-    first = stage('navigation-membership', [{'slug': 'navigation-member', 'kind': 'entity',
-        'title': 'Synthetic navigation member', 'summary': 'A product with optional navigation groups.',
-        'body': 'A synthetic product. [needs verification]', 'properties': membership}])
-    before_definition = publish(first)
-    exported = pc.json('page', 'navigation-member')
-    check(exported['properties'] == membership, 'navigation memberships publish without definition pages and round-trip through page')
-    member = pc.json('sql', "SELECT id FROM pages WHERE slug='navigation-member'")['rows'][0][0]
-    links = pc.json('sql', f"SELECT count(*) FROM page_links l JOIN page_revisions r ON r.id=l.page_revision WHERE r.page='{member}'")
-    check(links['rows'][0][0] == 0, 'topic and catalog memberships create no relationship links')
-    definitions = stage('navigation-definitions', [
-        {'slug': 'custom-research', 'kind': 'concept', 'title': 'Research', 'summary': 'A named topic.',
-         'body': 'Research navigation. [needs verification]', 'properties': {'navigation_kind': 'topic', 'navigation_order': 0}},
-        {'slug': 'custom-tools', 'kind': 'concept', 'title': 'Research tools', 'summary': 'A configured catalog.',
-         'body': 'Tools navigation. [needs verification]', 'properties': {'navigation_kind': 'catalog', 'navigation_order': 1,
-             'catalog_columns': ['title', 'summary', 'slug', 'kind', 'provider'], 'catalog_sort': '-provider'}},
-    ])
-    defined_publication = publish(definitions)
-    archived = stage('navigation-archive-definition', [{'slug': 'custom-tools', 'archived': True}])
-    publish(archived)
-    check(pc.json('page', 'navigation-member')['properties'] == membership,
-          'archiving an optional definition does not rewrite memberships or block publication')
-    definition = pc.json('sql', "SELECT id FROM pages WHERE slug='custom-tools'")['rows'][0][0]
-    check(pc.json('sql', f"SELECT count(*) FROM publications, json_each(manifest) m WHERE publications.id='{before_definition}' AND m.key='{definition}'")['rows'][0][0] == 0,
-          'publications before a definition keep their original manifest')
-    check(pc.json('sql', f"SELECT r.archived FROM publications p JOIN json_each(p.manifest) m JOIN page_revisions r ON r.id=m.value WHERE p.id='{defined_publication}' AND m.key='{definition}'")['rows'][0][0] == 0,
-          'an older publication keeps the unarchived definition revision')
-
-    run = pc.json('create', 'ingestion_runs', '{"key":"navigation-invalid","status":"staging","description":"Synthetic rejected navigation metadata"}')
-    target = pc.json('create', 'pages', '{"slug":"navigation-validation","kind":"concept"}')
-    bad = [
-        {'topics': 'research'}, {'topics': None}, {'topics': ['Research']}, {'topics': [' research']},
-        {'topics': ['research_tools']}, {'topics': ['research--tools']}, {'topics': ['']}, {'topics': [1]},
-        {'topics': ['a' * 65]}, {'topics': [f'group-{i}' for i in range(101)]},
-        {'catalogs': ['tools', 'tools']}, {'catalogs': ['tools-']}, {'navigation_kind': 'group'},
-        {'navigation_kind': None}, {'navigation_order': 0},
-        *[{'navigation_kind': 'topic', 'navigation_order': value} for value in [-1, 0.5, '1', None, 9007199254740992]],
-        {'catalog_columns': ['provider']}, {'navigation_kind': 'topic', 'catalog_columns': []},
-        *[{'navigation_kind': 'catalog', 'catalog_columns': columns} for columns in [
-            None, 'provider', ['provider', 'provider'], ['provider.name'], ['title; DROP TABLE pages'],
-            ['constructor'], ['prototype'], ['__proto__'], ['body'], ['properties'],
-            [f'column_{i}' for i in range(13)]]],
-        {'navigation_kind': 'catalog', 'catalog_sort': 'provider'},
-        {'navigation_kind': 'catalog', 'catalog_sort': '--title'},
-        {'navigation_kind': 'catalog', 'catalog_sort': None},
-        {'navigation_kind': 'topic', 'catalog_sort': 'title'},
-    ]
-    for properties in bad:
-        pc.run('create', 'page_revisions', '-', stdin=json.dumps({'run': run['id'], 'page': target['id'],
-            'title': 'Invalid navigation', 'summary': 'Rejected synthetic metadata.',
-            'body': 'A synthetic definition. [needs verification]', 'properties': properties}), expect=1)
-    check(True, 'REST rejects malformed navigation keys, orders, columns and sort settings')
-    invalid_spec = {'run_key': 'navigation-invalid-stage', 'pages': [{'slug': 'navigation-would-write', 'kind': 'concept',
-        'title': 'Must not be created', 'summary': 'Synthetic dry-run check.', 'body': '[needs verification]',
-        'properties': {'topics': ['Not-Canonical']}}]}
-    for flags in [[], ['--dry-run']]:
-        result = pc.json('stage', '-', *flags, stdin=json.dumps(invalid_spec), expect=3)
-        check(any(problem['kind'] == 'property' for problem in result['problems']), 'stage reports malformed navigation before writes')
-    check(pc.json('sql', "SELECT count(*) FROM ingestion_runs WHERE key='navigation-invalid-stage'")['rows'][0][0] == 0,
-          'invalid navigation staging creates no run')
-    uncited = {'run_key': 'navigation-uncited-definition', 'pages': [{'slug': 'navigation-uncited', 'kind': 'concept',
-        'title': 'Uncited definition', 'summary': 'Definitions keep ordinary evidence rules.', 'body': 'A factual claim without evidence.',
-        'properties': {'navigation_kind': 'topic'}}]}
-    rejected = pc.json('stage', '-', '--dry-run', stdin=json.dumps(uncited), expect=3)
-    check(any(problem['kind'] == 'uncited' for problem in rejected['problems']), 'navigation definitions still require ordinary citation or verification markers')
-
-    long_page = pc.json('create', 'pages', json.dumps({'slug': 'a' * 65, 'kind': 'concept'}))
-    body = {'run': run['id'], 'page': long_page['id'], 'title': 'Long page slug', 'summary': 'Synthetic slug check.', 'body': '[needs verification]'}
-    pc.run('create', 'page_revisions', '-', stdin=json.dumps({**body, 'properties': {'navigation_kind': 'topic'}}), expect=1)
-    pc.json('create', 'page_revisions', '-', stdin=json.dumps(body))
-    check(True, 'definition keys are limited to 64 characters while ordinary long page slugs remain valid')
-
-
-def scenario(pc):
-    usage = pc.run('help')
-    text = usage.stdout + usage.stderr
-    check('pocketcontext' in text and RETIRED not in text.lower(), 'help names pocketcontext and not the retired product')
-    batch_help = pc.run('batch', '--help').stdout
-    check(batch_help.startswith('usage: pocketcontext batch') and '"method"' in batch_help and '"url"' in batch_help
-          and '"body"' in batch_help, 'batch --help documents the request shape')
-    check(pc.run('help', 'lint').stdout == pc.run('lint', '-h').stdout and 'unlinked-mention' in pc.run('help', 'lint').stdout,
-          'help COMMAND and COMMAND -h print the same help')
-    check('unknown command' in pc.run('help', 'no-such-command', expect=2).stderr, 'help refuses an unknown command')
-
-    saved_env = pc.env
-    pc.env = {**saved_env, 'SSH_CONNECTION': 'synthetic-ssh-session'}
-    try:
-        environment = subprocess.run([str(pc.binary), 'environment'], env=pc.env,
-                                     capture_output=True, text=True, encoding='utf-8', timeout=10, check=True)
-        check(json.loads(environment.stdout)['session'] == 'ssh', 'environment detects SSH without a project')
-        skipped = pc.json('open')
-        check(skipped['readerSkipped'] and 'signInLink' not in skipped and not pc.db.exists(),
-              'SSH reader setup skips without creating a database or sign-in link')
-    finally:
-        pc.env = saved_env
-
-    init = pc.json('init', '--name', 'synthetic', '--port', str(pc.port), '--password-stdin', stdin=PASSWORD + '\n')
-    check(init['accountCreated'] and init['url'] == pc.url and 'email' not in init, 'init creates the account and starts the server')
-    check(pc.db.exists(), 'init writes the database to the project folder')
-    check('email' not in json.loads((pc.project / 'pocketcontext.json').read_text(encoding='utf-8')), 'the project config names no account')
-    me = pc.json('whoami')
-    spaces = pc.json('spaces')
-    check(init['space'] == me['space'] and spaces == [{'id': me['space'], 'name': 'Default', 'archived': False, 'default': True, 'selected': True}],
-          f'init creates one space, Default, which is the default and selected: {spaces}')
-    check(me['name'] == 'Default' and me['default'] and not me['archived'] and me['signedIn'] and me['db'] == str(pc.db),
-          f'whoami reports the selected space and the sign-in: {me}')
-    check(pc.json('default-space')['id'] == me['space'], 'default-space shows the default space')
-    check(pc.run('whoami', '--space', 'companyspace001', expect=2).returncode == 2, 'an unknown space cannot be selected')
-    for retired in (['account', '--email', 'x@example.localhost'], ['create-personal-space'], ['init', '--email', 'x@example.localhost'],
-                    ['open', '--email', 'x@example.localhost'], ['login-code', '--email', 'x@example.localhost']):
-        check(pc.run(*retired, expect=2).returncode == 2, f'{" ".join(retired[:2])} is no longer accepted')
-    pc.json('stop')
-    check(pc.json('spaces') == spaces, 'restart preserves the Default space')
-    schema = {table['name']: {column['name'] for column in table['columns']} for table in pc.json('schema')['tables']}
-    check(not {'space_members', 'user_directory', 'project_policy', 'users', '_superusers'} & set(schema),
-          'memberships, the account directory and accounts are not SQL-readable')
-    check('actor' not in schema['audit_log'] and 'actor_type' not in schema['audit_log']
-          and not any('created_by' in columns or 'updated_by' in columns for columns in schema.values())
-          and schema['spaces'] == {'id', 'name', 'archived', 'revision', 'created', 'updated'},
-          'no table exposes an actor, a creator or a space kind')
-    check('OK:' in pc.run('check').stdout, 'live schema matches the reference schema')
-
-    notes = pc.root / 'notes'
-    notes.mkdir()
-    note = notes / 'coffee.md'
-    note.write_text('# Coffee policy\n\nThe espresso machine is descaled every Friday. Café ✓ 😀\n', encoding='utf-8')
-    first = pc.json('ingest', str(note), '--title', 'Coffee policy')
-    second = pc.json('ingest', str(note))
-    check(first['status'] == 'extracted' and first['passages'] == 1, 'ingest stores a text note and extracts passages')
-    check(first['source'] == second['source'] and first['rendition'] == second['rendition'], 'repeated ingest deduplicates')
-
-    passage = pc.json('sql', f"SELECT id FROM passages WHERE rendition = '{first['rendition']}' LIMIT 1")['rows'][0][0]
-    run = pc.json('create', 'ingestion_runs', json.dumps({'key': 'coffee-v1', 'status': 'staging', 'description': 'Coffee', 'sources': [first['source']]}))
-    page = pc.json('create', 'pages', '{"slug":"coffee-policy","kind":"summary"}')
-    revision = pc.json('create', 'page_revisions', '-', stdin=json.dumps({
-        'run': run['id'], 'page': page['id'], 'base_revision': '', 'title': 'Coffee policy',
-        'summary': 'Espresso machine maintenance.', 'body': 'The espresso machine is descaled every Friday.[^1]'}))
-    pc.json('create', 'citations', json.dumps({'page_revision': revision['id'], 'passage': passage, 'marker': '1'}))
-    current = pc.json('get', 'ingestion_runs', run['id'])
-    published = pc.json('publish', run['id'], '--expected-revision', str(current['revision']))
-    check(published['status'] == 'published', 'a cited page publishes atomically')
-    stale = pc.run('publish', run['id'], '--expected-revision', str(current['revision']), expect=4)
-    check('409' in stale.stderr, 'a stale revision is rejected with exit 4')
-    results = pc.json('search', 'espresso descaled')
-    check([p['slug'] for p in results['pages']] == ['coffee-policy'], 'full-text search finds the published page')
-    lint = pc.json('lint')
-    check({(f['kind'], f['page']) for f in lint['findings']} == {('orphan', 'coffee-policy'), ('stub', 'coffee-policy')},
-          'lint reports the orphan and the stub only')
-
-    transport = pc.json('status')
-    check(transport['headless'] and not transport['tcp'] and transport['socket'], 'the full local skill workflow runs with TCP off')
-    saved_env = pc.env
-    pc.env = {**saved_env, 'SSH_CONNECTION': 'synthetic-ssh-session'}
-    try:
-        for options in ((), ('--skip-reader',)):
-            skipped = pc.json('open', *options)
-            check(skipped['readerSkipped'] and 'signInLink' not in skipped and not pc.json('status')['tcp'],
-                  'SSH or explicit reader skip leaves the active server headless')
-    finally:
-        pc.env = saved_env
-
-    pc.json('open', '--no-browser')
-    check(pc.json('status')['tcp'], 'open enables TCP on the running server')
-    status, _ = pc.http('GET', '/')
-    check(status == 200, 'the reader is served')
-    status, body = pc.http('GET', '/api/bundle/instance')
-    check(status == 200 and json.loads(body).get('app') == 'pocketcontext', 'the instance endpoint reports app pocketcontext')
-    cache = user_cache(pc.home) / 'pocketcontext'
-    working = [p for p in cache.iterdir() if p.is_dir() and p.name != 'app' and not p.name.startswith('remote-')] if cache.is_dir() else []
-    check(len(working) == 1 and any(working[0].iterdir()), f'the working copy lives in the per-machine pocketcontext cache: {working}')
-    status, _ = pc.http('GET', '/api/bundle/instance', headers={'Host': f'attacker.example:{pc.port}'})
-    check(status == 403, 'foreign Host headers are refused')
-    status, _ = pc.http('POST', '/api/context/query', {'sql': 'SELECT 1'})
-    check(status == 401, 'SQL requires authentication')
-    status, _ = pc.http('POST', '/api/context/query', {'sql': 'SELECT 1'}, {'Authorization': 'forged'})
-    check(status == 401, 'SQL refuses an invalid token')
-    status, _ = pc.http('POST', '/api/context/search', {'index': 'pages', 'query': 'espresso'})
-    check(status == 401, 'search requires authentication')
-    status, _ = pc.http('GET', '/api/spaces/default')
-    check(status == 401, 'the default space requires authentication')
-    status, body = pc.http('GET', '/api/collections/sources/records')
-    check(status == 200 and json.loads(body)['items'] == [], 'REST lists nothing without authentication')
-    status, _ = pc.http('POST', '/api/collections/pages/records', {'slug': 'anonymous', 'kind': 'concept'})
-    check(status in (400, 401, 403), 'REST writes require authentication')
-    stored = pc.json('sql', f"SELECT id, original FROM sources WHERE id = '{first['source']}'")['rows'][0]
-    status, _ = pc.http('GET', f'/api/files/sources/{stored[0]}/{stored[1]}')
-    check(status != 200, 'protected originals require a file token')
-    status, _ = pc.http('POST', '/api/bundle/token')
-    check(status == 403, 'local tokens require the private key')
-    link = pc.json('open', '--no-browser')['signInLink']
-    code = link.split('#', 1)[1]
-    status, body = pc.http('POST', '/api/bundle/redeem', {'code': code})
-    check(status == 200 and json.loads(body)['record']['email'] == IDENTITY, 'the sign-in link signs in the project account')
-    status, _ = pc.http('POST', '/api/bundle/redeem', {'code': code})
-    check(status == 401, 'the sign-in link is single-use')
-    status, body = pc.http('POST', '/api/collections/users/auth-with-password', {'identity': IDENTITY, 'password': PASSWORD})
-    check(status == 200, 'the reader password works under the fixed identity')
-    token = {'Authorization': json.loads(body)['token']}
-    status, _ = pc.http('GET', '/api/collections/users/records', headers=token)
-    check(status == 403, 'the account cannot be listed')
-    status, _ = pc.http('POST', '/api/collections/users/records', {'email': 'second@example.localhost', 'password': PASSWORD, 'passwordConfirm': PASSWORD}, token)
-    check(status in (400, 403), 'a second account cannot be created')
-    status, _ = pc.http('POST', '/api/context/search', {'index': 'pages', 'query': 'espresso'}, token)
-    check(status in (200, 400), 'search works with the token')
-
-    pc.json('stop')
-    names = sorted(p.name for p in pc.project.iterdir())
-    check(names == ['pocketcontext.db', 'pocketcontext.json', 'storage'], f'only the project files remain after stop: {names}')
-    originals = [p for p in (pc.project / 'storage').rglob('*') if p.is_file() and not p.name.endswith('.attrs')]
-    check(len(originals) == 1 and originals[0].read_bytes() == note.read_bytes(), 'the original is stored beside the database')
-    again = pc.json('search', 'espresso')
-    check(len(again['pages']) == 1, 'knowledge survives a restart')
-
-    # Another computer is using the project.
-    pc.json('stop')
-    pc.db.with_name('pocketcontext.db.lease').write_text(json.dumps({'host': 'other-laptop', 'pid': 1, 'heartbeat': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}))
-    blocked = pc.run('ensure-running', expect=1)
-    check('other-laptop' in blocked.stderr, 'a fresh lease from another computer blocks start')
-    pc.json('ensure-running', '--take-over')
-    check(pc.json('status')['running'], '--take-over starts the server')
-    structured_ingest(pc, notes)
-
-    skills = pc.root / 'skill'
-    installed = pc.json('skill', '--dir', str(skills))
-    text = (skills / 'SKILL.md').read_text(encoding='utf-8')
-    check(str(pc.binary) in text and str(pc.db) in text and '{{' not in text, 'the skill names the absolute binary and database')
-    check(installed["binary"] == str(pc.binary), 'skill install reports the binary')
-    check((skills / '.pocketcontext').is_file(), 'the skill directory carries the .pocketcontext marker')
-    check('name: pocketcontext' in text, 'the skill is named pocketcontext')
-    mentions = [str(p) for p in skills.rglob('*') if p.is_file() and RETIRED in p.read_bytes().decode('utf-8', 'replace').lower()]
-    check(not mentions, f'no installed skill file mentions the retired product: {mentions}')
-    (pc.home / '.claude').mkdir()
-    agent = pc.json('skill', '--agent', 'claude-code')
-    target = pc.home / '.claude' / 'skills' / 'pocketcontext'
-    check(agent['installed'].get('claude-code') == str(target) and (target / 'SKILL.md').is_file()
-          and (target / '.pocketcontext-router').is_file(), 'the Claude Code router is installed as pocketcontext')
-
-
-def structured_ingest(pc, notes):
-    """Markdown front matter fills title and date; passages follow headings."""
-    talk = ' '.join(['The agent runs bash commands only from the whitelist.'] * 50)
-    episode = notes / 'episode.md'
-    episode.write_text('---\ntitle: "Episode one: agents"\npublished: 2025-06-16\nauthor:\n  - Dan\n  - Ann\n---\n'
-                       '# Episode one\n\nIntro.\n\n## Transcript\n\n### Level 1 - Setup\n' + talk + '\n\n'
-                       '### Level 4 - Bash Tool + Whitelist\n' + talk + '\n', encoding='utf-8')
-    first = pc.json('ingest', str(episode))
-    check(first['title'] == 'Episode one: agents' and first['source_date'] == '2025-06-16' and first['version'] == 'v3',
-          f'front matter supplies title and source date: {first}')
-    row = pc.json('sql', f"SELECT title, source_date FROM sources WHERE id = '{first['source']}'")['rows'][0]
-    check(row == ['Episode one: agents', '2025-06-16'], f'sources.source_date is stored: {row}')
-    rows = pc.json('sql', f"SELECT locator FROM passages WHERE rendition = '{first['rendition']}' ORDER BY ordinal")['rows']
-    want = ['front matter; lines 1-7', '# Episode one; lines 8-15',
-            '# Episode one > ## Transcript > ### Level 4 - Bash Tool + Whitelist; lines 17-18']
-    check([r[0] for r in rows] == want, f'passages carry heading paths and line ranges: {rows}')
-    passages_scenario(pc, notes, first)
-    again = pc.json('ingest', str(episode), '--title', 'Other', '--date', '2020-01-01')
-    check(again['rendition'] == first['rendition'] and again['source_date'] == '2025-06-16' and 'immutable' in again['note'],
-          'repeated ingest reuses the source and rendition and keeps its date')
-
-    # A v1 rendition (fixed 24,000-character cuts) stays valid and resumes with its own splitter.
-    # The exact bytes ingest read: on Windows write_text stored CRLF, which read_text would hide.
-    text = episode.read_bytes().decode('utf-8')
-    v1 = [{'locator': f'document; characters 1-{len(text)}', 'body': text}]
-    digest = hashlib.sha256(json.dumps(v1, sort_keys=True).encode()).hexdigest()
-    pc.json('create', 'renditions', json.dumps({'source': first['source'], 'kind': 'text', 'processor': 'utf-8 text / pocketcontext-1',
-                                                'version_label': 'v1', 'notes': json.dumps({'passages': 1, 'sha256': digest})}))
-    legacy = pc.json('ingest', str(episode), '--version', 'v1')
-    rows = pc.json('sql', f"SELECT locator FROM passages WHERE rendition = '{legacy['rendition']}'")['rows']
-    check(legacy['passages'] == 1 and rows == [[v1[0]['locator']]] and 'v1' in legacy['note'], f'a partial v1 rendition resumes: {legacy}')
-    v1_rows = pc.json('sql', f"SELECT id, ordinal, locator, body FROM passages WHERE rendition = '{legacy['rendition']}'")['rows']
-    check(pc.run('passages', first['source'], '--version', 'v1').stdout == passages_text(v1_rows), 'passages --version reads another rendition')
-    check(pc.run('passages', first['source']).stdout.count('\n=== ') == 2, 'without --version passages prefers the v3 rendition')
-    check(pc.json('ingest', str(episode))['rendition'] == first['rendition'], 'without --version ingest prefers the v3 rendition')
-
-    # v3 folds a lone link after the front matter into the next passage; a v2 rendition
-    # (released in v0.5.0) keeps it apart and still resumes with the v2 splitter.
-    tiny = notes / 'tiny.md'
-    talk_lines = ['---', 'title: Tiny lead', '---', '[video](https://video.example/watch/42)', '', '# Talk', '', talk]
-    tiny.write_bytes(('\n'.join(talk_lines) + '\n').encode('utf-8'))
-    custom = pc.json('ingest', str(tiny), '--version', 'custom')
-    rows = pc.json('sql', f"SELECT locator FROM passages WHERE rendition = '{custom['rendition']}' ORDER BY ordinal")['rows']
-    check([r[0] for r in rows] == ['front matter; lines 1-3', 'document; lines 4-8'], f'v3 merges a tiny passage into the next: {rows}')
-    v2 = [{'locator': 'front matter; lines 1-3', 'body': '\n'.join(talk_lines[:3])},
-          {'locator': 'document; line 4', 'body': talk_lines[3]},
-          {'locator': '# Talk; lines 6-8', 'body': '\n'.join(talk_lines[5:])}]
-    digest = hashlib.sha256(json.dumps(v2, sort_keys=True).encode()).hexdigest()
-    pc.json('create', 'renditions', json.dumps({'source': custom['source'], 'kind': 'text', 'processor': 'utf-8 text / pocketcontext-2 structure',
-                                                'version_label': 'v2', 'notes': json.dumps({'passages': 3, 'sha256': digest})}))
-    old = pc.json('ingest', str(tiny), '--version', 'v2')
-    rows = pc.json('sql', f"SELECT locator, body FROM passages WHERE rendition = '{old['rendition']}' ORDER BY ordinal")['rows']
-    check(old['passages'] == 3 and rows == [[p['locator'], p['body']] for p in v2] and 'v2' in old['note'],
-          f'a partial v2 rendition resumes with the v2 splitter: {old} {[r[0] for r in rows]}')
-    text = tiny.read_bytes().decode('utf-8')
-    v1 = [{'locator': f'document; characters 1-{len(text)}', 'body': text}]
-    digest = hashlib.sha256(json.dumps(v1, sort_keys=True).encode()).hexdigest()
-    pc.json('create', 'renditions', json.dumps({'source': custom['source'], 'kind': 'text', 'processor': 'utf-8 text / pocketcontext-1',
-                                                'version_label': 'v1', 'notes': json.dumps({'passages': 1, 'sha256': digest})}))
-    check(pc.json('ingest', str(tiny))['rendition'] == old['rendition'], 'without --version ingest prefers v2 over a newer rendition')
-    check(pc.json('ingest', str(tiny), '--version', 'v3')['passages'] == 2, '--version v3 re-extracts with tiny passages merged')
-    check(pc.json('ingest', str(tiny))['version'] == 'v3', 'without --version ingest then prefers the v3 rendition')
-
-    dated = notes / 'dated.md'
-    dated.write_text('---\ndate: 2024-02-03\n---\nPlain text without headings.\n', encoding='utf-8')
-    source = pc.json('ingest', str(dated), '--date', '2026-01-01')
-    check(source['title'] == 'dated' and source['source_date'] == '2026-01-01', f'--date wins over front matter: {source}')
-
-
-def passages_text(rows):
-    """The expected `passages` output for (id, ordinal, locator, body) rows: LF only."""
-    blocks = []
-    for pid, ordinal, locator, body in rows:
-        body = body.replace('\r\n', '\n').replace('\r', '\n').rstrip('\n')
-        blocks.append(f'=== {ordinal} · {pid} · {locator}\n{body}\n')
-    return '\n'.join(blocks)
-
-
-def passages_scenario(pc, notes, first):
-    """passages prints a source's passages as text in ordinal order, or writes them to a file."""
-    rows = pc.json('sql', f"SELECT id, ordinal, locator, body FROM passages WHERE rendition = '{first['rendition']}' ORDER BY ordinal")['rows']
-    want = passages_text(rows)
-    printed = pc.run('passages', first['source']).stdout
-    check(printed == want and printed.startswith('=== 1 · ') and printed.count('\n=== ') == len(rows) - 1,
-          f'passages prints every passage after an ordinal, ID and locator line: {printed[:200]!r}')
-    out = notes / 'episode-passages.txt'
-    summary = pc.json('passages', first['source'], '--out', str(out))
-    check(Path(summary.pop('file')).samefile(out) and summary == {'source': first['source'], 'rendition': first['rendition'], 'version': 'v3', 'passages': len(rows)},
-          f'passages --out prints a summary: {summary}')
-    data = out.read_bytes()
-    check(data == want.encode('utf-8') and b'\r' not in data, 'passages --out writes the text as UTF-8 with LF line endings')
-    refused = pc.run('passages', first['source'], '--version', 'v9', expect=1)
-    check('no rendition "v9"' in refused.stderr and 'v3' in refused.stderr, 'passages names the renditions when --version matches none')
-    check('not found in this space' in pc.run('passages', 'zzzzzzzzzzzzzzz', expect=1).stderr, 'passages refuses an unknown source')
-    check('source ID' in pc.run('passages', 'Episode one', expect=2).stderr, 'passages takes a source ID, not a title')
-
-
-def binary_scenario(pc):
-    """A file that is not text is stored as it is, converted by the agent and recorded with extract."""
-    notes = pc.root / 'binary-notes'
-    notes.mkdir()
-    original = notes / 'scan.pdf'
-    original.write_bytes(b'%PDF-1.7\n%\xe2\xe3\xcf\xd3\n' + bytes(range(256)) * 8 + b'\n%%EOF\n')
-    digest = hashlib.sha256(original.read_bytes()).hexdigest()
-    check('--version applies to text sources' in pc.run('ingest', str(original), '--version', 'v3', expect=2).stderr,
-          'ingest refuses --version for a binary before upload')
-    check(pc.json('sql', f"SELECT count(*) FROM sources WHERE sha256 = '{digest}'")['rows'][0][0] == 0, 'a refused binary is not uploaded')
-    stored = pc.json('ingest', str(original), '--title', 'Quarterly scan')
-    source = stored['source']
-    check(stored['status'] == 'stored' and stored['media_type'] == 'application/pdf' and stored['sha256'] == digest
-          and stored['title'] == 'Quarterly scan' and 'rendition' not in stored and f'pocketcontext original {source}' in stored['next']
-          and f'pocketcontext extract {source}' in stored['next'], f'ingest stores a binary without a rendition: {stored}')
-    check(pc.json('ingest', str(original))['source'] == source, 'repeated binary ingest deduplicates')
-    check(pc.json('sql', f"SELECT count(*) FROM renditions WHERE source = '{source}'")['rows'][0][0] == 0, 'a binary source has no rendition')
-    odd = notes / 'blob'
-    odd.write_bytes(b'\xff\xfe\x00binary without extension')
-    blob = pc.json('ingest', str(odd))
-    check(blob['status'] == 'stored' and blob['media_type'] == 'application/octet-stream', f'an extensionless binary is stored: {blob}')
-    unknown = notes / 'model.xyz'
-    unknown.write_bytes(b'\x00\x01 synthetic')
-    check(pc.json('ingest', str(unknown))['media_type'] == 'application/octet-stream', 'an unknown extension is stored as octet-stream')
-    subtitles = notes / 'talk.srt'
-    subtitles.write_text('1\n00:00:01,000 --> 00:00:02,000\n# Not a heading\n', encoding='utf-8')
-    srt = pc.json('ingest', str(subtitles))
-    locator = pc.json('sql', f"SELECT locator FROM passages WHERE rendition = '{srt['rendition']}'")['rows']
-    check(srt['status'] == 'extracted' and locator == [['document; lines 1-3']], f'.srt is extracted as plain text: {srt} {locator}')
-
-    pending = pc.json('pending')
-    ids = [row['id'] for row in pending['sources']]
-    check(source in ids and blob['source'] in ids and srt['source'] not in ids and not pending['truncated']
-          and pending['space'] == pc.json('whoami')['space'], f'pending lists sources without a rendition: {pending}')
-    row = next(row for row in pending['sources'] if row['id'] == source)
-    check(row['title'] == 'Quarterly scan' and row['original_name'] == 'scan.pdf' and row['media_type'] == 'application/pdf'
-          and set(row) == {'id', 'title', 'original_name', 'media_type', 'source_date', 'created'}, f'pending rows carry metadata: {row}')
-    check(len(pc.json('pending', '--limit', '1')['sources']) == 1 and pc.json('pending', '--limit', '1')['truncated'], 'pending --limit truncates')
-    check(pc.run('pending', '--limit', '501', expect=2).returncode == 2, 'pending refuses a limit above 500')
-
-    out = notes / 'download.pdf'
-    got = pc.json('original', source, '--out', str(out))
-    check(out.read_bytes() == original.read_bytes() and got['sha256'] == digest and got['bytes'] == len(original.read_bytes())
-          and got['media_type'] == 'application/pdf' and Path(got['out']).samefile(out), f'original downloads identical bytes: {got}')
-    check('already exists' in pc.run('original', source, '--out', str(out), expect=2).stderr, 'original refuses to overwrite a file')
-
-    converted = notes / 'scan.md'
-    converted.write_text('# Quarterly scan\n\nRevenue of the Zephyrine unit grew by 7 percent.\n\n## Outlook\n\nHiring continues.\n', encoding='utf-8')
-    tool = 'synthetic agent read the PDF'
-    check('--tool' in pc.run('extract', source, '--text', str(converted), expect=2).stderr, 'extract requires --tool')
-    extracted = pc.json('extract', source, '--text', str(converted), '--tool', tool)
-    check(extracted['status'] == 'extracted' and extracted['derived'] is True and extracted['version'] == 'agent-1'
-          and extracted['passages'] == 1 and extracted['source'] == source and extracted['space'] == pending['space'], f'extract records agent text: {extracted}')
-    kind, processor, label, notes_json = pc.json('sql', f"SELECT kind, processor, version_label, notes FROM renditions WHERE id = '{extracted['rendition']}'")['rows'][0]
-    manifest = json.loads(notes_json)
-    check(kind == 'agent-text' and processor == 'agent text / pocketcontext-3 structure' and label == 'agent-1'
-          and manifest['derived'] is True and manifest['tool'] == tool and manifest['passages'] == 1
-          and manifest['text_sha256'] == hashlib.sha256(converted.read_bytes()).hexdigest() and 'conversion' not in manifest,
-          f'the agent-text rendition records its provenance: {kind} {processor} {manifest}')
-    check(source not in [row['id'] for row in pc.json('pending')['sources']], 'an extracted source leaves pending')
-    rows = pc.json('sql', f"SELECT id, ordinal, locator, body FROM passages WHERE rendition = '{extracted['rendition']}' ORDER BY ordinal")['rows']
-    printed = pc.run('passages', source).stdout
-    check(printed == passages_text(rows).replace(rows[0][2] + '\n', rows[0][2] + ' · derived: agent text\n', 1)
-          and rows[0][2] == '# Quarterly scan; lines 1-7', f'passages reads agent text and marks it derived: {printed!r}')
-    summary = pc.json('passages', source, '--out', str(notes / 'scan-passages.txt'))
-    check(summary['derived'] is True and summary['version'] == 'agent-1', f'passages --out marks agent text derived: {summary}')
-    again = pc.json('ingest', str(original))
-    check(again['status'] == 'extracted' and again['versions'] == ['agent-1'] and 'Synthesize' in again['next'],
-          f'ingest reports the agent-text versions of a stored binary: {again}')
-
-    # Resume: identical text completes a partial rendition; different text under the same version is refused.
-    resumed = pc.json('extract', source, '--text', str(converted), '--tool', tool)
-    check(resumed['rendition'] == extracted['rendition'] and resumed['passages'] == 1, 'extract with identical text resumes the rendition')
-    changed = notes / 'scan-v2.md'
-    changed.write_text('# Quarterly scan\n\nRevenue of the Zephyrine unit grew by 9 percent.\n', encoding='utf-8')
-    conflict = pc.run('extract', source, '--text', str(changed), '--tool', tool, expect=4)
-    check('preserve it and select a new --version' in conflict.stderr, 'different text under the same version exits 4')
-    check('preserve it' in pc.run('extract', source, '--text', str(converted), '--tool', 'another tool', expect=4).stderr,
-          'a different tool under the same version exits 4')
-    second = pc.json('extract', source, '--text', str(changed), '--tool', 'synthetic transcriber', '--version', 'agent-2',
-                     '--original-sha256', '0' * 64, '--conversion', 'pdf pages rendered to PNG before reading')
-    manifest = json.loads(pc.json('sql', f"SELECT notes FROM renditions WHERE id = '{second['rendition']}'")['rows'][0][0])
-    check(second['version'] == 'agent-2' and second['rendition'] != extracted['rendition'] and manifest['original_sha256'] == '0' * 64
-          and manifest['conversion'] == 'pdf pages rendered to PNG before reading', f'a second version is added beside the first: {second} {manifest}')
-    check('9 percent' in pc.run('passages', source).stdout and '7 percent' in pc.run('passages', source, '--version', 'agent-1').stdout,
-          'passages prefers the newest agent-text rendition; --version selects another')
-    check(pc.run('extract', source, '--text', str(changed), '--tool', tool, '--original-sha256', 'ABC', expect=2).returncode == 2,
-          'extract refuses a malformed --original-sha256')
-
-    text_note = notes / 'memo.md'
-    text_note.write_text('# Memo\n\nThe Zephyrine memo is copied verbatim.\n', encoding='utf-8')
-    memo = pc.json('ingest', str(text_note))
-    check('text source; ingest extracts it' in pc.run('extract', memo['source'], '--text', str(converted), '--tool', tool, expect=2).stderr,
-          'extract refuses a text source')
-    check('not found' in pc.run('extract', 'zzzzzzzzzzzzzzz', '--text', str(converted), '--tool', tool, expect=1).stderr,
-          'extract refuses an unknown source')
-
-    # An exact copy reproduces original bytes: agent text never qualifies.
-    passage = {name: pc.json('sql', f"SELECT id FROM passages WHERE rendition = '{r}' LIMIT 1")['rows'][0][0]
-               for name, r in (('binary', extracted['rendition']), ('text', memo['rendition']))}
-    run = pc.json('create', 'ingestion_runs', json.dumps({'key': 'exact-copy', 'status': 'staging', 'description': 'Exact copies'}))
-    for slug, name, src in (('scan-copy', 'binary', source), ('memo-copy', 'text', memo['source'])):
-        page = pc.json('create', 'pages', json.dumps({'slug': slug, 'kind': 'entity'}))
-        revision = pc.json('create', 'page_revisions', json.dumps({
-            'run': run['id'], 'page': page['id'], 'base_revision': '', 'title': slug, 'summary': slug, 'body': 'Copied verbatim.[^1]',
-            'properties': {'catalog_type': 'repository_document', 'document_type': 'other', 'output_mode': 'exact_copy', 'source_id': src}}))
-        pc.json('create', 'citations', json.dumps({'page_revision': revision['id'], 'passage': passage[name], 'marker': '1'}))
-    checked = json.loads(pc.run('check-run', run['id'], expect=3).stdout)
-    problems = [(p['page'], p['kind'], p['detail']) for p in checked['problems'] if p['kind'] == 'property']
-    check(problems == [('scan-copy', 'property', 'Exact-copy source must be a text source')], f'exact_copy is refused for a binary source only: {checked}')
-    current = pc.json('get', 'ingestion_runs', run['id'])
-    refused = pc.run('publish', run['id'], '--expected-revision', str(current['revision']), expect=1)
-    check('Exact-copy source must be a text source' in refused.stdout + refused.stderr, 'publication refuses an exact copy of a binary source')
-    current = pc.json('get', 'ingestion_runs', run['id'])
-    pc.json('update', 'ingestion_runs', run['id'], json.dumps({'status': 'cancelled', 'expected_revision': current['revision']}))
-
-
-def spaces_scenario(pc):
-    """Spaces partition the knowledge: create, rename, archive, restore and the default."""
-    default = pc.json('default-space')
-    research = pc.json('create-space', '  Research  ')
-    check(research['created'] and research['name'] == 'Research' and not research['archived'], 'create-space creates a trimmed name')
-    again = pc.json('create-space', 'Research')
-    check(not again['created'] and again['id'] == research['id'], 'create-space returns the one space with that name')
-    for bad in ('', '   ', 'x' * 201):
-        pc.run('create-space', bad, expect=2)
-    check(True, 'create-space refuses empty and over-long names')
-    status, body = pc.http('POST', '/api/collections/spaces/records', {'name': 'Research'}, token(pc))
-    twin = json.loads(body)['id']
-    check(status == 200 and twin != research['id'], 'the API itself allows two spaces with one name')
-    ambiguous = pc.run('create-space', 'Research', expect=2)
-    check(research['id'] in ambiguous.stderr and twin in ambiguous.stderr, 'create-space lists the IDs of an ambiguous name')
-    check(pc.run('whoami', '--space', 'Research', expect=2).returncode == 2, '--space refuses an ambiguous name')
-    renamed = pc.json('rename-space', twin, 'Reading list')
-    check(renamed['name'] == 'Reading list' and renamed['revision'] == 2, 'rename-space renames by ID at the current revision')
-    check(pc.json('whoami', '--space', 'Research')['space'] == research['id'], '--space selects a space by unique name')
-    env = dict(pc.env)
-    pc.env['POCKETCONTEXT_SPACE'] = 'Reading list'
-    check(pc.json('whoami')['space'] == twin, 'POCKETCONTEXT_SPACE selects a space by name')
-    pc.env = env
-
-    page = pc.json('create', 'pages', '{"slug":"research-notes","kind":"concept"}', '--space', 'Research')
-    check(page['space'] == research['id'], 'root records go to the selected space')
-    pc.json('create', 'pages', '{"slug":"research-notes","kind":"concept"}')
-    check(True, 'page slugs are unique per space, not per project')
-    run = pc.json('create', 'ingestion_runs', '{"key":"cross-space","status":"staging","description":"Synthetic"}')
-    crossed = pc.run('create', 'page_revisions', json.dumps({'run': run['id'], 'page': page['id'], 'title': 'T', 'summary': 'S',
-                     'body': '[needs verification]'}), expect=1)
-    check('404' in crossed.stderr, 'a revision cannot reference a page in another space')
-    check('404' in pc.run('create', 'page_links', json.dumps({'page_revision': 'aaaaaaaaaaaaaaa', 'target': page['id']}), expect=1).stderr,
-          'references to unknown records are refused')
-    pc.json('update', 'ingestion_runs', run['id'], json.dumps({'status': 'cancelled', 'expected_revision': 1}))
-
-    refused = pc.run('archive-space', default['id'], expect=1)
-    check('default space cannot be archived' in refused.stderr, 'the default space cannot be archived')
-    archived = pc.json('archive-space', 'Reading list')
-    check(archived['archived'], 'archive-space archives a space')
-    blocked = pc.run('create', 'pages', '{"slug":"archived-write","kind":"concept"}', '--space', twin, expect=1)
-    check('403' in blocked.stderr and 'Restore this archived space' in blocked.stderr, 'writes to an archived space are refused')
-    note = pc.root / 'archived-note.md'
-    note.write_text('# Archived\n\nA synthetic note.\n', encoding='utf-8')
-    pc.run('ingest', str(note), '--space', twin, expect=1)
-    check(True, 'ingest into an archived space is refused')
-    check(next(s for s in pc.json('spaces') if s['id'] == twin)['archived'], 'spaces reports the archived flag')
-    check(pc.json('whoami', '--space', twin)['archived'], 'an archived space stays readable')
-    refused = pc.run('default-space', twin, expect=1)
-    check('Restore this archived space' in refused.stderr, 'an archived space cannot become the default')
-    restored = pc.json('restore-space', twin)
-    check(not restored['archived'], 'restore-space restores a space')
-    pc.json('create', 'pages', '{"slug":"restored-write","kind":"concept"}', '--space', twin)
-    check(True, 'a restored space accepts writes')
-
-    changed = pc.json('default-space', 'Research')
-    check(changed['id'] == research['id'] and changed['default'], 'default-space sets the default by name')
-    check(pc.json('whoami')['space'] == research['id'] and pc.json('create', 'pages', '{"slug":"default-moved","kind":"concept"}')['space'] == research['id'],
-          'commands and root records follow the new default')
-    check([s['id'] for s in pc.json('spaces') if s['default']] == [research['id']], 'spaces marks the one default')
-    pc.json('archive-space', default['id'])
-    check(True, 'the former default can be archived')
-    pc.json('restore-space', default['id'])
-    pc.json('default-space', default['id'])
-    check(pc.json('default-space')['id'] == default['id'], 'the default returns to the first space')
-    audit = pc.json('sql', f"SELECT action, changes FROM audit_log WHERE collection = 'spaces' AND record = '{twin}' ORDER BY created")['rows']
-    check([row[0] for row in audit] == ['create', 'update', 'update', 'update'], 'space changes are audited')
-
-
-def token(pc):
-    status, body = pc.http('POST', '/api/collections/users/auth-with-password', {'identity': IDENTITY, 'password': PASSWORD})
-    assert status == 200, body
-    return {'Authorization': json.loads(body)['token']}
-
-
-def staging_scenario(pc):
-    """stage, check-run and page: a spec in, every problem at once, a page back out."""
-    notes = pc.root / 'staging-notes'
-    notes.mkdir()
-    (notes / 'orbit.md').write_text('# Orbit cadence\n\nThe Zephyrine satellite completes an orbit every 97 minutes.\n', encoding='utf-8')
-    (notes / 'lantern.md').write_text('# Lantern protocol\n\nLantern beacons answer the Zephyrine handshake within 4 seconds.\n', encoding='utf-8')
-    orbit = pc.json('ingest', str(notes / 'orbit.md'), '--title', 'Orbit cadence')
-    lantern = pc.json('ingest', str(notes / 'lantern.md'), '--title', 'Lantern protocol')
-    passage = {}
-    for name, source in (('orbit', orbit), ('lantern', lantern)):
-        passage[name] = pc.json('sql', f"SELECT id FROM passages WHERE rendition = '{source['rendition']}' ORDER BY ordinal LIMIT 1")['rows'][0][0]
-
-    spec_file = notes / 'spec.json'
-    spec = {'run_key': 'staging-v1', 'description': 'Zephyrine pages', 'sources': [orbit['source'], lantern['source']], 'home': 'orbit-cadence',
-            'pages': [
-                {'slug': 'orbit-cadence', 'kind': 'concept', 'title': 'Orbit cadence', 'summary': 'How often Zephyrine orbits.',
-                 'body': 'Zephyrine completes an orbit every 97 minutes.[^1] Beacons follow the [[lantern-protocol]].', 'citations': {'1': passage['orbit']}},
-                {'slug': 'lantern-protocol', 'kind': 'concept', 'title': 'Lantern protocol', 'summary': 'Beacon handshakes.',
-                 'body': 'Beacons answer within 4 seconds.[^1] See [[orbit-cadence|the orbit]].', 'citations': {'1': passage['lantern']}}]}
-    spec_file.write_text(json.dumps(spec), encoding='utf-8')
-    dry = pc.json('stage', str(spec_file), '--dry-run')
-    check(dry['problems'] == [] and dry['run'] is None and sorted(dry['staged']) == ['lantern-protocol', 'orbit-cadence'], 'a clean dry run lists the pages to stage')
-    check(pc.json('sql', "SELECT count(*) FROM ingestion_runs WHERE key = 'staging-v1'")['rows'][0][0] == 0, 'a dry run writes nothing')
-    staged = pc.json('stage', str(spec_file))
-    check(staged['problems'] == [] and staged['staged'] == ['orbit-cadence', 'lantern-protocol'] and staged['skipped'] == [], 'stage writes two linked pages')
-    links = pc.json('sql', f"SELECT count(*) FROM page_links l JOIN page_revisions r ON r.id = l.page_revision WHERE r.run = '{staged['run']}'")['rows'][0][0]
-    check(links == 2, 'stage derives page_links from [[links]] in the bodies')
-    again = pc.json('stage', '-', stdin=json.dumps(spec))
-    check(again['run'] == staged['run'] and again['staged'] == [] and sorted(again['skipped']) == ['lantern-protocol', 'orbit-cadence'], 'stage resumes a run by key and skips staged pages')
-    checked = pc.json('check-run', staged['run'])
-    check(checked == {'run': staged['run'], 'ok': True, 'problems': []}, 'check-run passes a complete run')
-    status, _ = pc.http('GET', f"/api/pocketcontext/runs/{staged['run']}/check")
-    check(status == 401, 'the run check route requires authentication')
-    published = pc.json('publish', staged['run'], '--expected-revision', str(again['revision']))
-    check(published['status'] == 'published', 'the staged run publishes')
-    home = pc.json('sql', "SELECT p.slug FROM publications pub JOIN pages p ON p.id = pub.home ORDER BY pub.sequence DESC LIMIT 1")['rows'][0][0]
-    check(home == 'orbit-cadence', 'the spec home becomes the publication home')
-    refused = pc.run('stage', str(spec_file), expect=3)
-    check(any(p['kind'] == 'run' for p in json.loads(refused.stdout)['problems']), 'stage refuses to resume a published run')
-
-    broken = {'run_key': 'staging-v2', 'pages': [
-        {'slug': 'orbit-cadence', 'append': '## Later\n\nThe cadence matters to [[lantern-protocol]] beacons.[^1]', 'citations': {'1': passage['lantern']}},
-        {'slug': 'broken-page', 'kind': 'concept', 'title': 'Broken', 'summary': 'Deliberately wrong.',
-         'body': 'Claim.[^1][^2] See [[no-such-page]].\n[^3]: a footnote', 'citations': {'1': 'zzzzzzzzzzzzzzz', '4': passage['orbit']}}]}
-    result = pc.run('stage', '-', '--dry-run', stdin=json.dumps(broken), expect=3)
-    kinds = {p['kind'] for p in json.loads(result.stdout)['problems'] if p['page'] == 'broken-page'}
-    check({'passage', 'missing-marker', 'unused-citation', 'link-target', 'footnote-definition'} <= kinds, f'a dry run lists several problems at once: {sorted(kinds)}')
-    check(all(p['page'] == 'broken-page' for p in json.loads(result.stdout)['problems']), 'the append page itself has no problems')
-    check(pc.json('sql', "SELECT count(*) FROM ingestion_runs WHERE key = 'staging-v2'")['rows'][0][0] == 0, 'a failing spec writes nothing')
-
-    broken['pages'].pop()
-    appended = pc.json('stage', '-', stdin=json.dumps(broken))
-    check(appended['problems'] == [] and appended['staged'] == ['orbit-cadence'], 'an append page stages')
-    pc.json('publish', appended['run'], '--expected-revision', str(appended['revision']))
-    page = pc.json('page', 'orbit-cadence')
-    check(page['body'].endswith('beacons.[^2]') and page['citations'] == {'1': passage['orbit'], '2': passage['lantern']}
-          and page['kind'] == 'concept' and page['title'] == 'Orbit cadence', 'append renumbers local markers after the existing ones')
-    first = pc.json('page', 'orbit-cadence', '--sequence', str(published_sequence(pc) - 1))
-    check('Later' not in first['body'], 'page reads an earlier publication')
-    roundtrip = pc.json('stage', '-', '--dry-run', stdin=json.dumps({'run_key': 'staging-v3', 'pages': [page]}))
-    check(roundtrip['problems'] == [] and roundtrip['staged'] == ['orbit-cadence'], 'page output is a valid spec page')
-    edits_scenario(pc, notes, passage)
-
-    # The server reports every problem of a staged run; publish still refuses with its first one.
-    run = pc.json('create', 'ingestion_runs', json.dumps({'key': 'staging-broken', 'status': 'staging', 'description': 'Broken'}))
-    target = pc.json('sql', "SELECT id FROM pages WHERE slug = 'lantern-protocol'")['rows'][0][0]
-    pc.json('create', 'page_revisions', '-', stdin=json.dumps({'run': run['id'], 'page': target, 'base_revision': '', 'title': 'Lantern',
-            'summary': 'Stale.', 'body': 'Unsupported.[^1][^2] [[orbit-cadence]]'}))
-    report = json.loads(pc.run('check-run', run['id'], expect=3).stdout)
-    kinds = sorted(p['kind'] for p in report['problems'])
-    check(kinds == ['missing-link-record', 'missing-marker', 'missing-marker', 'stale-base'], f'check-run reports every problem at once: {kinds}')
-    stale = pc.run('publish', run['id'], '--expected-revision', '1', expect=4)
-    check('Page changed since synthesis' in stale.stderr, 'publish still refuses with the first problem and HTTP 409')
-
-    # An interrupted run: the revision exists but its citation and link do not. Publish names the first
-    # problem as before; stage with the same run_key adds only the missing records.
-    base = pc.json('sql', f"SELECT m.value FROM publications pub JOIN json_each(pub.manifest) m WHERE m.key = '{target}' ORDER BY pub.sequence DESC LIMIT 1")['rows'][0][0]
-    run = pc.json('create', 'ingestion_runs', json.dumps({'key': 'staging-resume', 'status': 'staging', 'description': 'Resume'}))
-    body = 'Beacons answer within 4 seconds.[^1] See [[orbit-cadence]].'
-    pc.json('create', 'page_revisions', '-', stdin=json.dumps({'run': run['id'], 'page': target, 'base_revision': base, 'title': 'Lantern protocol',
-            'summary': 'Beacon handshakes.', 'body': body}))
-    missing = pc.run('publish', run['id'], '--expected-revision', '1', expect=1)
-    check('Missing citation marker 1' in missing.stderr, 'publish still refuses with the first problem and HTTP 400')
-    resumed = pc.json('stage', '-', stdin=json.dumps({'run_key': 'staging-resume', 'pages': [
-        {'slug': 'lantern-protocol', 'body': body, 'citations': {'1': passage['lantern']}}]}))
-    check(resumed['skipped'] == ['lantern-protocol'] and resumed['problems'] == [], 'a resumed run gets the citations and links it missed')
-
-
-def edits_scenario(pc, notes, passage):
-    """edits change one cited sentence and add another; the replaced marker's citation is dropped."""
-    (notes / 'burn.md').write_text('# Orbit burn\n\nAfter the 2026 burn Zephyrine completes an orbit every 95 minutes.\n', encoding='utf-8')
-    burn = pc.json('ingest', str(notes / 'burn.md'), '--title', 'Orbit burn')
-    burn_passage = pc.json('sql', f"SELECT id FROM passages WHERE rendition = '{burn['rendition']}' ORDER BY ordinal LIMIT 1")['rows'][0][0]
-    before = pc.json('page', 'orbit-cadence')
-    check(before['body'].startswith('Zephyrine completes an orbit every 97 minutes.[^1]') and before['citations'] == {'1': passage['orbit'], '2': passage['lantern']},
-          'the page to edit cites two passages')
-
-    ambiguous = {'run_key': 'staging-edits-bad', 'pages': [{'slug': 'orbit-cadence', 'edits': [
-        {'old': '[[lantern-protocol]]', 'new': '[[orbit-cadence]]'}, {'old': 'no such text', 'new': 'x'}]}]}
-    result = json.loads(pc.run('stage', '-', '--dry-run', stdin=json.dumps(ambiguous), expect=3).stdout)
-    details = sorted(p['detail'] for p in result['problems'] if p['kind'] == 'edit' and p['page'] == 'orbit-cadence')
-    check(len(details) == 2 and details[0].startswith('edits[0]: old text occurs more than once') and details[1].startswith('edits[1]: old text not found'),
-          f'an edit whose old text does not occur exactly once is refused with its index: {result["problems"]}')
-
-    spec = {'run_key': 'staging-edits', 'sources': [burn['source']], 'pages': [{'slug': 'orbit-cadence', 'edits': [
-        {'old': 'Zephyrine completes an orbit every 97 minutes.[^1]', 'new': 'Since its 2026 burn Zephyrine completes an orbit every 95 minutes.[^1]'},
-        {'old': 'Beacons follow the [[lantern-protocol]].', 'new': 'Before the burn an orbit took 97 minutes.[^2] Beacons follow the [[lantern-protocol]].'}],
-        'citations': {'1': burn_passage, '2': passage['orbit']}}]}
-    staged = pc.json('stage', '-', stdin=json.dumps(spec))
-    check(staged['problems'] == [] and staged['staged'] == ['orbit-cadence'], f'a page with edits stages: {staged}')
-    check(pc.json('check-run', staged['run']) == {'run': staged['run'], 'ok': True, 'problems': []}, 'check-run passes the edited page')
-    pc.json('publish', staged['run'], '--expected-revision', str(staged['revision']))
-    after = pc.json('page', 'orbit-cadence')
-    want = ('Since its 2026 burn Zephyrine completes an orbit every 95 minutes.[^3] Before the burn an orbit took 97 minutes.[^4] '
-            'Beacons follow the [[lantern-protocol]].\n\n## Later\n\nThe cadence matters to [[lantern-protocol]] beacons.[^2]')
-    check(after['body'] == want, f'edits replace text and renumber local markers after the highest one: {after["body"]!r}')
-    check(after['citations'] == {'2': passage['lantern'], '3': burn_passage, '4': passage['orbit']},
-          f'the replaced marker loses its citation and the new markers get theirs: {after["citations"]}')
-    check(after['title'] == before['title'] and after['summary'] == before['summary'], 'edits keep the published title and summary')
-
-
-def published_sequence(pc):
-    space = pc.json('whoami')['space']
-    return pc.json('sql', f"SELECT max(sequence) FROM publications WHERE space = '{space}'")['rows'][0][0]
-
-
 def remote_scenario(pc, r):
     instance = json.loads((pc.project / 'pocketcontext.json').read_text(encoding='utf-8'))['instance']
     local = pc.json('whoami')
@@ -1023,46 +405,9 @@ def remote_scenario(pc, r):
     check(env_status['url'] == pc.url and env_status['loggedIn'], 'POCKETCONTEXT_URL selects remote mode')
 
     me = r.json('whoami')
-    check(me['space'] == local['space'] and me['url'] == pc.url and 'db' not in me and me['signedIn'],
-          'remote whoami reports the same default space without a database')
-    check(r.json('spaces') == pc.json('spaces'), 'the other computer sees the same spaces')
-    own = r.json('create', 'pages', '{"slug":"remote-default","kind":"concept"}')
-    check(own['space'] == me['space'], 'remote omitted root writes use the default space')
-    workspace = r.json('create-space', 'Remote research')['id']
-    r.env['POCKETCONTEXT_SPACE'] = 'Remote research'
-    check(r.json('whoami')['space'] == workspace and r.json('whoami', '--space', me['space'])['space'] == me['space'],
-          'explicit --space overrides POCKETCONTEXT_SPACE (by name), which overrides the default')
-    r.env['POCKETCONTEXT_SPACE'] = workspace
-
-    # A note only the other computer has, named relative to its working folder.
-    (r.work / 'tea.md').write_text('# Tea policy\n\nRooibosquartz tea is restocked every Monday. Thé ✓\n', encoding='utf-8')
-    source = r.json('ingest', 'tea.md', '--title', 'Tea policy')
-    check(source['status'] == 'extracted' and source['passages'] == 1, 'remote ingest uploads a local note')
-    check(r.json('query', f"SELECT space FROM sources WHERE id = '{source['source']}'")['rows'][0][0] == workspace,
-          'remote ingest writes to the selected space')
-    passage = r.json('query', f"SELECT id FROM passages WHERE rendition = '{source['rendition']}' AND body LIKE '%Rooibosquartz%'")['rows'][0][0]
-    rows = r.json('query', f"SELECT id, ordinal, locator, body FROM passages WHERE rendition = '{source['rendition']}' ORDER BY ordinal")['rows']
-    check(r.run('passages', source['source']).stdout == passages_text(rows) and passage in passages_text(rows), 'remote passages prints the source passages')
-    summary = r.json('passages', source['source'], '--out', str(r.root / 'tea-passages.txt'))
-    check(summary['passages'] == 1 and (r.root / 'tea-passages.txt').read_bytes() == passages_text(rows).encode('utf-8'),
-          'remote passages --out writes the file on the other computer')
-    (r.root / 'leaf.png').write_bytes(b'\x89PNG\r\n\x1a\n synthetic remote image \x00\xff')
-    image = r.json('ingest', str(r.root / 'leaf.png'))
-    check(image['status'] == 'stored' and image['media_type'] == 'image/png', 'remote ingest stores a binary')
-    fetched = r.json('original', image['source'], '--out', str(r.root / 'leaf-copy.png'))
-    check((r.root / 'leaf-copy.png').read_bytes() == (r.root / 'leaf.png').read_bytes() and fetched['sha256'] == image['sha256'],
-          'remote original downloads the verified bytes')
-    run = r.json('create', 'ingestion_runs', json.dumps({'key': 'tea-v1', 'status': 'staging', 'description': 'Tea', 'sources': [source['source']]}))
-    page = r.json('create', 'pages', '{"slug":"tea-policy","kind":"summary"}')
-    revision = r.json('create', 'page_revisions', '-', stdin=json.dumps({
-        'run': run['id'], 'page': page['id'], 'base_revision': '', 'title': 'Tea policy',
-        'summary': 'Tea supplies.', 'body': 'Rooibosquartz tea is restocked every Monday.[^1]'}))
-    r.json('create', 'citations', json.dumps({'page_revision': revision['id'], 'passage': passage, 'marker': '1'}))
-    current = r.json('get', 'ingestion_runs', run['id'])
-    check(r.json('publish', run['id'], '--expected-revision', str(current['revision']))['status'] == 'published', 'remote publish works')
-    closed = json.loads(r.run('check-run', run['id'], expect=3).stdout)
-    check([p['kind'] for p in closed['problems']] == ['run-closed'], 'remote check-run reports a published run as closed')
-    check([p['slug'] for p in r.json('search', 'rooibosquartz')['pages']] == ['tea-policy'], 'remote search finds the remote page')
+    check(me['instance'] == local['instance'] and me['url'] == pc.url and 'db' not in me and me['signedIn'],
+          'remote whoami reports the same instance without a database or space')
+    check('space' not in me, 'remote identity has no space')
 
     for args in (['stop'], ['ensure-running'], ['flush'], ['recover'], ['init'], ['password', '--password-stdin'], ['login-code']):
         refused = r.run(*args, expect=2)
@@ -1092,7 +437,7 @@ def remote_scenario(pc, r):
     other = r.run('whoami', expect=1)
     check('different' in other.stderr and 'sign in again' in other.stderr, 'a session for another instance is refused')
     session.write_text(original, encoding='utf-8')
-    check(r.json('whoami')['space'] == workspace, 'the restored session works again')
+    check(r.json('whoami')['instance'] == instance, 'the restored session works again')
 
     skills = r.root / 'skill'
     r.json('skill', '--dir', str(skills))
@@ -1108,7 +453,7 @@ def remote_scenario(pc, r):
           'the remote reader handoff signs in the project account')
     status, _ = pc.http('POST', '/api/bundle/redeem', {'code': reader_code})
     check(status == 401, 'the remote reader handoff is single-use')
-    check(r.json('whoami')['space'] == workspace, 'reader sign-in preserves the remote CLI session')
+    check(r.json('whoami')['instance'] == instance, 'reader sign-in preserves the remote CLI session')
     check(reader_code not in session.read_text(encoding='utf-8'), 'the browser handoff code is not saved in the CLI session')
 
     check(r.json('logout') == {'url': pc.url, 'loggedOut': True}, 'remote logout ends the session')
@@ -1118,7 +463,7 @@ def remote_scenario(pc, r):
 
     leftovers = [p for p in r.root.rglob('*') if p.name in ('pocketcontext.db', 'pocketcontext.json', 'local.key') or p.suffix in ('.db', '.lease')]
     check(not leftovers, f'remote mode creates no database, project or key: {leftovers}')
-    check(sorted(p.name for p in r.work.iterdir()) == ['tea.md'], 'remote mode writes nothing to the working folder')
+    check(not list(r.work.iterdir()), 'remote mode writes nothing to the working folder')
     r.env.pop('POCKETCONTEXT_SPACE', None)
 
 
@@ -1155,8 +500,7 @@ def codes_scenario(pc, r):
     login = r.json('login', '--code-stdin', stdin=issued['code'] + '\n')
     check(login == {'url': pc.url, 'instance': instance, 'signedIn': True}, 'remote login redeems a code')
     me = r.json('whoami')
-    check(me['space'] == pc.json('whoami')['space'], 'the code signs in the project account with its default space')
-    check([me['space'], me['name']] in r.json('query', 'SELECT id, name FROM spaces')['rows'], 'a code session reads spaces with SQL')
+    check(me['instance'] == pc.json('whoami')['instance'], 'the code signs in the same Crew instance')
     r.json('logout')
     reused = r.run('login', '--code-stdin', stdin=issued['code'] + '\n', expect=1)
     check('used or expired' in reused.stderr, 'a redeemed code cannot be reused')
@@ -1191,75 +535,6 @@ def codes_scenario(pc, r):
     expired = r.run('login', '--code-stdin', stdin=expiring['code'] + '\n', expect=1)
     check('used or expired' in expired.stderr, 'an expired code is refused')
     check(not r.json('status')['loggedIn'], 'an expired code leaves the remote logged out')
-
-
-def lint_scenario(pc):
-    """Editorial lint findings on pages written with one batch."""
-    note = pc.root / 'notes' / 'grinder.md'
-    note.write_text('# Grinder\n\nThe burr grinder is set to grind size twelve. The tamping station sits beside it.\n', encoding='utf-8')
-    source = pc.json('ingest', str(note), '--title', 'Grinder')
-    passage = pc.json('sql', f"SELECT id FROM passages WHERE rendition = '{source['rendition']}' LIMIT 1")['rows'][0][0]
-    run = pc.json('create', 'ingestion_runs', json.dumps({'key': 'grinder-v1', 'status': 'staging', 'description': 'Grinder',
-                                                          'sources': [source['source']]}))
-    filler = ' '.join(['The grinder setting is checked each morning before service begins.'] * 9)
-    pages = {  # slug: (title, body, markers, link targets[, properties])
-        'burr-grinder': ('Burr grinder', f'{filler}[^1] Follow the Coffee policy and the **Tamping station** rules, as Ada Lovelace asked on Monday.[^2]', 2, []),
-        'milk-frother': ('Milk frother', 'Placed next to the [[burr-grinder]] and the **Tamping station** by Ada Lovelace on Monday.[^1]', 1, ['burr-grinder']),
-        'cleaning-rota': ('Cleaning rota', 'Wipe the burr grinder, the `Milk frother` and the **tamping station** daily; Ada Lovelace checks on Monday.[^1][^2]', 2, []),
-        # Short entity pages: only those with a catalog_type are catalog records, not stubs.
-        'example-labs': ('Example Labs', 'Recorded from the note.[^1][^2]', 2, [],
-                         {'catalog_type': 'organization', 'organization_type': 'lab', 'website': 'https://labs.example.test'}),
-        'example-cli': ('Example CLI', 'Recorded from the note.[^1][^2]', 2, [],
-                        {'catalog_type': 'product', 'product_type': 'cli', 'provider': 'Example Labs'}),
-        'example-model': ('Example Model', 'Recorded from the note.[^1][^2]', 2, [],
-                          {'catalog_type': 'model', 'provider': 'Example Labs', 'family': 'Example'}),
-        'loose-widget': ('Loose widget', 'Recorded from the note.[^1][^2]', 2, [], {'entity_type': 'product'}),
-    }
-    ids = {slug: (pc.run('newid').stdout.strip(), pc.run('newid').stdout.strip()) for slug in pages}
-    batches = {'concept': [], 'entity': []}  # a batch holds at most 20 requests: entity pages go in a second one
-    for slug, (title, body, markers, links, *properties) in pages.items():
-        page_id, revision_id = ids[slug]
-        kind = 'entity' if properties else 'concept'
-        requests = batches[kind]
-        requests.append({'method': 'POST', 'url': '/api/collections/pages/records', 'body': {'id': page_id, 'slug': slug, 'kind': kind}})
-        requests.append({'method': 'POST', 'url': '/api/collections/page_revisions/records', 'body': {
-            'id': revision_id, 'run': run['id'], 'page': page_id, 'base_revision': '', 'title': title, 'summary': title, 'body': body,
-            **({'properties': properties[0]} if properties else {})}})
-        for marker in range(1, markers + 1):
-            requests.append({'method': 'POST', 'url': '/api/collections/citations/records',
-                             'body': {'page_revision': revision_id, 'passage': passage, 'marker': str(marker)}})
-        for target in links:
-            requests.append({'method': 'POST', 'url': '/api/collections/page_links/records',
-                             'body': {'page_revision': revision_id, 'target': ids[target][0]}})
-    requests, entities = batches['concept'], batches['entity']
-    written = pc.json('batch', '-', stdin=json.dumps(requests))
-    check(len(written) == len(requests), 'batch writes pages, revisions, citations and links in one request')
-    check(len(pc.json('batch', '-', stdin=json.dumps(entities))) == len(entities), 'a second batch writes the entity pages')
-    current = pc.json('get', 'ingestion_runs', run['id'])
-    check(pc.json('publish', run['id'], '--expected-revision', str(current['revision']))['status'] == 'published',
-          'the batch-written run publishes')
-    findings = pc.json('lint')['findings']
-    mentions = {(f['page'], f['target']) for f in findings if f['kind'] == 'unlinked-mention'}
-    check(mentions == {('burr-grinder', 'coffee-policy'), ('cleaning-rota', 'burr-grinder')},
-          f'lint reports unlinked mentions, not linked ones or code: {mentions}')
-    missing = [(f['term'], f['pages']) for f in findings if f['kind'] == 'missing-page']
-    check(missing == [('Ada Lovelace', ['burr-grinder', 'cleaning-rota', 'milk-frother']),
-                      ('Tamping station', ['burr-grinder', 'cleaning-rota', 'milk-frother'])],
-          f'lint reports a bold term and a capitalized name on three pages without a page, not a weekday: {missing}')
-    stubbed = {f['page'] for f in findings if f['kind'] == 'stub'}
-    check({'milk-frother', 'cleaning-rota'} <= stubbed and 'burr-grinder' not in stubbed, f'lint reports short pages as stubs: {stubbed}')
-    check('loose-widget' in stubbed and not stubbed & {'example-labs', 'example-cli', 'example-model'},
-          f'lint exempts only entity pages with a catalog_type from stub: {stubbed}')
-    published = pc.json('sql', "SELECT p.slug, json_extract(r.properties, '$.catalog_type') FROM page_revisions r "
-                        f"JOIN pages p ON p.id = r.page WHERE r.run = '{run['id']}' AND p.slug LIKE 'example-%' ORDER BY p.slug")['rows']
-    check(published == [['example-cli', 'product'], ['example-labs', 'organization'], ['example-model', 'model']],
-          f'the server accepts the organization, product and model catalog types: {published}')
-    refused = pc.json('create', 'ingestion_runs', json.dumps({'key': 'grinder-v2', 'status': 'staging', 'description': 'Grinder',
-                                                              'sources': [source['source']]}))
-    attempt = pc.run('create', 'page_revisions', json.dumps({
-        'run': refused['id'], 'page': ids['loose-widget'][0], 'base_revision': ids['loose-widget'][1], 'title': 'Loose widget',
-        'summary': 'Loose widget', 'body': 'Recorded from the note.', 'properties': {'catalog_type': 'spaceship'}}), expect=1)
-    check('Invalid catalog_type' in attempt.stdout + attempt.stderr, 'the server still refuses an unknown catalog_type')
 
 
 if __name__ == '__main__':

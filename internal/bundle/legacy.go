@@ -98,7 +98,7 @@ func checkDatabase(db, synced string) error {
 		return err
 	}
 	earlier := fmt.Errorf("%w: %s was created by an earlier PocketContext release (multi-account spaces); this release does not open databases from earlier releases and leaves the file unchanged. "+
-		"Keep using the earlier release for it, or start a new project with `pocketcontext init --db NEW_PATH` and ingest the sources again", ErrEarlierRelease, synced)
+		"Keep using the earlier release for it, or start a new project with `pocketcontext init --db NEW_PATH` and recreate the Crew records you need", ErrEarlierRelease, synced)
 	for _, t := range legacyTables {
 		if tables[t] {
 			return earlier

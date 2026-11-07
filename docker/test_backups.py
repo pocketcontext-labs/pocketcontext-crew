@@ -96,6 +96,20 @@ class Backups(unittest.TestCase):
         with self.assertRaises(hosted.Failure):
             hosted.restore(target, self.store, result["key"])
 
+    def test_migrated_database_cannot_lose_its_required_archive(self):
+        # A schema-retirement anchor makes absent archives an error, even though
+        # ordinary pre-migration and fresh Crew backups legitimately lack one.
+        with sqlite3.connect(self.config.db) as db:
+            db.execute("CREATE TABLE _crew_legacy_archive(id INTEGER PRIMARY KEY, archive TEXT, manifest_sha256 TEXT)")
+            db.execute("INSERT INTO _crew_legacy_archive VALUES(1, ?, ?)", ("a" * 64, "b" * 64))
+        with self.assertRaises(ValueError):
+            hosted.snapshot(self.config, self.config.revision)
+        root = self.config.project / "legacy-knowledge"
+        root.mkdir()
+        hosted.atomic_json(root / "current.json", {"archive": "a" * 64})
+        with self.assertRaises((ValueError, FileNotFoundError)):
+            hosted.snapshot(self.config, self.config.revision)
+
     def test_changed_state_invalidates_prepared_upgrade(self):
         result = hosted.complete_backup(self.config, self.store, self.config.revision)
         self.assertTrue(hosted.prepared_matches(self.config, result, self.config.revision))

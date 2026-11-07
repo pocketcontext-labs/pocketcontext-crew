@@ -165,8 +165,8 @@ func expired(base string) error {
 
 // NewRemote returns a client for a server reached through a port forward,
 // using the stored session.
-func NewRemote(base, space string) (*Client, error) {
-	c, err := newClient(base, space)
+func NewRemote(base string) (*Client, error) {
+	c, err := newClient(base)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func login(base string, passwordStdin bool) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := newClient(base, "")
+	c, err := newClient(base)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func redeemCode(base, code, expected string) (map[string]any, error) {
 	if expected != "" && i.Instance != expected {
 		return nil, fail(1, "invitation identity mismatch; no code was sent")
 	}
-	c, err := newClient(base, "")
+	c, err := newClient(base)
 	if err != nil {
 		return nil, err
 	}

@@ -14,9 +14,9 @@ import (
 	assets "github.com/pocketcontext-labs/pocketcontext-crew"
 )
 
-const manualVersion = "0.24.0"
+const manualVersion = "0.2.0"
 
-var manualFiles = []string{"README.md", "docs/spaces.md", "docs/import-obsidian.md", "docs/upgrades.md", "docs/reader-setup.md", "docs/service.md", "docs/https.md", "docs/mcp.md", "docs/hosting.md", "docs/releases/0.24.0.md"}
+var manualFiles = []string{"README.md", "docs/crew.md", "docs/data-model.md", "docs/upgrades.md", "docs/reader-setup.md", "docs/service.md", "docs/https.md", "docs/mcp.md", "docs/hosting.md", "docs/releases/0.2.0.md"}
 var markdownLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 
 func manualContent(name string) ([]byte, error) {
@@ -56,7 +56,7 @@ func manualContent(name string) ([]byte, error) {
 		}
 		return "](" + target + ")"
 	})
-	title, _ := json.Marshal("PocketContext " + manualVersion + " manual: " + name)
+	title, _ := json.Marshal("PocketContext Crew " + manualVersion + " manual: " + name)
 	return []byte("---\ntitle: " + string(title) + "\n---\n\n" + content), nil
 }
 

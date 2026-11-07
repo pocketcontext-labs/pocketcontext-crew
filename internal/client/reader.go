@@ -68,7 +68,7 @@ func openRemoteReader(base string, noBrowser, skipReader bool) (map[string]any, 
 	if out := skippedReader(noBrowser, skipReader); out != nil {
 		return out, nil
 	}
-	c, err := NewRemote(base, "")
+	c, err := NewRemote(base)
 	if err != nil {
 		return nil, err
 	}

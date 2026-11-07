@@ -90,19 +90,21 @@ try {
   let server = start(binary, ['serve', '--db', db, '--ui-dev', upstream], { env, cwd: temporary });
   await until(async () => (await fetch(`${origin}/api/bundle/instance`)).ok, 'PocketContext readiness');
 
-  const original = '---\ntitle: Synthetic browser source\ndate: 2026-10-22\n---\n\n# Synthetic browser source\n\nThe observatory opened in October.\n';
-  const note = path.join(temporary, 'observatory.md');
-  await writeFile(note, original);
-  const ingested = await cli(['ingest', note]);
-  const identity = await cli(['create', 'pages', JSON.stringify({ slug: 'observatory', kind: 'concept' })]);
-  let revision = '';
-  async function publish(edition) {
-    const run = await cli(['create', 'ingestion_runs', JSON.stringify({ key: `browser-${edition}`, status: 'staging', description: 'Synthetic browser check' })]);
-    const next = await cli(['create', 'page_revisions', '-'], JSON.stringify({ run: run.id, page: identity.id, base_revision: revision, title: 'Observatory', summary: 'Synthetic browser fixture.', body: `Edition ${edition} [needs verification]` }));
-    await cli(['publish', run.id, '--expected-revision', String(run.revision)]);
-    revision = next.id;
+  const authenticated = await fetch(`${origin}/api/collections/users/auth-with-password`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({identity:'me@pocketcontext.localhost',password:'synthetic browser password'}),
+  });
+  assert.equal(authenticated.status,200);
+  const {token} = await authenticated.json();
+  async function write(action,data,row) {
+    const response = await fetch(`${origin}/api/crew/write`, {
+      method:'POST',headers:{'Content-Type':'application/json',Authorization:token},
+      body:JSON.stringify({action,data,...(row ? {id:row.id,expected_revision:row.revision}: {})}),
+    });
+    assert.equal(response.status,200);
+    return response.json();
   }
-  await publish(1);
+  await write('task.create',{title:'Synthetic browser task',description:'Durable test task'});
   browser = await chromium.launch({ headless: true, executablePath: option('--browser') });
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
@@ -115,8 +117,7 @@ try {
   const signIn = await cli(['open', '--no-browser']);
   await page.goto(signIn.signInLink);
   await page.getByRole('button', { name: 'Sign out' }).waitFor();
-  await page.evaluate(() => { location.hash = '#/page/observatory'; });
-  await page.getByText('Edition 1 [needs verification]', { exact: true }).waitFor();
+  await page.getByText('Synthetic browser task', {exact:true}).waitFor();
   ok('one-time open link signs into the reader on the backend origin');
   await until(async () => sockets.some(url => new URL(url).pathname === '/__ui_hmr'), 'same-origin hot-reload connection');
   assert(sockets.every(url => new URL(url).port === String(port)), 'HMR must not bypass the backend');
@@ -128,11 +129,11 @@ try {
   const css = path.join(ui, 'src/styles.css');
   await writeFile(css, `${await readFile(css, 'utf8')}\nbody { --pocketcontext-hmr-check: updated; }\n`);
   await page.waitForFunction(() => getComputedStyle(document.body).getPropertyValue('--pocketcontext-hmr-check').trim() === 'updated');
-  const component = path.join(ui, 'src/App.tsx');
+  const component = path.join(ui, 'src/CrewWorkspace.tsx');
   const source = await readFile(component, 'utf8');
-  assert(source.includes('<span>Overview</span>'));
-  await writeFile(component, source.replace('<span>Overview</span>', '<span>SYNTHETIC HOT UPDATE</span>'));
-  await page.getByText('SYNTHETIC HOT UPDATE', { exact: true }).waitFor();
+  assert(source.includes('One owner. One shared context.'));
+  await writeFile(component, source.replace('One owner. One shared context.', 'SYNTHETIC HOT UPDATE'));
+  await page.waitForFunction(() => document.querySelector('.crew-sidebar-bottom')?.textContent.includes('SYNTHETIC HOT UPDATE'));
   assert.equal(await page.evaluate(() => window.__uiTestDocument), documentMarker, 'CSS and component edits must preserve the document');
   assert.equal(server.pid, initialPID);
   assert.equal(server.exitCode, null, 'the same Go process must stay running');
@@ -140,10 +141,10 @@ try {
   assert.equal(errors.length, 0, 'reader must have no browser runtime errors');
   ok('CSS and React edits update without navigation, sign-in loss or Go restart');
 
-  await until(async () => requests.some(url => url.pathname === '/api/realtime'), 'reader realtime connection');
-  await publish(2);
-  await page.getByText('Edition 2 [needs verification]', { exact: true }).waitFor();
-  ok('publication realtime updates still reach the reader');
+  await write('task.create',{title:'Synthetic refreshed task'});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByText('Synthetic refreshed task', {exact:true}).waitFor();
+  ok('Crew refresh reads writes from another client');
 
   const viteStopped = once(vite, 'exit');
   vite.kill('SIGTERM');
@@ -161,47 +162,10 @@ try {
   assert(sockets.every(url => new URL(url).port === String(port)));
   assert.equal(errors.length, 0, 'Vite restart must have no browser runtime errors');
   ok('hot reload recovers after restarting Vite with the same Go process');
-  await page.evaluate(sourceID => { location.hash = `#/sources/${sourceID}`; }, ingested.source);
-  const metadata = page.locator('.source-metadata');
-  await metadata.waitFor();
-  assert.equal(await metadata.getAttribute('open'), null);
-  assert.equal(await page.getByRole('heading', { name: /^title:/ }).count(), 0);
-  await metadata.locator('summary').click();
-  assert(await metadata.locator('code').isVisible());
-  assert((await metadata.innerText()).includes('title: Synthetic browser source'));
-  await metadata.locator('summary').press('Enter');
-  assert.equal(await metadata.getAttribute('open'), null);
-  ok('front matter is collapsed metadata with mouse and keyboard disclosure controls');
-  const downloadReady = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Download original' }).click();
-  const download = await downloadReady;
-  assert.equal(await readFile(await download.path(), 'utf8'), original);
-  const sourceRecord = await cli(['get', 'sources', ingested.source]);
-  const denied = await fetch(`${origin}/api/files/sources/${sourceRecord.id}/${sourceRecord.original}`);
-  assert.equal(denied.status, 404, 'originals must still require file authorization');
-  ok('authenticated original download is byte-exact and anonymous access is denied');
-
-  const [initialDefault] = (await cli(['sql', 'SELECT default_space FROM settings'])).rows[0];
-  const second = await cli(['create-space', 'Synthetic second space']);
-  await page.getByRole('button',{name:'Back to spaces'}).click();
-  await page.getByRole('button', { name: 'Manage spaces' }).click();
-  const manager = page.getByRole('dialog', { name: 'Manage spaces' });
-  const rowFor = name => manager.locator('li').filter({ has: page.locator('strong', { hasText: new RegExp(`^${name}$`) }) });
-  const firstRow = rowFor('Default'), secondRow = rowFor('Synthetic second space');
-  await secondRow.waitFor();
-  assert(await firstRow.getByRole('button', { name: 'Archive', exact: true }).isDisabled(), 'the default space cannot be archived');
-  await secondRow.getByRole('button', { name: 'Make default', exact: true }).click();
-  await manager.getByText('“Synthetic second space” is now the default space.', { exact: true }).waitFor();
-  assert(await secondRow.getByRole('button', { name: 'Archive', exact: true }).isDisabled(), 'the new default cannot be archived');
-  assert(await firstRow.getByRole('button', { name: 'Archive', exact: true }).isEnabled(), 'the former default can be archived');
-  assert.equal((await cli(['sql', 'SELECT default_space FROM settings'])).rows[0][0], second.id);
-  await firstRow.getByRole('button', { name: 'Make default', exact: true }).click();
-  await manager.getByText('“Default” is now the default space.', { exact: true }).waitFor();
-  assert.equal((await cli(['sql', 'SELECT default_space FROM settings'])).rows[0][0], initialDefault);
-  await page.keyboard.press('Escape');
-  await manager.waitFor({ state: 'hidden' });
-  assert.equal(errors.length, 0, 'space manager must have no browser runtime errors');
-  ok('the development reader sets the default space and never archives it');
+  await page.reload();
+  await page.getByText('Synthetic refreshed task', {exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Manage spaces'}).count(),0);
+  ok('Crew tasks persist through reload without a space selector');
 
   await cli(['stop']);
   await until(async () => server.exitCode !== null, 'development server shutdown');

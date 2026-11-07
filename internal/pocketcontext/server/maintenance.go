@@ -86,8 +86,7 @@ func maintenanceRead(r *http.Request) bool {
 		return true
 	}
 	if r.Method == http.MethodPost {
-		return p == "/api/context/query" || p == "/api/context/search" ||
-			p == "/api/files/token" || p == "/api/realtime" ||
+		return p == "/api/crew/read" || p == "/api/realtime" ||
 			(len(parts) == 4 && parts[0] == "api" && parts[1] == "collections" && parts[3] == "auth-refresh")
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -99,7 +98,7 @@ func maintenanceRead(r *http.Request) bool {
 	collectionRead := (len(parts) == 4 && parts[3] == "auth-methods") ||
 		((len(parts) == 4 || len(parts) == 5) && parts[3] == "records")
 	fileRead := len(parts) == 5 && parts[0] == "api" && parts[1] == "files" && r.URL.Query().Get("thumb") == ""
-	return p == "/api/health" || p == "/api/context/schema" ||
+	return p == "/api/health" ||
 		p == "/api/realtime" || fileRead ||
 		(strings.HasPrefix(p, "/api/collections/") && collectionRead)
 }

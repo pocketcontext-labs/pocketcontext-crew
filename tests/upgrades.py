@@ -2,7 +2,7 @@
 """Rehearse coexistence, upgrade and full-backup rollback with synthetic projects.
 
 Runs on Linux, macOS and Windows using only the standard library. By default it
-fetches the pinned 0.15.0 executable and verifies the release archive checksum.
+fetches the pinned 0.1.1 executable and verifies the release archive checksum.
 Pass --previous-binary to use an already verified local release instead.
 """
 import argparse
@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import sqlite3
+from contextlib import closing
 import subprocess
 import tarfile
 import tempfile
@@ -22,7 +24,7 @@ import zipfile
 
 from e2e import isolated_env, free_port, PASSWORD
 
-PREVIOUS = '0.15.0'
+PREVIOUS = '0.1.1'
 
 
 def download_previous(destination):
@@ -31,8 +33,8 @@ def download_previous(destination):
     if system == 'windows':
         arch = 'amd64'
     extension = 'zip' if system == 'windows' else 'tar.gz'
-    archive = f'pocketcontext_{PREVIOUS}_{system}_{arch}.{extension}'
-    base = f'https://github.com/pocketcontext-labs/pocketcontext/releases/download/v{PREVIOUS}'
+    archive = f'pocketcontext-crew_{PREVIOUS}_{system}_{arch}.{extension}'
+    base = f'https://github.com/pocketcontext-labs/pocketcontext-crew/releases/download/v{PREVIOUS}'
     with urllib.request.urlopen(f'{base}/checksums.txt', timeout=120) as response:
         checksums = response.read().decode('utf-8')
     expected = [line.split()[0] for line in checksums.splitlines() if len(line.split()) == 2 and line.split()[1] == archive]
@@ -42,7 +44,7 @@ def download_previous(destination):
         data = response.read()
     if hashlib.sha256(data).hexdigest() != expected[0]:
         raise AssertionError('previous release archive checksum mismatch')
-    name = 'pocketcontext.exe' if system == 'windows' else 'pocketcontext'
+    name = 'pocketcontext-crew.exe' if system == 'windows' else 'pocketcontext-crew'
     destination.mkdir()
     binary = destination / name
     if system == 'windows':
@@ -73,9 +75,20 @@ def replace_binary(source, destination):
             time.sleep(0.1)
 
 
+CREW_TABLES = ('crew_agents', 'crew_buckets', 'crew_notes', 'crew_note_revisions', 'crew_tasks', 'crew_reviews', 'crew_events')
+LEGACY_TABLES = ('spaces', 'settings', 'sources', 'renditions', 'passages', 'pages', 'ingestion_runs', 'page_revisions', 'citations', 'page_links', 'publications', 'audit_log')
+
+
+def table_rows(path, names):
+    # Call only after the writer has stopped, or against an immutable archive.
+    with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
+        assert db.execute('PRAGMA integrity_check').fetchone() == ('ok',)
+        return {name: db.execute('SELECT * FROM "' + name + '" ORDER BY id').fetchall() for name in names}
+
+
 def rehearse(target, previous, root):
     home = root / 'home'
-    (home / '.codex').mkdir(parents=True)
+    home.mkdir()
     env = isolated_env(home)
     executable = 'pocketcontext.exe' if os.name == 'nt' else 'pocketcontext'
     alpha = root / 'Old project'
@@ -85,8 +98,8 @@ def rehearse(target, previous, root):
         shutil.copy2(source, folder / executable)
 
     def run(folder, *args, binary=None, stdin=None, expect=0):
-        command = [str(binary or folder / executable), '--db', str(folder / 'pocketcontext.db'), *args]
-        result = subprocess.run(command, input=stdin, capture_output=True, text=True, encoding='utf-8', env=env, timeout=120)
+        result = subprocess.run([str(binary or folder / executable), '--db', str(folder / 'pocketcontext.db'), *args],
+            input=stdin, capture_output=True, text=True, encoding='utf-8', env=env, timeout=120)
         if result.returncode != expect:
             raise AssertionError(f'{args}: exit {result.returncode}, expected {expect}\n{result.stdout}\n{result.stderr}')
         return result
@@ -97,63 +110,115 @@ def rehearse(target, previous, root):
     def release(binary):
         return subprocess.check_output([str(binary), '--version'], text=True, encoding='utf-8', env=env).split()[1]
 
+    def owner(folder):
+        opened = data(folder, 'open', '--no-browser')
+        url, code = opened['signInLink'].split('/bundle/login#')
+        request = urllib.request.Request(url + '/api/bundle/redeem', data=json.dumps({'code':code}).encode(), headers={'Content-Type':'application/json'})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return url, json.load(response)['token']
+
+    def call(session, path, body):
+        url, token = session
+        request = urllib.request.Request(url + path, data=json.dumps(body).encode(), headers={'Content-Type':'application/json', 'Authorization':token})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.load(response)
+
     old_version, new_version = release(previous), release(target)
-    if old_version != PREVIOUS or old_version == new_version:
-        raise AssertionError(f'expected distinct versions with previous {PREVIOUS}: {old_version}, {new_version}')
+    assert old_version == PREVIOUS and old_version != new_version, (old_version, new_version)
     stopped = set()
     try:
         ports = [free_port(), free_port()]
-        while ports[0] == ports[1]:
-            ports[1] = free_port()
+        while ports[0] == ports[1]: ports[1] = free_port()
         for folder, name, port in ((alpha, 'Older', ports[0]), (beta, 'Current', ports[1])):
             data(folder, 'init', '--name', name, '--port', str(port), '--password-stdin', stdin=PASSWORD + '\n')
-            data(folder, 'skill', '--agent', 'codex')
-        note = root / 'synthetic.txt'
-        note.write_text('Synthetic upgrade evidence: the lighthouse is green.\n', encoding='utf-8')
-        source = data(alpha, 'ingest', str(note), '--title', 'Upgrade evidence')['source']
-        data(beta, 'ingest', str(note), '--title', 'Independent current evidence')
+        session = owner(alpha)
+        def write(action, fields, row=None):
+            return call(session, '/api/crew/write', {'action':action, 'reported_agent':'Synthetic upgrade', 'reason':'migration fixture', 'data':fields,
+                **({'id':row['id'], 'expected_revision':row['revision']} if row else {})})
+        agent = write('agent.create', {'name':'Build', 'brief':'Synthetic brief'})
+        bucket = write('bucket.create', {'name':'BUILD', 'responsible_agent':agent['id']})
+        note = write('note.create', {'bucket':bucket['id'],'title':'Durable note','body':'Before revision'})
+        note = write('note.update', {'body':'After revision ✓'}, note)
+        task = write('task.create', {'title':'Migration task','draft':'Exact draft','assigned_agent':agent['id'], 'links':[note['id']]})
+        review = write('review.request', {}, task)
+        archived = write('agent.create', {'name':'Archived'})
+        write('agent.update', {'archived':True}, archived)
+        text = root / 'synthetic.txt'
+        text.write_text('Synthetic legacy evidence: the lighthouse is green.\n', encoding='utf-8')
+        source = data(alpha, 'ingest', str(text), '--title', 'Upgrade evidence')['source']
+        image = root / 'synthetic.png'
+        image.write_bytes(b'\x89PNG\r\n\x1a\nsynthetic migration original\x00')
+        data(alpha, 'ingest', str(image))
         assert data(alpha, 'status')['version'] == old_version
         assert data(beta, 'status')['version'] == new_version
-        refused = run(alpha, 'ensure-running', binary=target, expect=1)
-        assert 'version' in refused.stderr and old_version in refused.stderr, refused.stderr
-        mismatch = data(alpha, 'status', binary=target)
-        assert mismatch['version'] == new_version and mismatch['serverVersion'] == old_version
-        assert mismatch['compatible'] is False
+        mismatch = run(alpha, 'ensure-running', binary=target, expect=1)
+        assert 'version' in mismatch.stderr and old_version in mismatch.stderr
+        assert data(alpha, 'status', binary=target)['compatible'] is False
         run(alpha, 'stop', binary=target)
-        run(alpha, 'ensure-running')
-        run(alpha, 'stop')
         stopped.add(alpha)
         backup = root / 'Complete backup'
         shutil.copytree(alpha, backup)
-        before_hash = hashlib.sha256((alpha / 'pocketcontext.db').read_bytes()).hexdigest()
+        old_db = alpha / 'pocketcontext.db'
+        before_hash = hashlib.sha256(old_db.read_bytes()).hexdigest()
+        before = table_rows(old_db, CREW_TABLES + LEGACY_TABLES)
         identity = json.loads((alpha / 'pocketcontext.json').read_text())['instance']
         replace_binary(target, alpha / executable)
-        assert hashlib.sha256((alpha / 'pocketcontext.db').read_bytes()).hexdigest() == before_hash
+        assert hashlib.sha256(old_db.read_bytes()).hexdigest() == before_hash
         stopped.discard(alpha)
         run(alpha, 'ensure-running')
-        data(alpha, 'skill', '--agent', 'codex')
-        assert data(alpha, 'status')['version'] == new_version
-        assert json.loads((alpha / 'pocketcontext.json').read_text())['instance'] == identity
-        data(alpha, 'profile', 'check', 'Older')
-        run(alpha, 'check')
-        assert data(alpha, 'sql', "SELECT title FROM sources WHERE id = '" + source + "'")['rows'] == [['Upgrade evidence']]
-        assert data(beta, 'status')['version'] == new_version
+        session = owner(alpha)
+        assert data(alpha, 'whoami')['instance'] == identity
+        assert 'space' not in data(alpha, 'whoami')
+        notes = call(session, '/api/crew/read', {'collection':'notes'})['items']
+        assert len(notes) == 1 and notes[0]['id'] == note['id'] and notes[0]['body'] == 'After revision ✓'
+        reviews = call(session, '/api/crew/read', {'collection':'reviews'})['items']
+        assert len(reviews) == 1 and reviews[0]['id'] == review['id'] and reviews[0]['draft'] == 'Exact draft' and reviews[0]['status'] == 'pending'
         run(alpha, 'stop')
         stopped.add(alpha)
-        # Roll back all project data together with its matching binary, at the
-        # same path; machine-local profiles and skills are recreated explicitly.
-        shutil.rmtree(alpha)
-        shutil.copytree(backup, alpha)
-        assert hashlib.sha256((alpha / 'pocketcontext.db').read_bytes()).hexdigest() == before_hash
+        after = table_rows(old_db, CREW_TABLES)
+        assert after == {name:before[name] for name in CREW_TABLES}, 'Crew rows/history changed during migration'
+        with closing(sqlite3.connect(old_db.as_uri()+'?mode=ro',uri=True)) as db:
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            assert not tables.intersection(LEGACY_TABLES)
+        archive_root = alpha / 'legacy-knowledge'
+        archive = archive_root / json.loads((archive_root / 'current.json').read_text())['archive']
+        manifest = json.loads((archive / 'manifest.json').read_text())
+        for path, digest in manifest['files'].items():
+            assert hashlib.sha256((archive / path).read_bytes()).hexdigest() == digest, path
+        assert set(manifest['tables']) == set(LEGACY_TABLES)
+        assert table_rows(archive / 'pocketcontext.db', CREW_TABLES + LEGACY_TABLES) == before
+        originals = [path for path in manifest['files'] if path.startswith('storage/') and not path.endswith('.attrs')]
+        assert len(originals) >= 2 and any((archive/path).read_bytes() == image.read_bytes() for path in originals)
+        # A previous executable must refuse the newer migration history without touching the database.
+        migrated_hash = hashlib.sha256(old_db.read_bytes()).hexdigest()
+        refused = run(alpha, 'ensure-running', binary=previous, expect=1)
+        assert 'migration' in refused.stderr.lower() or 'newer' in refused.stderr.lower(), refused.stderr
+        assert hashlib.sha256(old_db.read_bytes()).hexdigest() == migrated_hash
+        # Restart and a complete upgraded backup restore retain Crew state and its legacy archive.
+        upgraded_backup = root / 'Migrated backup'
+        shutil.copytree(alpha, upgraded_backup)
+        run(alpha, 'ensure-running'); stopped.discard(alpha)
+        run(alpha, 'stop'); stopped.add(alpha)
+        assert table_rows(old_db, CREW_TABLES) == after
+        shutil.rmtree(alpha); shutil.copytree(upgraded_backup, alpha)
+        run(alpha, 'ensure-running'); stopped.discard(alpha)
+        run(alpha, 'stop'); stopped.add(alpha)
+        assert table_rows(old_db, CREW_TABLES) == after
+        # Roll back the complete pre-upgrade project and exact matching binary.
+        shutil.rmtree(alpha); shutil.copytree(backup, alpha)
+        assert hashlib.sha256(old_db.read_bytes()).hexdigest() == before_hash
         assert release(alpha / executable) == old_version
-        stopped.discard(alpha)
-        run(alpha, 'ensure-running')
-        data(alpha, 'skill', '--agent', 'codex')
-        assert data(alpha, 'status')['version'] == old_version
-        assert data(alpha, 'sql', "SELECT title FROM sources WHERE id = '" + source + "'")['rows'] == [['Upgrade evidence']]
-        data(beta, 'profile', 'check', 'Older')
-        assert data(beta, 'status')['version'] == new_version
-        print(f'PASS: {old_version} and {new_version} coexist; mismatch refused; clean upgrade and complete-backup rollback preserve evidence and identity')
+        run(alpha, 'ensure-running'); stopped.discard(alpha)
+        assert data(alpha, 'sql', "SELECT title FROM sources WHERE id = '"+source+"'")['rows'] == [['Upgrade evidence']]
+        run(alpha, 'stop'); stopped.add(alpha)
+        assert table_rows(old_db, CREW_TABLES + LEGACY_TABLES) == before
+        # A fresh current installation never creates legacy knowledge tables or an archive.
+        run(beta, 'stop'); stopped.add(beta)
+        with closing(sqlite3.connect((beta/'pocketcontext.db').as_uri()+'?mode=ro',uri=True)) as db:
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            assert set(CREW_TABLES).issubset(tables) and not tables.intersection(LEGACY_TABLES)
+        assert not (beta/'legacy-knowledge').exists()
+        print(f'PASS: Crew {old_version} -> {new_version}; rows/history preserved, legacy archive verified, downgrade refused, restart/restore/rollback verified')
     finally:
         for folder in (alpha, beta):
             if folder not in stopped:
