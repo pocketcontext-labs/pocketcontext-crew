@@ -38,7 +38,12 @@ func newTestApp(t *testing.T) *testApp {
 	if err := app.Bootstrap(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = app.ResetBootstrapState() })
+	t.Cleanup(func() {
+		// Close read-only SQL/search connections like the server shutdown does;
+		// Windows cannot remove a temporary directory with open database files.
+		_ = app.OnTerminate().Trigger(&core.TerminateEvent{App: app})
+		_ = app.ResetBootstrapState()
+	})
 	if err := app.RunAllMigrations(); err != nil {
 		t.Fatal(err)
 	}
