@@ -128,11 +128,15 @@ func startHostedHTTP(ctx context.Context, app core.App, p *Project, opts ServeOp
 		return nil, err
 	}
 	oauth.hosted = true
-	ln, err := net.Listen("tcp", ":80")
-	if err != nil {
-		return nil, fmt.Errorf("listen on hosted HTTP port 80: %w", err)
+	address := ":80"
+	if opts.DevHTTPAddress != "" {
+		address = opts.DevHTTPAddress
 	}
-	server := &http.Server{Handler: publicHandlerMode(app, opts.HTTPSDomain, handler, true, oauth), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
+	ln, err := net.Listen("tcp", address)
+	if err != nil {
+		return nil, fmt.Errorf("listen on hosted HTTP address: %w", err)
+	}
+	server := &http.Server{Handler: publicHandlerModeWithUIDev(app, opts.HTTPSDomain, handler, true, opts.PublicUIDev, oauth), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
 	s := &publicServers{http: server, plainListener: ln}
 	go func() { failures <- server.Serve(ln) }()
 	return s, nil

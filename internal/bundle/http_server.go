@@ -126,7 +126,7 @@ func serveHTTPContext(parent context.Context, app core.App, p *Project, opts Ser
 		defer ln.Close()
 		go func() { listeners.errors <- server.Serve(ln) }()
 	}
-	if !opts.Headless || opts.TCPOnly || opts.UIDev != "" {
+	if !opts.Headless || opts.TCPOnly || (opts.UIDev != "" && !opts.PublicUIDev) {
 		if err := listeners.enableTCP(); err != nil {
 			server.Close()
 			return err

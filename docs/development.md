@@ -97,29 +97,87 @@ server, rebuilding with `make build`, and restarting it. Before testing the
 embedded/release reader, rebuild both UI and binary. Hot reload does not
 perform TypeScript checks.
 
-## Temporary Cloudflare previews
+## Public development with MCP and HTTPS hot reload
 
-The shell includes Caddy and cloudflared for explicitly configured previews;
-it does not automatically publish a service. A direct Quick Tunnel to either
-Vite or the PocketContext reader is not a working configuration: the reader
-validates loopback Host/Origin, and Vite's hot-reload client normally uses the
-reader's local port.
+Use this explicit mode on a separate development instance when an external agent
+needs MCP and a browser needs hot reload at the same HTTPS origin. It does not
+change production serving defaults. The public reader still requires owner email
+login and MCP still requires OAuth consent.
 
-A development gateway must validate the exact temporary HTTPS hostname and
-browser Origin, proxy only reader/authentication/Crew routes and development
-assets, and block local administration and the PocketBase dashboard. Configure
-the hot-reload WebSocket for WSS on external port 443. Do not disable backend
-authentication or globally allow arbitrary Hosts/Origins to make a tunnel work.
+Prepare the isolated hosted project first. For an authorized production snapshot,
+use the verified restore procedure, revoke copied sessions/MCP grants, rotate the
+webhook epoch, and disable production webhook bindings before exposing the copy.
+Never put private backups or runtime state beneath `ui/`. Automated tests continue
+to use synthetic temporary projects, not the development copy. The launcher does
+not initialize or restore a database and never reads a private environment file.
 
-Machine-local gateway configuration, process helpers, logs and tunnel URLs belong
-in `.private/`; they are not supplied by a fresh clone. The temporary setup on an
-individual machine may provide `.private/dev/manage.py`; consult its local README
-before using it. It is distinct from the committed `scripts/dev.mjs` launcher.
+Supply development hosted settings through the trusted parent environment or a
+private service `EnvironmentFile`: the owner email and SMTP variables documented
+in [hosting](hosting.md), and separate `XDG_CACHE_HOME`, `XDG_CONFIG_HOME` and
+`XDG_STATE_HOME` paths for the development runtime. Use development SMTP settings;
+do not inherit production backup scheduling or credentials. The backend inherits
+the environment; PocketContext runtime bindings are removed from Vite's environment.
+The launcher runs the binary directly, not the hosted backup supervisor.
 
-[Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
-change hostname on restart and do not support Server-Sent Events. Vite hot reload
-uses WebSockets. Use Crew’s Refresh button to read changes made by another
-client through the preview.
+With Caddy terminating HTTPS on the same machine:
+
+```sh
+node scripts/dev.mjs \
+  --db /absolute/private/crew-development/project/pocketcontext.db \
+  --binary /absolute/source/pocketcontext-crew/bin/pocketcontext \
+  --public-domain walter.bigconfig.space \
+  --dev-http-address 127.0.0.1:18098 \
+  --vite-port 5174
+```
+
+This starts the backend with `--headless --hosted --mcp --public-ui-dev`, the
+explicit domain, private HTTP address and loopback Vite upstream. Vite remains
+bound to loopback; its browser WebSocket uses
+`wss://walter.bigconfig.space/__ui_hmr` on port 443. The private HTTP address defaults
+to `127.0.0.1:18098` and the launcher accepts only that loopback IPv4 host with an
+unprivileged port. The ordinary local reader TCP listener is not enabled in this
+mode. Readiness checks use the local control path to verify the exact child PID
+and configured MCP origin; the public route never exposes local instance metadata.
+
+Caddy's site configuration is:
+
+```caddyfile
+walter.bigconfig.space {
+    reverse_proxy 127.0.0.1:18098
+}
+```
+
+Only Caddy listens publicly on ports 80/443. It must proxy WebSocket upgrades as
+well as HTTP. Crew checks the configured HTTPS Host/Origin and routes only the
+explicit development assets and `/__ui_hmr` to Vite. Local administration and the
+PocketBase dashboard stay excluded. Do not route `/api` or `/mcp` through Vite,
+disable authentication, or globally permit arbitrary Hosts/Origins. Development
+source modules are served as UI assets; API authentication does not make source
+files confidential. Keep all secrets outside the Vite filesystem allowlist.
+
+Connect the external client to `https://walter.bigconfig.space/mcp` and grant fresh
+OAuth consent for this development instance. A stable domain allows ordinary
+backend restarts without replacing the MCP address. The launcher reports backend
+readiness, not DNS/certificate/firewall reachability; verify the public site
+separately. After public-mode startup, a Vite failure leaves MCP and the backend
+running; UI requests return an unavailable response until Vite restarts. The
+launcher retries Vite with exponential backoff from 500ms to a maximum of 10s,
+resetting after a frontend has stayed alive for 30s. An explicit launcher stop or
+backend exit cancels retries and stops both owned processes. Ordinary local mode
+keeps its existing stop-both behavior when either child exits. API and MCP routing
+never falls through to Vite.
+
+The MCP adapter accepts the configured public hostname even when Caddy reaches
+Crew over loopback. Crew enforces its exact public Host/Origin boundary and OAuth
+before entering the protocol handler; this replaces the SDK's generic localhost
+hostname heuristic only for that guarded adapter. It does not allow arbitrary
+hostnames or anonymous MCP access.
+
+For a temporary tunnel, configure the explicit HTTPS hostname the same way and
+forward it to the private hosted HTTP listener. [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
+change hostname on restart and do not support Server-Sent Events; each new hostname
+requires matching server configuration and OAuth reconnection. Vite hot reload
+uses WebSockets. A stable Caddy hostname is preferable for repeated development.
 
 ## Validation
 

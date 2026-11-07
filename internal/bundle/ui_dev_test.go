@@ -18,7 +18,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/router"
 )
 
-func uiDevTestHandler(t *testing.T, upstream string) http.Handler {
+func uiDevTestHandler(t *testing.T, upstream string, publicDomain ...string) http.Handler {
 	t.Helper()
 	p := &Project{Config: Config{Port: DefaultPort}}
 	d, err := newUIDevProxy(upstream, p)
@@ -29,12 +29,20 @@ func uiDevTestHandler(t *testing.T, upstream string) http.Handler {
 		return &core.RequestEvent{Event: router.Event{Response: w, Request: r}}, nil
 	})
 	e := &core.ServeEvent{Router: r}
-	(&localRoutes{p: p}).register(e)
+	local := &localRoutes{p: p}
+	if len(publicDomain) > 0 {
+		d.allowPublic(publicDomain[0])
+		local.publicURL = "https://" + publicDomain[0]
+	}
+	local.register(e)
 	r.GET("/api/test", func(e *core.RequestEvent) error { return e.String(http.StatusOK, "API") })
 	d.register(e)
 	mux, err := r.BuildMux()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(publicDomain) > 0 {
+		return publicHandlerModeWithUIDev(nil, publicDomain[0], mux, false, true)
 	}
 	return mux
 }
@@ -196,8 +204,18 @@ func TestUIDevUnavailableUpstream(t *testing.T) {
 }
 
 func TestUIDevWebSocketTunnel(t *testing.T) {
+	for _, public := range []bool{false, true} {
+		t.Run(fmt.Sprintf("public=%v", public), func(t *testing.T) { testUIDevWebSocketTunnel(t, public) })
+	}
+}
+func testUIDevWebSocketTunnel(t *testing.T, public bool) {
+	host, origin := "127.0.0.1:8096", "http://127.0.0.1:8096"
+	if public {
+		host, origin = "dev.example.test", "https://dev.example.test"
+	}
+
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/__ui_hmr" || r.URL.RawQuery != "token=synthetic" || r.Header.Get("Sec-WebSocket-Protocol") != "vite-hmr" || r.Header.Get("Origin") != "http://127.0.0.1:8096" {
+		if r.URL.Path != "/__ui_hmr" || r.URL.RawQuery != "token=synthetic" || r.Header.Get("Sec-WebSocket-Protocol") != "vite-hmr" || r.Header.Get("Origin") != origin {
 			http.Error(w, "lost HMR path, token or protocol", http.StatusBadRequest)
 			return
 		}
@@ -219,7 +237,11 @@ func TestUIDevWebSocketTunnel(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
-	proxy := httptest.NewServer(uiDevTestHandler(t, upstream.URL))
+	handler := uiDevTestHandler(t, upstream.URL)
+	if public {
+		handler = uiDevTestHandler(t, upstream.URL, host)
+	}
+	proxy := httptest.NewServer(handler)
 	defer proxy.Close()
 	conn, err := net.DialTimeout("tcp", strings.TrimPrefix(proxy.URL, "http://"), 5*time.Second)
 	if err != nil {
@@ -227,7 +249,7 @@ func TestUIDevWebSocketTunnel(t *testing.T) {
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
-	fmt.Fprint(conn, "GET /__ui_hmr?token=synthetic HTTP/1.1\r\nHost: 127.0.0.1:8096\r\nOrigin: http://127.0.0.1:8096\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Protocol: vite-hmr\r\nAuthorization: private-token\r\nCookie: private-cookie\r\nX-PocketContext-Local-Key: private-key\r\n\r\n")
+	fmt.Fprintf(conn, "GET /__ui_hmr?token=synthetic HTTP/1.1\r\nHost: %s\r\nOrigin: %s\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Protocol: vite-hmr\r\nAuthorization: private-token\r\nCookie: private-cookie\r\nX-PocketContext-Local-Key: private-key\r\n\r\n", host, origin)
 	r := bufio.NewReader(conn)
 	response, err := http.ReadResponse(r, nil)
 	if err != nil {

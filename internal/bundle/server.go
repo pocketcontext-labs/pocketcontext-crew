@@ -34,18 +34,20 @@ var (
 
 // ServeOptions control one foreground server run.
 type ServeOptions struct {
-	TakeOver      bool
-	UIDev         string
-	Headless      bool
-	TCPOnly       bool
-	Port          int
-	HTTPSDomain   string
-	ACMEEmail     string
-	MCP           bool
-	Hosted        bool
-	HostedInit    bool
-	HostedRestore bool
-	HostedConfig  *HostedConfig
+	TakeOver       bool
+	UIDev          string
+	PublicUIDev    bool
+	DevHTTPAddress string
+	Headless       bool
+	TCPOnly        bool
+	Port           int
+	HTTPSDomain    string
+	ACMEEmail      string
+	MCP            bool
+	Hosted         bool
+	HostedInit     bool
+	HostedRestore  bool
+	HostedConfig   *HostedConfig
 	// MCPHandler builds the protocol adapter around the ordinary authenticated API.
 	MCPHandler func(http.Handler) http.Handler
 	// Service starts after the HTTP listeners are ready. Its failure stops the
@@ -130,6 +132,9 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 			return err
 		}
 	}
+	if err := validatePublicUIDev(opts); err != nil {
+		return err
+	}
 	if opts.HostedRestore && (!opts.Hosted || opts.HostedInit) {
 		return errors.New("--hosted-restore requires --hosted and excludes --hosted-init")
 	}
@@ -162,8 +167,8 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 		if err := ValidateHTTPSDomain(opts.HTTPSDomain); err != nil {
 			return err
 		}
-		if !opts.Headless || opts.UIDev != "" || opts.TCPOnly || opts.Port != 0 {
-			return errors.New("public HTTPS requires headless mode without UI development, TCP-only or port overrides")
+		if !opts.Headless || (opts.UIDev != "" && !opts.PublicUIDev) || opts.TCPOnly || opts.Port != 0 {
+			return errors.New("public HTTPS requires headless mode without TCP-only or port overrides; UI development requires --public-ui-dev")
 		}
 	}
 
@@ -211,6 +216,9 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 	if opts.UIDev != "" {
 		var err error
 		devUI, err = newUIDevProxy(opts.UIDev, p)
+		if err == nil && opts.PublicUIDev {
+			devUI.allowPublic(opts.HTTPSDomain)
+		}
 		if err != nil {
 			return err
 		}

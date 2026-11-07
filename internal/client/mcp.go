@@ -43,11 +43,19 @@ func newMCPHandler(api http.Handler) http.Handler {
 	addCrewMCPTools(server, api)
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Stateless: true, JSONResponse: true, MaxRequestBodyBytes: mcpInputLimit, PropagateRequestCancellation: true,
+		// Caddy can reach the public endpoint over a loopback listener. The SDK's
+		// local-address heuristic would reject its configured public Host. Our
+		// wrapper below requires the stronger exact-origin boundary and OAuth.
+		DisableLocalhostProtection: true,
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := bundle.MCPAuthToken(r.Context())
 		if token == "" {
 			http.Error(w, "MCP authorization required", http.StatusUnauthorized)
+			return
+		}
+		if !bundle.ValidatedMCPPublicRequest(r) {
+			http.Error(w, "Configured public MCP origin required", http.StatusForbidden)
 			return
 		}
 		// No protocol session retains credentials. The caller is bound to this HTTP

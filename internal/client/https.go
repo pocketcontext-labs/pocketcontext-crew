@@ -9,6 +9,18 @@ import (
 )
 
 func validateHTTPSArgs(a *args) error {
+	if a.bools["public-ui-dev"] && (!a.has("ui-dev") || a.flags["ui-dev"] == "" || !a.has("domain") || !a.bools["headless"]) {
+		return fail(2, "--public-ui-dev requires --ui-dev, --domain and --headless")
+	}
+	if a.has("dev-http-address") {
+		if !a.bools["hosted"] || !a.bools["public-ui-dev"] {
+			return fail(2, "--dev-http-address requires --hosted and --public-ui-dev")
+		}
+		if err := bundle.ValidateDevHTTPAddress(a.flags["dev-http-address"]); err != nil {
+			return fail(2, "%v", err)
+		}
+	}
+
 	if a.bools["hosted-restore"] && (!a.bools["hosted"] || a.bools["hosted-init"]) {
 		return fail(2, "--hosted-restore requires --hosted and excludes --hosted-init")
 	}
@@ -31,8 +43,8 @@ func validateHTTPSArgs(a *args) error {
 	if err := bundle.ValidateHTTPSDomain(a.flags["domain"]); err != nil {
 		return fail(2, "%v", err)
 	}
-	if !a.bools["headless"] || a.bools["tcp-only"] || a.has("port") || a.has("ui-dev") {
-		return fail(2, "--domain requires --headless and cannot be combined with --tcp-only, --port or --ui-dev; HTTPS uses port 443 and HTTP uses port 80")
+	if !a.bools["headless"] || a.bools["tcp-only"] || a.has("port") || (a.has("ui-dev") && !a.bools["public-ui-dev"]) {
+		return fail(2, "--domain requires --headless and excludes --tcp-only and --port; --ui-dev additionally requires --public-ui-dev")
 	}
 	if a.has("acme-email") {
 		email := a.flags["acme-email"]

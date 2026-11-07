@@ -39,6 +39,20 @@ func ValidateHTTPSDomain(domain string) error {
 }
 
 type publicContextKey struct{}
+type publicOriginContextKey struct{}
+
+// ValidatedMCPPublicRequest identifies a request that passed the configured public
+// host/origin boundary. It cannot be supplied by a client or forwarded header.
+func ValidatedMCPPublicRequest(r *http.Request) bool {
+	origin, _ := r.Context().Value(publicOriginContextKey{}).(string)
+	if origin == "" || !publicRequest(r) {
+		return false
+	}
+	if "https://"+strings.TrimSuffix(r.Host, ":443") != origin {
+		return false
+	}
+	return r.Header.Get("Origin") == "" || r.Header.Get("Origin") == origin
+}
 
 func publicRequest(r *http.Request) bool {
 	v, _ := r.Context().Value(publicContextKey{}).(bool)
@@ -111,6 +125,10 @@ func publicHandler(app core.App, domain string, next http.Handler, oauth ...*mcp
 }
 
 func publicHandlerMode(app core.App, domain string, next http.Handler, hosted bool, oauth ...*mcpOAuth) http.Handler {
+	return publicHandlerModeWithUIDev(app, domain, next, hosted, false, oauth...)
+}
+
+func publicHandlerModeWithUIDev(app core.App, domain string, next http.Handler, hosted, uiDev bool, oauth ...*mcpOAuth) http.Handler {
 	var mcp *mcpOAuth
 	if len(oauth) > 0 {
 		mcp = oauth[0]
@@ -147,7 +165,7 @@ func publicHandlerMode(app core.App, domain string, next http.Handler, hosted bo
 			http.NotFound(w, r)
 			return
 		}
-		if !isOAuth && !isOTP && !publicRoute(r.Method, r.URL.Path) {
+		if !isOAuth && !isOTP && !publicRoute(r.Method, r.URL.Path) && !(uiDev && uiDevRoute(r.Method, r.URL.Path)) {
 			http.NotFound(w, r)
 			return
 		}
@@ -186,7 +204,7 @@ func publicHandlerMode(app core.App, domain string, next http.Handler, hosted bo
 		for _, name := range []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "X-Real-IP", keyHeader} {
 			r.Header.Del(name)
 		}
-		r = r.WithContext(context.WithValue(r.Context(), publicContextKey{}, true))
+		r = r.WithContext(context.WithValue(context.WithValue(r.Context(), publicContextKey{}, true), publicOriginContextKey{}, "https://"+domain))
 		if isOAuth {
 			mcp.ServeHTTP(w, r)
 			return
@@ -283,7 +301,7 @@ func startPublicHTTPS(ctx context.Context, app core.App, p *Project, opts ServeO
 			return nil, err
 		}
 	}
-	return startPublicListeners(ctx, publicHandler(app, opts.HTTPSDomain, handler, oauth), publicHTTPHandler(opts.HTTPSDomain, manager.HTTPHandler), tlsConfig, ":443", ":80", failures)
+	return startPublicListeners(ctx, publicHandlerModeWithUIDev(app, opts.HTTPSDomain, handler, false, opts.PublicUIDev, oauth), publicHTTPHandler(opts.HTTPSDomain, manager.HTTPHandler), tlsConfig, ":443", ":80", failures)
 }
 
 // Addresses are internal parameters so lifecycle tests can use ephemeral ports.

@@ -17,9 +17,10 @@ import (
 // uiDevProxy serves only the reader through a separately managed Vite process.
 // Application APIs, login links and protected files always stay on PocketContext.
 type uiDevProxy struct {
-	proxy *httputil.ReverseProxy
-	local *localRoutes
-	csp   string
+	proxy        *httputil.ReverseProxy
+	local        *localRoutes
+	csp          string
+	publicDomain string
 }
 
 func newUIDevProxy(raw string, p *Project) (*uiDevProxy, error) {
@@ -94,11 +95,17 @@ func (d *uiDevProxy) register(e *core.ServeEvent) {
 		r := re.Request
 		// Also check here so a future route/middleware refactor cannot expose
 		// development sources or the WebSocket under an unexpected Host.
-		if !d.local.allowedHost(r.Host) {
+		expectedOrigin := "http://" + r.Host
+		if publicRequest(r) {
+			if d.publicDomain == "" || (r.Host != d.publicDomain && r.Host != d.publicDomain+":443") {
+				return re.ForbiddenError("Unexpected public UI host.", nil)
+			}
+			expectedOrigin = "https://" + d.publicDomain
+		} else if !d.local.allowedHost(r.Host) {
 			return re.ForbiddenError("Unexpected host.", nil)
 		}
 		origin := r.Header.Get("Origin")
-		if origin != "" && origin != "http://"+r.Host {
+		if origin != "" && origin != expectedOrigin {
 			return re.ForbiddenError("Unexpected UI origin.", nil)
 		}
 		upgrade := r.Header.Get("Upgrade") != ""
@@ -117,4 +124,50 @@ func (d *uiDevProxy) register(e *core.ServeEvent) {
 	for _, path := range []string{"/{$}", "/index.html", "/src/{path...}", "/assets/{path...}", "/node_modules/{path...}", "/@vite/{path...}", "/@id/{path...}", "/@fs/{path...}", "/@react-refresh", "/__ui_hmr"} {
 		e.Router.GET(path, serve)
 	}
+}
+
+// Public development is an explicit process option, never inferred from proxy headers.
+func validatePublicUIDev(opts ServeOptions) error {
+	if opts.PublicUIDev && (opts.UIDev == "" || opts.HTTPSDomain == "" || !opts.Headless) {
+		return errors.New("--public-ui-dev requires --ui-dev, --domain and --headless")
+	}
+	if opts.DevHTTPAddress != "" {
+		if !opts.Hosted || !opts.PublicUIDev {
+			return errors.New("--dev-http-address requires --hosted and --public-ui-dev")
+		}
+		return ValidateDevHTTPAddress(opts.DevHTTPAddress)
+	}
+	return nil
+}
+
+// ValidateDevHTTPAddress keeps a development TLS-terminating proxy's upstream private.
+func ValidateDevHTTPAddress(address string) error {
+	host, port, err := net.SplitHostPort(address)
+	n, portErr := strconv.Atoi(port)
+	ip := net.ParseIP(host)
+	if err != nil || portErr != nil || n < 1024 || n > 65535 || ip == nil || !ip.IsLoopback() {
+		return errors.New("--dev-http-address must be a literal loopback IP with a port from 1024 to 65535")
+	}
+	return nil
+}
+
+func (d *uiDevProxy) allowPublic(domain string) {
+	d.publicDomain = domain
+	d.csp = strings.Replace(d.csp, fmt.Sprintf("ws://127.0.0.1:%d ws://localhost:%d", d.local.p.Config.Port, d.local.p.Config.Port), "wss://"+domain, 1)
+}
+
+func uiDevRoute(method, p string) bool {
+	if method != http.MethodGet && method != http.MethodHead {
+		return false
+	}
+	switch p {
+	case "/", "/index.html", "/@react-refresh", "/__ui_hmr":
+		return true
+	}
+	for _, prefix := range []string{"/src/", "/assets/", "/node_modules/", "/@vite/", "/@id/", "/@fs/"} {
+		if strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
 }

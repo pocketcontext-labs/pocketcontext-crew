@@ -183,7 +183,7 @@ parsed:
 		return nil
 	}
 	spec := map[string][2][]string{
-		"serve":          {{"ui-dev", "port", "domain", "acme-email"}, {"take-over", "headless", "tcp-only", "tunnel", "mcp", "hosted", "hosted-init", "hosted-restore"}},
+		"serve":          {{"ui-dev", "port", "domain", "acme-email", "dev-http-address"}, {"take-over", "headless", "tcp-only", "tunnel", "mcp", "hosted", "hosted-init", "hosted-restore", "public-ui-dev"}},
 		"start":          {nil, {"take-over"}},
 		"ensure-running": {nil, {"take-over"}},
 		"stop":           {nil, nil},
@@ -279,7 +279,7 @@ parsed:
 		if a.has("ui-dev") && a.flags["ui-dev"] == "" {
 			return fail(2, "--ui-dev needs a loopback Vite URL")
 		}
-		if a.bools["headless"] && (a.bools["tcp-only"] || a.has("port") || a.has("ui-dev")) {
+		if a.bools["headless"] && (a.bools["tcp-only"] || a.has("port") || (a.has("ui-dev") && !a.bools["public-ui-dev"])) {
 			return fail(2, "--headless cannot be combined with TCP or UI development options")
 		}
 		servePort := 0
@@ -290,7 +290,7 @@ parsed:
 			}
 			servePort = n
 		}
-		opts := bundle.ServeOptions{TakeOver: a.bools["take-over"], UIDev: a.flags["ui-dev"], Headless: a.bools["headless"], TCPOnly: a.bools["tcp-only"], Port: servePort, HTTPSDomain: a.flags["domain"], ACMEEmail: a.flags["acme-email"]}
+		opts := bundle.ServeOptions{TakeOver: a.bools["take-over"], UIDev: a.flags["ui-dev"], PublicUIDev: a.bools["public-ui-dev"], DevHTTPAddress: a.flags["dev-http-address"], Headless: a.bools["headless"], TCPOnly: a.bools["tcp-only"], Port: servePort, HTTPSDomain: a.flags["domain"], ACMEEmail: a.flags["acme-email"]}
 		opts.Hosted = a.bools["hosted"]
 		opts.HostedInit = a.bools["hosted-init"]
 		opts.HostedRestore = a.bools["hosted-restore"]

@@ -119,3 +119,29 @@ func TestHostedCLIOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicUIDevCLIOptions(t *testing.T) {
+	base := []string{"--headless", "--hosted", "--domain", "dev.example.test", "--mcp", "--ui-dev", "http://127.0.0.1:5174", "--public-ui-dev"}
+	for _, tc := range []struct {
+		args []string
+		ok   bool
+	}{
+		{base, true},
+		{append(append([]string{}, base...), "--dev-http-address", "127.0.0.1:18098"), true},
+		{append(append([]string{}, base...), "--dev-http-address", "0.0.0.0:18098"), false},
+		{append(append([]string{}, base...), "--dev-http-address", "127.0.0.1:80"), false},
+		{[]string{"--public-ui-dev"}, false},
+		{[]string{"--headless", "--domain", "dev.example.test", "--public-ui-dev"}, false},
+		{[]string{"--headless", "--domain", "dev.example.test", "--ui-dev", "http://127.0.0.1:5174"}, false},
+		{[]string{"--headless", "--domain", "dev.example.test", "--ui-dev", "http://127.0.0.1:5174", "--public-ui-dev"}, true},
+		{[]string{"--headless", "--domain", "dev.example.test", "--ui-dev", "http://127.0.0.1:5174", "--public-ui-dev", "--dev-http-address", "127.0.0.1:18098"}, false},
+	} {
+		a, err := parseArgs(tc.args, []string{"domain", "acme-email", "port", "ui-dev", "dev-http-address"}, []string{"headless", "tcp-only", "tunnel", "mcp", "hosted", "hosted-init", "hosted-restore", "public-ui-dev"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = validateHTTPSArgs(a); (err == nil) != tc.ok {
+			t.Errorf("%v: %v (want success=%v)", tc.args, err, tc.ok)
+		}
+	}
+}
