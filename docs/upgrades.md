@@ -53,7 +53,7 @@ conversion, startup and backups reject a missing archive, changed manifest or
 corrupt file. Archive publication flushes files and directory metadata before
 schema retirement; interrupted preparation is cleaned under the writer lock.
 
-## Crew 0.4.0 dispatcher migration
+## Crew 0.4.1 dispatcher migration
 
 Take the complete stopped backup described above, including the private webhook
 key. Existing per-agent webhook configurations and delivery history are retained,

@@ -47,7 +47,13 @@ afterEach(() => {
 });
 async function open() {
   render(<WebhookStatus agents={agents} />);
-  await screen.findByRole("textbox", { name: "Routine instructions" });
+  // The first data render can precede the loading promise's finally callback.
+  // fireEvent can edit disabled controls, unlike a user; wait for the form to
+  // become interactive before typing into mount-initialized mapping fields.
+  const instructions = await screen.findByRole("textbox", {
+    name: "Routine instructions",
+  });
+  await waitFor(() => expect(instructions).toBeEnabled());
 }
 it("saves manually entered credentials without enabling or testing and clears both fields", async () => {
   await open();
@@ -114,10 +120,13 @@ it("selects one dispatcher via global configuration without updating credentials
 });
 it("creates a recipient mapping with an explicit zero revision", async () => {
   await open();
-  fireEvent.change(screen.getByLabelText("Grok Bot reference for Learn"), {
-    target: { value: "Learn bot" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Save Learn mapping" }));
+  const reference = screen.getByLabelText("Grok Bot reference for Learn");
+  const save = screen.getByRole("button", { name: "Save Learn mapping" });
+  expect(reference).toBeEnabled();
+  fireEvent.change(reference, { target: { value: "Learn bot" } });
+  expect(reference).toHaveValue("Learn bot");
+  expect(save).toBeEnabled();
+  fireEvent.click(save);
   await waitFor(() =>
     expect(crewApi.write).toHaveBeenCalledWith(
       "webhook.mapping.update",

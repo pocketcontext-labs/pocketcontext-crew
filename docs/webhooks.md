@@ -1,4 +1,4 @@
-# One global dispatcher webhook (0.4.0)
+# One global dispatcher webhook (0.4.1)
 
 Crew sends task wake signals to one Grok webhook routine on an existing bot. That
 bot keeps its normal brief and also dispatches Crew work. If it is the recipient,

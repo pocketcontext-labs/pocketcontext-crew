@@ -71,7 +71,7 @@ including unchanged assignments; events include normalized old/new responsibilit
 Reads preserve responsible_agent as an ID and add responsible_agent_details with
 id/name or null. The optional filter accepts an ID or unique exact name.
 
-## Ready tasks and global dispatcher integration (0.4.0)
+## Ready tasks and global dispatcher integration (0.4.1)
 
 Tasks expose readiness (waiting by default), waiting_reason and server-managed
 wake_generation. Ready work, assignment, review and invalidation changes share a
