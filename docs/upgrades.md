@@ -98,3 +98,20 @@ wake stopped before an execution record exists, the owner can explicitly move th
 task Waiting then Ready after reconciliation to create a new generation. Do not
 replay the old bridge event. Update installed skills with the release so their
 webhook instructions match protocol 3.
+
+## Unreleased: comment wakes and compact instructions
+
+Take a complete stopped backup, including the private webhook key. The first
+migration adds task fields for owner-comment wakes and the bot handoff limit and
+sets `max_bot_handoffs` to 4. It does not change subscriptions; `comment` stays
+opt-in. It sends nothing and leaves current work, generations and delivery as
+they were.
+
+The second migration keeps the protocol 3 wire format and installs a shorter
+managed block as a new instruction revision. It retains the dispatcher, dispatch
+mode, mappings, credentials and histories, preserves the previous instruction
+text, invalidates old work generations and pauses delivery, exactly like earlier
+instruction upgrades. Apply the new block to the existing routine, report
+synchronization, run an explicit connection test (with a mapped teammate in
+parent_bridge mode) and re-enable delivery. Enabling sends no backlog. Update
+installed skills with the release.

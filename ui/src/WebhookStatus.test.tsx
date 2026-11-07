@@ -298,6 +298,8 @@ it("copies one nonsecret setup prompt with current capability discovery", async 
   const prompt = writeText.mock.calls[0][0];
   expect(prompt).toContain("collection capabilities");
   expect(prompt).toContain("data._crew");
+  expect(prompt).toContain('id:"execution"');
+  expect(prompt).toContain("capabilities_digest");
   expect(prompt).toContain('"Build"');
   expect(prompt).not.toContain("hooks.example");
   expect(crewApi.write).not.toHaveBeenCalled();

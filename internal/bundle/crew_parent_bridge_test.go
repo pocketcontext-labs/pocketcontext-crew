@@ -140,7 +140,8 @@ func TestParentBridgeTaskRequiresParentAndPreservesExecutionFence(t *testing.T) 
 
 func TestParentBridgeMigrationPreservesBindingAndPauses(t *testing.T) {
 	a, c, task, event := webhookFixture(t)
-	beforeInstructions, beforeCipher, beforeURL := c.GetString("instructions"), c.GetString("secret_ciphertext"), c.GetString("url")
+	// The 0.6.0 migration installs its own historical protocol 3 block.
+	beforeInstructions, beforeCipher, beforeURL := legacyManagedBlock(t), c.GetString("secret_ciphertext"), c.GetString("url")
 	canonicalHash := fmt.Sprintf("%x", sha256.Sum256([]byte(beforeInstructions)))
 	// Rehearse the upgrade on a pre-bridge collection layout.
 	bridges, err := a.app.FindCollectionByNameOrId("crew_webhook_bridges")

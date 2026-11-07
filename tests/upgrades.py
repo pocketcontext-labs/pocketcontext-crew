@@ -186,6 +186,14 @@ def rehearse(target, previous, root):
                 assert rows == before[name], ('Crew rows/history changed during migration', name)
             assert current.execute("SELECT count(*) FROM crew_tasks WHERE readiness != 'waiting' OR wake_generation != 0").fetchone() == (0,)
             assert current.execute('SELECT count(*) FROM crew_webhook_deliveries').fetchone() == (0,)
+            # Current managed instructions, opt-in comment wakes and the default handoff limit.
+            instructions, subscriptions, enabled, managed_hash = current.execute(
+                "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()
+            assert 'id:"execution"' in instructions and 'capabilities_digest' in instructions and not enabled
+            assert managed_hash == hashlib.sha256(instructions.encode('utf-8')).hexdigest()
+            assert 'comment' not in json.loads(subscriptions or '[]')
+            assert current.execute("SELECT max_bot_handoffs FROM crew_webhook_routing").fetchall() == [(4,)]
+            assert current.execute('SELECT count(*) FROM crew_tasks WHERE bot_handoffs != 0 OR handoff_limited OR comment_wake_generation != 0').fetchone() == (0,)
         with closing(sqlite3.connect(old_db.as_uri()+'?mode=ro',uri=True)) as db:
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             assert not tables.intersection(LEGACY_TABLES)

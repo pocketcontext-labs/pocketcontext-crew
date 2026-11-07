@@ -63,7 +63,39 @@ function normalizeEnvelope(b) {
   delete b.data._crew;
   return b;
 }
-function describe() {
+const PROTOCOL_VERSION = 3;
+// Operations a wake run needs: routine test/bridge, parent bridge, dispatcher
+// and recipient execution, and proof-bearing task writes.
+const EXECUTION_OPERATIONS = [
+  "webhook.runtime.report",
+  "execution.test_ack",
+  "webhook.bridge.prepare",
+  "webhook.bridge.parent",
+  "webhook.bridge.sent",
+  "webhook.bridge.ack",
+  "execution.begin",
+  "execution.renew",
+  "execution.dispatched",
+  "execution.complete",
+  "task.comment",
+  "task.update",
+  "review.request",
+];
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const k of Object.keys(value).sort()) out[k] = canonical(value[k]);
+    return out;
+  }
+  return value;
+}
+// The digest covers the complete document (including server version), so a
+// client may skip rereading capabilities only while it holds the same digest.
+function digestOf(doc) {
+  return $security.sha256(JSON.stringify(canonical(doc)));
+}
+function document() {
   const record = {
     type: "object",
     properties: { id: str, revision: num },
@@ -639,54 +671,115 @@ function describe() {
   };
   const metadata = $pocketcontext.crewVersion();
   return {
-    items: [
+    id: "crew-capabilities",
+    protocol_version: PROTOCOL_VERSION,
+    server_version: metadata.version,
+    server_commit: metadata.commit,
+    $defs: definitions,
+    collections,
+    operations,
+    write_envelope: object(
       {
-        id: "crew-capabilities",
-        protocol_version: 3,
-        server_version: metadata.version,
-        server_commit: metadata.commit,
-        $defs: definitions,
-        collections,
-        operations,
-        write_envelope: object(
-          {
-            action: str,
-            id: str,
-            expected_revision: num,
-            reported_agent: str,
-            reason: str,
-            data: { type: "object" },
-            idempotency_key: str,
-            execution: proof,
-          },
-          ["action", "data"],
-        ),
-        compatibility: {
-          path: "data._crew",
-          schema: compatibility,
-          reason:
-            "Use when a cached connector does not expose top-level execution or idempotency_key. Identical authorization and fencing checks apply; never omit coordination.",
-        },
-        limits: {
-          shared_mcp_identity: true,
-          worker_ids_are_identity: false,
-          native_handoff_is_caller_reported: true,
-          bridge_context_is_caller_reported: true,
-          external_effects_exactly_once: false,
-        },
-        wake_reasons: require(`${__hooks}/crew_webhooks.js`).reasons.slice(),
-        wake_rules: {
-          comment:
-            "Opt-in. Only an owner browser comment wakes; shared-MCP comments never wake. During a live execution the wake is deferred until execution.complete; payloads carry comment_event_id, never comment text.",
-          bot_handoffs:
-            "Consecutive shared-MCP assignment changes; any owner task write resets it. Exceeding webhook_routing.max_bot_handoffs applies the write but sets Waiting without a wake; only the owner can set Ready again.",
-        },
-        setup_entry:
-          "Read webhook_configs; follow the canonical managed routine instructions. Never request credentials through chat or MCP.",
+        action: str,
+        id: str,
+        expected_revision: num,
+        reported_agent: str,
+        reason: str,
+        data: { type: "object" },
+        idempotency_key: str,
+        execution: proof,
       },
-    ],
+      ["action", "data"],
+    ),
+    compatibility: {
+      path: "data._crew",
+      schema: compatibility,
+      reason:
+        "Use when a cached connector does not expose top-level execution or idempotency_key. Identical authorization and fencing checks apply; never omit coordination.",
+    },
+    limits: {
+      shared_mcp_identity: true,
+      worker_ids_are_identity: false,
+      native_handoff_is_caller_reported: true,
+      bridge_context_is_caller_reported: true,
+      external_effects_exactly_once: false,
+    },
+    wake_reasons: require(`${__hooks}/crew_webhooks.js`).reasons.slice(),
+    wake_rules: {
+      comment:
+        "Opt-in. Only an owner browser comment wakes; shared-MCP comments never wake. During a live execution the wake is deferred until execution.complete; payloads carry comment_event_id, never comment text.",
+      bot_handoffs:
+        "Consecutive shared-MCP assignment changes; any owner task write resets it. Exceeding webhook_routing.max_bot_handoffs applies the write but sets Waiting without a wake; only the owner can set Ready again.",
+    },
+    setup_entry:
+      "Read webhook_configs; follow the canonical managed routine instructions. Never request credentials through chat or MCP.",
+    subsets: {
+      execution:
+        'crew_read {collection:"capabilities", id:"execution"} returns only the wake-run operations with this document\'s capabilities_digest.',
+    },
+  };
+}
+function full() {
+  const doc = document();
+  doc.capabilities_digest = digestOf(doc);
+  return doc;
+}
+function digest() {
+  return full().capabilities_digest;
+}
+// Compact execution subset. Schemas are inlined without the per-operation
+// compatibility property; data._crew is described once.
+function execution(doc) {
+  const operations = {};
+  for (const name of EXECUTION_OPERATIONS) {
+    const source = doc.operations[name];
+    const properties = Object.assign({}, source.data_schema.properties);
+    delete properties._crew;
+    const op = {
+      data: properties,
+      required: source.data_schema.required,
+      revision: source.revision,
+      idempotency: source.idempotency,
+    };
+    if (source.execution_proof) op.execution_proof = source.execution_proof;
+    operations[name] = op;
+  }
+  operations["execution.begin"].returns =
+    "Execution record with next_step self_work|handoff|work|reconcile, execution proof {id,worker_id,fence}, task_context, recipient_agent_id, recipient_bot_ref, dispatcher_agent_id; replays return reconcile without proof.";
+  for (const action of ["prepare", "parent", "sent", "ack"])
+    operations["webhook.bridge." + action].returns =
+      "Bridge record (id, revision, stages) with next_step wake_parent|dispatch_task|test_complete|send_test|stop|reconcile.";
+  return {
+    id: "crew-capabilities-execution",
+    subset: "execution",
+    protocol_version: doc.protocol_version,
+    server_version: doc.server_version,
+    server_commit: doc.server_commit,
+    capabilities_digest: doc.capabilities_digest,
+    operations,
+    write_envelope: doc.write_envelope.properties,
+    compatibility: {
+      path: "data._crew",
+      fields: ["idempotency_key", "execution"],
+      reason: doc.compatibility.reason,
+    },
+    limits: doc.limits,
+    wake_reasons: doc.wake_reasons,
+    full: 'crew_read {collection:"capabilities"} lists every operation, collection and result schema.',
+  };
+}
+function describe(selector) {
+  const doc = full();
+  return {
+    items: [selector === "execution" ? execution(doc) : doc],
     has_more: false,
     next_offset: null,
   };
 }
-module.exports = { describe, normalizeEnvelope };
+module.exports = {
+  describe,
+  digest,
+  normalizeEnvelope,
+  PROTOCOL_VERSION,
+  EXECUTION_OPERATIONS,
+};

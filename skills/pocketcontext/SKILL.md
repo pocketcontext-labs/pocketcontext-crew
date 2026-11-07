@@ -77,7 +77,9 @@ verification of Grok. Report missing mappings or unsupported harness capabilitie
 Read [webhook operations](references/webhooks.md) before configuring delivery or
 executing webhook-triggered work. Synthetic tests do not certify Grok Bot.
 
-For webhook-triggered work, use execution.begin and its returned next_step and
+For webhook-triggered work, read the compact `crew_read` capabilities with
+`id: "execution"` (skip it when you already hold the payload's
+`capabilities_digest`), then use execution.begin and its returned next_step and
 proof. On replayed/reconcile responses, do not send or resume work; reconcile the
 current record first. Governed tasks require proof even before acquisition; only an explicit
 owner Waiting transition releases them. In native mode inspect messaging tools in

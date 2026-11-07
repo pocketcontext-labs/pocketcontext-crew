@@ -249,8 +249,11 @@ function wake(app, t, causes, outcome, extra) {
   const subscriptions = json(target.config, "subscriptions", []);
   if (!causes.some((x) => subscriptions.includes(x))) return null;
   const reason = reasons.find((x) => causes.includes(x));
+  const capabilities = require(`${__hooks}/crew_capabilities.js`);
   const payload = {
     schema_version: 1,
+    protocol_version: capabilities.PROTOCOL_VERSION,
+    capabilities_digest: capabilities.digest(),
     event_id: $pocketcontext.webhookUUID(),
     event_type: "task.wake",
     instance_id: target.routing.getString("instance_id"),
@@ -1065,8 +1068,11 @@ function handle(app, b, actor, isAgent) {
           !mapping.getString("bot_ref")
         )
           bad("Choose an active mapped test recipient");
+        const capabilities = require(`${__hooks}/crew_capabilities.js`);
         const payload = {
           schema_version: 1,
+          protocol_version: capabilities.PROTOCOL_VERSION,
+          capabilities_digest: capabilities.digest(),
           event_id: $pocketcontext.webhookUUID(),
           event_type: "webhook.test",
           instruction_revision: c.getInt("instruction_revision"),

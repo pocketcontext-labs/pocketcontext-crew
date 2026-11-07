@@ -178,7 +178,7 @@ function read(e) {
     "responsible_agent",
   ]);
   if (b.collection === "capabilities")
-    return e.json(200, capabilities.describe());
+    return e.json(200, capabilities.describe(b.id));
   if (!names.includes(b.collection)) bad("Unknown collection");
   const col = b.collection,
     params = {},

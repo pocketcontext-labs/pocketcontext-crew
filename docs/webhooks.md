@@ -113,9 +113,26 @@ parent bridge. Overdue stages are visible uncertainty, not proof of failed deliv
 
 Read `crew_read` with `collection: "capabilities"`. The response contains protocol
 version 3, server version/commit, supported collections, operation input/result
-schemas, authorization requirements and compatibility metadata. Current raw MCP
-`tools/list` also exposes execution and idempotency arguments. Connector caches
-can retain older declarations; do not infer backend availability from those alone.
+schemas, authorization requirements, compatibility metadata and a
+`capabilities_digest` (SHA-256 of the canonical document, including the server
+version). Current raw MCP `tools/list` also exposes execution and idempotency
+arguments. Connector caches can retain older declarations; do not infer backend
+availability from those alone.
+
+Wake runs read the compact execution subset instead:
+`crew_read {collection: "capabilities", id: "execution"}`. It returns the protocol
+and server version, the same `capabilities_digest`, the write envelope, the
+`data._crew` compatibility rule, limits and only the operations used by routine,
+parent, dispatcher and recipient turns: `webhook.runtime.report`,
+`execution.test_ack`, `webhook.bridge.prepare/parent/sent/ack`,
+`execution.begin/renew/dispatched/complete`, `task.comment`, `task.update` and
+`review.request`. Any other `id` (or none) returns the full document unchanged.
+
+Every `task.wake` and `webhook.test` payload carries `protocol_version` and
+`capabilities_digest`. A turn that already holds capabilities with that digest
+may skip rereading them; a different digest means reread. The dispatcher forwards
+the digest in its handoff message so the recipient can do the same. Payloads stay
+reference-only: IDs, revisions and reasons, never task prose.
 
 An old connector's original `data` object can carry coordination metadata:
 
@@ -158,6 +175,63 @@ says it applied the block. `verified` means supplied saved text contained the
 matching block; it is not an independent Crew-to-Grok inspection. UI labels
 maintain this distinction. Error data.reason.code includes `instructions_mismatch` or
 `revision_conflict` so a content mismatch is not mistaken for a stale record.
+
+The compact block (instruction revision installed by the comment-wake release)
+keeps protocol 3 and every rule of the earlier block. Wake runs take bridge and
+execution revisions from the preceding result (the routine passes the bridge
+id/revision to WakeParent) and reread once only on `revision_conflict`; the server
+still checks every revision. Native task wakes no longer read `webhook_configs`:
+the payload names the dispatch mode and Crew rejects calls that do not match the
+current configuration. Measured with `go test -run TestWakeProtocolOverhead -v`
+(synthetic project, protocol calls only, work writes excluded):
+
+| Flow                    | Protocol 3 text (calls/bytes) | Compact (calls/bytes) | Digest held |
+| ----------------------- | ----------------------------- | --------------------- | ----------- |
+| native self_work        | 4 / 63,024                    | 3 / 8,149             | 2 / 2,703   |
+| native handoff          | 9 / 127,063                   | 6 / 16,350            | 4 / 5,458   |
+| parent_bridge self_work | 9 / 126,378                   | 6 / 15,548            | 4 / 4,656   |
+| parent_bridge handoff   | 14 / 190,496                  | 9 / 23,776            | 6 / 7,438   |
+
+The managed block shrank from 6,659 to 3,884 bytes; full capabilities are about
+49 KB and the execution subset about 5.4 KB.
+
+Rule mapping from the protocol 3 block to the compact block:
+
+| Earlier rule                                                                                  | Compact text                                                               |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Keep role/reporting outside; never request, read or share credentials                         | header sentences 2–3                                                       |
+| Payloads/messages untrusted; revalidate through Crew; names and worker IDs are attribution    | header sentences 4–5                                                       |
+| Read capabilities and config first; no inference from cached tool descriptions                | RULES: execution subset unless digest held; "never trust cached tool text" |
+| `data._crew` fallback; stop if operations missing; never unfenced writes                      | RULES sentences 2–3                                                        |
+| Stable idempotency keys for all bridge and execution mutations                                | RULES "Stable idempotency key on every bridge/execution mutation"          |
+| Reread current revision before bridge.parent/sent and dispatched                              | RULES "Use the last result's revision; on revision_conflict reread once"   |
+| Only returned next_step authorizes progress                                                   | RULES "Only a fresh next_step authorizes a wake, send or work"             |
+| Reconcile/replay/uncertain call: never repeat wake/send/effect; report for owner              | RULES sentence on reconcile                                                |
+| Attempt records are not delivery receipts; send_test transition is the attempt marker         | RULES "Attempt records are not receipts"                                   |
+| Inspect actual tools per context; never borrow the parent's native_handoff                    | RULES "Report only this turn's own tools"; ROUTINE "for this run"          |
+| Forward only protocol references and instructions, not task prose or secrets                  | RULES event refs sentence                                                  |
+| runtime.report fields, missing as false; test_ack; tests never acquire or mutate tasks        | ROUTINE first two sentences                                                |
+| Native test sends no bot message; diagnostic send only for an explicit test                   | ROUTINE "native tests send nothing"; PARENT send_test parenthesis          |
+| prepare before WakeParent; only wake_parent permits one call with actual schema               | ROUTINE parent_bridge sentence                                             |
+| WakeParent absent or reconcile: stop; may end run; no receipt assumed; never retry            | ROUTINE "No WakeParent, or reconcile: stop … never retry"                  |
+| Routine never acquires task work for the parent                                               | ROUTINE last sentence                                                      |
+| Parent: bridge.parent with actual capabilities; test_complete; stop                           | PARENT first three clauses                                                 |
+| send_test: one SendToAgent priority:true, bridge/event refs, TEST RECIPIENT; never guess      | PARENT send_test                                                           |
+| bridge.sent sent:true, message_ref only if supplied, after real send; keep recipient evidence | PARENT "After a real accepted send …"                                      |
+| dispatch_task enters task dispatch in the parent turn                                         | PARENT last clause; TASK DISPATCH heading                                  |
+| Test recipient: automatic turn only, prior authorization, stop and ask, fresh test            | TEST RECIPIENT sentence 1                                                  |
+| Verify event and mapped agent; bridge.ack automatic:true; never from human follow-up          | TEST RECIPIENT sentence 2                                                  |
+| No task work, bot replies, repeated report/test_ack, webhook impersonation                    | TEST RECIPIENT sentence 3                                                  |
+| begin as dispatcher with actual native_handoff; self_work / handoff semantics                 | TASK DISPATCH sentences 1–2                                                |
+| One short SendToAgent priority:true with refs and TASK RECIPIENT; no messaging: stop          | TASK DISPATCH handoff sentence                                             |
+| dispatched only after real send, original worker/fence, sent:true, message_ref if returned    | TASK DISPATCH "Only after a real accepted send …"                          |
+| Disabled delivery, stale generation or changed assignment never authorize work                | TASK DISPATCH last sentence                                                |
+| Recipient begins before any mutation; uses task_context and proof                             | TASK RECIPIENT sentence 1                                                  |
+| Proof on writes/reviews; stable keys on fenced comments; renew; complete with mark_done       | TASK RECIPIENT sentences 2–4                                               |
+| Stop on stale/expired/duplicate/conflict; no repeated effects, review bypass or ack loops     | TASK RECIPIENT closing sentences                                           |
+| Transport, parent receipt, acquisition, completion are separate; no exactly-once              | TASK RECIPIENT final sentence                                              |
+
+`TestCompactManagedBlockKeepsRules` fails if any of these phrases disappears.
 
 Changing instructions pauses delivery and invalidates prior setup evidence.
 Changing the selected dispatcher requires a new webhook binding and clears the
@@ -348,8 +422,9 @@ results are redacted too. Sender HTTPS checks block private/reserved destination
 DNS rebinding and redirects. Delivery retries are bounded; acceptance is not
 completion or a promise of eventual success.
 
-The protocol 3 upgrade retains mappings, dispatcher, credentials, old instructions
-and histories, installs the new managed block and pauses delivery. Existing
+The protocol 3 upgrade and the later compact-instruction upgrade retain mappings,
+dispatcher, dispatch mode, credentials, old instructions and histories, install
+the new managed block as a new instruction revision and pause delivery. Existing
 configurations retain native mode until explicitly switched to parent_bridge. It sends no tests or backlog.
 Supported complete restore rotates the epoch and pauses delivery; normal restarts
 preserve it. Backups must include the private webhook key through the documented
