@@ -679,6 +679,7 @@ function document() {
     collections,
     read: readDiscovery(),
     search: searchDiscovery(),
+    sql: sqlDiscovery(),
     operations,
     write_envelope: object(
       {
@@ -862,6 +863,37 @@ function searchDiscovery() {
     archived:
       "Same as crew_read: default excludes archived notes, notes in archived buckets and archived tasks; archived:true selects only them.",
     excludes: "Webhook, review, event and revision data are never searched.",
+  };
+}
+function sqlDiscovery() {
+  return {
+    routes:
+      "GET /api/crew/schema (MCP crew_schema), POST /api/crew/query {sql} (MCP crew_query)",
+    views: [
+      "agents",
+      "buckets",
+      "notes",
+      "note_revisions",
+      "tasks",
+      "events",
+      "reviews",
+      "webhook_configs",
+      "webhook_mappings",
+      "webhook_routing",
+      "webhook_deliveries",
+      "webhook_attempts",
+      "webhook_executions",
+      "webhook_bridges",
+    ],
+    result: "columns, rows (arrays), truncated",
+    limits: { timeout_ms: 2000, max_rows: 1000, max_bytes: 1048576 },
+    read_only: true,
+    archived:
+      "SQL includes archived records; filter archived explicitly (notes are also archived when their bucket is).",
+    excludes:
+      "Webhook URLs, credentials, execution fencing handles, idempotency records, accounts and internal tables.",
+    strategy:
+      "Use for counts, joins, aggregates and history; prefer crew_read filters and crew_search for ordinary lookups.",
   };
 }
 module.exports = {

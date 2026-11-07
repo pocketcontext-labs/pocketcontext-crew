@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -19,9 +20,24 @@ func TestCrewMCPAuthorityBoundary(t *testing.T) {
 	if !mcpAPIAllowed("POST", "/api/crew/read") || !mcpAPIAllowed("POST", "/api/crew/agent-write") || !mcpAPIAllowed("POST", "/api/crew/search") {
 		t.Fatal("Crew agent routes unavailable")
 	}
+	if !mcpAPIAllowed("GET", "/api/crew/schema") || !mcpAPIAllowed("POST", "/api/crew/query") {
+		t.Fatal("Crew SQL routes unavailable")
+	}
 	for _, method := range []string{"GET", "PATCH", "DELETE"} {
-		if mcpAPIAllowed(method, "/api/crew/search") {
-			t.Fatalf("MCP exposes %s search", method)
+		for _, path := range []string{"/api/crew/search", "/api/crew/query", "/api/crew/read", "/api/crew/agent-write"} {
+			if mcpAPIAllowed(method, path) {
+				t.Fatalf("MCP exposes %s %s", method, path)
+			}
+		}
+	}
+	for _, method := range []string{"POST", "PATCH", "DELETE"} {
+		if mcpAPIAllowed(method, "/api/crew/schema") {
+			t.Fatalf("MCP exposes %s schema", method)
+		}
+	}
+	for _, path := range []string{"/api/context/query", "/api/context/schema", "/api/crew/query/", "/api/crew/schema/"} {
+		if mcpAPIAllowed("GET", path) || mcpAPIAllowed("POST", path) {
+			t.Fatalf("MCP exposes %s", path)
 		}
 	}
 	calls := 0
@@ -370,5 +386,35 @@ func TestCrewMCPCompactReadsAndSearch(t *testing.T) {
 	capabilities := dig(call("crew_read", map[string]any{"collection": "capabilities"}), "items").([]any)[0]
 	if dig(capabilities, "read", "parameters", "properties", "fields") == nil || dig(capabilities, "search", "parameters", "properties", "generation") == nil {
 		t.Fatal("capabilities omit compact read or search discovery")
+	}
+}
+
+// Bounded read-only SQL through MCP uses only the read routes.
+func TestCrewMCPSchemaAndQuery(t *testing.T) {
+	api, token := mcpRealAPI(t)
+	h := mcpTestHandler(api)
+	call := func(name string, args map[string]any) any { return mcpCall(t, h, token, name, args, false) }
+	agent := call("crew_write", map[string]any{"action": "agent.create", "reported_agent": "Synthetic", "data": map[string]any{"name": "Ledger"}})
+	for _, title := range []string{"One", "Two"} {
+		call("crew_write", map[string]any{"action": "task.create", "reported_agent": "Synthetic", "data": map[string]any{"title": title, "assigned_agent": dig(agent, "id")}})
+	}
+	schema := call("crew_schema", map[string]any{})
+	raw, _ := json.Marshal(schema)
+	if !bytes.Contains(raw, []byte(`"webhook_configs"`)) || bytes.Contains(raw, []byte("secret_ciphertext")) || bytes.Contains(raw, []byte(`"url"`)) {
+		t.Fatalf("schema: %s", raw)
+	}
+	result := call("crew_query", map[string]any{"sql": "SELECT a.name, t.status, count(*) FROM tasks t JOIN agents a ON a.id = t.assigned_agent WHERE t.archived = 0 GROUP BY 1, 2"})
+	if got, _ := json.Marshal(dig(result, "rows")); string(got) != `[["Ledger","todo",2]]` {
+		t.Fatalf("query rows: %s", got)
+	}
+	for _, sql := range []string{"DELETE FROM crew_tasks", "SELECT url FROM crew_webhook_configs", "SELECT * FROM users", "SELECT 1; SELECT 2", strings.Repeat(" ", 65537) + "SELECT 1"} {
+		mcpCall(t, h, token, "crew_query", map[string]any{"sql": sql}, true)
+	}
+	if rows := dig(call("crew_query", map[string]any{"sql": "SELECT count(*) FROM tasks"}), "rows").([]any); len(rows) != 1 {
+		t.Fatal("rejected SQL changed data")
+	}
+	capabilities := dig(call("crew_read", map[string]any{"collection": "capabilities"}), "items").([]any)[0]
+	if dig(capabilities, "sql", "views") == nil {
+		t.Fatal("capabilities omit SQL discovery")
 	}
 }

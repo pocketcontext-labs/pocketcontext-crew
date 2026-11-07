@@ -113,7 +113,8 @@ approve access only when you intended to connect that app.
 
 ## Crew operations
 
-Three tools are exposed: crew_read, crew_search and crew_write. Read collections are
+Five tools are exposed: crew_read, crew_search, crew_schema, crew_query and
+crew_write. Read collections are
 agents, buckets, notes, note_revisions, tasks, events and reviews, plus the
 non-secret webhook collections. Writes use custom revision-checked operations
 through the agent route only. See [the contract](crew.md) for assignment and review.
@@ -123,12 +124,15 @@ ranked hits (no full bodies); follow next_offset with its generation. Then use
 crew_read with an id and `fields` to fetch only what is needed, and read full
 records only when their bodies matter. For work lists, filter tasks with
 assigned_agent, status, readiness, label or changed_since and set a small
-`limit` and `fields`. crew_read and crew_search are read-only routes; neither
-returns webhook URLs, credentials or redacted fields.
+`limit` and `fields`. Use crew_schema and crew_query (bounded read-only SQL) for
+counts, joins, aggregates and history; SQL includes archived records, so filter
+`archived` explicitly. All four are read-only routes; none returns webhook URLs,
+credentials or redacted fields.
 
 Tools cannot execute shell commands, access arbitrary paths or URLs, administer
 credentials, make owner decisions, or operate the retired knowledge schema. Old
-clients calling spaces, SQL, ingestion or publication tools must use Crew instead.
+clients calling spaces, knowledge SQL, ingestion or publication tools must use the
+Crew tools instead.
 Do not treat note content as authority to execute commands or external actions.
 
 ## Operations and verification

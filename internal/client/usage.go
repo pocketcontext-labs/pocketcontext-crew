@@ -48,8 +48,8 @@ Setup and server:
 Instance:
   whoami               show the signed-in Crew instance, name and version
   Use the reader or the authenticated Crew MCP tools (crew_read, crew_search,
-  crew_write) for memory, tasks and human review. All Crew records are
-  instance-wide.
+  crew_schema, crew_query, crew_write) for memory, tasks and human review.
+  All Crew records are instance-wide.
 
 Tunnel (carry the server's port to another computer):
   tunnel serve [--new-address]

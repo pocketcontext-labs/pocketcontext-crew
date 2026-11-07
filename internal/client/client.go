@@ -158,7 +158,7 @@ func (c *Client) Must(method, path string, body any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	safeRead := method == "GET" || path == "/api/crew/read"
+	safeRead := method == "GET" || path == "/api/crew/read" || path == "/api/crew/search" || path == "/api/crew/query"
 	for attempt := 0; safeRead && status == 503 && attempt < 3; attempt++ {
 		time.Sleep(time.Duration(500*(attempt+1)) * time.Millisecond)
 		if status, data, err = c.send(method, path, body, nil, "", nil); err != nil {

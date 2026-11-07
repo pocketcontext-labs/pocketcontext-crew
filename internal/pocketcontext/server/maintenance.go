@@ -86,13 +86,13 @@ func maintenanceRead(r *http.Request) bool {
 		return true
 	}
 	if r.Method == http.MethodPost {
-		return p == "/api/crew/read" || p == "/api/crew/search" || p == "/api/realtime" ||
+		return p == "/api/crew/read" || p == "/api/crew/search" || p == "/api/crew/query" || p == "/api/realtime" ||
 			(len(parts) == 4 && parts[0] == "api" && parts[1] == "collections" && parts[3] == "auth-refresh")
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
-	if p == "/" || p == "/up" || strings.HasPrefix(p, "/assets/") {
+	if p == "/" || p == "/up" || p == "/api/crew/schema" || strings.HasPrefix(p, "/assets/") {
 		return true
 	}
 	collectionRead := (len(parts) == 4 && parts[3] == "auth-methods") ||

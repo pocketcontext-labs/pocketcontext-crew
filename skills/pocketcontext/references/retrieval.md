@@ -21,3 +21,13 @@ fields; webhook URLs and credentials are never readable.
 Archived records stay hidden unless you pass `archived: true`; notes in archived
 buckets count as archived for both crew_read and crew_search. Search reflects
 edits, restores and archive changes immediately.
+
+Use SQL for counts, joins, aggregates and history, not for ordinary lookups:
+read `crew_schema` once for the views and columns, then send one read-only
+statement to `crew_query`. Results are `columns` plus `rows` arrays, at most
+1000 rows and 1 MiB (`truncated` reports a cut). SQL includes archived records:
+add `archived = 0` (and join buckets for notes) when you want active work.
+Example: `SELECT a.name, t.status, count(*) FROM tasks t LEFT JOIN agents a ON
+a.id = t.assigned_agent WHERE t.archived = 0 GROUP BY 1, 2`. JSON columns are
+text (`json_each(t.labels)`), timestamps are UTC text. Webhook URLs, credentials
+and fencing handles are not readable; never try to work around that.

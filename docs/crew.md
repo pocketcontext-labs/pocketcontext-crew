@@ -1,7 +1,9 @@
 # Crew v1 data and access contract
 
 The `crew_*` collections are accessed through authenticated operations, never
-through generic record writes. There are no spaces or inherited knowledge collections.
+through generic record writes. There are no spaces or inherited knowledge
+collections. Reads use the routes below; bounded read-only SQL is available for
+reporting (see [SQL reads](#bounded-read-only-sql)).
 
 | Collection     | Purpose                                                                     |
 | -------------- | --------------------------------------------------------------------------- |
@@ -42,6 +44,38 @@ so edits, restores and archive changes, including bucket archival, are visible
 immediately. Indexed text is bounded (64 MiB). Webhook, event, review and
 revision records are never indexed or returned.
 
+## Bounded read-only SQL
+
+`GET /api/crew/schema` lists the SQL views, their columns and limits.
+`POST /api/crew/query` takes `{"sql": "..."}` with exactly one read-only
+statement and returns `columns`, `rows` (arrays) and `truncated`. Both require
+the same authentication as crew_read (owner token or MCP OAuth caller) and are
+the MCP tools crew_schema and crew_query.
+
+Views: agents, buckets, notes, note_revisions, tasks, events, reviews,
+webhook_configs, webhook_mappings, webhook_routing, webhook_deliveries,
+webhook_attempts, webhook_executions and webhook_bridges. Each view selects an
+explicit column allowlist, and every column is one crew_read already returns.
+Excluded: webhook_configs url and secret_ciphertext; webhook_executions
+worker_id, dispatch_worker_id, fence and dispatch_fence and webhook_bridges
+wake_worker_id (fencing handles); the webhook idempotency table; users and other
+auth records; PocketBase internal tables; OAuth state; retired knowledge data.
+The underlying `crew_*` table names are not a supported interface and are limited
+to the same columns.
+
+SQL sees archived records. Filter `archived` explicitly; a note in an archived
+bucket is archived for crew_read and crew_search, so join buckets when that
+matters. JSON columns are text (use `json_each` or `->>`), timestamps are UTC
+text and booleans are 0/1.
+
+Queries run on separate read-only connections to the server's private working
+copy (never the synced database), with `query_only`, an SQLite authorizer that
+allows only SELECT, the allowlisted columns and a fixed function list, and a
+prepared-statement read-only check. Writes, ATTACH, PRAGMA, extension loading
+and multiple statements are rejected. Limits: 2 seconds, 1000 rows and 1 MiB per
+result, 64 KiB of SQL. Prefer crew_read filters and crew_search for ordinary
+lookups; use SQL for counts, joins, aggregates and history.
+
 `POST /api/crew/write` is the owner path. MCP only forwards to
 `POST /api/crew/agent-write`, which denies decisions, bucket archival
 and agent deactivation. All use the same transaction and revision checks.
@@ -75,10 +109,14 @@ messages, publish posts or perform payments.
 ## Verification
 
 Crew integration tests exercise authenticated read/write, compact read filters
-and projections, ranked search freshness and archive semantics, immutable history,
+and projections, ranked search freshness and archive semantics, SQL allowlists
+(each excluded secret column is rejected), mutation rejection and limits, immutable history,
 conflicts and concurrent claims, archive ancestry, review invalidation, owner-only
 decisions, generic REST/batch rejection and restart persistence. MCP tests cover
-transport allowlists and the agent path. Hosted image gates additionally rehearse
+transport allowlists and the agent path. `CREW_READ_BENCH=1 go test ./internal/bundle
+-run TestCrewRetrievalBenchmark -v` (with the usual CGO and build tags) seeds a
+synthetic 500-note, 300-task project and compares response bytes and call counts
+of full pages with compact reads, search and SQL, checking identical answers. Hosted image gates additionally rehearse
 complete backup/restore, credential revocation on restore, one writer and clean
 shutdown. Actual owner inbox delivery and third-party client sign-in require a
 real user confirmation; automated checks must not be presented as that confirmation.

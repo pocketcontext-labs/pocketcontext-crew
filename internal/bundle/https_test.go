@@ -149,6 +149,12 @@ func TestPublicHTTPSReaderAndBoundary(t *testing.T) {
 	request("POST", "/api/crew/search", "", `{"query":"synthetic"}`, domain, "", 401)
 	request("POST", "/api/crew/search", a.token, `{"query":"synthetic"}`, domain, "https://evil.example", 403)
 	request("POST", "/api/crew/search", a.token, `{"query":"synthetic"}`, domain, "https://"+domain, 200)
+	request("GET", "/api/crew/schema", "", "", domain, "", 401)
+	request("GET", "/api/crew/schema", a.token, "", domain, "", 200)
+	request("POST", "/api/crew/query", "", `{"sql":"SELECT 1"}`, domain, "", 401)
+	request("POST", "/api/crew/query", a.token, `{"sql":"SELECT count(*) FROM tasks"}`, domain, "https://evil.example", 403)
+	request("POST", "/api/crew/query", a.token, `{"sql":"SELECT count(*) FROM tasks"}`, domain, "https://"+domain, 200)
+	request("POST", "/api/crew/query", a.token, `{"sql":"DELETE FROM crew_tasks"}`, domain, "https://"+domain, 400)
 	for _, path := range []string{"/api/spaces/default", "/api/collections/sources/records", "/api/context/schema", "/api/files/sources/id/original.txt"} {
 		request("GET", path, a.token, "", domain, "", 404)
 	}

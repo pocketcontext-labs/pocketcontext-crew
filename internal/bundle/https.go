@@ -69,12 +69,12 @@ func publicRoute(method, p string) bool {
 	if read && strings.HasPrefix(p, "/assets/") && readerAssetName.MatchString(strings.TrimPrefix(p, "/assets/")) {
 		return true
 	}
-	if read && p == "/api/realtime" {
+	if read && (p == "/api/realtime" || p == "/api/crew/schema") {
 		return true
 	}
 	if method == http.MethodPost {
 		switch p {
-		case "/api/crew/read", "/api/crew/search", "/api/crew/write", "/api/crew/agent-write", "/api/bundle/redeem", "/api/collections/users/auth-with-password", "/api/collections/users/auth-refresh", "/api/realtime":
+		case "/api/crew/read", "/api/crew/search", "/api/crew/query", "/api/crew/write", "/api/crew/agent-write", "/api/bundle/redeem", "/api/collections/users/auth-with-password", "/api/collections/users/auth-refresh", "/api/realtime":
 			return true
 		}
 	}

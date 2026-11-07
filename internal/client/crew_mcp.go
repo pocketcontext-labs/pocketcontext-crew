@@ -31,6 +31,10 @@ type crewSearch struct {
 	Generation  string   `json:"generation,omitempty" jsonschema:"When following next_offset, pass the generation from the first page; a conflict means content changed, so restart."`
 }
 
+type crewQuery struct {
+	SQL string `json:"sql" jsonschema:"One read-only SELECT/WITH statement over the crew_schema views. SQL sees archived records: filter archived explicitly. At most 1000 rows and 1 MiB per result."`
+}
+
 type crewWrite struct {
 	Execution        map[string]any `json:"execution,omitempty" jsonschema:"Governed task writes require proof even before first acquisition {id,worker_id,fence}. This does not grant separate bot identity."`
 	IdempotencyKey   string         `json:"idempotency_key,omitempty" jsonschema:"Persistent retry key, required for bridge/execution mutations and fenced task.comment, agent.ensure and webhook.test/catch_up; supported for all webhook operations. Replays reconcile guarded wake/send/acquisition steps without granting permission again; changed input conflicts."`
@@ -79,6 +83,15 @@ func addCrewMCPTools(s *mcp.Server, api http.Handler) {
 			body["generation"] = a.Generation
 		}
 		return c.Must("POST", "/api/crew/search", body)
+	})
+	addMCPTool(s, api, "crew_schema", "Read the SQL views (agents, buckets, notes, note_revisions, tasks, events, reviews and non-secret webhook tables), their columns and query limits before using crew_query.", true, func(c *Client, _ struct{}) (any, error) {
+		return c.Must("GET", "/api/crew/schema", nil)
+	})
+	addMCPTool(s, api, "crew_query", "Run bounded read-only SQL for counts, joins, aggregates and history across Crew records (for example tasks grouped by status and assigned_agent). Prefer crew_read filters or crew_search for ordinary lookups. SQL includes archived records, so filter archived explicitly; notes in archived buckets are archived too. Webhook URLs, credentials and fencing handles are not readable.", true, func(c *Client, a crewQuery) (any, error) {
+		if len(a.SQL) > 65536 {
+			return nil, mcpDiagnosticError("limit_exceeded", "SQL exceeds 64 KiB")
+		}
+		return c.Must("POST", "/api/crew/query", map[string]any{"sql": a.SQL})
 	})
 	addMCPTool(s, api, "crew_write", "Create and update Crew memory/tasks or request human review. Cannot record approval decisions. Bucket ownership is a behavioral convention. On conflict reread and reassess. Updating a draft withdraws its pending review; approval never executes an external action.", false, func(c *Client, a crewWrite) (any, error) {
 		return c.Must("POST", "/api/crew/agent-write", map[string]any{"execution": a.Execution, "idempotency_key": a.IdempotencyKey, "action": a.Action, "id": a.ID, "expected_revision": a.ExpectedRevision, "reported_agent": a.ReportedAgent, "reason": a.Reason, "data": a.Data})

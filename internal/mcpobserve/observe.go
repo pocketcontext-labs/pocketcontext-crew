@@ -75,7 +75,7 @@ func SafeMethod(s string) string {
 	return listed(s, "GET POST PATCH HEAD DELETE OPTIONS initialize ping tools/list tools/call notifications/initialized notifications/cancelled logging/setLevel")
 }
 func SafeTool(s string) string {
-	return listed(s, "crew_read crew_search crew_write")
+	return listed(s, "crew_read crew_search crew_schema crew_query crew_write")
 }
 
 // Emit writes one JSON line atomically. Logging failures never change an operation's result.
@@ -90,7 +90,7 @@ func Emit(ctx context.Context, e Event) {
 	e.Outcome = listed(e.Outcome, "success protocol_error tool_error transport_error internal_error error rejected denied cancelled timeout expected_probe")
 	e.Reason = listed(e.Reason, `response_write_failed none operation_failed unavailable ok invalid_input invalid_arguments invalid_request unknown_method unknown_tool protocol_error tool_error internal_error conflict not_found limit_exceeded cancelled timeout unauthorized forbidden api_error result_too_large request_budget response_budget response_limit invalid_json invalid_params parse_error method_not_found validation_error cancellation deadline_exceeded auth_required invalid_token token_expired grant_revoked account_unavailable method_not_allowed registration_complete consent_required consent_approved consent_denied token_issued token_refreshed revoked connections_listed discovery script invalid_client_metadata invalid_redirect_uri unsupported_grant_type unsupported_response_type registration_unavailable duplicate_parameter unknown_client redirect_mismatch resource_mismatch pkce_method pkce_challenge state_too_large invalid_scope login_required approval_required pending_limit form_required invalid_client invalid_grant invalid_refresh refresh_replay persistence_failure token_required connection_required rate_limited invalid_target slow_down temporarily_unavailable`)
 	// Routes are templates selected by code. No IDs, filenames or query strings.
-	e.APIRoute = listed(e.APIRoute, `/mcp /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/mcp /.well-known/oauth-authorization-server /oauth/authorize /oauth/register /oauth/token /oauth/revoke /oauth/connections /oauth/app.js /api/crew/read /api/crew/search /api/crew/agent-write`)
+	e.APIRoute = listed(e.APIRoute, `/mcp /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/mcp /.well-known/oauth-authorization-server /oauth/authorize /oauth/register /oauth/token /oauth/revoke /oauth/connections /oauth/app.js /api/crew/read /api/crew/search /api/crew/schema /api/crew/query /api/crew/agent-write`)
 	entry := struct {
 		Time      string `json:"time"`
 		Domain    string `json:"domain"`

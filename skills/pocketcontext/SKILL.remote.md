@@ -17,8 +17,9 @@ Read [reader setup](references/reader-setup.md) before opening the reader.
 ## Work with Crew
 
 Connect the external assistant to this instance's authenticated `/mcp` endpoint.
-Use `crew_read`, `crew_search` and `crew_write` for agent operations. There are
-no spaces, knowledge ingestion, page publication or generic record-write tools.
+Use `crew_read`, `crew_search`, `crew_schema`, `crew_query` and `crew_write` for
+agent operations. There are no spaces, knowledge ingestion, page publication or
+generic record-write tools; SQL is read-only.
 Read [retrieval](references/retrieval.md) to keep reads compact.
 
 Read your agent brief, relevant buckets and current task before writing. Bucket
