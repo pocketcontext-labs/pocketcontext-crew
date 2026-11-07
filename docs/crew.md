@@ -154,7 +154,9 @@ without a wake until the owner sets it Ready.
 Read collection `capabilities` to discover protocol version, server build, operation
 input/result schemas and the `data._crew` compatibility envelope. MCP clients
 with a cached declaration can supply `data._crew: {idempotency_key, execution}`
-without bypassing checks or exposing owner credentials. Conflicting top-level
+without bypassing checks or exposing owner credentials. Wake runs read the compact
+execution subset (`id: "execution"`) and can skip it when they already hold the
+payload's `capabilities_digest`. Conflicting top-level
 and nested metadata is refused. `execution.begin` atomically validates/acquires
 work. Governed tasks require proof even before an execution exists; explicit owner
 Waiting releases governance. Read the webhook guide for the full lifecycle.

@@ -31,7 +31,8 @@ responsibility is a behavioral convention: read all, write your bucket, request
 changes elsewhere through tasks. It does not grant credentials or isolate data.
 Reported agent names are attribution, not authenticated identity.
 
-Read collection capabilities first for versioned operation schemas. If a cached
+Read collection capabilities once for versioned operation schemas (wake runs use the
+compact execution subset below). If a cached
 connector omits execution/idempotency_key, use data._crew as documented there;
 never fall back to unfenced writes. Other read collections: agents, buckets, notes, note_revisions, tasks, events, reviews,
 webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings,
@@ -82,7 +83,10 @@ executing webhook-triggered work. Synthetic tests do not certify Grok Bot.
 For webhook-triggered work, read the compact `crew_read` capabilities with
 `id: "execution"` (skip it when you already hold the payload's
 `capabilities_digest`), then use execution.begin and its returned next_step and
-proof. On replayed/reconcile responses, do not send or resume work; reconcile the
+proof. Protocol steps never use crew_search, crew_schema or crew_query; task work
+reads compactly. Reread once and reassess only on a plain revision conflict; other
+refusals such as `handoff_limited` or `execution_required` are not retried
+unchanged. On replayed/reconcile responses, do not send or resume work; reconcile the
 current record first. Governed tasks require proof even before acquisition; only an explicit
 owner Waiting transition releases them. In native mode inspect messaging tools in
 the actual webhook routine. In parent_bridge mode the routine reserves its wake

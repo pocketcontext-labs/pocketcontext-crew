@@ -108,6 +108,11 @@ requires fresh relevant verification. A parent test checks actual parent capabil
 without requiring the routine to claim native messaging. When another active mapped
 bot exists, automatic recipient acknowledgment is required before enabling the
 parent bridge. Overdue stages are visible uncertainty, not proof of failed delivery.
+A parent may also decline a wake deliberately, for example when the owner's instructions
+forbid continuing. It then never calls `webhook.bridge.parent`, so the record still shows
+the wake as reserved but not received: from Crew's side a deliberate decline and a lost
+wake look the same. Ask the parent conversation before treating the stage as a delivery
+failure, and reconcile before a new test or Waiting→Ready retry.
 
 ## Capability discovery and cached clients
 
@@ -176,7 +181,7 @@ matching block; it is not an independent Crew-to-Grok inspection. UI labels
 maintain this distinction. Error data.reason.code includes `instructions_mismatch` or
 `revision_conflict` so a content mismatch is not mistaken for a stale record.
 
-The compact block (instruction revision installed by the comment-wake release)
+The compact block (an instruction revision installed by Crew 0.7.0)
 keeps protocol 3 and every rule of the earlier block. Wake runs take bridge and
 execution revisions from the preceding result (the routine passes the bridge
 id/revision to WakeParent) and reread once only on `revision_conflict`; the server
@@ -187,13 +192,15 @@ current configuration. Measured with `go test -run TestWakeProtocolOverhead -v`
 
 | Flow                    | Protocol 3 text (calls/bytes) | Compact (calls/bytes) | Digest held |
 | ----------------------- | ----------------------------- | --------------------- | ----------- |
-| native self_work        | 4 / 63,024                    | 3 / 8,149             | 2 / 2,703   |
-| native handoff          | 9 / 127,063                   | 6 / 16,350            | 4 / 5,458   |
-| parent_bridge self_work | 9 / 126,378                   | 6 / 15,548            | 4 / 4,656   |
-| parent_bridge handoff   | 14 / 190,496                  | 9 / 23,776            | 6 / 7,438   |
+| native self_work        | 4 / 64,567                    | 3 / 8,149             | 2 / 2,703   |
+| native handoff          | 9 / 130,149                   | 6 / 16,350            | 4 / 5,458   |
+| parent_bridge self_work | 9 / 129,462                   | 6 / 15,548            | 4 / 4,656   |
+| parent_bridge handoff   | 14 / 195,122                  | 9 / 23,776            | 6 / 7,438   |
 
-The managed block shrank from 6,659 to 3,884 bytes; full capabilities are about
-49 KB and the execution subset about 5.4 KB.
+The managed block shrank from 6,659 to 3,986 bytes including the retrieval rules
+below; in this synthetic test full capabilities are about 52 KB and the execution
+subset about 5.4 KB. Live parent-bridge measurements are in the
+Crew 0.7.0 release notes.
 
 Rule mapping from the protocol 3 block to the compact block:
 
@@ -233,7 +240,20 @@ Rule mapping from the protocol 3 block to the compact block:
 
 `TestCompactManagedBlockKeepsRules` fails if any of these phrases disappears.
 
+A second 0.7.0 instruction revision adds two retrieval rules without changing the
+protocol: protocol steps never use `crew_search`, `crew_schema` or `crew_query`
+(their reads are already covered by the execution subset, bridge and execution
+results), and task work reads compactly with `crew_search`, `fields` and a small
+`limit` instead of listing whole collections at full size. Live parent-bridge runs
+before this rule showed one unprompted 9 KB schema read in a wake run and one
+102 KB full listing during task work.
+
 Changing instructions pauses delivery and invalidates prior setup evidence.
+Any integration or credential update, including a subscription-only change such as
+opting in to `comment`, invalidates the configuration: delivery pauses, Ready tasks
+move to a new wake generation and in-flight work for the old generation is refused
+with a conflict. Change configuration between runs, then re-enable delivery; enabling
+sends no backlog, so set an affected task Waiting and then Ready to wake it again.
 Changing the selected dispatcher requires a new webhook binding and clears the
 old credentials; editing the current managed protocol during upgrade preserves
 credentials. Mapping changes invalidate affected routing. No-op mapping saves
@@ -422,7 +442,7 @@ results are redacted too. Sender HTTPS checks block private/reserved destination
 DNS rebinding and redirects. Delivery retries are bounded; acceptance is not
 completion or a promise of eventual success.
 
-The protocol 3 upgrade and the later compact-instruction upgrade retain mappings,
+The protocol 3 upgrade and the later compact-instruction and retrieval-instruction upgrades retain mappings,
 dispatcher, dispatch mode, credentials, old instructions and histories, install
 the new managed block as a new instruction revision and pause delivery. Existing
 configurations retain native mode until explicitly switched to parent_bridge. It sends no tests or backlog.

@@ -99,25 +99,41 @@ task Waiting then Ready after reconciliation to create a new generation. Do not
 replay the old bridge event. Update installed skills with the release so their
 webhook instructions match protocol 3.
 
-## Unreleased: comment wakes and compact instructions
+## Crew 0.7.0 comment wakes and compact instructions
 
-Take a complete stopped backup, including the private webhook key. The first
-migration adds task fields for owner-comment wakes and the bot handoff limit and
-sets `max_bot_handoffs` to 4. It does not change subscriptions; `comment` stays
-opt-in. It sends nothing and leaves current work, generations and delivery as
-they were.
+Take a complete stopped backup, including the private webhook key, and keep the
+matching 0.6.0 release for rollback. Three migrations run in order:
 
-The second migration keeps the protocol 3 wire format and installs a shorter
-managed block as a new instruction revision. It retains the dispatcher, dispatch
-mode, mappings, credentials and histories, preserves the previous instruction
-text, invalidates old work generations and pauses delivery, exactly like earlier
-instruction upgrades. Apply the new block to the existing routine, report
-synchronization, run an explicit connection test (with a mapped teammate in
-parent_bridge mode) and re-enable delivery. Enabling sends no backlog. Update
-installed skills with the release.
+1. Task fields for owner-comment wakes and the bot handoff limit, with
+   `max_bot_handoffs` set to 4. Subscriptions are unchanged, so `comment` stays
+   opt-in. This step sends nothing and leaves work, generations and delivery as
+   they were.
+2. A compact managed block as a new instruction revision (protocol 3 wire format
+   unchanged).
+3. One more instruction revision with two retrieval rules: protocol steps never
+   use search, schema or SQL, and task work reads compactly.
 
-A third migration installs one more instruction revision with two retrieval rules
-(protocol steps never use search/schema/SQL; task work reads compactly). It behaves
-like the second: binding preserved, delivery paused, old generations fenced. An
-upgrade from 0.6.0 applies both instruction revisions in order, so the routine is
-synchronized once, to the latest block.
+Steps 2 and 3 behave like earlier instruction upgrades: they retain the
+dispatcher, dispatch mode, mappings, encrypted credentials and histories,
+preserve the previous instruction text, invalidate old work generations and pause
+delivery. No tests or tasks are sent. After the upgrade delivery is paused at the
+latest instruction revision, and the routine is synchronized once, to that block.
+
+After starting 0.7.0:
+
+1. Verify authenticated Crew operations and MCP discovery; refresh connector tool
+   schemas so clients see `crew_search`, `crew_schema` and `crew_query`.
+2. Apply the current managed block to the existing routine, preserving role and
+   reporting text, and report synchronization once.
+3. Run an explicit connection test, with a mapped teammate in parent_bridge mode.
+4. Re-enable delivery. Enabling sends no backlog; set a task Waiting and then Ready
+   to wake it again.
+5. Optionally opt in to the `comment` subscription so owner browser comments wake
+   the assignee. Any integration, subscription or credential change, including
+   this one, pauses delivery, moves Ready tasks to a new generation and fences
+   in-flight work for the old one. Make the change between runs, then re-enable.
+6. Optionally adjust `max_bot_handoffs` (owner only, 1-20).
+7. Update installed skills with the release.
+
+Rollback requires the complete pre-upgrade backup with the 0.6.0 binary or image;
+an older binary must not open the migrated database.

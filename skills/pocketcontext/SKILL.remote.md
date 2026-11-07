@@ -27,10 +27,12 @@ responsibility is a behavioral convention: read all, write your bucket, request
 changes elsewhere through tasks. It does not grant credentials or isolate data.
 Reported agent names are attribution, not authenticated identity.
 
-Read collection capabilities first for versioned operation schemas. If a cached
+Read collection capabilities once for versioned operation schemas (wake runs use the
+compact execution subset below). If a cached
 connector omits execution/idempotency_key, use data._crew as documented there;
 never fall back to unfenced writes. Other read collections: agents, buckets, notes, note_revisions, tasks, events, reviews,
-webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings and webhook_executions.
+webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings,
+webhook_bridges and webhook_executions.
 Follow `next_offset` while `has_more`. Archived records require `archived: true`.
 Writes carry action, data, reported_agent, optional reason, and the current id and
 expected_revision for changes. On conflict reread and reassess; never blindly retry.
@@ -77,9 +79,19 @@ executing webhook-triggered work. Synthetic tests do not certify Grok Bot.
 For webhook-triggered work, read the compact `crew_read` capabilities with
 `id: "execution"` (skip it when you already hold the payload's
 `capabilities_digest`), then use execution.begin and its returned next_step and
-proof. On replayed/reconcile responses, do not send or resume work; reconcile the
+proof. Protocol steps never use crew_search, crew_schema or crew_query; task work
+reads compactly. Reread once and reassess only on a plain revision conflict; other
+refusals such as `handoff_limited` or `execution_required` are not retried
+unchanged. On replayed/reconcile responses, do not send or resume work; reconcile the
 current record first. Governed tasks require proof even before acquisition; only an explicit
-owner Waiting transition releases them. Inspect native handoff tools in the actual
-routine context, not a parent chat. Preserve role/reporting text outside the
-managed dispatcher block. Record safe test acknowledgment and runtime capability
-reports honestly; synthetic tests do not certify Grok.
+owner Waiting transition releases them. In native mode inspect messaging tools in
+the actual webhook routine. In parent_bridge mode the routine reserves its wake
+through webhook.bridge.prepare, then calls WakeParent once; only the automatically
+activated parent records webhook.bridge.parent and enters task dispatch. Inspect
+each context's own tools rather than borrowing another context's capability claim.
+Bridge and execution replays never authorize another external call. Preserve
+role/reporting text outside the managed dispatcher block. Record diagnostic
+recipient acknowledgment only from the automatically activated recipient turn,
+under previously granted owner authorization. Tests may send one explicitly
+requested diagnostic message while delivery is disabled, but never perform task
+work. Record capabilities honestly; synthetic tests do not certify Grok.

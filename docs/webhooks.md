@@ -181,7 +181,7 @@ matching block; it is not an independent Crew-to-Grok inspection. UI labels
 maintain this distinction. Error data.reason.code includes `instructions_mismatch` or
 `revision_conflict` so a content mismatch is not mistaken for a stale record.
 
-The compact block (instruction revision installed by the comment-wake release)
+The compact block (an instruction revision installed by Crew 0.7.0)
 keeps protocol 3 and every rule of the earlier block. Wake runs take bridge and
 execution revisions from the preceding result (the routine passes the bridge
 id/revision to WakeParent) and reread once only on `revision_conflict`; the server
@@ -192,13 +192,15 @@ current configuration. Measured with `go test -run TestWakeProtocolOverhead -v`
 
 | Flow                    | Protocol 3 text (calls/bytes) | Compact (calls/bytes) | Digest held |
 | ----------------------- | ----------------------------- | --------------------- | ----------- |
-| native self_work        | 4 / 63,024                    | 3 / 8,149             | 2 / 2,703   |
-| native handoff          | 9 / 127,063                   | 6 / 16,350            | 4 / 5,458   |
-| parent_bridge self_work | 9 / 126,378                   | 6 / 15,548            | 4 / 4,656   |
-| parent_bridge handoff   | 14 / 190,496                  | 9 / 23,776            | 6 / 7,438   |
+| native self_work        | 4 / 64,567                    | 3 / 8,149             | 2 / 2,703   |
+| native handoff          | 9 / 130,149                   | 6 / 16,350            | 4 / 5,458   |
+| parent_bridge self_work | 9 / 129,462                   | 6 / 15,548            | 4 / 4,656   |
+| parent_bridge handoff   | 14 / 195,122                  | 9 / 23,776            | 6 / 7,438   |
 
-The managed block shrank from 6,659 to 3,884 bytes; full capabilities are about
-49 KB and the execution subset about 5.4 KB.
+The managed block shrank from 6,659 to 3,986 bytes including the retrieval rules
+below; in this synthetic test full capabilities are about 52 KB and the execution
+subset about 5.4 KB. Live parent-bridge measurements are in the
+[0.7.0 release notes](releases/0.7.0.md).
 
 Rule mapping from the protocol 3 block to the compact block:
 
@@ -238,7 +240,7 @@ Rule mapping from the protocol 3 block to the compact block:
 
 `TestCompactManagedBlockKeepsRules` fails if any of these phrases disappears.
 
-The following instruction revision adds two retrieval rules without changing the
+A second 0.7.0 instruction revision adds two retrieval rules without changing the
 protocol: protocol steps never use `crew_search`, `crew_schema` or `crew_query`
 (their reads are already covered by the execution subset, bridge and execution
 results), and task work reads compactly with `crew_search`, `fields` and a small
