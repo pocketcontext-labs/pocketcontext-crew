@@ -180,7 +180,12 @@ func checked(method, path string, status int, data any) (any, error) {
 	conflict := status == 409
 
 	if conflict {
-		lines = append(lines, "HTTP 409: another request changed the record first. Read it again, confirm the change still applies, then retry.")
+		code, _ := dig(data, "data", "reason", "code").(string)
+		if code == "" || code == "revision_conflict" {
+			lines = append(lines, "HTTP 409: another request changed the record first. Read it again, confirm the change still applies, then retry.")
+		} else {
+			lines = append(lines, fmt.Sprintf("HTTP 409: Crew refused this operation (%s). Do not retry it unchanged; follow the message above.", code))
+		}
 		return nil, &Fail{4, strings.Join(lines, "\n")}
 	}
 	return nil, &Fail{1, strings.Join(lines, "\n")}

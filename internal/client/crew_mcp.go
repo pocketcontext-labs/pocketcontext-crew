@@ -84,7 +84,7 @@ func addCrewMCPTools(s *mcp.Server, api http.Handler) {
 		}
 		return c.Must("POST", "/api/crew/search", body)
 	})
-	addMCPTool(s, api, "crew_schema", "Read the SQL views (agents, buckets, notes, note_revisions, tasks, events, reviews and non-secret webhook tables), their columns and query limits before using crew_query.", true, func(c *Client, _ struct{}) (any, error) {
+	addMCPTool(s, api, "crew_schema", "Not needed for wake or execution protocol steps. Read the SQL views (agents, buckets, notes, note_revisions, tasks, events, reviews and non-secret webhook tables), their columns and query limits before using crew_query.", true, func(c *Client, _ struct{}) (any, error) {
 		return c.Must("GET", "/api/crew/schema", nil)
 	})
 	addMCPTool(s, api, "crew_query", "Run bounded read-only SQL for counts, joins, aggregates and history across Crew records (for example tasks grouped by status and assigned_agent). Prefer crew_read filters or crew_search for ordinary lookups. SQL includes archived records, so filter archived explicitly; notes in archived buckets are archived too. Webhook URLs, credentials and fencing handles are not readable.", true, func(c *Client, a crewQuery) (any, error) {

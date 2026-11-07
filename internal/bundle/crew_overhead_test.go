@@ -302,7 +302,7 @@ func TestWakePayloadCarriesProtocolAndDigest(t *testing.T) {
 func TestCompactManagedBlockKeepsRules(t *testing.T) {
 	a := newTestApp(t)
 	block := jsStringConstant(t, "../../pb_hooks/crew_setup.js", "DEFAULT_INSTRUCTIONS")
-	if migrated := jsStringConstant(t, "../../pb_migrations/1800700000_crew_compact_instructions.js", "canonical"); migrated != block {
+	if migrated := jsStringConstant(t, "../../pb_migrations/1800800000_crew_retrieval_instructions.js", "canonical"); migrated != block {
 		t.Fatal("migration and setup blocks differ")
 	}
 	config, err := a.app.FindFirstRecordByFilter("crew_webhook_configs", "scope='global'")
@@ -330,6 +330,7 @@ func TestCompactManagedBlockKeepsRules(t *testing.T) {
 		"Renew long work", "execution.complete", "mark_done:true with task_revision", "comment_event_id",
 		"Stop on stale, expired, duplicate or conflicting work", "Never repeat uncertain external effects",
 		"bypass human review", "acknowledgment loops", "not exactly-once",
+		"Protocol steps never use crew_search/schema/query", "Read compactly (crew_search, fields, small limit)",
 	} {
 		if !strings.Contains(block, rule) {
 			t.Errorf("compact block lost rule %q", rule)
@@ -342,6 +343,12 @@ func TestCompactManagedBlockKeepsRules(t *testing.T) {
 }
 
 func TestCompactInstructionMigrationPreservesBindingAndPauses(t *testing.T) {
+	for _, migration := range []string{"1800700000_crew_compact_instructions.js", "1800800000_crew_retrieval_instructions.js"} {
+		t.Run(migration, func(t *testing.T) { checkInstructionMigration(t, migration) })
+	}
+}
+
+func checkInstructionMigration(t *testing.T, migration string) {
 	a, c, task, event := webhookFixture(t)
 	legacy := legacyManagedBlock(t)
 	c.Set("instructions", legacy)
@@ -350,11 +357,11 @@ func TestCompactInstructionMigrationPreservesBindingAndPauses(t *testing.T) {
 		t.Fatal(err)
 	}
 	beforeCipher, beforeURL, beforeAgent, beforeRevision := c.GetString("secret_ciphertext"), c.GetString("url"), c.GetString("agent"), c.GetInt("instruction_revision")
-	if err := runFixtureMigration(t, a.app, "../../pb_migrations/1800700000_crew_compact_instructions.js"); err != nil {
+	if err := runFixtureMigration(t, a.app, "../../pb_migrations/"+migration); err != nil {
 		t.Fatal(err)
 	}
 	c = apiWebhookRecord(t, a, "webhook_configs", c.Id)
-	block := jsStringConstant(t, "../../pb_hooks/crew_setup.js", "DEFAULT_INSTRUCTIONS")
+	block := jsStringConstant(t, "../../pb_migrations/"+migration, "canonical")
 	if c.GetString("instructions") != block || c.GetString("previous_instructions") != legacy || c.GetString("managed_hash") != fmt.Sprintf("%x", sha256.Sum256([]byte(block))) {
 		t.Fatal("compact block not installed with history")
 	}

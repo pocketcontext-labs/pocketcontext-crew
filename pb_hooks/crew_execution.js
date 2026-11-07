@@ -527,6 +527,11 @@ function guardTaskWrite(app, task, b, isAgent) {
   )
     return;
   const p = b.execution;
+  if ((!p || typeof p !== "object") && task.getBool("handoff_limited"))
+    fail(
+      "The bot handoff limit stopped this task; only the owner can review it and set Ready",
+      "handoff_limited",
+    );
   if (!p || typeof p !== "object")
     fail(
       "This task is governed by webhook execution. Begin its current event and supply execution proof, or ask the owner to mark it Waiting to release it",

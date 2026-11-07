@@ -162,6 +162,11 @@ flag does not assert that a publication committed. Cancellation, timeouts, size
 limits, conflicts and input errors are distinct from ordinary successful calls.
 HTTP completion events separately report failed response writes: a successful
 tool execution does not guarantee the client received its result.
+
+A 409 tool error suggests rereading and retrying only for a genuine revision
+conflict (no reason code, or `revision_conflict`). Other refusals such as
+`execution_required`, `handoff_limited` or a stale generation say that Crew refused
+the operation and must not be retried unchanged; follow the returned message.
 Expected discovery challenges and unsupported HTTP probes are classified
 separately from service failures.
 

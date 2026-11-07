@@ -115,3 +115,9 @@ instruction upgrades. Apply the new block to the existing routine, report
 synchronization, run an explicit connection test (with a mapped teammate in
 parent_bridge mode) and re-enable delivery. Enabling sends no backlog. Update
 installed skills with the release.
+
+A third migration installs one more instruction revision with two retrieval rules
+(protocol steps never use search/schema/SQL; task work reads compactly). It behaves
+like the second: binding preserved, delivery paused, old generations fenced. An
+upgrade from 0.6.0 applies both instruction revisions in order, so the routine is
+synchronized once, to the latest block.

@@ -108,6 +108,11 @@ requires fresh relevant verification. A parent test checks actual parent capabil
 without requiring the routine to claim native messaging. When another active mapped
 bot exists, automatic recipient acknowledgment is required before enabling the
 parent bridge. Overdue stages are visible uncertainty, not proof of failed delivery.
+A parent may also decline a wake deliberately, for example when the owner's instructions
+forbid continuing. It then never calls `webhook.bridge.parent`, so the record still shows
+the wake as reserved but not received: from Crew's side a deliberate decline and a lost
+wake look the same. Ask the parent conversation before treating the stage as a delivery
+failure, and reconcile before a new test or Waiting→Ready retry.
 
 ## Capability discovery and cached clients
 
@@ -233,7 +238,20 @@ Rule mapping from the protocol 3 block to the compact block:
 
 `TestCompactManagedBlockKeepsRules` fails if any of these phrases disappears.
 
+The following instruction revision adds two retrieval rules without changing the
+protocol: protocol steps never use `crew_search`, `crew_schema` or `crew_query`
+(their reads are already covered by the execution subset, bridge and execution
+results), and task work reads compactly with `crew_search`, `fields` and a small
+`limit` instead of listing whole collections at full size. Live parent-bridge runs
+before this rule showed one unprompted 9 KB schema read in a wake run and one
+102 KB full listing during task work.
+
 Changing instructions pauses delivery and invalidates prior setup evidence.
+Any integration or credential update, including a subscription-only change such as
+opting in to `comment`, invalidates the configuration: delivery pauses, Ready tasks
+move to a new wake generation and in-flight work for the old generation is refused
+with a conflict. Change configuration between runs, then re-enable delivery; enabling
+sends no backlog, so set an affected task Waiting and then Ready to wake it again.
 Changing the selected dispatcher requires a new webhook binding and clears the
 old credentials; editing the current managed protocol during upgrade preserves
 credentials. Mapping changes invalidate affected routing. No-op mapping saves
@@ -422,7 +440,7 @@ results are redacted too. Sender HTTPS checks block private/reserved destination
 DNS rebinding and redirects. Delivery retries are bounded; acceptance is not
 completion or a promise of eventual success.
 
-The protocol 3 upgrade and the later compact-instruction upgrade retain mappings,
+The protocol 3 upgrade and the later compact-instruction and retrieval-instruction upgrades retain mappings,
 dispatcher, dispatch mode, credentials, old instructions and histories, install
 the new managed block as a new instruction revision and pause delivery. Existing
 configurations retain native mode until explicitly switched to parent_bridge. It sends no tests or backlog.

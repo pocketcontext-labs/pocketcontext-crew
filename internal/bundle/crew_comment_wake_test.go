@@ -274,6 +274,16 @@ func TestBotHandoffLimitStopsLoopWithoutWake(t *testing.T) {
 	}
 	// Agents cannot release the stop; the owner can.
 	agentWrite(t, a, "task.update", id, rev(), map[string]any{"readiness": "ready"}, 403)
+	// A governed stopped task names the handoff limit instead of generic governance advice.
+	governed := apiWebhookRecord(t, a, "tasks", id)
+	governed.Set("execution_required_generation", governed.GetInt("wake_generation"))
+	if err := a.app.Save(governed); err != nil {
+		t.Fatal(err)
+	}
+	refused := agentWrite(t, a, "task.comment", id, rev(), map[string]any{"body": "retry"}, 409)
+	if reason, _ := refused["data"].(map[string]any)["reason"].(map[string]any); reason["code"] != "handoff_limited" {
+		t.Fatal("stopped governed task lacks handoff_limited refusal", refused)
+	}
 	released := webhookOperation(t, a, "task.update", id, rev(), map[string]any{"readiness": "ready"}, "")
 	if released["bot_handoffs"] != float64(0) || released["handoff_limited"] != false || len(apiWebhookDeliveries(t, a, id)) != before+1 {
 		t.Fatal("owner release did not reset and wake", released)
