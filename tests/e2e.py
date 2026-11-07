@@ -7,6 +7,7 @@ a temporary project folder, home and cache, and a free loopback port.
 import argparse
 from contextlib import closing
 import hashlib
+import http.client
 import http.server
 import json
 import os
@@ -85,14 +86,22 @@ class Project:
         return json.loads(self.run(*args, **kwargs).stdout)
 
     def http(self, method, path, body=None, headers=None):
+        """One loopback HTTP request; return every status without redirects/retries.
+
+        Keep HTTP/1.1 persistence enabled until the response is consumed. urllib
+        forces Connection: close, which can reset a Windows connection when an
+        early denial leaves the request body unread. Close explicitly afterward.
+        Host overrides remain available for the server's host-boundary tests.
+        """
         data = None if body is None else json.dumps(body).encode()
-        request = urllib.request.Request(self.url + path, data=data, method=method,
-                                         headers={'Content-Type': 'application/json', **(headers or {})})
+        connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=10)
         try:
-            with urllib.request.urlopen(request, timeout=10) as response:
-                return response.status, response.read()
-        except urllib.error.HTTPError as error:
-            return error.code, error.read()
+            connection.request(method, path, body=data,
+                               headers={'Content-Type': 'application/json', **(headers or {})})
+            response = connection.getresponse()
+            return response.status, response.read()
+        finally:
+            connection.close()
 
 
 class Remote:
@@ -209,10 +218,62 @@ def check(condition, message):
     print('ok -', message)
 
 
+def http_transport_scenario():
+    """Regression: retain request bodies/Host and expose early errors verbatim."""
+    observed = []
+
+    class EarlyResponse(http.server.BaseHTTPRequestHandler):
+        protocol_version = 'HTTP/1.1'
+
+        def handle_request(self):
+            status = {'/denied': 401, '/missing': 404, '/redirect': 302, '/ok': 200}[self.path]
+            # Respond before consuming the body, like an auth/router rejection.
+            self.send_response(status)
+            if status == 302:
+                self.send_header('Location', '/ok')
+            self.send_header('Content-Length', '5')
+            self.end_headers()
+            body = self.rfile.read(int(self.headers.get('Content-Length', '0')))
+            observed.append((self.command, self.path, self.headers.get('Host'),
+                             self.headers.get('Connection'), body))
+            self.wfile.write(b'reply')
+            self.wfile.flush()
+
+        do_GET = handle_request
+        do_POST = handle_request
+
+        def log_message(self, *_):
+            pass
+
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), EarlyResponse)
+    server.daemon_threads = True
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    pc = object.__new__(Project)
+    pc.port = server.server_port
+    pc.url = f'http://127.0.0.1:{pc.port}'
+    try:
+        for method, path, payload, status in [
+                ('POST', '/denied', {'collection': 'notes'}, 401),
+                ('POST', '/missing', {'sql': 'SELECT 1'}, 404),
+                ('GET', '/redirect', None, 302),
+                ('POST', '/ok', {'text': 'synthetic'}, 200)]:
+            assert pc.http(method, path, payload, {'Host': 'synthetic.invalid'}) == (status, b'reply')
+            expected = b'' if payload is None else json.dumps(payload).encode()
+            assert observed[-1] == (method, path, 'synthetic.invalid', None, expected), observed[-1]
+        assert len(observed) == 4, 'Requests must not be retried or redirected'
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
+    check(True, 'HTTP test client preserves early responses and bodies without forced close or redirects')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--binary', required=True, type=Path)
     binary = parser.parse_args().binary.resolve()
+    http_transport_scenario()
     with tempfile.TemporaryDirectory(prefix='crew-e2e-') as temp:
         pc = Project(binary, Path(temp))
         try:

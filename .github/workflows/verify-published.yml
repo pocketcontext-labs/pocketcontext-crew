@@ -1,0 +1,85 @@
+name: Verify published Crew release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Existing published version (X.Y.Z); never publishes or changes assets'
+        required: true
+        default: '0.3.1'
+        type: string
+      source:
+        description: 'Expected full source commit of the published binary'
+        required: true
+        default: '920f37a06e38d5f160a5393de725b0fe4525b1fd'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  installed:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_SOURCE: ${{ inputs.source }}
+      PY: ${{ matrix.runner == 'windows-2025' && 'python' || 'python3' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate immutable release selection
+        run: |
+          "$PY" - <<'PYTHON'
+          import os, re
+          assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', os.environ['RELEASE_VERSION'])
+          assert re.fullmatch(r'[0-9a-f]{40}', os.environ['RELEASE_SOURCE'])
+          PYTHON
+      - name: Download and verify published installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir release
+          gh release download "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --dir release --pattern checksums.txt --pattern install.sh --pattern install.ps1
+          "$PY" - <<'PYTHON'
+          import hashlib
+          from pathlib import Path
+          root = Path('release')
+          checksums = dict((line.split()[1], line.split()[0]) for line in (root/'checksums.txt').read_text().splitlines())
+          for name in ('install.sh', 'install.ps1'):
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest() == checksums[name]
+          PYTHON
+      - name: Install on Linux or macOS
+        if: runner.os != 'Windows'
+        run: |
+          dir="$RUNNER_TEMP/Cloud Drive/PocketContext Crew"
+          sh release/install.sh "$dir"
+          echo "EXE=$dir/pocketcontext-crew" >> "$GITHUB_ENV"
+      - name: Install on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:CREW_INSTALL_DIR = Join-Path $env:RUNNER_TEMP 'Cloud Drive\PocketContext Crew'
+          & ./release/install.ps1
+          "EXE=$env:CREW_INSTALL_DIR\pocketcontext-crew.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: Verify published binary and execute current regression tests
+        run: |
+          "$PY" - <<'PYTHON'
+          import os, subprocess
+          observed = subprocess.check_output([os.environ['EXE'], '--version'], text=True).strip()
+          assert observed == 'pocketcontext ' + os.environ['RELEASE_VERSION'] + ' (' + os.environ['RELEASE_SOURCE'] + ')', observed
+          print(observed)
+          PYTHON
+          "$PY" tests/crew_e2e.py --binary "$EXE"
+          "$PY" tests/e2e.py --binary "$EXE"
+      - name: Native Linux restore of the published binary
+        if: runner.os == 'Linux'
+        run: |
+          "$PY" tests/native_install.py --binary "$EXE"
