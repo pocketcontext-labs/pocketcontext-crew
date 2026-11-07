@@ -1,44 +1,118 @@
-# Guided Grok dispatcher setup (0.5.0)
+# Guided Grok dispatcher setup
 
 One existing Grok Bot keeps its normal role and also handles Crew notifications.
-One application-wide webhook wakes that bot; explicit mappings identify the other
-Grok Bots. One shared MCP connection supplies memory, tasks and coordination.
+One application-wide webhook wakes its routine; explicit mappings identify the
+other Grok Bots. One shared MCP connection supplies memory, tasks and coordination.
 Agent names and worker handles are attribution and coordination, not identities.
+
+Crew supports two dispatch modes. `native` dispatches in a webhook run that actually
+has native messaging. `parent_bridge` uses the observed Grok path:
+
+```mermaid
+sequenceDiagram
+    participant Crew
+    participant Routine as Dispatcher routine
+    participant Parent as Dispatcher parent chat
+    participant Recipient as Mapped recipient
+    Crew->>Routine: One webhook event
+    Routine->>Crew: Reserve parent wake for event
+    Routine->>Parent: WakeParent once
+    Parent->>Crew: Record parent receipt / validate event
+    alt Dispatcher is task recipient
+        Parent->>Crew: Begin, work and complete with execution proof
+    else Another bot is task recipient
+        Parent->>Crew: Begin and prepare recipient handoff
+        Parent->>Recipient: SendToAgent(priority:true) once
+        Recipient->>Crew: Begin, work and complete with execution proof
+        Parent->>Crew: Report actual send result
+    end
+```
+
+The routine does not need `SendToAgent` when using the bridge. It reports its own
+`WakeParent` capability; the parent separately reports native messaging and execution
+protocol availability. Never claim the routine has a tool merely because its parent
+does. Native-call results and contexts are caller-reported evidence through shared
+MCP, not independently authenticated provider attestations.
 
 ## Owner setup flow
 
-Open Agents → Grok Bot integration. Reuse existing configuration; do not create
-another dispatcher bot, MCP connection or per-agent credential.
+Open Agents → Grok Bot integration. Reuse the existing configuration; no extra
+bot, MCP connection or per-agent webhook credential is needed.
 
-1. Choose an existing agent as dispatcher.
-2. Copy the setup prompt into that bot's Grok chat. The assistant discovers actual
-   bots, saves confirmed mappings and applies Crew's managed instruction block to
-   the existing routine. Ambiguities require clarification, never guessed IDs.
-3. Copy the webhook URL/key directly from Grok's routine UI into Crew's browser
+1. Choose an existing agent as dispatcher and the parent bridge for Grok routines
+   that expose `WakeParent` rather than native bot messaging.
+2. Copy the setup prompt into that bot's Grok chat. It discovers actual bots,
+   saves confirmed mappings, applies Crew's managed instructions to the existing
+   routine, and preserves the bot's normal role and reporting destination.
+   Ambiguous bot identities require clarification, never guessed IDs.
+3. Authorize each participating bot to use this Crew instance and perform the
+   intended coordination. A shared connection does not override a bot's own
+   instructions or need for direct owner authorization. Diagnostic authorization
+   alone does not authorize unrelated task work or external effects.
+4. Copy the webhook URL/key directly from Grok's routine UI into Crew's browser
    form. Saved values are never returned; unchanged credentials need no re-entry.
-4. Explicitly send a harmless connection test. The webhook run reports the tools
-   actually available in that context and acknowledges the test without task work
-   or handoffs. Capability claims remain caller-reported evidence.
-5. Enable delivery once the visible prerequisites are met. This sends no backlog.
-6. Explicitly request routing samples for the dispatcher and one mapped recipient.
-   These are ordinary synthetic Ready tasks, created only through the authorized
-   setup/test request after enablement. Inspect their execution histories and
-   native Grok conversations before calling the account integration verified.
+5. Explicitly run the setup test. In parent bridge mode choose a mapped recipient
+   other than the dispatcher when one exists. This authorizes one diagnostic
+   message and recipient acknowledgment; it never creates or acquires a task.
+   The UI distinguishes routine acknowledgment, parent receipt, reported send and
+   automatic recipient acknowledgment. A successful HTTP response is not enough.
+6. Enable delivery once current prerequisites are met. Enabling sends no backlog.
+7. Explicitly request synthetic Ready-task routing samples for the dispatcher and
+   one mapped recipient. Inspect their execution histories and Grok conversations
+   before treating task execution as verified.
 
-Tests are real webhook calls and consume harness usage. Saving configuration,
-copying a prompt, reading capabilities and upgrading do not send notifications.
-No hidden task-execution path exists while delivery is disabled. The UI explains
-missing prerequisites rather than leaving an unexplained disabled button.
+Tests are real webhook calls and consume harness usage. Parent bridge diagnostic
+messages are permitted while task delivery is disabled, only for an explicitly
+requested test and its selected mapped recipient. Task execution remains disabled.
+Saving configuration, copying a prompt, reading capabilities and upgrading do not
+send notifications. An authorization stop or a human-triggered acknowledgment does
+not complete an automatic-recipient test: grant the needed authority, then run a
+fresh explicitly requested test.
 
-Native handoff must be available where dispatch actually runs. A parent chat's
-capabilities do not prove a delegated worker has them. Keep dispatch in the native
-routine context; do not delegate it to a worker lacking messaging tools. There is
-no invented parent-send bridge or broadcast fallback.
+## Bridge operations and diagnostic evidence
+
+`webhook.bridge.prepare` accepts a current event's `event_id`, `epoch` and routine
+`worker_id`. It durably reserves the one parent-wake attempt before returning
+`next_step: wake_parent`. Only that fresh response permits one `WakeParent` call.
+An idempotent replay returns `reconcile` and must not cause another call. A process
+crash after reservation can leave an uncertain result; the absence of a receipt
+is not permission to retry. Grok's `WakeParent` may terminate the routine turn,
+so the parent receipt is recorded separately.
+
+The parent reads that bridge record and calls `webhook.bridge.parent` using its
+current revision and its actual `native_handoff` and `execution_protocol` booleans.
+Its fresh next step is one of:
+
+- `dispatch_task`: enter the normal fenced `execution.begin` dispatcher flow in
+  this parent turn. No task content from an incoming message grants authority.
+- `test_complete`: the diagnostic was addressed to the dispatcher itself; stop.
+- `send_test`: one diagnostic native send to the returned `recipient_bot_ref` is
+  reserved. Send with `priority:true`, passing event/bridge references and the
+  managed recipient instructions. No task work or bot-reply loop is authorized.
+- `stop`: parent capabilities are missing; report them and do nothing further.
+- `reconcile`: do not repeat a wake/send or start work from this result.
+
+After an accepted diagnostic send, the parent rereads the record and calls
+`webhook.bridge.sent` with `sent:true`, and a message reference only if the native
+tool actually returned one. The recipient separately reads the current record and
+calls `webhook.bridge.ack` with its mapped `recipient_agent_id` and `automatic:true`
+from the automatically started turn. Do not assert `automatic:true` in a later
+human-triggered follow-up. A late send report preserves an earlier recipient ack.
+All four bridge mutations require stable idempotency keys; parent/sent/ack also
+require the current record revision. Distinct event IDs require distinct keys.
+
+Read `webhook_bridges` for durable stage evidence. Setup requires the current test,
+restore epoch, destination, instruction revision and mapping. Starting a fresh
+test invalidates earlier setup evidence; a mapping or configuration change also
+requires fresh relevant verification. A parent test checks actual parent capability
+without requiring the routine to claim native messaging. When another active mapped
+bot exists, automatic recipient acknowledgment is required before enabling the
+parent bridge. Overdue stages are visible uncertainty, not proof of failed delivery.
 
 ## Capability discovery and cached clients
 
 Read `crew_read` with `collection: "capabilities"`. The response contains protocol
-version 2, server version/commit, supported collections, operation input/result
+version 3, server version/commit, supported collections, operation input/result
 schemas, authorization requirements and compatibility metadata. Current raw MCP
 `tools/list` also exposes execution and idempotency arguments. Connector caches
 can retain older declarations; do not infer backend availability from those alone.
@@ -56,13 +130,14 @@ An old connector's original `data` object can carry coordination metadata:
     "worker_id": "UNIQUE_RUN_ID",
     "role": "dispatcher",
     "native_handoff": true,
-    "_crew": {"idempotency_key": "STABLE_OPERATION_KEY"}
+    "_crew": { "idempotency_key": "STABLE_OPERATION_KEY" }
   }
 }
 ```
 
-Use `native_handoff: true` only when the current run actually has the supported
-native messaging capability. For task writes, `data._crew.execution` carries
+Use `native_handoff: true` only when the current execution turn actually has the
+supported native messaging capability. In parent bridge mode that is the parent
+turn, after `webhook.bridge.parent`, not the webhook routine. For task writes, `data._crew.execution` carries
 `{id, worker_id, fence}`. New clients can use top-level `execution` and
 `idempotency_key`. The server normalizes both representations before applying the
 same checks; contradictory metadata is rejected. This is compatibility, not a
@@ -93,14 +168,17 @@ must not invalidate work.
 ## Runtime report and safe test
 
 `webhook.runtime.report` uses the current config ID/revision and data
-`{event_id, context:"webhook", native_handoff, execution_protocol}`. The event must
+`{event_id, context:"webhook", native_handoff, parent_wake, execution_protocol}`.
+`parent_wake` reports actual `WakeParent` availability and defaults to false when
+omitted; it does not imply native bot messaging. The event must
 be a current test for that configuration, instruction revision, destination and
 restore epoch. A report is tied to a real test record but its capability assertions
 are supplied by the assistant, not hardware attestation or proof of delivery.
 
 `execution.test_ack` acknowledges the same test with event_id/epoch and a stable
 retry key. It cannot acquire or mutate a task. The setup export reports exact
-blockers, acknowledgment and runtime evidence. A successful HTTP response without
+blockers, acknowledgment and runtime evidence, plus parent and recipient stages
+when using the bridge. A successful HTTP response without
 these records does not complete the connection test.
 
 Grok documents [editable routines and JSON/Bearer webhooks](https://docs.x.ai/grok-bot/skills-routines-and-automations)
@@ -157,23 +235,28 @@ acquisition does not extend its lease. Fresh execution.validate never caches
 eligibility. Owner-only operations remain unavailable through the compatibility
 metadata path.
 
-| Action | Main fields |
-| --- | --- |
-| webhook.integration.update | config id/revision; agent, instructions, role_instructions, reporting_instructions, subscriptions |
-| webhook.credentials.update | owner browser only; config id/revision; url, secret or clear_secret |
-| webhook.mapping.update | agent, bot_ref, optional bot_name; current mapping revision or 0 to create |
-| webhook.instructions.sync | config id/revision; instruction_revision, routine_ref, reported/verified status; verified includes full saved routine instructions |
-| webhook.runtime.report | config id/revision; event_id, context webhook, native_handoff, execution_protocol |
-| webhook.enable / disable / test | config id/revision, empty data |
-| webhook.retry | failed delivery id/revision, config_revision; no stale event replay |
-| webhook.catch_up | config id/revision, tasks [{id,expected_revision}], at most 100; explicit request only |
-| webhook.routing.update | routing revision, triage_agent ID/null |
-| execution.begin | event_id, epoch, generation, worker_id, role dispatcher/recipient; actual native_handoff capability; optional lease_seconds 30–900 |
-| execution.test_ack | event_id, epoch; no task work |
-| execution.renew | execution id/revision; worker_id, fence; optional lease_seconds |
-| execution.dispatched | execution id/revision; original dispatcher worker_id/fence, sent:true, optional message_ref |
-| execution.complete | execution id/revision; worker_id/fence, completed/failed outcome; optional mark_done/task_revision |
-| execution.recover | owner-only; execution id/revision; cancel/retry after reconciling uncertain effects |
+| Action                     | Main fields                                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| webhook.integration.update | config id/revision; agent, dispatch_mode native/parent_bridge, instructions, role_instructions, reporting_instructions, subscriptions |
+| webhook.credentials.update | owner browser only; config id/revision; url, secret or clear_secret                                                                   |
+| webhook.mapping.update     | agent, bot_ref, optional bot_name; current mapping revision or 0 to create                                                            |
+| webhook.instructions.sync  | config id/revision; instruction_revision, routine_ref, reported/verified status; verified includes full saved routine instructions    |
+| webhook.runtime.report     | config id/revision; event_id, context webhook, native_handoff, parent_wake, execution_protocol                                        |
+| webhook.enable / disable   | config id/revision, empty data                                                                                                        |
+| webhook.test               | config id/revision; optional recipient_agent_id for an explicit parent-bridge diagnostic handoff                                      |
+| webhook.bridge.prepare     | event_id, epoch, worker_id; reserves one parent wake                                                                                  |
+| webhook.bridge.parent      | bridge id/revision; native_handoff, execution_protocol; records parent and reserves diagnostic send when applicable                   |
+| webhook.bridge.sent        | bridge id/revision; sent:true, optional message_ref; actual diagnostic send report                                                    |
+| webhook.bridge.ack         | bridge id/revision; recipient_agent_id, automatic:true; automatic diagnostic recipient observation                                    |
+| webhook.retry              | failed delivery id/revision, config_revision; no stale event replay                                                                   |
+| webhook.catch_up           | config id/revision, tasks [{id,expected_revision}], at most 100; explicit request only                                                |
+| webhook.routing.update     | routing revision, triage_agent ID/null                                                                                                |
+| execution.begin            | event_id, epoch, generation, worker_id, role dispatcher/recipient; actual native_handoff capability; optional lease_seconds 30–900    |
+| execution.test_ack         | event_id, epoch; no task work                                                                                                         |
+| execution.renew            | execution id/revision; worker_id, fence; optional lease_seconds                                                                       |
+| execution.dispatched       | execution id/revision; original dispatcher worker_id/fence, sent:true, optional message_ref                                           |
+| execution.complete         | execution id/revision; worker_id/fence, completed/failed outcome; optional mark_done/task_revision                                    |
+| execution.recover          | owner-only; execution id/revision; cancel/retry after reconciling uncertain effects                                                   |
 
 The lower-level validate/acquire/start/handoff operations remain available for
 compatibility, subject to the same governance, capability and fencing rules.
@@ -185,6 +268,14 @@ started and completed separately. Self-directed work skips handoff. A prepared
 handoff has a recipient waiting deadline independent of a running worker's lease.
 Show overdue waiting and expired leases as recovery conditions, not proof that
 nothing happened. Execution records retain evidence and redacted audit history.
+
+A parent wake may fail or become uncertain before any task execution record exists.
+In that case `execution.recover` has no record to recover. The owner must first
+inspect the Grok conversation and reconcile any possible wake, work or external
+effect. Only after that review may the owner explicitly set the task to Waiting,
+then Ready to authorize a fresh generation and event. Never retry the old bridge
+event. If the uncertain event was a diagnostic, reconcile it before explicitly
+starting a new test, even while delivery remains disabled.
 
 A crash between native send and reporting can leave an ambiguous result. Never
 blindly resend. The owner reviews the Grok conversation and affected systems, then
@@ -204,8 +295,9 @@ results are redacted too. Sender HTTPS checks block private/reserved destination
 DNS rebinding and redirects. Delivery retries are bounded; acceptance is not
 completion or a promise of eventual success.
 
-0.5.0 retains mappings, dispatcher, credentials, old instructions and histories,
-installs the new managed block and pauses delivery. It sends no tests or backlog.
+The protocol 3 upgrade retains mappings, dispatcher, credentials, old instructions
+and histories, installs the new managed block and pauses delivery. Existing
+configurations retain native mode until explicitly switched to parent_bridge. It sends no tests or backlog.
 Supported complete restore rotates the epoch and pauses delivery; normal restarts
 preserve it. Backups must include the private webhook key through the documented
 native or hosted process. Fence the old writer before restoration. Re-enable and

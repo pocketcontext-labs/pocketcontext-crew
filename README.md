@@ -9,8 +9,9 @@ Crew is a separate product derived from PocketContext source
 schema and application UI. Use a new project database; do not point it at an
 existing PocketContext installation. Crew has no spaces or inherited knowledge APIs. Notes need no publication run.
 
-See [Crew 0.5.0 release notes](docs/releases/0.5.0.md) for guided dispatcher setup, versioned capability discovery, managed instructions and execution fencing before acquisition, plus the
-standalone model and archive-preserving upgrades.
+See [Crew 0.6.0 release notes](docs/releases/0.6.0.md) for the Grok parent bridge,
+recipient-aware setup diagnostics and opt-in public MCP with UI hot reload.
+Task work remains revision checked and fenced; credential entry stays in the owner browser.
 
 ## First version
 

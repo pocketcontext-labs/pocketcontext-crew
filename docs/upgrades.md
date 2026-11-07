@@ -75,3 +75,26 @@ re-enabling. Existing webhook-governed tasks remain subject to execution fencing
 the owner can set Waiting explicitly to release a task for ordinary MCP edits.
 Older connector schemas can discover and use `data._crew` through capabilities;
 refreshing the client's tool schema remains recommended.
+
+## Crew 0.6.0 parent bridge migration
+
+Take a complete stopped backup, including the private webhook key. The migration
+retains the dispatcher, mappings, credentials and history, preserves the previous
+instruction text, installs protocol 3, invalidates old work generations and pauses
+delivery. Existing integrations retain native mode; select parent_bridge explicitly
+for a routine that uses WakeParent. Switching dispatch mode preserves credentials
+but requires synchronization and new diagnostic evidence.
+
+Apply the current managed block to the existing routine and remove retired Crew
+probe overrides, preserving normal role and reporting settings. Authorize the bots
+to use the intended instance before testing. Run an explicit connection test to a
+mapped teammate; parent receipt and an automatic recipient acknowledgment are
+required when other mapped bots exist. Then enable delivery and validate explicitly
+authorized synthetic Ready tasks. Enabling sends no backlog. Native tool-approval
+settings belong to the harness and may still interrupt execution.
+
+Uncertain wakes or sends must be reconciled before a fresh attempt. If a parent
+wake stopped before an execution record exists, the owner can explicitly move the
+task Waiting then Ready after reconciliation to create a new generation. Do not
+replay the old bridge event. Update installed skills with the release so their
+webhook instructions match protocol 3.
