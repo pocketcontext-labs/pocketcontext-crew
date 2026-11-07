@@ -71,7 +71,7 @@ including unchanged assignments; events include normalized old/new responsibilit
 Reads preserve responsible_agent as an ID and add responsible_agent_details with
 id/name or null. The optional filter accepts an ID or unique exact name.
 
-## Ready tasks and global dispatcher integration (0.4.1)
+## Ready tasks and global dispatcher integration (0.5.0)
 
 Tasks expose readiness (waiting by default), waiting_reason and server-managed
 wake_generation. Ready work, assignment, review and invalidation changes share a
@@ -79,3 +79,13 @@ transaction with durable outbox records. Shared MCP manages the global dispatche
 through revision-checked operations; URL and secret entry is owner-browser-only; this does not expose owner decisions or
 general host administration. Read [webhooks](webhooks.md) for the operation and
 receiver contracts, idempotency, destination versions and restore epochs.
+
+## Capability discovery and cached tool schemas
+
+Read collection `capabilities` to discover protocol version, server build, operation
+input/result schemas and the `data._crew` compatibility envelope. MCP clients
+with a cached declaration can supply `data._crew: {idempotency_key, execution}`
+without bypassing checks or exposing owner credentials. Conflicting top-level
+and nested metadata is refused. `execution.begin` atomically validates/acquires
+work. Governed tasks require proof even before an execution exists; explicit owner
+Waiting releases governance. Read the webhook guide for the full lifecycle.

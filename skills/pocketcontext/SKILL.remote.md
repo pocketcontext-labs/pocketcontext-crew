@@ -25,7 +25,9 @@ responsibility is a behavioral convention: read all, write your bucket, request
 changes elsewhere through tasks. It does not grant credentials or isolate data.
 Reported agent names are attribution, not authenticated identity.
 
-Read collections: agents, buckets, notes, note_revisions, tasks, events, reviews,
+Read collection capabilities first for versioned operation schemas. If a cached
+connector omits execution/idempotency_key, use data._crew as documented there;
+never fall back to unfenced writes. Other read collections: agents, buckets, notes, note_revisions, tasks, events, reviews,
 webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings and webhook_executions.
 Follow `next_offset` while `has_more`. Archived records require `archived: true`.
 Writes carry action, data, reported_agent, optional reason, and the current id and
@@ -66,3 +68,11 @@ was actually retrieved and compared. A reported synchronization is not independe
 verification of Grok. Report missing mappings or unsupported harness capabilities.
 Read [webhook operations](references/webhooks.md) before configuring delivery or
 executing webhook-triggered work. Synthetic tests do not certify Grok Bot.
+
+For webhook-triggered work, use execution.begin and its returned next_step and
+proof. On replayed/reconcile responses, do not send or resume work; reconcile the
+current record first. Governed tasks require proof even before acquisition; only an explicit
+owner Waiting transition releases them. Inspect native handoff tools in the actual
+routine context, not a parent chat. Preserve role/reporting text outside the
+managed dispatcher block. Record safe test acknowledgment and runtime capability
+reports honestly; synthetic tests do not certify Grok.

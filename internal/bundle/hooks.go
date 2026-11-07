@@ -31,6 +31,7 @@ func registerHookBindings(vm *goja.Runtime) {
 		// sha256(reader) streams the raw bytes of reader (for example a
 		// filesystem reader of an original) and returns the lowercase hex digest.
 		"sha256":                  readerSHA256,
+		"crewVersion":             func() map[string]string { return map[string]string{"version": Version, "commit": Commit} },
 		"verifyKnowledgeArchive":  verifyKnowledgeArchive,
 		"recordKnowledgeArchive":  recordKnowledgeArchive,
 		"webhookSeal":             webhookSeal,

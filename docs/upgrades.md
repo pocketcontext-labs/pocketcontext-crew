@@ -63,3 +63,15 @@ apply routine instructions and enter the URL/key manually in the owner browser.
 No endpoint is silently adopted and no backlog is sent. Explicit test/enable and
 optional catch-up follow configuration. Do not roll back only the binary after
 a schema migration; use the matching complete backup if rollback is required.
+
+## Crew 0.5.0 managed setup migration
+
+The migration retains the existing dispatcher, mappings, encrypted credentials
+and histories. It replaces the old unstructured instructions with protocol 2's
+managed block, preserves the prior instruction text for inspection, invalidates
+in-flight eligibility and pauses delivery. No tests or tasks are sent on upgrade.
+Apply the current managed block and run the explicit safe connection test before
+re-enabling. Existing webhook-governed tasks remain subject to execution fencing;
+the owner can set Waiting explicitly to release a task for ordinary MCP edits.
+Older connector schemas can discover and use `data._crew` through capabilities;
+refreshing the client's tool schema remains recommended.

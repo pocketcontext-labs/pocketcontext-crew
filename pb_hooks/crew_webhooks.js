@@ -1,3 +1,4 @@
+const setup = require(`${__hooks}/crew_setup.js`);
 // Shared-MCP webhook operations. All callers supply the enclosing transaction.
 const reasons = [
   "reassigned",
@@ -19,8 +20,10 @@ const collections = [
 function bad(message) {
   throw new BadRequestError(message);
 }
-function conflict(message) {
-  throw new ApiError(409, message, {});
+function conflict(message, code = "revision_conflict") {
+  throw new ApiError(409, message, {
+    reason: new ValidationError(code, message),
+  });
 }
 function only(value, fields) {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -54,7 +57,7 @@ function json(record, key, fallback) {
 function routing(app) {
   return rows(app, "webhook_routing", "singleton='routing'")[0];
 }
-function exported(record) {
+function exported(record, app) {
   const result = record.publicExport();
   delete result.secret_ciphertext;
   if (record.collection().name === "crew_webhook_configs") {
@@ -63,6 +66,8 @@ function exported(record) {
     const match = record.getString("url").match(/^https:\/\/([^/:?#]+)/);
     result.receiver_host = match ? match[1] : "";
     delete result.url;
+    if (app && record.getString("scope") === "global")
+      result.setup = setupStatus(app, record);
   }
   return result;
 }
@@ -209,6 +214,10 @@ function enqueue(app, config, payload, t, target) {
     app.findCollectionByNameOrId("crew_webhook_deliveries"),
   );
   const now = new Date();
+  if (t) {
+    t.set("execution_required_generation", t.getInt("wake_generation"));
+    app.save(t);
+  }
   row.set("config", config.id);
   row.set("task", t ? t.id : "");
   row.set("agent", payload.recipient_agent_id || config.getString("agent"));
@@ -224,7 +233,7 @@ function enqueue(app, config, payload, t, target) {
   row.set("deadline_at", new Date(now.getTime() + 86400000).toISOString());
   row.set("revision", 1);
   app.save(row);
-  return exported(row);
+  return exported(row, app);
 }
 function wake(app, t, causes, outcome) {
   const target = route(app, t);
@@ -352,6 +361,82 @@ function instructionsReady(c) {
     ["reported", "verified"].includes(c.getString("sync_status"))
   );
 }
+function setupStatus(app, c) {
+  const test = [];
+  const add = (code, message) => test.push({ code, message });
+  if (!activeAgent(app, c.getString("agent")))
+    add("dispatcher_missing", "Choose an active dispatcher bot.");
+  const mapping = mappingFor(app, c.getString("agent"));
+  if (!mapping || !mapping.getString("bot_ref"))
+    add(
+      "dispatcher_mapping_missing",
+      "Connect the selected dispatcher to its Grok Bot.",
+    );
+  if (!c.getString("url") || !c.getString("secret_ciphertext"))
+    add(
+      "credentials_missing",
+      "Paste the webhook URL and key directly into Crew.",
+    );
+  if (!instructionsReady(c))
+    add(
+      "instructions_not_applied",
+      "Apply instruction revision " +
+        c.getInt("instruction_revision") +
+        " in Grok before testing.",
+    );
+  const rt = routing(app);
+  const runtime =
+    c.getString("runtime_context") === "webhook" &&
+    c.getString("runtime_epoch") === rt.getString("epoch") &&
+    c.getInt("runtime_destination_version") ===
+      c.getInt("destination_version") &&
+    c.getInt("runtime_instruction_revision") ===
+      c.getInt("instruction_revision");
+  const ack =
+    runtime &&
+    rows(
+      app,
+      "webhook_executions",
+      "event_id={:event} && state='test_acknowledged'",
+      { event: c.getString("runtime_event_id") },
+    ).length > 0;
+  const blockers = test.slice();
+  if (!runtime)
+    blockers.push({
+      code: "runtime_unverified",
+      message:
+        "Run the connection test so the webhook routine can report its available tools.",
+    });
+  else {
+    if (!c.getBool("runtime_execution_protocol"))
+      blockers.push({
+        code: "execution_protocol_missing",
+        message:
+          "The webhook routine cannot use the required Crew execution protocol. Refresh its tools and test again.",
+      });
+    if (!c.getBool("runtime_native_handoff"))
+      blockers.push({
+        code: "native_handoff_missing",
+        message:
+          "Native bot messaging is unavailable in the webhook routine. Do not use a parent chat as an assumed bridge.",
+      });
+  }
+  if (!ack)
+    blockers.push({
+      code: "test_ack_missing",
+      message:
+        "Wait for the harmless connection test acknowledgment before enabling.",
+    });
+  return {
+    can_test: test.length === 0,
+    can_enable: blockers.length === 0,
+    test_blockers: test,
+    blockers,
+    test_acknowledged: !!ack,
+    runtime_reported: !!runtime,
+    native_handoff_reported: runtime && c.getBool("runtime_native_handoff"),
+  };
+}
 function requireReady(app, c) {
   if (!activeAgent(app, c.getString("agent")))
     bad("Active dispatcher required");
@@ -415,7 +500,7 @@ function handle(app, b, actor, isAgent) {
           if (agent.getBool("archived")) bad("Restore the agent first");
           if (d.name && agent.getString("name") !== d.name)
             conflict("Agent ID and name do not match");
-          return exported(agent);
+          return exported(agent, app);
         }
         agent = new Record(app.findCollectionByNameOrId("crew_agents"));
         agent.set("name", d.name);
@@ -423,7 +508,7 @@ function handle(app, b, actor, isAgent) {
         agent.set("revision", 1);
         app.save(agent);
         audit(app, agent, b, actor, { name: d.name });
-        return exported(agent);
+        return exported(agent, app);
       }
       if (b.action === "webhook.routing.update") {
         only(d, ["triage_agent"]);
@@ -441,10 +526,15 @@ function handle(app, b, actor, isAgent) {
         rt.set("revision", rt.getInt("revision") + 1);
         app.save(rt);
         audit(app, rt, b, actor, { triage_agent: id });
-        return exported(rt);
+        return exported(rt, app);
       }
       if (b.action === "webhook.mapping.update") {
-        only(d, ["agent", "bot_ref"]);
+        only(d, ["agent", "bot_ref", "bot_name"]);
+        if (
+          d.bot_name !== undefined &&
+          (typeof d.bot_name !== "string" || d.bot_name.length > 200)
+        )
+          bad("Invalid bot display name");
         if (!activeAgent(app, d.agent)) bad("Active agent required");
         if (
           typeof d.bot_ref !== "string" ||
@@ -472,8 +562,12 @@ function handle(app, b, actor, isAgent) {
           }).length
         )
           conflict("Bot reference already maps to another agent");
-        if (m.getInt("revision") > 0 && m.getString("bot_ref") === ref)
-          return exported(m);
+        if (
+          m.getInt("revision") > 0 &&
+          m.getString("bot_ref") === ref &&
+          (d.bot_name === undefined || d.bot_name === m.getString("bot_name"))
+        )
+          return exported(m, app);
         if (m.getString("bot_ref") !== ref) {
           invalidateAgent(app, d.agent, b, actor);
           const global = globalConfig(app);
@@ -493,11 +587,18 @@ function handle(app, b, actor, isAgent) {
             app.save(global);
           }
         }
+        if (
+          m.getString("bot_ref") === ref &&
+          d.bot_name !== undefined &&
+          d.bot_name !== m.getString("bot_name")
+        )
+          invalidateAgent(app, d.agent, b, actor);
         m.set("bot_ref", ref);
+        if (d.bot_name !== undefined) m.set("bot_name", d.bot_name);
         m.set("revision", m.getInt("revision") + 1);
         app.save(m);
         audit(app, m, b, actor, { agent: d.agent, mapping_changed: true });
-        return exported(m);
+        return exported(m, app);
       }
       if (b.action === "webhook.retry") {
         only(d, ["config_revision"]);
@@ -547,7 +648,7 @@ function handle(app, b, actor, isAgent) {
         delivery.set("revision", delivery.getInt("revision") + 1);
         app.save(delivery);
         audit(app, delivery, b, actor, {});
-        return exported(delivery);
+        return exported(delivery, app);
       }
       const c = get(app, "webhook_configs", b.id);
       check(c, b.expected_revision);
@@ -573,7 +674,13 @@ function handle(app, b, actor, isAgent) {
           cancel(app, "config={:config}", { config: c.id });
         }
       } else if (b.action === "webhook.integration.update") {
-        only(d, ["agent", "instructions", "subscriptions"]);
+        only(d, [
+          "agent",
+          "instructions",
+          "subscriptions",
+          "role_instructions",
+          "reporting_instructions",
+        ]);
         validateConfig(app, d);
         let changed = false;
         if (d.agent !== undefined && d.agent !== c.getString("agent")) {
@@ -596,7 +703,13 @@ function handle(app, b, actor, isAgent) {
           )
             bad("Dispatcher instructions required (at most 40000 characters)");
           if (d.instructions !== c.getString("instructions")) {
+            if (setup.managed(d.instructions) !== d.instructions)
+              setup.error(
+                "instructions_mismatch",
+                "Edit only the managed block here; keep role/report settings separately",
+              );
             c.set("instructions", d.instructions);
+            c.set("managed_hash", setup.hash(d.instructions));
             c.set("instruction_revision", c.getInt("instruction_revision") + 1);
             c.set("sync_status", "unverified");
             changed = true;
@@ -609,6 +722,17 @@ function handle(app, b, actor, isAgent) {
         ) {
           c.set("subscriptions", d.subscriptions);
           changed = true;
+        }
+        for (const field of ["role_instructions", "reporting_instructions"]) {
+          if (d[field] !== undefined) {
+            if (typeof d[field] !== "string" || d[field].length > 40000)
+              bad("Invalid role or reporting instructions");
+            if (d[field] !== c.getString(field)) {
+              c.set(field, d[field]);
+              c.set("sync_status", "unverified");
+              changed = true;
+            }
+          }
         }
         if (changed) {
           invalidateConfig(app, c, b, actor);
@@ -636,14 +760,58 @@ function handle(app, b, actor, isAgent) {
           bad("Routine reference required");
         if (
           d.status === "verified" &&
-          d.instructions !== c.getString("instructions")
+          setup.hash(d.instructions) !== c.getString("managed_hash")
         )
-          conflict(
-            "Verified synchronization requires exact routine instruction readback",
+          setup.error(
+            "instructions_mismatch",
+            "The Crew managed instruction block differs; preserve surrounding role/report text and apply the current block",
           );
+        c.set(
+          "applied_hash",
+          d.status === "verified" ? c.getString("managed_hash") : "",
+        );
         c.set("applied_revision", d.instruction_revision);
         c.set("sync_status", d.status);
         c.set("routine_ref", d.routine_ref);
+      } else if (b.action === "webhook.runtime.report") {
+        only(d, [
+          "event_id",
+          "context",
+          "native_handoff",
+          "execution_protocol",
+        ]);
+        if (
+          d.context !== "webhook" ||
+          typeof d.native_handoff !== "boolean" ||
+          typeof d.execution_protocol !== "boolean"
+        )
+          bad("Report actual webhook-run capabilities");
+        const delivery = rows(app, "webhook_deliveries", "event_id={:event}", {
+          event: d.event_id,
+        })[0];
+        const rt = routing(app),
+          p = delivery ? json(delivery, "payload", {}) : {};
+        if (
+          !delivery ||
+          p.event_type !== "webhook.test" ||
+          delivery.getString("config") !== c.id ||
+          delivery.getString("epoch") !== rt.getString("epoch") ||
+          delivery.getInt("destination_version") !==
+            c.getInt("destination_version") ||
+          p.instruction_revision !== c.getInt("instruction_revision")
+        )
+          setup.error(
+            "stale_test",
+            "Runtime report must reference a current connection test",
+          );
+        c.set("runtime_event_id", d.event_id);
+        c.set("runtime_epoch", rt.getString("epoch"));
+        c.set("runtime_context", "webhook");
+        c.set("runtime_destination_version", c.getInt("destination_version"));
+        c.set("runtime_instruction_revision", c.getInt("instruction_revision"));
+        c.set("runtime_native_handoff", d.native_handoff);
+        c.set("runtime_execution_protocol", d.execution_protocol);
+        c.set("runtime_reported_at", new Date().toISOString());
       } else if (
         b.action === "webhook.enable" ||
         b.action === "webhook.disable"
@@ -652,6 +820,13 @@ function handle(app, b, actor, isAgent) {
         const enabled = b.action === "webhook.enable";
         if (enabled) {
           requireReady(app, c);
+          const status = setupStatus(app, c);
+          if (!status.can_enable)
+            setup.error(
+              status.blockers[0].code,
+              status.blockers[0].message,
+              400,
+            );
           const rt = routing(app);
           if (rt.getBool("paused")) {
             rt.set("paused", false);
@@ -667,12 +842,17 @@ function handle(app, b, actor, isAgent) {
         only(d, []);
         requireReady(app, c);
         const rt = routing(app);
-        if (rt.getBool("paused"))
-          bad("Delivery is paused after restore; enable explicitly first");
+        // Explicit test resumes transport only; restored integrations remain disabled.
+        if (rt.getBool("paused")) {
+          rt.set("paused", false);
+          rt.set("revision", rt.getInt("revision") + 1);
+          app.save(rt);
+        }
         const payload = {
           schema_version: 1,
           event_id: $pocketcontext.webhookUUID(),
           event_type: "webhook.test",
+          instruction_revision: c.getInt("instruction_revision"),
           test: true,
           dispatcher_agent_id: c.getString("agent"),
           recipient_agent_id: c.getString("agent"),
@@ -727,7 +907,7 @@ function handle(app, b, actor, isAgent) {
         destination_version: c.getInt("destination_version"),
         credential_changed: d.secret !== undefined || !!d.clear_secret,
       });
-      return exported(c);
+      return exported(c, app);
     },
     [
       "agent.ensure",

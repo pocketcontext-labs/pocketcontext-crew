@@ -33,7 +33,8 @@ func webhookOperation(t *testing.T, a *testApp, action, id string, revision int,
 	}
 	raw, _ := json.Marshal(b)
 	route := "/api/crew/agent-write"
-	if action == "webhook.credentials.update" {
+	// Lifecycle tests change eligibility as the owner; agent fencing has dedicated tests.
+	if action == "webhook.credentials.update" || action == "task.update" || action == "task.comment" {
 		route = "/api/crew/write"
 	}
 	return a.request(t, "POST", route, a.token, string(raw), 200)
@@ -53,6 +54,14 @@ func webhookFixture(t *testing.T) (*testApp, *core.Record, *core.Record, *core.R
 	c["revision"] = float64(global.GetInt("revision"))
 	c = webhookOperation(t, a, "webhook.credentials.update", global.Id, int(c["revision"].(float64)), map[string]any{"url": "https://93.184.216.34/receiver", "secret": "synthetic-bearer"}, "")
 	c = webhookOperation(t, a, "webhook.instructions.sync", global.Id, int(c["revision"].(float64)), map[string]any{"instruction_revision": c["instruction_revision"], "routine_ref": "synthetic-routine", "status": "reported"}, "")
+	test := webhookOperation(t, a, "webhook.test", global.Id, int(c["revision"].(float64)), map[string]any{}, "fixture-test")
+	c = webhookOperation(t, a, "webhook.runtime.report", global.Id, int(c["revision"].(float64)), map[string]any{"event_id": test["event_id"], "context": "webhook", "native_handoff": true, "execution_protocol": true}, "fixture-runtime")
+	webhookOperation(t, a, "execution.test_ack", "", 0, map[string]any{"event_id": test["event_id"], "epoch": test["epoch"]}, "fixture-ack")
+	testDelivery, _ := a.app.FindRecordById("crew_webhook_deliveries", test["id"].(string))
+	testDelivery.Set("state", "accepted")
+	if err := a.app.Save(testDelivery); err != nil {
+		t.Fatal(err)
+	}
 	c = webhookOperation(t, a, "webhook.enable", global.Id, int(c["revision"].(float64)), map[string]any{}, "")
 	task := webhookOperation(t, a, "task.create", "", 0, map[string]any{"title": "Synthetic actionable task", "assigned_agent": agent["id"], "readiness": "ready"}, "")
 	config, e := a.app.FindRecordById("crew_webhook_configs", c["id"].(string))

@@ -29,6 +29,14 @@ beforeEach(() => {
     url_configured: true,
     receiver_host: "hooks.example",
     subscriptions: ["created", "ready"],
+    setup: {
+      can_test: true,
+      can_enable: true,
+      blockers: [],
+      test_blockers: [],
+      test_acknowledged: true,
+      runtime_reported: true,
+    },
   };
   fixtures = {
     webhook_configs: [config],
@@ -50,10 +58,15 @@ async function open() {
   // The first data render can precede the loading promise's finally callback.
   // fireEvent can edit disabled controls, unlike a user; wait for the form to
   // become interactive before typing into mount-initialized mapping fields.
-  const instructions = await screen.findByRole("textbox", {
-    name: "Routine instructions",
+  const selector = await screen.findByRole("combobox", {
+    name: "Crew dispatcher",
   });
-  await waitFor(() => expect(instructions).toBeEnabled());
+  await waitFor(() => expect(selector).toBeEnabled());
+  fireEvent.click(screen.getByText("Advanced settings and recovery"));
+  const credentialDetails = screen.getByText("Replace saved credentials");
+  fireEvent.click(credentialDetails);
+  const recovery = screen.queryByText("Recover interrupted work");
+  if (recovery) fireEvent.click(recovery);
 }
 it("saves manually entered credentials without enabling or testing and clears both fields", async () => {
   await open();
@@ -98,15 +111,12 @@ it("preserves a retry key after a lost response and never renders raw errors", a
 });
 it("selects one dispatcher via global configuration without updating credentials", async () => {
   await open();
-  expect(
-    screen.getByRole("checkbox", { name: "Use Build as Crew dispatcher" }),
-  ).toBeChecked();
-  expect(
-    screen.getByRole("checkbox", { name: "Use Learn as Crew dispatcher" }),
-  ).not.toBeChecked();
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "Use Learn as Crew dispatcher" }),
+  expect(screen.getByRole("combobox", { name: "Crew dispatcher" })).toHaveValue(
+    "build",
   );
+  fireEvent.change(screen.getByRole("combobox", { name: "Crew dispatcher" }), {
+    target: { value: "learn" },
+  });
   await waitFor(() =>
     expect(crewApi.write).toHaveBeenCalledWith(
       "webhook.integration.update",
@@ -139,8 +149,11 @@ it("creates a recipient mapping with an explicit zero revision", async () => {
 });
 it("blocks enable and tests when instruction changes have not been applied", async () => {
   config.applied_revision = 1;
+  delete config.setup;
   await open();
-  expect(screen.getByText(/Update needed/)).toBeInTheDocument();
+  expect(
+    screen.getAllByText(/Instructions not applied/)[0],
+  ).toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Enable delivery" }),
   ).toBeDisabled();
@@ -160,7 +173,7 @@ it("distinguishes reported instruction sync from verified and delivery from exec
     { id: "execution", revision: 1, delivery: "delivery", state: "running" },
   ];
   await open();
-  expect(screen.getByText(/Applied — verification needed/)).toBeInTheDocument();
+  expect(screen.getAllByText(/Application reported/)[0]).toBeInTheDocument();
   expect(screen.getByText("Accepted by receiver")).toBeInTheDocument();
   expect(screen.getByText("Execution started")).toBeInTheDocument();
   expect(screen.queryByText("Completed")).not.toBeInTheDocument();
@@ -186,14 +199,16 @@ it("requires outcome review before recovery and does not resend a webhook", asyn
     target: { value: execution.id },
   });
   expect(
-    screen.getByRole("button", { name: "Authorize retry" }),
+    screen.getByRole("button", { name: "Authorize another attempt" }),
   ).toBeDisabled();
   fireEvent.click(
     screen.getByLabelText(
       "I reviewed the uncertain outcome and any external actions.",
     ),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Authorize retry" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Authorize another attempt" }),
+  );
   await waitFor(() =>
     expect(crewApi.write).toHaveBeenCalledWith(
       "execution.recover",
@@ -217,11 +232,7 @@ it("shows unmapped agents and does not offer recovery for active or terminal wor
     { id: "completed", revision: 1, state: "completed" },
   ];
   await open();
-  expect(
-    screen.getByText(
-      "No Grok Bot mapping. Ready tasks for this agent cannot be routed.",
-    ),
-  ).toBeInTheDocument();
+  expect(screen.getByText(/Not mapped/)).toBeInTheDocument();
   expect(
     screen.queryByLabelText("Execution to recover"),
   ).not.toBeInTheDocument();
@@ -247,4 +258,89 @@ it("distinguishes prepared handoff from reported sent handoff", async () => {
   ];
   await open();
   expect(screen.getByText("Handoff reported")).toBeInTheDocument();
+});
+
+it("shows server blockers beside safe test and enable without sending anything", async () => {
+  config.setup = {
+    can_test: false,
+    can_enable: false,
+    test_acknowledged: false,
+    test_blockers: [
+      { code: "sync", message: "Apply the current managed block." },
+    ],
+    blockers: [
+      {
+        code: "runtime",
+        message: "The webhook routine has not reported native handoff.",
+      },
+    ],
+  };
+  await open();
+  expect(screen.getByRole("button", { name: "Send test" })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Enable delivery" }),
+  ).toBeDisabled();
+  expect(screen.getByText("Apply the current managed block.")).toBeVisible();
+  expect(
+    screen.getByText("The webhook routine has not reported native handoff."),
+  ).toBeVisible();
+  expect(crewApi.write).not.toHaveBeenCalled();
+});
+it("copies one nonsecret setup prompt with current capability discovery", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Copy setup prompt" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+  const prompt = writeText.mock.calls[0][0];
+  expect(prompt).toContain("collection capabilities");
+  expect(prompt).toContain("data._crew");
+  expect(prompt).toContain('"Build"');
+  expect(prompt).not.toContain("hooks.example");
+  expect(crewApi.write).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("button", { name: "Copy routing test prompt" }),
+  ).toBeDisabled();
+});
+it("keeps role and reporting instructions outside the read-only managed block", async () => {
+  await open();
+  expect(
+    screen.getByRole("textbox", { name: "Routine instructions" }),
+  ).toHaveAttribute("readonly");
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Reporting instructions" }),
+    { target: { value: "Report task links" } },
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Save advanced settings" }),
+  );
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "webhook.integration.update",
+      {
+        subscriptions: ["created", "ready"],
+        role_instructions: "",
+        reporting_instructions: "Report task links",
+      },
+      config,
+      "",
+      { idempotency_key: expect.any(String) },
+    ),
+  );
+});
+
+it("explains a managed block mismatch instead of claiming a revision conflict", async () => {
+  vi.mocked(crewApi.write).mockRejectedValue({
+    status: 409,
+    response: { data: { reason: { code: "instructions_mismatch" } } },
+  });
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Enable delivery" }));
+  await screen.findByText(/managed block does not match Crew/);
+  expect(
+    screen.queryByText(/configuration changed elsewhere/),
+  ).not.toBeInTheDocument();
 });

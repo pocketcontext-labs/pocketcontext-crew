@@ -9,7 +9,7 @@ Crew is a separate product derived from PocketContext source
 schema and application UI. Use a new project database; do not point it at an
 existing PocketContext installation. Crew has no spaces or inherited knowledge APIs. Notes need no publication run.
 
-See [Crew 0.4.1 release notes](docs/releases/0.4.1.md) for one global dispatcher webhook, manual browser credential entry, instruction synchronization and durable execution coordination, plus the
+See [Crew 0.5.0 release notes](docs/releases/0.5.0.md) for guided dispatcher setup, versioned capability discovery, managed instructions and execution fencing before acquisition, plus the
 standalone model and archive-preserving upgrades.
 
 ## First version

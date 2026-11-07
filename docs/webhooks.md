@@ -1,158 +1,212 @@
-# One global dispatcher webhook (0.4.1)
+# Guided Grok dispatcher setup (0.5.0)
 
-Crew sends task wake signals to one Grok webhook routine on an existing bot. That
-bot keeps its normal brief and also dispatches Crew work. If it is the recipient,
-it handles work itself; otherwise it sends a targeted native Grok handoff. All
-bots use the existing shared MCP connection. Agent names and bucket responsibility
-are behavioral attribution, not separate credentials or access boundaries.
+One existing Grok Bot keeps its normal role and also handles Crew notifications.
+One application-wide webhook wakes that bot; explicit mappings identify the other
+Grok Bots. One shared MCP connection supplies memory, tasks and coordination.
+Agent names and worker handles are attribution and coordination, not identities.
 
-## Setup
+## Owner setup flow
 
-1. Reuse or create the user's agents with `agent.ensure` and stable retry keys.
-2. Select one existing active agent as dispatcher and map agents to unambiguous
-   Grok Bot references. Never create an extra dispatcher bot automatically.
-3. Read the canonical dispatcher instructions from Crew and create/update the
-   webhook routine inside Grok using supported harness capabilities.
-4. The owner copies the URL and key from Grok's routine UI directly into Crew's
-   integration form. Never request them in chat, put them in notes, or pass them
-   to MCP. Configuration reads never return the URL, secret or ciphertext.
-5. Record the instruction revision applied to the routine. Matching supplied
-   readback text can be recorded as verified; without readback report application
-   only. This evidence is supplied by the caller, not independently fetched by Crew.
-6. Saving sends nothing. Explicitly test, inspect the acknowledgment, verify the
-   intended bot handoff, then enable. Enabling never scans or replays old tasks.
+Open Agents → Grok Bot integration. Reuse existing configuration; do not create
+another dispatcher bot, MCP connection or per-agent credential.
 
-One global selection determines the dispatcher. Changing it clears credentials
-and synchronization state and pauses delivery until the new routine binding is
-configured. Changing instructions also disables delivery and invalidates old
-work. Legacy per-agent configurations remain disabled for historical inspection;
-new legacy create/update operations are refused.
+1. Choose an existing agent as dispatcher.
+2. Copy the setup prompt into that bot's Grok chat. The assistant discovers actual
+   bots, saves confirmed mappings and applies Crew's managed instruction block to
+   the existing routine. Ambiguities require clarification, never guessed IDs.
+3. Copy the webhook URL/key directly from Grok's routine UI into Crew's browser
+   form. Saved values are never returned; unchanged credentials need no re-entry.
+4. Explicitly send a harmless connection test. The webhook run reports the tools
+   actually available in that context and acknowledges the test without task work
+   or handoffs. Capability claims remain caller-reported evidence.
+5. Enable delivery once the visible prerequisites are met. This sends no backlog.
+6. Explicitly request routing samples for the dispatcher and one mapped recipient.
+   These are ordinary synthetic Ready tasks, created only through the authorized
+   setup/test request after enablement. Inspect their execution histories and
+   native Grok conversations before calling the account integration verified.
 
-Grok documents [editable routines and Bearer/JSON webhooks](https://docs.x.ai/grok-bot/skills-routines-and-automations)
-and [asynchronous bot handoffs](https://docs.x.ai/grok-bot/chat-and-collaboration).
-A webhook-triggered handoff, busy-bot behavior and routine readback need validation
-in the user's account. Team policy can restrict bot messaging. Synthetic Crew
-fixtures do not certify Grok Bot. HTTP acceptance does not establish execution.
+Tests are real webhook calls and consume harness usage. Saving configuration,
+copying a prompt, reading capabilities and upgrading do not send notifications.
+No hidden task-execution path exists while delivery is disabled. The UI explains
+missing prerequisites rather than leaving an unexplained disabled button.
 
-## Readiness and routing
+Native handoff must be available where dispatch actually runs. A parent chat's
+capabilities do not prove a delegated worker has them. Keep dispatch in the native
+routine context; do not delegate it to a worker lacking messaging tools. There is
+no invented parent-send bridge or broadcast fallback.
 
-Tasks default to `readiness: waiting`; assignment alone does not wake an agent.
-Set `readiness: ready` explicitly when work can begin and use `waiting_reason` for
-prerequisites. A wake requires an unarchived ready task in todo/in_progress, no
-pending review, an active recipient, a configured bot mapping and an enabled
-subscribed global integration. Optional single-agent triage handles unassigned
-work; no broadcast or inferred owner is allowed.
+## Capability discovery and cached clients
 
-Subscriptions are `created`, `assigned`, `reassigned`, `unassigned`, `ready`,
-`reopened`, `review_outcome` and `catch_up`. Match every qualifying cause, but emit
-one event per actionable transition. Ordinary comments, metadata edits and delivery
-records do not wake bots. Generation changes invalidate previous work when the
-task stops being eligible or routing changes. Editing a pending draft withdraws
-review and leaves the task waiting. Review resolution allows reassessment only;
-approval never performs an external action.
+Read `crew_read` with `collection: "capabilities"`. The response contains protocol
+version 2, server version/commit, supported collections, operation input/result
+schemas, authorization requirements and compatibility metadata. Current raw MCP
+`tools/list` also exposes execution and idempotency arguments. Connector caches
+can retain older declarations; do not infer backend availability from those alone.
 
-Crew owns task assignment. A mapping resolves the Crew agent ID to a Grok Bot
-reference. Prefer stable harness identifiers where available; do not guess from
-ambiguous names. The selected dispatcher follows the explicit recipient, not an
-LLM guess about which specialist seems suitable.
+An old connector's original `data` object can carry coordination metadata:
 
-## Configuration API
+```json
+{
+  "action": "execution.begin",
+  "reported_agent": "Build",
+  "data": {
+    "event_id": "EVENT_ID",
+    "epoch": "CURRENT_EPOCH",
+    "generation": 1,
+    "worker_id": "UNIQUE_RUN_ID",
+    "role": "dispatcher",
+    "native_handoff": true,
+    "_crew": {"idempotency_key": "STABLE_OPERATION_KEY"}
+  }
+}
+```
 
-Read `webhook_configs`, `webhook_mappings`, `webhook_routing`,
-`webhook_deliveries`, `webhook_attempts` and `webhook_executions`; follow pagination.
-Configuration reads return safe endpoint metadata and credential presence only.
-The global configuration is created disabled by migration. Read it before writes.
-All operations use the normal revision-checked transaction and audit history.
+Use `native_handoff: true` only when the current run actually has the supported
+native messaging capability. For task writes, `data._crew.execution` carries
+`{id, worker_id, fence}`. New clients can use top-level `execution` and
+`idempotency_key`. The server normalizes both representations before applying the
+same checks; contradictory metadata is rejected. This is compatibility, not a
+privilege bypass. Never fall back to an unfenced update if coordination fails.
 
-| Action | Fields |
+## Managed instructions and synchronization
+
+The canonical dispatcher block is delimited by exactly one pair of markers:
+`<!-- crew-dispatch:begin -->` and `<!-- crew-dispatch:end -->`.
+The SHA-256 comparison covers that exact block. Meaningful changes inside it,
+duplicate markers and malformed boundaries are rejected; no loose normalization
+silently removes instructions. Role and reporting instructions remain outside it.
+The assistant must preserve Grok's reporting destination and other outside text.
+
+Configuration stores instruction revision, managed hash, applied revision/hash,
+routine reference and reported synchronization state. `reported` means the caller
+says it applied the block. `verified` means supplied saved text contained the
+matching block; it is not an independent Crew-to-Grok inspection. UI labels
+maintain this distinction. Error data.reason.code includes `instructions_mismatch` or
+`revision_conflict` so a content mismatch is not mistaken for a stale record.
+
+Changing instructions pauses delivery and invalidates prior setup evidence.
+Changing the selected dispatcher requires a new webhook binding and clears the
+old credentials; editing the current managed protocol during upgrade preserves
+credentials. Mapping changes invalidate affected routing. No-op mapping saves
+must not invalidate work.
+
+## Runtime report and safe test
+
+`webhook.runtime.report` uses the current config ID/revision and data
+`{event_id, context:"webhook", native_handoff, execution_protocol}`. The event must
+be a current test for that configuration, instruction revision, destination and
+restore epoch. A report is tied to a real test record but its capability assertions
+are supplied by the assistant, not hardware attestation or proof of delivery.
+
+`execution.test_ack` acknowledges the same test with event_id/epoch and a stable
+retry key. It cannot acquire or mutate a task. The setup export reports exact
+blockers, acknowledgment and runtime evidence. A successful HTTP response without
+these records does not complete the connection test.
+
+Grok documents [editable routines and JSON/Bearer webhooks](https://docs.x.ai/grok-bot/skills-routines-and-automations)
+and [native asynchronous handoffs](https://docs.x.ai/grok-bot/chat-and-collaboration).
+Tool availability in a webhook run and recipient behavior require account-level
+verification. Crew's synthetic tests do not certify Grok or its team policy.
+
+## Governed tasks and atomic execution
+
+Tasks default to Waiting. Ready work in todo/in_progress, with no pending review,
+an active recipient, a mapping and an enabled subscribed integration can emit a
+wake. The task and outbox record commit atomically. A persisted governance marker
+is set at enqueue, before any worker acquires the event.
+
+MCP task mutations and review requests for governed tasks require a valid running
+execution proof even when no execution record exists yet. Governance persists
+after completion, invalidation and lease expiry; omitting proof cannot restore
+ordinary access. The owner can explicitly set Waiting to release a task from
+coordination. Owner edits remain authoritative. Non-governed tasks retain ordinary
+revision-checked MCP behavior. These rules coordinate the shared principal, not
+independently authenticated bots.
+
+`execution.begin` validates current epoch, generation, destination, mapping,
+assignment, readiness and review state and acquires coordination in one transaction.
+Its result includes the execution record, `execution` proof, authoritative
+`task_context`, explicit recipient identifiers and `next_step`:
+
+- `self_work`: the dispatcher is the recipient and can work immediately.
+- `handoff`: the dispatcher has prepared recipient acquisition; send one short
+  native message to the returned bot reference.
+- `work`: the recipient acquired its prepared handoff and can work.
+- `reconcile`: an idempotent replay; inspect the fresh record and do not send or
+  start work from this response. Replayed responses omit the old work proof.
+
+For cross-bot routing, report actual native messaging capability in the begin call;
+missing capability must stop before a prepared send is claimed. After a successful
+native send, `execution.dispatched` records `sent:true` with the original dispatcher
+worker/fence, current record revision and optional non-secret message reference.
+Do not fabricate a receipt. “Handoff reported” is not independent recipient receipt.
+A recipient may start before this report; the late report must not replace its lease.
+
+Renew during long work. Include proof on task writes and review requests. Use a
+stable key for proof-bearing comments so a lost response cannot create a second
+pong. Complete through `execution.complete`; `mark_done:true` plus task_revision
+commits task completion and execution outcome together. Review/Waiting/reassignment
+changes invalidate previous authority; later eligible work uses a new generation.
+
+## Operation reference
+
+Read capabilities for the current machine-readable schemas. All mutations are
+revision checked; stable idempotency keys are required for execution mutations,
+proof-bearing comments, agent.ensure and webhook.test/catch_up. Replaying an
+acquisition does not extend its lease. Fresh execution.validate never caches
+eligibility. Owner-only operations remain unavailable through the compatibility
+metadata path.
+
+| Action | Main fields |
 | --- | --- |
-| `webhook.integration.update` | config id/expected_revision; data.agent (dispatcher), instructions, subscriptions |
-| `webhook.credentials.update` | **Owner browser only**; config id/expected_revision; url, secret or clear_secret |
-| `webhook.instructions.sync` | config id/expected_revision; instruction_revision, routine_ref, status reported/verified; verified requires matching instructions readback |
-| `webhook.mapping.update` | data.agent, bot_ref; expected_revision of existing mapping, or 0 to create |
-| `webhook.enable` / `webhook.disable` | config id/expected_revision, empty data |
-| `webhook.test` | config id/expected_revision, empty data; required idempotency_key |
-| `webhook.retry` | failed delivery id/expected_revision; data.config_revision |
-| `webhook.catch_up` | config id/expected_revision; tasks [{id,expected_revision}]; required idempotency_key |
-| `webhook.routing.update` | routing expected_revision; triage_agent ID or null |
+| webhook.integration.update | config id/revision; agent, instructions, role_instructions, reporting_instructions, subscriptions |
+| webhook.credentials.update | owner browser only; config id/revision; url, secret or clear_secret |
+| webhook.mapping.update | agent, bot_ref, optional bot_name; current mapping revision or 0 to create |
+| webhook.instructions.sync | config id/revision; instruction_revision, routine_ref, reported/verified status; verified includes full saved routine instructions |
+| webhook.runtime.report | config id/revision; event_id, context webhook, native_handoff, execution_protocol |
+| webhook.enable / disable / test | config id/revision, empty data |
+| webhook.retry | failed delivery id/revision, config_revision; no stale event replay |
+| webhook.catch_up | config id/revision, tasks [{id,expected_revision}], at most 100; explicit request only |
+| webhook.routing.update | routing revision, triage_agent ID/null |
+| execution.begin | event_id, epoch, generation, worker_id, role dispatcher/recipient; actual native_handoff capability; optional lease_seconds 30–900 |
+| execution.test_ack | event_id, epoch; no task work |
+| execution.renew | execution id/revision; worker_id, fence; optional lease_seconds |
+| execution.dispatched | execution id/revision; original dispatcher worker_id/fence, sent:true, optional message_ref |
+| execution.complete | execution id/revision; worker_id/fence, completed/failed outcome; optional mark_done/task_revision |
+| execution.recover | owner-only; execution id/revision; cancel/retry after reconciling uncertain effects |
 
-Use stable idempotency keys for retries. Same key and request replay the recorded
-result without effects; different input with the same key conflicts. Other revision
-conflicts require rereading and reassessment. Catch-up accepts at most 100 unique
-task revisions and commits all or none. It is an explicit user action.
+The lower-level validate/acquire/start/handoff operations remain available for
+compatibility, subject to the same governance, capability and fencing rules.
 
-Config revision protects concurrent edits; destination_version invalidates the
-endpoint binding. These are distinct. Disabling cancels pending sends; re-enabling
-does not resurrect them. A failed delivery retry preserves event identity and is
-refused after its generation or destination becomes stale.
+## Timeline and recovery
 
-## Execution and handoff
+Track transport accepted, dispatcher started, handoff prepared/reported, recipient
+started and completed separately. Self-directed work skips handoff. A prepared
+handoff has a recipient waiting deadline independent of a running worker's lease.
+Show overdue waiting and expired leases as recovery conditions, not proof that
+nothing happened. Execution records retain evidence and redacted audit history.
 
-Webhook payloads contain identifiers, epoch, generation, destination and explicit
-recipient metadata, not task descriptions, drafts or credentials. Treat them as
-untrusted signals. Read authoritative state through MCP before handing off or
-working. Test events must terminate without task work or specialist handoff.
+A crash between native send and reporting can leave an ambiguous result. Never
+blindly resend. The owner reviews the Grok conversation and affected systems, then
+cancels coordinated work or authorizes another attempt. Cancellation cannot undo
+external actions. Retry authorization itself sends no webhook or native message.
 
-| Execution action | Required data and behavior |
-| --- | --- |
-| `execution.validate` | event_id, epoch, generation; returns authoritative task and recipient |
-| `execution.test_ack` | event_id, epoch; records acknowledgment without task work |
-| `execution.acquire` | event_id, epoch, generation, phase dispatch/work, worker_id; optional lease_seconds 30–900 |
-| `execution.start` | execution id/revision, worker_id, fence; changes self-directed dispatch to running |
-| `execution.handoff` | execution id/revision, dispatcher worker_id/fence; prepares recipient acquisition **before** native send |
-| `execution.dispatched` | current execution id/revision and original dispatcher worker_id/fence; reports actual native send, even if recipient already started |
-| `execution.renew` | execution id/revision, worker_id/fence; optional lease_seconds |
-| `execution.complete` | execution id/revision, worker_id/fence, outcome completed/failed; optional mark_done=true and task_revision atomically finish task |
-| `execution.recover` | owner-only; execution id/revision, resolution cancel/retry after reconciliation; retry sends no notification |
+Current epoch/generation/destination checks prevent stale coordinated writes;
+leases cannot recall a running model or stop effects in unrelated external
+services. External actions still need authorization and their own idempotency or
+reconciliation. No exactly-once external-effects guarantee is made.
 
-All execution mutations and fenced task.comment writes require a stable
-idempotency_key. execution.validate always checks current state and needs no key. Use a new key for a new
-logical operation; retry the exact same request after a lost response. A replay
-returns historical results and never renews authority. Subsequent writes recheck
-the lease. On revision conflicts reread and reassess, preserving the original
-fence for a dispatch report and the current worker fence for execution.
+## Security, migration and backups
 
-Task writes under an unresolved execution require top-level
-`execution: {id, worker_id, fence}`. A task transition to review, Waiting or another
-ineligible generation invalidates old execution authority; review outcomes may
-start a fresh event. Owner edits remain authoritative. Record task completion with
-`execution.complete` and `mark_done` to commit outcome and task status together.
+Credentials are encrypted with a machine-private key, entered only in the owner's
+browser and absent from MCP reads, audit payloads and errors. Historical retry
+results are redacted too. Sender HTTPS checks block private/reserved destinations,
+DNS rebinding and redirects. Delivery retries are bounded; acceptance is not
+completion or a promise of eventual success.
 
-Use the execution operations in the current tool schema to validate and acquire
-work before acting. Assigned-task execution is distinct from `task.claim`, which
-only assigns unassigned tasks. Execution acquisition checks epoch, generation,
-routing, review and readiness in one transaction. Durable leases and fencing
-prevent concurrent acquisition and stale recorded updates. Expired or ambiguous
-handoffs/runs require explicit recovery, not automatic repeated external effects.
-
-Prepare the handoff before sending so a fast recipient can acquire work; report
-the actual native send separately. A handoff can succeed while its response or
-completion record is lost. Retrying
-may send a duplicate Grok message. The receiving bot must acquire the execution
-before doing work. Prompts alone do not guarantee serialization. A lease cannot
-recall a running bot or prevent effects in an unrelated external service: use
-external idempotency or reconcile uncertain outcomes before resuming.
-
-Record transport acceptance, dispatch, execution start and outcome separately.
-Self-directed work skips the handoff stage. A reported handoff is not evidence of
-recipient execution. Instructions and reported names do not authenticate a bot;
-the shared MCP principal remains the authorization boundary.
-
-## Delivery, security and recovery
-
-The task mutation and outbox insertion commit atomically. The Go dispatcher uses
-the existing writer, bounded retries and leases. It records immutable attempt
-starts and finishes; an unfinished attempt means an unknown outcome. HTTPS
-validation rejects private/reserved destinations and DNS rebinding, pins resolved
-addresses, and refuses redirects and proxies. Secrets are encrypted using a
-machine-private key and redacted from reads, audit payloads and errors.
-
-Supported complete restoration rotates the delivery epoch and disables delivery.
-Normal restarts preserve it. Backups must retain the private webhook key through
-the documented native helper or hosted runtime backup. A copied project database
-alone cannot recover credentials. Fence the old writer; explicitly re-enable and
-catch up only after recovery is accepted.
-
-One webhook simplifies setup, not necessarily usage. A dispatcher run plus a
-specialist run can cost more than direct delivery. Suppress unnecessary wakes,
-keep routing context short and avoid acknowledgment loops; measure real usage.
+0.5.0 retains mappings, dispatcher, credentials, old instructions and histories,
+installs the new managed block and pauses delivery. It sends no tests or backlog.
+Supported complete restore rotates the epoch and pauses delivery; normal restarts
+preserve it. Backups must include the private webhook key through the documented
+native or hosted process. Fence the old writer before restoration. Re-enable and
+catch up explicitly only after recovery and setup verification.

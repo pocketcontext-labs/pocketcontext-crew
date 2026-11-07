@@ -326,3 +326,77 @@ func TestWebhookHistoricalIdempotencyReplayRedactsLegacyURL(t *testing.T) {
 		t.Fatal("legacy replay exposed receiver", string(body))
 	}
 }
+
+func TestWebhookAPIManagedBlockAndStructuredConflicts(t *testing.T) {
+	a, c, _, _ := webhookFixture(t)
+	block := c.GetString("instructions")
+	data := map[string]any{"instruction_revision": c.GetInt("instruction_revision"), "routine_ref": "routine", "status": "verified", "instructions": "Keep my normal role.\n" + block + "\nAlways report in the routine UI."}
+	result := webhookOperation(t, a, "webhook.instructions.sync", c.Id, c.GetInt("revision"), data, "")
+	if result["applied_hash"] != c.GetString("managed_hash") || result["sync_status"] != "verified" {
+		t.Fatal(result)
+	}
+	data["instructions"] = strings.Replace(block, "Never request", "Always request", 1)
+	response := executionOperation(t, a, "webhook.instructions.sync", c.Id, int(result["revision"].(float64)), data, "", false, 409)
+	reason := response["data"].(map[string]any)["reason"].(map[string]any)
+	if reason["code"] != "instructions_mismatch" {
+		t.Fatal(response)
+	}
+	response = executionOperation(t, a, "webhook.instructions.sync", c.Id, c.GetInt("revision"), data, "", false, 409)
+	reason = response["data"].(map[string]any)["reason"].(map[string]any)
+	if reason["code"] != "revision_conflict" {
+		t.Fatal(response)
+	}
+}
+
+func TestWebhookAPISetupRequiresCurrentWebhookRuntime(t *testing.T) {
+	a, c, _, _ := webhookFixture(t)
+	// A new destination makes the existing acknowledgment and runtime report stale.
+	result := webhookOperation(t, a, "webhook.credentials.update", c.Id, c.GetInt("revision"), map[string]any{"url": "https://93.184.216.34/new-receiver", "secret": "new-synthetic-key"}, "")
+	state := result["setup"].(map[string]any)
+	if state["can_test"] != true || state["can_enable"] != false {
+		t.Fatal(state)
+	}
+	event := webhookOperation(t, a, "webhook.test", c.Id, int(result["revision"].(float64)), map[string]any{}, "new-test")
+	report := map[string]any{"event_id": event["event_id"], "context": "parent", "native_handoff": true, "execution_protocol": true}
+	executionOperation(t, a, "webhook.runtime.report", c.Id, int(result["revision"].(float64)), report, "", false, 400)
+	report["context"] = "webhook"
+	report["native_handoff"] = false
+	result = webhookOperation(t, a, "webhook.runtime.report", c.Id, int(result["revision"].(float64)), report, "")
+	executionOperation(t, a, "execution.test_ack", "", 0, map[string]any{"event_id": event["event_id"], "epoch": event["epoch"]}, "new-test-ack", false, 200)
+	executionOperation(t, a, "webhook.enable", c.Id, int(result["revision"].(float64)), map[string]any{}, "", false, 400)
+	report["native_handoff"] = true
+	result = webhookOperation(t, a, "webhook.runtime.report", c.Id, int(result["revision"].(float64)), report, "")
+	if result["setup"].(map[string]any)["can_enable"] != true {
+		t.Fatal(result)
+	}
+}
+
+func TestWebhookManagedMigrationPreservesCredentialsAndHistory(t *testing.T) {
+	a, c, task, event := webhookFixture(t)
+	canonical, canonicalHash := c.GetString("instructions"), c.GetString("managed_hash")
+	beforeCipher, beforeURL, beforeAgent := c.GetString("secret_ciphertext"), c.GetString("url"), c.GetString("agent")
+	c.Set("instructions", "legacy custom instructions")
+	if err := a.app.Save(c); err != nil {
+		t.Fatal(err)
+	}
+	if err := runFixtureMigration(t, a.app, "../../pb_migrations/1800400000_crew_managed_setup.js"); err != nil {
+		t.Fatal(err)
+	}
+	updated := apiWebhookRecord(t, a, "webhook_configs", c.Id)
+	if updated.GetString("secret_ciphertext") != beforeCipher || updated.GetString("url") != beforeURL || updated.GetString("agent") != beforeAgent || updated.GetBool("enabled") || updated.GetString("previous_instructions") != "legacy custom instructions" {
+		t.Fatal("migration lost configuration")
+	}
+	if apiWebhookRecord(t, a, "webhook_deliveries", event.Id).GetString("state") != "cancelled" {
+		t.Fatal("queued old event remains active")
+	}
+	if len(apiWebhookDeliveries(t, a, task.Id)) != 1 {
+		t.Fatal("migration emitted new wake")
+	}
+	if updated.GetString("instructions") != canonical || updated.GetString("managed_hash") != canonicalHash {
+		t.Fatal("migration differs from canonical managed protocol")
+	}
+	mappings, err := a.app.FindRecordsByFilter("crew_webhook_mappings", "agent={:agent}", "", 0, 0, dbx.Params{"agent": beforeAgent})
+	if err != nil || len(mappings) != 1 {
+		t.Fatal("mapping lost", err)
+	}
+}

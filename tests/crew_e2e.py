@@ -223,7 +223,7 @@ def scenario(pc):
     changed = write('webhook.credentials.update', {'clear_secret':True},changed,agent=False)
     assert not changed['secret_configured']
     write('webhook.enable', {}, changed, expected=400)
-    changed = write('webhook.integration.update', {'instructions':changed['instructions']+' Stop on unknown inputs.'},changed)
+    changed = write('webhook.integration.update', {'instructions':changed['instructions'].replace('<!-- crew-dispatch:end -->', 'Stop on unknown inputs.\n<!-- crew-dispatch:end -->')},changed)
     assert changed['sync_status'] == 'unverified' and not changed['enabled']
     assert not read('webhook_deliveries'), 'Saving configuration must not send'
 

@@ -17,6 +17,7 @@ func runFixtureMigration(t *testing.T, app core.App, path string) error {
 	t.Helper()
 	vm := goja.New()
 	jsvm.BindCore(vm)
+	jsvm.BindSecurity(vm)
 	registerHookBindings(vm)
 	var up func(core.App) error
 	vm.Set("migrate", func(fn, down func(core.App) error) { up = fn })

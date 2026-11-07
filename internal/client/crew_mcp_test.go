@@ -281,3 +281,47 @@ func TestCrewMCPGlobalIntegrationCredentialBoundary(t *testing.T) {
 		t.Fatal("non-secret setup sent a webhook")
 	}
 }
+
+func TestCrewDiscoveryAndCachedEnvelopeCompatibility(t *testing.T) {
+	api, token := mcpRealAPI(t)
+	h := mcpTestHandler(api)
+	listed := mcpRequest(t, h, token, "tools/list", map[string]any{})
+	raw, _ := json.Marshal(listed)
+	for _, term := range []string{"capabilities", "execution.begin", "idempotency_key", "execution", "webhook_mappings", "webhook_executions"} {
+		if !bytes.Contains(raw, []byte(term)) {
+			t.Fatalf("tools/list omits %s", term)
+		}
+	}
+	result := mcpCall(t, h, token, "crew_read", map[string]any{"collection": "capabilities"}, false)
+	cap := dig(result, "items").([]any)[0]
+	if dig(cap, "protocol_version") != float64(2) {
+		t.Fatal(cap)
+	}
+	for _, action := range []string{"execution.begin", "execution.complete", "webhook.instructions.sync", "webhook.runtime.report", "webhook.mapping.update"} {
+		if dig(cap, "operations", action) == nil {
+			t.Fatalf("capabilities omit %s", action)
+		}
+	}
+	// Model-visible old connector schema can send only these original arguments.
+	args := map[string]any{"action": "agent.ensure", "reported_agent": "Synthetic legacy client", "data": map[string]any{"name": "Cached client bot", "_crew": map[string]any{"idempotency_key": "cached-ensure"}}}
+	first := mcpCall(t, h, token, "crew_write", args, false)
+	second := mcpCall(t, h, token, "crew_write", args, false)
+	if dig(first, "id") != dig(second, "id") {
+		t.Fatal("compatibility key lost idempotency")
+	}
+	args["idempotency_key"] = "contradictory-key"
+	mcpCall(t, h, token, "crew_write", args, true)
+	delete(args, "idempotency_key")
+	args["data"].(map[string]any)["_crew"] = map[string]any{"owner": true}
+	mcpCall(t, h, token, "crew_write", args, true)
+	task := mcpCall(t, h, token, "crew_write", map[string]any{"action": "task.create", "reported_agent": "Synthetic", "data": map[string]any{"title": "Compatibility proof test"}}, false)
+	// Normalization cannot turn malformed/stale proof into an ordinary unfenced write.
+	mcpCall(t, h, token, "crew_write", map[string]any{"action": "task.comment", "reported_agent": "Synthetic", "id": dig(task, "id"), "expected_revision": dig(task, "revision"), "data": map[string]any{"body": "must not appear", "_crew": map[string]any{"idempotency_key": "invalid-proof", "execution": map[string]any{"id": "missingrecord00", "worker_id": "synthetic", "fence": 1}}}}, true)
+	// Owner-only operation remains owner-only through the compatible envelope.
+	configs := dig(mcpCall(t, h, token, "crew_read", map[string]any{"collection": "webhook_configs"}, false), "items").([]any)
+	for _, c := range configs {
+		if dig(c, "scope") == "global" {
+			mcpCall(t, h, token, "crew_write", map[string]any{"action": "webhook.credentials.update", "reported_agent": "Synthetic", "id": dig(c, "id"), "expected_revision": dig(c, "revision"), "data": map[string]any{"secret": "synthetic-never-save", "_crew": map[string]any{"idempotency_key": "blocked-credential"}}}, true)
+		}
+	}
+}

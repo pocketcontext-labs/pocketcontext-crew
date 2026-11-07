@@ -1,3 +1,4 @@
+const capabilities = require(`${__hooks}/crew_capabilities.js`);
 const webhooks = require(`${__hooks}/crew_webhooks.js`);
 const execution = require(`${__hooks}/crew_execution.js`);
 const names = [
@@ -170,6 +171,8 @@ function read(e) {
     "offset",
     "responsible_agent",
   ]);
+  if (b.collection === "capabilities")
+    return e.json(200, capabilities.describe());
   if (!names.includes(b.collection)) bad("Unknown collection");
   const col = b.collection,
     params = {},
@@ -253,7 +256,7 @@ function read(e) {
         col === "buckets"
           ? bucketExport(e.app, r)
           : webhooks.collections.includes(col)
-            ? webhooks.exported(r)
+            ? webhooks.exported(r, e.app)
             : execution.collections.includes(col)
               ? execution.exported(r)
               : r,
@@ -263,7 +266,7 @@ function read(e) {
   });
 }
 function write(e, isAgent) {
-  const b = e.requestInfo().body;
+  const b = capabilities.normalizeEnvelope(e.requestInfo().body);
   only(b, [
     "action",
     "id",
@@ -457,6 +460,15 @@ function write(e, isAgent) {
       app.save(r);
       if (kind === "task")
         webhooks.transition(app, r, oldTask, { autoWithdraw });
+      if (
+        kind === "task" &&
+        !isAgent &&
+        op === "update" &&
+        d.readiness === "waiting"
+      ) {
+        r.set("execution_required_generation", 0);
+        app.save(r);
+      }
       if (kind === "task") execution.invalidateStale(app, r, b, actor);
       if (kind === "agent" && values.archived === true)
         webhooks.deactivate(app, r.id, b, actor);
