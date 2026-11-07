@@ -69,3 +69,26 @@ it("fetches uncached running-server metadata and rejects missing versions", asyn
     "Server version unavailable",
   );
 });
+
+it("passes idempotency and an explicit zero create revision to owner writes", async () => {
+  const send = vi
+    .spyOn(pb, "send")
+    .mockResolvedValue({ id: "mapping", revision: 1 });
+  await crewApi.write(
+    "webhook.mapping.update",
+    { agent: "build", bot_ref: "Build bot" },
+    undefined,
+    "",
+    { idempotency_key: "stable-key", expected_revision: 0 },
+  );
+  expect(send).toHaveBeenCalledWith("/api/crew/write", {
+    method: "POST",
+    body: {
+      action: "webhook.mapping.update",
+      data: { agent: "build", bot_ref: "Build bot" },
+      reason: "",
+      idempotency_key: "stable-key",
+      expected_revision: 0,
+    },
+  });
+});

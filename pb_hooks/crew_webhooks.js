@@ -11,6 +11,7 @@ const reasons = [
 ];
 const collections = [
   "webhook_configs",
+  "webhook_mappings",
   "webhook_deliveries",
   "webhook_attempts",
   "webhook_routing",
@@ -56,8 +57,25 @@ function routing(app) {
 function exported(record) {
   const result = record.publicExport();
   delete result.secret_ciphertext;
-  if (record.collection().name === "crew_webhook_configs")
+  if (record.collection().name === "crew_webhook_configs") {
     result.secret_configured = !!record.getString("secret_ciphertext");
+    result.url_configured = !!record.getString("url");
+    const match = record.getString("url").match(/^https:\/\/([^/:?#]+)/);
+    result.receiver_host = match ? match[1] : "";
+    delete result.url;
+  }
+  return result;
+}
+// Old release idempotency results may contain receiver URLs. Redact on replay,
+// including nested results, without rewriting historical operation records.
+function redactReplay(value) {
+  if (Array.isArray(value)) return value.map(redactReplay);
+  if (!value || typeof value !== "object") return value;
+  const result = {};
+  for (const k of Object.keys(value)) {
+    if (["url", "secret", "secret_ciphertext"].includes(k)) continue;
+    result[k] = redactReplay(value[k]);
+  }
   return result;
 }
 function canonical(value) {
@@ -83,6 +101,7 @@ function idempotent(app, b, fn, required) {
         id: b.id || "",
         expected_revision: b.expected_revision || 0,
         data: b.data || {},
+        ...(b.execution ? { execution: b.execution } : {}),
       }),
     ),
   );
@@ -95,7 +114,7 @@ function idempotent(app, b, fn, required) {
   if (existing.length) {
     if (existing[0].getString("fingerprint") !== fingerprint)
       conflict("Idempotency key already used for different input");
-    return json(existing[0], "result", {});
+    return redactReplay(json(existing[0], "result", {}));
   }
   const result = fn();
   const entry = new Record(
@@ -167,15 +186,22 @@ function route(app, t) {
   if (!eligible(s) || rt.getBool("paused")) return null;
   const id = s.assigned || rt.getString("triage_agent");
   if (!activeAgent(app, id)) return null;
-  const config = rows(app, "webhook_configs", "agent={:agent}", {
-    agent: id,
-  })[0];
-  if (!config || !config.getBool("enabled")) return null;
+  const config = globalConfig(app),
+    mapping = mappingFor(app, id);
+  if (
+    !config ||
+    !config.getBool("enabled") ||
+    !activeAgent(app, config.getString("agent")) ||
+    !mapping ||
+    !mapping.getString("bot_ref")
+  )
+    return null;
   return {
     config,
     agent: id,
     kind: s.assigned ? "assignee" : "triage",
     routing: rt,
+    mapping,
   };
 }
 function enqueue(app, config, payload, t, target) {
@@ -185,7 +211,7 @@ function enqueue(app, config, payload, t, target) {
   const now = new Date();
   row.set("config", config.id);
   row.set("task", t ? t.id : "");
-  row.set("agent", config.getString("agent"));
+  row.set("agent", payload.recipient_agent_id || config.getString("agent"));
   row.set("target_kind", target || "test");
   row.set("generation", t ? t.getInt("wake_generation") : 0);
   row.set("epoch", payload.epoch);
@@ -215,6 +241,10 @@ function wake(app, t, causes, outcome) {
     config_id: target.config.id,
     destination_version: target.config.getInt("destination_version"),
     target_agent_id: target.agent,
+    recipient_agent_id: target.agent,
+    dispatcher_agent_id: target.config.getString("agent"),
+    recipient_bot_ref: target.mapping.getString("bot_ref"),
+    mapping_revision: target.mapping.getInt("revision"),
     target_kind: target.kind,
     task_id: t.id,
     task_revision: t.getInt("revision"),
@@ -310,8 +340,57 @@ function validateConfig(app, d) {
   if (d.secret !== undefined && d.clear_secret)
     bad("Cannot replace and clear credential together");
 }
-function handle(app, b, actor) {
+function globalConfig(app) {
+  return rows(app, "webhook_configs", "scope='global'")[0];
+}
+function mappingFor(app, agent) {
+  return rows(app, "webhook_mappings", "agent={:agent}", { agent })[0];
+}
+function instructionsReady(c) {
+  return (
+    c.getInt("applied_revision") === c.getInt("instruction_revision") &&
+    ["reported", "verified"].includes(c.getString("sync_status"))
+  );
+}
+function requireReady(app, c) {
+  if (!activeAgent(app, c.getString("agent")))
+    bad("Active dispatcher required");
+  const mapping = mappingFor(app, c.getString("agent"));
+  if (!mapping || !mapping.getString("bot_ref"))
+    bad("Dispatcher bot mapping required");
+  if (!instructionsReady(c))
+    bad("Apply the current dispatcher instructions first");
+  if (!c.getString("url") || !c.getString("secret_ciphertext"))
+    bad("Enter receiver URL and credential in the owner UI");
+  credentialReady(app, c.getString("secret_ciphertext"));
+  validateEndpoint(c.getString("url"));
+}
+function invalidateAgent(app, agent, b, actor) {
+  for (const t of rows(
+    app,
+    "tasks",
+    "assigned_agent={:agent} && readiness='ready'",
+    { agent },
+  )) {
+    t.set("wake_generation", t.getInt("wake_generation") + 1);
+    t.set("revision", t.getInt("revision") + 1);
+    app.save(t);
+    cancel(app, "task={:task}", { task: t.id });
+    audit(app, t, b, actor, { mapping_invalidated: agent });
+  }
+  if (routing(app).getString("triage_agent") === agent)
+    invalidateTriage(app, b, actor);
+}
+function handle(app, b, actor, isAgent) {
   const d = b.data || {};
+  // Check authorization before idempotency replay, so an owner result cannot be
+  // replayed through MCP and credentials can never enter the agent API.
+  if (b.action === "webhook.credentials.update" && isAgent)
+    throw new ForbiddenError("Enter webhook credentials in the owner UI");
+  if (["webhook.create", "webhook.update"].includes(b.action))
+    bad(
+      "Use the global integration; legacy per-agent configuration is retired",
+    );
   return idempotent(
     app,
     b,
@@ -364,35 +443,61 @@ function handle(app, b, actor) {
         audit(app, rt, b, actor, { triage_agent: id });
         return exported(rt);
       }
-      if (b.action === "webhook.create") {
-        only(d, ["agent", "url", "adapter", "subscriptions", "secret"]);
-        validateConfig(app, d);
+      if (b.action === "webhook.mapping.update") {
+        only(d, ["agent", "bot_ref"]);
         if (!activeAgent(app, d.agent)) bad("Active agent required");
-        if (!d.url || !d.adapter || !d.subscriptions)
-          bad("url, adapter and subscriptions required");
         if (
-          rows(app, "webhook_configs", "agent={:agent}", { agent: d.agent })
-            .length
+          typeof d.bot_ref !== "string" ||
+          d.bot_ref.length > 500 ||
+          /[\r\n]/.test(d.bot_ref)
         )
-          conflict(
-            "Agent already has a webhook configuration; read and reuse or update it",
-          );
-        const c = new Record(
-          app.findCollectionByNameOrId("crew_webhook_configs"),
-        );
-        for (const k of ["agent", "url", "adapter", "subscriptions"])
-          c.set(k, d[k]);
-        if (d.secret)
-          c.set("secret_ciphertext", $pocketcontext.webhookSeal(app, d.secret));
-        c.set("enabled", false);
-        c.set("destination_version", 1);
-        c.set("revision", 1);
-        app.save(c);
-        audit(app, c, b, actor, {
-          agent: d.agent,
-          credential_changed: !!d.secret,
-        });
-        return exported(c);
+          bad("Invalid bot reference");
+        const ref = d.bot_ref.trim();
+        let m = mappingFor(app, d.agent);
+        if (m) {
+          check(m, b.expected_revision);
+          if (b.id && b.id !== m.id)
+            conflict("Mapping ID does not match agent");
+        } else {
+          if (b.expected_revision !== 0)
+            conflict("Use revision 0 to create mapping");
+          m = new Record(app.findCollectionByNameOrId("crew_webhook_mappings"));
+          m.set("agent", d.agent);
+        }
+        if (
+          ref &&
+          rows(app, "webhook_mappings", "bot_ref={:ref} && agent!={:agent}", {
+            ref,
+            agent: d.agent,
+          }).length
+        )
+          conflict("Bot reference already maps to another agent");
+        if (m.getInt("revision") > 0 && m.getString("bot_ref") === ref)
+          return exported(m);
+        if (m.getString("bot_ref") !== ref) {
+          invalidateAgent(app, d.agent, b, actor);
+          const global = globalConfig(app);
+          if (global.getString("agent") === d.agent && m.getString("bot_ref")) {
+            invalidateConfig(app, global, b, actor);
+            global.set("url", "");
+            global.set("secret_ciphertext", "");
+            global.set("routine_ref", "");
+            global.set("sync_status", "unverified");
+            global.set("applied_revision", 0);
+            global.set(
+              "destination_version",
+              global.getInt("destination_version") + 1,
+            );
+            global.set("enabled", false);
+            global.set("revision", global.getInt("revision") + 1);
+            app.save(global);
+          }
+        }
+        m.set("bot_ref", ref);
+        m.set("revision", m.getInt("revision") + 1);
+        app.save(m);
+        audit(app, m, b, actor, { agent: d.agent, mapping_changed: true });
+        return exported(m);
       }
       if (b.action === "webhook.retry") {
         only(d, ["config_revision"]);
@@ -400,6 +505,8 @@ function handle(app, b, actor) {
         check(delivery, b.expected_revision);
         const c = get(app, "webhook_configs", delivery.getString("config"));
         check(c, d.config_revision);
+        if (c.getString("scope") !== "global")
+          bad("Legacy receiver is retired");
         if (
           delivery.getString("state") !== "failed" ||
           delivery.getInt("destination_version") !==
@@ -444,30 +551,99 @@ function handle(app, b, actor) {
       }
       const c = get(app, "webhook_configs", b.id);
       check(c, b.expected_revision);
-      if (b.action === "webhook.update") {
-        only(d, ["url", "adapter", "subscriptions", "secret", "clear_secret"]);
+      if (c.getString("scope") !== "global") bad("Legacy receiver is retired");
+      if (b.action === "webhook.credentials.update") {
+        only(d, ["url", "secret", "clear_secret"]);
         validateConfig(app, d);
         const destination =
           (d.url !== undefined && d.url !== c.getString("url")) ||
-          (d.adapter !== undefined && d.adapter !== c.getString("adapter")) ||
           d.secret !== undefined ||
           d.clear_secret;
-        const changedSubs =
-          d.subscriptions !== undefined &&
-          JSON.stringify(d.subscriptions) !==
-            JSON.stringify(json(c, "subscriptions", []));
-        for (const k of ["url", "adapter", "subscriptions"])
-          if (d[k] !== undefined) c.set(k, d[k]);
+        if (d.url !== undefined && d.url !== c.getString("url"))
+          c.set("secret_ciphertext", "");
+        if (d.url !== undefined) c.set("url", d.url);
         if (d.secret !== undefined)
           c.set("secret_ciphertext", $pocketcontext.webhookSeal(app, d.secret));
         if (d.clear_secret) c.set("secret_ciphertext", "");
         if (destination)
           c.set("destination_version", c.getInt("destination_version") + 1);
-        if (destination || changedSubs) {
+        if (destination) {
           invalidateConfig(app, c, b, actor);
           c.set("enabled", false);
           cancel(app, "config={:config}", { config: c.id });
         }
+      } else if (b.action === "webhook.integration.update") {
+        only(d, ["agent", "instructions", "subscriptions"]);
+        validateConfig(app, d);
+        let changed = false;
+        if (d.agent !== undefined && d.agent !== c.getString("agent")) {
+          if (d.agent && !activeAgent(app, d.agent))
+            bad("Active dispatcher required");
+          c.set("agent", d.agent || "");
+          c.set("url", "");
+          c.set("secret_ciphertext", "");
+          c.set("routine_ref", "");
+          c.set("sync_status", "unverified");
+          c.set("applied_revision", 0);
+          c.set("destination_version", c.getInt("destination_version") + 1);
+          changed = true;
+        }
+        if (d.instructions !== undefined) {
+          if (
+            typeof d.instructions !== "string" ||
+            !d.instructions.trim() ||
+            d.instructions.length > 40000
+          )
+            bad("Dispatcher instructions required (at most 40000 characters)");
+          if (d.instructions !== c.getString("instructions")) {
+            c.set("instructions", d.instructions);
+            c.set("instruction_revision", c.getInt("instruction_revision") + 1);
+            c.set("sync_status", "unverified");
+            changed = true;
+          }
+        }
+        if (
+          d.subscriptions !== undefined &&
+          JSON.stringify(d.subscriptions) !==
+            JSON.stringify(json(c, "subscriptions", []))
+        ) {
+          c.set("subscriptions", d.subscriptions);
+          changed = true;
+        }
+        if (changed) {
+          invalidateConfig(app, c, b, actor);
+          c.set("enabled", false);
+          cancel(app, "config={:config}", { config: c.id });
+        }
+      } else if (b.action === "webhook.instructions.sync") {
+        only(d, [
+          "instruction_revision",
+          "routine_ref",
+          "status",
+          "instructions",
+        ]);
+        if (d.instruction_revision !== c.getInt("instruction_revision"))
+          conflict(
+            "Instruction revision changed; reread and apply current instructions",
+          );
+        if (!["reported", "verified"].includes(d.status))
+          bad("Sync status must be reported or verified");
+        if (
+          typeof d.routine_ref !== "string" ||
+          !d.routine_ref.trim() ||
+          d.routine_ref.length > 1000
+        )
+          bad("Routine reference required");
+        if (
+          d.status === "verified" &&
+          d.instructions !== c.getString("instructions")
+        )
+          conflict(
+            "Verified synchronization requires exact routine instruction readback",
+          );
+        c.set("applied_revision", d.instruction_revision);
+        c.set("sync_status", d.status);
+        c.set("routine_ref", d.routine_ref);
       } else if (
         b.action === "webhook.enable" ||
         b.action === "webhook.disable"
@@ -475,12 +651,7 @@ function handle(app, b, actor) {
         only(d, []);
         const enabled = b.action === "webhook.enable";
         if (enabled) {
-          if (!activeAgent(app, c.getString("agent")))
-            bad("Active agent required");
-          if (!c.getString("secret_ciphertext"))
-            bad("Receiver credential required");
-          credentialReady(app, c.getString("secret_ciphertext"));
-          validateEndpoint(c.getString("url"));
+          requireReady(app, c);
           const rt = routing(app);
           if (rt.getBool("paused")) {
             rt.set("paused", false);
@@ -494,9 +665,7 @@ function handle(app, b, actor) {
         c.set("enabled", enabled);
       } else if (b.action === "webhook.test") {
         only(d, []);
-        if (!c.getString("secret_ciphertext"))
-          bad("Receiver credential required");
-        credentialReady(app, c.getString("secret_ciphertext"));
+        requireReady(app, c);
         const rt = routing(app);
         if (rt.getBool("paused"))
           bad("Delivery is paused after restore; enable explicitly first");
@@ -505,6 +674,8 @@ function handle(app, b, actor) {
           event_id: $pocketcontext.webhookUUID(),
           event_type: "webhook.test",
           test: true,
+          dispatcher_agent_id: c.getString("agent"),
+          recipient_agent_id: c.getString("agent"),
           config_id: c.id,
           destination_version: c.getInt("destination_version"),
           instance_id: rt.getString("instance_id"),
@@ -583,13 +754,15 @@ function invalidateTriage(app, b, actor) {
   }
 }
 function invalidateConfig(app, config, b, actor) {
-  const agent = config.getString("agent");
-  if (routing(app).getString("triage_agent") === agent)
+  const agent = config.getString("agent"),
+    global = config.getString("scope") === "global";
+  if (global || routing(app).getString("triage_agent") === agent)
     invalidateTriage(app, b, actor);
   for (const t of rows(
     app,
     "tasks",
-    "assigned_agent={:agent} && readiness='ready' && archived=false && (status='todo' || status='in_progress')",
+    (global ? "assigned_agent!=''" : "assigned_agent={:agent}") +
+      " && readiness='ready' && archived=false && (status='todo' || status='in_progress')",
     { agent },
   )) {
     t.set("wake_generation", t.getInt("wake_generation") + 1);
@@ -603,6 +776,14 @@ function invalidateConfig(app, config, b, actor) {
   }
 }
 function deactivate(app, agent, b, actor) {
+  const c = globalConfig(app);
+  if (c && c.getString("agent") === agent) {
+    invalidateConfig(app, c, b, actor);
+    c.set("enabled", false);
+    c.set("revision", c.getInt("revision") + 1);
+    app.save(c);
+    cancel(app, "config={:config}", { config: c.id });
+  }
   if (routing(app).getString("triage_agent") === agent)
     invalidateTriage(app, b, actor);
   for (const t of rows(app, "tasks", "assigned_agent={:agent}", { agent })) {
@@ -618,6 +799,16 @@ function deactivate(app, agent, b, actor) {
   cancel(app, "agent={:agent}", { agent });
 }
 module.exports = {
+  route,
+  routing,
+  get,
+  json,
+  check,
+  rows,
+  idempotent,
+  audit,
+  mappingFor,
+  globalConfig,
   collections,
   exported,
   handle,

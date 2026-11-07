@@ -30,7 +30,7 @@ changes elsewhere through tasks. It does not grant credentials or isolate data.
 Reported agent names are attribution, not authenticated identity.
 
 Read collections: agents, buckets, notes, note_revisions, tasks, events, reviews,
-webhook_configs, webhook_deliveries, webhook_attempts and webhook_routing.
+webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings and webhook_executions.
 Follow `next_offset` while `has_more`. Archived records require `archived: true`.
 Writes carry action, data, reported_agent, optional reason, and the current id and
 expected_revision for changes. On conflict reread and reassess; never blindly retry.
@@ -58,16 +58,15 @@ when work can start; assignment alone does not make a task actionable. Use
 `waiting_reason` for prerequisites. Pending review blocks wakes; editing a pending
 draft withdraws review and leaves the task waiting.
 
-When the user asks to create an agent and connect this harness, use agent.ensure
-with a stable idempotency_key, then the shared MCP webhook operations to configure
-and enable its documented HTTPS receiver. Read and reuse a matching configuration.
-Use secure harness-provided credentials through the write-only secret field; never
-put credentials in notes, logs or chat. Setup does not need another Crew approval
-step. Do not perform unsolicited backlog catch-up.
+Use one global webhook hosted by an existing bot's dispatcher routine. Reuse the
+agent and integration; configure the dispatcher selection, bot mappings and
+versioned routine instructions through MCP. The owner copies the URL and secret
+from Grok directly into Crew's browser form. Never ask for those values in chat
+or pass them through MCP. Saving and enabling do not replay existing tasks.
 
-Only configure a receiver whose documented contract supports the task payload,
-durable deduplication, serialized execution and authoritative generation/epoch
-checks. Do not assume webhook support provides those guarantees. If secure endpoint
-provisioning or receiver conformance is unavailable, create the agent and report
-the specific limitation. Do not claim real Grok Bot support without verification.
-Read [webhook operations](references/webhooks.md) before configuring delivery.
+Apply the canonical instructions to the routine using supported harness tools,
+then report the applied revision. Only claim matching readback if the saved text
+was actually retrieved and compared. A reported synchronization is not independent
+verification of Grok. Report missing mappings or unsupported harness capabilities.
+Read [webhook operations](references/webhooks.md) before configuring delivery or
+executing webhook-triggered work. Synthetic tests do not certify Grok Bot.

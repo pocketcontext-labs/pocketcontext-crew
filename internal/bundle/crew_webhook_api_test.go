@@ -43,7 +43,7 @@ func TestWebhookAPISubscriptionsMatchAllCauses(t *testing.T) {
 	for _, subs := range [][]string{{"ready"}, {"assigned"}, {"ready", "assigned"}} {
 		t.Run(strings.Join(subs, "+"), func(t *testing.T) {
 			a, config, _, _ := webhookFixture(t)
-			updated := webhookOperation(t, a, "webhook.update", config.Id, config.GetInt("revision"), map[string]any{"subscriptions": subs}, "")
+			updated := webhookOperation(t, a, "webhook.integration.update", config.Id, config.GetInt("revision"), map[string]any{"subscriptions": subs}, "")
 			webhookOperation(t, a, "webhook.enable", config.Id, int(updated["revision"].(float64)), map[string]any{}, "")
 			task := webhookOperation(t, a, "task.create", "", 0, map[string]any{"title": "Waiting unassigned synthetic work"}, "")
 			if task["readiness"] != "waiting" {
@@ -167,12 +167,19 @@ func TestWebhookAPIDisableInvalidatesAcceptedWorkWithoutReplay(t *testing.T) {
 func TestWebhookAPISaveDisabledAndCredentialRedaction(t *testing.T) {
 	a := newTestApp(t)
 	agent := webhookOperation(t, a, "agent.ensure", "", 0, map[string]any{"name": "Synthetic setup agent"}, "setup-agent")
-	data := map[string]any{"agent": agent["id"], "url": "https://93.184.216.34/receiver", "adapter": "crew-v1", "subscriptions": []string{"created", "ready"}, "secret": "synthetic-private-credential"}
-	config := webhookOperation(t, a, "webhook.create", "", 0, data, "setup-config")
-	replay := webhookOperation(t, a, "webhook.create", "", 0, data, "setup-config")
-	if config["id"] != replay["id"] || config["enabled"] != false || config["secret_configured"] != true {
-		t.Fatal("setup isn't disabled and idempotent", config)
+	configs, err := a.app.FindRecordsByFilter("crew_webhook_configs", "scope='global'", "", 1, 0)
+	if err != nil || len(configs) != 1 {
+		t.Fatal("missing global integration", err)
 	}
+	selected := webhookOperation(t, a, "webhook.integration.update", configs[0].Id, configs[0].GetInt("revision"), map[string]any{"agent": agent["id"]}, "")
+	data := map[string]any{"url": "https://93.184.216.34/receiver", "secret": "synthetic-private-credential"}
+	config := webhookOperation(t, a, "webhook.credentials.update", configs[0].Id, int(selected["revision"].(float64)), data, "setup-config")
+	replay := webhookOperation(t, a, "webhook.credentials.update", configs[0].Id, int(selected["revision"].(float64)), data, "setup-config")
+	if config["id"] != replay["id"] || config["enabled"] != false || config["secret_configured"] != true || config["url"] != nil {
+		t.Fatal("setup isn't disabled, redacted and idempotent", config)
+	}
+	rawDenied, _ := json.Marshal(map[string]any{"action": "webhook.credentials.update", "id": configs[0].Id, "expected_revision": selected["revision"], "data": data, "idempotency_key": "setup-config"})
+	a.request(t, "POST", "/api/crew/agent-write", a.token, string(rawDenied), 403)
 	webhookOperation(t, a, "task.create", "", 0, map[string]any{"title": "Assigned ready but disabled", "assigned_agent": agent["id"], "readiness": "ready"}, "")
 	w := newWebhookDispatcher(a.app)
 	calls := 0
@@ -206,5 +213,116 @@ func TestWebhookAPISaveDisabledAndCredentialRedaction(t *testing.T) {
 		if strings.Contains(row.GetString("result"), "synthetic-private-credential") || strings.Contains(row.GetString("result"), "secret_ciphertext") {
 			t.Fatal("idempotency result stores credential material")
 		}
+	}
+}
+
+func TestWebhookGlobalRecipientAndMappingInvalidation(t *testing.T) {
+	a, config, _, _ := webhookFixture(t)
+	recipient := webhookOperation(t, a, "agent.create", "", 0, map[string]any{"name": "Other specialist"}, "")
+	mapping := webhookOperation(t, a, "webhook.mapping.update", "", 0, map[string]any{"agent": recipient["id"], "bot_ref": "other-grok-bot"}, "")
+	same := webhookOperation(t, a, "webhook.mapping.update", mapping["id"].(string), int(mapping["revision"].(float64)), map[string]any{"agent": recipient["id"], "bot_ref": "other-grok-bot"}, "")
+	if same["revision"] != mapping["revision"] {
+		t.Fatal("no-op mapping update invalidates delivery revision")
+	}
+	task := webhookOperation(t, a, "task.create", "", 0, map[string]any{"title": "Different recipient", "assigned_agent": recipient["id"], "readiness": "ready"}, "")
+	ds := apiWebhookDeliveries(t, a, task["id"].(string))
+	if len(ds) != 1 {
+		t.Fatal("missing global delivery", len(ds))
+	}
+	d := ds[0]
+	if d.GetString("config") != config.Id || d.GetString("agent") != recipient["id"] {
+		t.Fatal("wrong routing", d.PublicExport())
+	}
+	var payload map[string]any
+	json.Unmarshal([]byte(d.GetString("payload")), &payload)
+	if payload["dispatcher_agent_id"] != config.GetString("agent") || payload["recipient_agent_id"] != recipient["id"] || payload["recipient_bot_ref"] != "other-grok-bot" {
+		t.Fatal(payload)
+	}
+	apiWebhookAccept(t, a)
+	webhookOperation(t, a, "webhook.mapping.update", mapping["id"].(string), int(mapping["revision"].(float64)), map[string]any{"agent": recipient["id"], "bot_ref": "new-grok-bot"}, "")
+	fresh := apiWebhookRecord(t, a, "tasks", task["id"].(string))
+	if fresh.GetInt("wake_generation") <= d.GetInt("generation") || webhookEligible(a.app, d, config) {
+		t.Fatal("old recipient mapping revived")
+	}
+	if len(apiWebhookDeliveries(t, a, fresh.Id)) != 1 {
+		t.Fatal("mapping change replayed work")
+	}
+	dispatcherMapping, err := a.app.FindFirstRecordByFilter("crew_webhook_mappings", "agent={:agent}", dbx.Params{"agent": config.GetString("agent")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	webhookOperation(t, a, "webhook.mapping.update", dispatcherMapping.Id, dispatcherMapping.GetInt("revision"), map[string]any{"agent": config.GetString("agent"), "bot_ref": "replacement-dispatcher"}, "")
+	freshConfig := apiWebhookRecord(t, a, "webhook_configs", config.Id)
+	if freshConfig.GetBool("enabled") || freshConfig.GetString("url") != "" || freshConfig.GetString("secret_ciphertext") != "" || freshConfig.GetString("sync_status") != "unverified" {
+		t.Fatal("changed dispatcher retained old receiver")
+	}
+}
+
+func TestWebhookGlobalMigrationPreservesLegacyHistoryWithoutDelivery(t *testing.T) {
+	a, config, task, delivery := webhookFixture(t)
+	// Reconstruct a legacy receiver on synthetic data and apply the real upgrade.
+	config.Set("scope", "")
+	if err := a.app.Save(config); err != nil {
+		t.Fatal(err)
+	}
+	mappings, err := a.app.FindCollectionByNameOrId("crew_webhook_mappings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.app.Delete(mappings); err != nil {
+		t.Fatal(err)
+	}
+	if err = runFixtureMigration(t, a.app, "../../pb_migrations/1800300000_crew_global_webhook.js"); err != nil {
+		t.Fatal(err)
+	}
+	old := apiWebhookRecord(t, a, "webhook_configs", config.Id)
+	if old.GetString("scope") != "legacy" || old.GetBool("enabled") || old.GetString("secret_ciphertext") == "" {
+		t.Fatal("legacy config not preserved disabled")
+	}
+	prior := apiWebhookRecord(t, a, "webhook_deliveries", delivery.Id)
+	if prior.GetString("state") != "cancelled" || prior.GetString("payload") != delivery.GetString("payload") {
+		t.Fatal("delivery history lost or still pending")
+	}
+	fresh := apiWebhookRecord(t, a, "tasks", task.Id)
+	if fresh.GetInt("wake_generation") <= task.GetInt("wake_generation") {
+		t.Fatal("accepted generations not invalidated")
+	}
+	globals, err := a.app.FindRecordsByFilter("crew_webhook_configs", "scope='global'", "", 0, 0)
+	if err != nil || len(globals) != 1 {
+		t.Fatal("global singleton", err)
+	}
+	if globals[0].GetBool("enabled") || globals[0].GetString("url") != "" || globals[0].GetString("secret_ciphertext") != "" {
+		t.Fatal("upgrade silently selected old credentials")
+	}
+	calls := 0
+	w := newWebhookDispatcher(a.app)
+	w.client = &http.Client{Transport: webhookRoundTrip(func(*http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
+	})}
+	if err = w.tick(context.Background()); err != nil || calls != 0 {
+		t.Fatal("upgrade sent work", calls, err)
+	}
+}
+
+func TestWebhookHistoricalIdempotencyReplayRedactsLegacyURL(t *testing.T) {
+	a, config, _, _ := webhookFixture(t)
+	data := map[string]any{}
+	original := webhookOperation(t, a, "webhook.disable", config.Id, config.GetInt("revision"), data, "legacy-disable-replay")
+	row, err := a.app.FindFirstRecordByFilter("crew_webhook_idempotency", "operation='webhook.disable' && key='legacy-disable-replay'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Model a pre-0.4 idempotency result without altering its stored fingerprint.
+	original["url"] = "https://example.com/confidential-routine-path"
+	original["secret_ciphertext"] = "legacy-private-ciphertext"
+	row.Set("result", original)
+	if err = a.app.Save(row); err != nil {
+		t.Fatal(err)
+	}
+	replay := webhookOperation(t, a, "webhook.disable", config.Id, config.GetInt("revision"), data, "legacy-disable-replay")
+	body, _ := json.Marshal(replay)
+	if strings.Contains(string(body), "confidential-routine-path") || strings.Contains(string(body), "legacy-private-ciphertext") || replay["url"] != nil {
+		t.Fatal("legacy replay exposed receiver", string(body))
 	}
 }

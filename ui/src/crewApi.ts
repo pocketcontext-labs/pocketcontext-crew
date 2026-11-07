@@ -62,6 +62,7 @@ export const crewApi = {
     data: Record<string, unknown> = {},
     row?: Row,
     reason = "",
+    options: { idempotency_key?: string; expected_revision?: number } = {},
   ): Promise<Row> {
     return pb.send("/api/crew/write", {
       method: "POST",
@@ -70,6 +71,7 @@ export const crewApi = {
         data,
         ...(row ? { id: row.id, expected_revision: row.revision } : {}),
         reason,
+        ...options,
       },
     });
   },

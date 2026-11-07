@@ -188,31 +188,43 @@ def scenario(pc):
     reused = write('agent.ensure', {'name': 'Webhook synthetic'}, key='reuse-agent')
     assert reused['id'] == build['id']
     secret = 'synthetic-webhook-secret-not-a-real-credential'
-    config_data = {'agent': build['id'], 'url': 'https://93.184.216.34/crew-test',
-                   'adapter': 'crew-v1', 'subscriptions': ['ready', 'assigned', 'catch_up'], 'secret': secret}
-    config = write('webhook.create', config_data, key='setup-webhook')
-    assert config['enabled'] is False and config['secret_configured'] is True
-    assert write('webhook.create', config_data, key='setup-webhook') == config
-    write('webhook.create', dict(config_data, url='https://93.184.216.34/other'), key='setup-webhook', expected=409)
-    assert not read('webhook_deliveries')
+    config = next(c for c in read('webhook_configs') if c['scope'] == 'global')
+    assert not config['enabled'] and not config['secret_configured']
+    write('webhook.create', {'agent': build['id']}, key='legacy', expected=400)
+    config = write('webhook.integration.update', {'agent': build['id']}, config)
+    credential_data = {'url': 'https://93.184.216.34/crew-test', 'secret': secret}
+    write('webhook.credentials.update', credential_data, config, expected=403)
+    original = config
+    config = write('webhook.credentials.update', credential_data, original, agent=False, key='manual-credentials')
+    assert write('webhook.credentials.update', credential_data, original, agent=False, key='manual-credentials') == config
+    write('webhook.credentials.update', credential_data, original, key='manual-credentials', expected=403)
+    assert config['enabled'] is False and config['secret_configured'] is True and 'url' not in config
     for collection in ['webhook_configs', 'webhook_deliveries', 'webhook_attempts', 'webhook_routing']:
         output = json.dumps(read(collection))
-        assert secret not in output and 'secret_ciphertext' not in output, collection
+        assert secret not in output and 'secret_ciphertext' not in output and '/crew-test' not in output, collection
     assert secret not in json.dumps(read('events', parent=config['id']))
     request('/api/crew/read', {'collection': 'webhook_idempotency'}, expected=400)
     for url in ['http://example.com', 'https://127.0.0.1/', 'https://[::1]/',
                 'https://169.254.169.254/', 'https://user:password@example.com/',
                 'https://10.0.0.1/', 'https://[::ffff:127.0.0.1]/']:
-        write('webhook.update', {'url': url}, config, expected=400)
-    changed = write('webhook.update', {'subscriptions': ['ready']}, config)
-    assert changed['destination_version'] == config['destination_version']
-    write('webhook.update', {'subscriptions': ['assigned']}, config, expected=409)
-    changed = write('webhook.update', {'secret': 'synthetic-replacement'}, changed)
-    assert changed['destination_version'] == config['destination_version'] + 1
-    assert changed['secret_configured'] and not changed['enabled']
-    changed = write('webhook.update', {'clear_secret': True}, changed)
+        write('webhook.credentials.update', {'url': url}, config, agent=False, expected=400)
+    write('webhook.enable', {}, config, expected=400)
+    mapping = request('/api/crew/agent-write', {'action':'webhook.mapping.update','expected_revision':0,'data':{'agent':build['id'],'bot_ref':'synthetic-grok-build'}})
+    config = current('webhook_configs',config)
+    write('webhook.enable', {}, config, expected=400)
+    write('webhook.instructions.sync', {'instruction_revision':config['instruction_revision'],'status':'verified','routine_ref':'synthetic-routine','instructions':'wrong'},config,expected=409)
+    changed = write('webhook.instructions.sync', {'instruction_revision':config['instruction_revision'],'status':'reported','routine_ref':'synthetic-routine'},config)
+    assert changed['sync_status'] == 'reported' and not changed['enabled']
+    changed = write('webhook.integration.update', {'subscriptions':['ready']},changed)
+    write('webhook.integration.update', {'subscriptions':['assigned']},config,expected=409)
+    changed = write('webhook.credentials.update', {'url':'https://93.184.216.34/new-path'},changed,agent=False)
+    assert not changed['secret_configured'], 'New URL cannot inherit old receiver credential'
+    changed = write('webhook.credentials.update', {'secret':'synthetic-replacement'},changed,agent=False)
+    changed = write('webhook.credentials.update', {'clear_secret':True},changed,agent=False)
     assert not changed['secret_configured']
     write('webhook.enable', {}, changed, expected=400)
+    changed = write('webhook.integration.update', {'instructions':changed['instructions']+' Stop on unknown inputs.'},changed)
+    assert changed['sync_status'] == 'unverified' and not changed['enabled']
     assert not read('webhook_deliveries'), 'Saving configuration must not send'
 
     # Readiness/generation invalidates already delivered wakes independently of

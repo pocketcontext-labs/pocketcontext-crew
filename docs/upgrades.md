@@ -52,3 +52,14 @@ A private database anchor binds the required archive and manifest hash. After
 conversion, startup and backups reject a missing archive, changed manifest or
 corrupt file. Archive publication flushes files and directory metadata before
 schema retirement; interrupted preparation is cleaned under the writer lock.
+
+## Crew 0.4.0 dispatcher migration
+
+Take the complete stopped backup described above, including the private webhook
+key. Existing per-agent webhook configurations and delivery history are retained,
+but old configurations are disabled and pending work is invalidated. A new global
+integration starts disabled. Select an existing dispatcher bot, map recipients,
+apply routine instructions and enter the URL/key manually in the owner browser.
+No endpoint is silently adopted and no backlog is sent. Explicit test/enable and
+optional catch-up follow configuration. Do not roll back only the binary after
+a schema migration; use the matching complete backup if rollback is required.

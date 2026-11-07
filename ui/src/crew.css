@@ -1033,3 +1033,59 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+.crew-integration-mappings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 14px;
+}
+.crew-integration-mappings .crew-webhook-card {
+  margin: 0;
+}
+.crew-integration-mappings h4 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+.crew-dispatcher-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0;
+}
+.crew-dispatcher-choice input,
+.crew-integration-events input {
+  width: auto;
+}
+.crew-integration-events {
+  border: 1px solid #dce3d2;
+  border-radius: 6px;
+  margin: 20px 0;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+.crew-integration-events label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.crew-integration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.crew-execution-state {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #edf2e8;
+}
+.crew-webhooks textarea {
+  width: 100%;
+  min-height: 230px;
+}
+.crew-webhooks button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}

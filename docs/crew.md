@@ -71,11 +71,11 @@ including unchanged assignments; events include normalized old/new responsibilit
 Reads preserve responsible_agent as an ID and add responsible_agent_details with
 id/name or null. The optional filter accepts an ID or unique exact name.
 
-## Ready tasks and shared MCP webhook configuration (0.3.0)
+## Ready tasks and global dispatcher integration (0.4.0)
 
 Tasks expose readiness (waiting by default), waiting_reason and server-managed
 wake_generation. Ready work, assignment, review and invalidation changes share a
-transaction with durable outbox records. Shared MCP may configure HTTPS receivers
-through revision-checked webhook actions; this does not expose owner decisions or
+transaction with durable outbox records. Shared MCP manages the global dispatcher, bot mappings and non-secret instructions
+through revision-checked operations; URL and secret entry is owner-browser-only; this does not expose owner decisions or
 general host administration. Read [webhooks](webhooks.md) for the operation and
 receiver contracts, idempotency, destination versions and restore epochs.

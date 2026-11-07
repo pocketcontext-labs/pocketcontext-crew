@@ -231,3 +231,53 @@ func TestCrewMCPWebhookReadinessAndIdempotency(t *testing.T) {
 	}
 	write(map[string]any{"action": "webhook.create", "idempotency_key": "synthetic-private", "data": map[string]any{"agent": dig(agent, "id"), "url": "https://127.0.0.1/receiver", "adapter": "crew-v1", "subscriptions": []string{"ready"}, "secret": "synthetic"}}, true)
 }
+
+func TestCrewMCPGlobalIntegrationCredentialBoundary(t *testing.T) {
+	api, token := mcpRealAPI(t)
+	h := mcpTestHandler(api)
+	read := func(collection string) []any {
+		result := mcpCall(t, h, token, "crew_read", map[string]any{"collection": collection}, false)
+		return dig(result, "items").([]any)
+	}
+	configs := read("webhook_configs")
+	var config any
+	for _, row := range configs {
+		if dig(row, "scope") == "global" {
+			config = row
+		}
+	}
+	if config == nil {
+		t.Fatal("global integration missing")
+	}
+	for _, key := range []string{"url", "secret", "secret_ciphertext"} {
+		if _, ok := config.(map[string]any)[key]; ok {
+			t.Fatalf("MCP config exposes %s", key)
+		}
+	}
+	args := func(action string, row any, data map[string]any) map[string]any {
+		a := map[string]any{"action": action, "data": data, "reported_agent": "Synthetic dispatcher"}
+		if row != nil {
+			a["id"] = dig(row, "id")
+			a["expected_revision"] = dig(row, "revision")
+		}
+		return a
+	}
+	agent := mcpCall(t, h, token, "crew_write", args("agent.create", nil, map[string]any{"name": "Synthetic dispatcher"}), false)
+	config = mcpCall(t, h, token, "crew_write", args("webhook.integration.update", config, map[string]any{"agent": dig(agent, "id")}), false)
+	mcpCall(t, h, token, "crew_write", args("webhook.credentials.update", config, map[string]any{"url": "https://receiver.example.com/wake", "secret": "synthetic-private-key"}), true)
+	mcpCall(t, h, token, "crew_write", args("webhook.integration.update", config, map[string]any{"secret": "synthetic-private-key"}), true)
+	mcpCall(t, h, token, "crew_write", args("webhook.update", config, map[string]any{"secret": "synthetic-private-key"}), true)
+	create := args("webhook.create", nil, map[string]any{"agent": dig(agent, "id"), "url": "https://receiver.example.com/wake", "secret": "synthetic-private-key", "adapter": "crew-v1", "subscriptions": []string{"ready"}})
+	create["idempotency_key"] = "blocked-legacy-create"
+	mcpCall(t, h, token, "crew_write", create, true)
+	mcpCall(t, h, token, "crew_write", args("webhook.enable", config, map[string]any{}), true)
+	mapping := args("webhook.mapping.update", nil, map[string]any{"agent": dig(agent, "id"), "bot_ref": "Synthetic Grok bot"})
+	mapping["expected_revision"] = 0
+	mcpCall(t, h, token, "crew_write", mapping, false)
+	if len(read("webhook_mappings")) != 1 {
+		t.Fatal("mapping not persisted")
+	}
+	if len(read("webhook_deliveries")) != 0 {
+		t.Fatal("non-secret setup sent a webhook")
+	}
+}

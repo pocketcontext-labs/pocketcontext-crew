@@ -447,6 +447,13 @@ it("shows redacted webhook health without exposing credential fields, URL paths 
       revision: 1,
       agent: agent.id,
       enabled: true,
+      scope: "global",
+      receiver_host: "receiver.example",
+      url_configured: true,
+      instructions: "Read current Crew task state before routing.",
+      instruction_revision: 1,
+      applied_revision: 1,
+      sync_status: "reported",
       url: "https://receiver.example/private-path?key=private-query",
       secret_configured: true,
       secret: "private-credential",
@@ -468,8 +475,8 @@ it("shows redacted webhook health without exposing credential fields, URL paths 
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
   fireEvent.click(screen.getByRole("button", { name: "Agents" }));
-  await screen.findByText("Credential: configured");
-  const section = screen.getByRole("region", { name: "Agent webhooks" });
+  await screen.findByText(/Credential: configured/);
+  const section = screen.getByRole("region", { name: "Grok Bot integration" });
   expect(section).toHaveTextContent("receiver.example");
   expect(section).toHaveTextContent("Accepted by receiver");
   expect(section).toHaveTextContent("2 attempts");

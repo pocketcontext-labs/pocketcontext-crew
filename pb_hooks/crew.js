@@ -1,6 +1,8 @@
 const webhooks = require(`${__hooks}/crew_webhooks.js`);
+const execution = require(`${__hooks}/crew_execution.js`);
 const names = [
   ...webhooks.collections,
+  ...execution.collections,
   "agents",
   "buckets",
   "notes",
@@ -190,11 +192,13 @@ function read(e) {
           ? "note"
           : col === "reviews"
             ? "task"
-            : col === "webhook_deliveries"
-              ? "config"
-              : col === "webhook_attempts"
-                ? "delivery"
-                : "parent";
+            : col === "webhook_executions"
+              ? "task"
+              : col === "webhook_deliveries"
+                ? "config"
+                : col === "webhook_attempts"
+                  ? "delivery"
+                  : "parent";
     if (
       ![
         "notes",
@@ -203,6 +207,7 @@ function read(e) {
         "events",
         "webhook_deliveries",
         "webhook_attempts",
+        "webhook_executions",
       ].includes(col)
     )
       bad("Invalid parent filter");
@@ -249,7 +254,9 @@ function read(e) {
           ? bucketExport(e.app, r)
           : webhooks.collections.includes(col)
             ? webhooks.exported(r)
-            : r,
+            : execution.collections.includes(col)
+              ? execution.exported(r)
+              : r,
       ),
     has_more: rows.length > 100,
     next_offset: rows.length > 100 ? offset + 100 : null,
@@ -265,6 +272,7 @@ function write(e, isAgent) {
     "reason",
     "data",
     "idempotency_key",
+    "execution",
   ]);
   if (
     typeof b.action !== "string" ||
@@ -279,8 +287,12 @@ function write(e, isAgent) {
   const actor = (isAgent ? "mcp:" : "owner:") + e.auth.id;
   let result;
   e.app.runInTransaction((app) => {
+    if (b.action.startsWith("execution.")) {
+      result = execution.handle(app, b, actor, isAgent);
+      return;
+    }
     if (b.action === "agent.ensure" || b.action.startsWith("webhook.")) {
-      result = webhooks.handle(app, b, actor);
+      result = webhooks.handle(app, b, actor, isAgent);
       return;
     }
     const parts = b.action.split("."),
@@ -308,6 +320,8 @@ function write(e, isAgent) {
           ? new Record(app.findCollectionByNameOrId("crew_" + col))
           : get(app, col, b.id);
       if (op !== "create") check(r, b);
+      if (kind === "task" && op !== "create")
+        execution.guardTaskWrite(app, r, b, isAgent);
       const oldTask =
         kind === "task" && op !== "create" ? webhooks.state(app, r) : null;
       let autoWithdraw = false;
@@ -338,8 +352,20 @@ function write(e, isAgent) {
           d.body.length > 20000
         )
           bad("Comment required");
-        event(app, r, b.action, b, actor);
-        result = r;
+        if (b.execution) {
+          result = webhooks.idempotent(
+            app,
+            b,
+            () => {
+              event(app, r, b.action, b, actor);
+              return r.publicExport();
+            },
+            true,
+          );
+        } else {
+          event(app, r, b.action, b, actor);
+          result = r;
+        }
         return;
       }
       let values = d;
@@ -431,6 +457,7 @@ function write(e, isAgent) {
       app.save(r);
       if (kind === "task")
         webhooks.transition(app, r, oldTask, { autoWithdraw });
+      if (kind === "task") execution.invalidateStale(app, r, b, actor);
       if (kind === "agent" && values.archived === true)
         webhooks.deactivate(app, r.id, b, actor);
       if (kind === "note") snapshot(app, r, b, actor);
@@ -452,6 +479,7 @@ function write(e, isAgent) {
       only(d, []);
       const t = active(app, "tasks", b.id);
       check(t, b);
+      execution.guardTaskWrite(app, t, b, isAgent);
       const oldTask = webhooks.state(app, t);
       if (!t.getString("draft").trim()) bad("Add a draft first");
       if (pending(app, t.id).length)
@@ -468,6 +496,7 @@ function write(e, isAgent) {
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
       webhooks.transition(app, t, oldTask, {});
+      execution.invalidateStale(app, t, b, actor);
       event(app, t, b.action, b, actor, {
         ...d,
         readiness: t.getString("readiness"),
@@ -484,6 +513,7 @@ function write(e, isAgent) {
       check(r, b);
       if (r.getString("status") !== "pending") bad("Review already closed");
       const t = active(app, "tasks", r.getString("task"));
+      execution.guardTaskWrite(app, t, b, isAgent);
       const oldTask = webhooks.state(app, t);
       if (op === "decide") {
         if (!["approved", "changes_requested", "rejected"].includes(d.decision))
@@ -501,6 +531,7 @@ function write(e, isAgent) {
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
       webhooks.transition(app, t, oldTask, { outcome: r.getString("status") });
+      execution.invalidateStale(app, t, b, actor);
       event(app, r, b.action, b, actor);
       event(app, t, b.action, b, actor, {
         ...d,

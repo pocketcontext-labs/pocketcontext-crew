@@ -340,10 +340,21 @@ func webhookEligible(app core.App, d, c *core.Record) bool {
 	if err != nil || agent.GetBool("archived") {
 		return false
 	}
+	if c.GetString("scope") != "global" {
+		return false
+	}
+	dispatcher, err := app.FindRecordById("crew_agents", c.GetString("agent"))
+	if err != nil || dispatcher.GetBool("archived") {
+		return false
+	}
 	if payload["event_type"] == "webhook.test" {
 		return !r.GetBool("paused")
 	}
 	if r.GetBool("paused") || !c.GetBool("enabled") {
+		return false
+	}
+	mapping, err := app.FindFirstRecordByFilter("crew_webhook_mappings", "agent = {:agent}", dbx.Params{"agent": d.GetString("agent")})
+	if err != nil || mapping.GetString("bot_ref") == "" || payload["mapping_revision"] != float64(mapping.GetInt("revision")) || payload["recipient_bot_ref"] != mapping.GetString("bot_ref") || payload["dispatcher_agent_id"] != c.GetString("agent") {
 		return false
 	}
 	var subscriptions []string
@@ -387,13 +398,13 @@ func (w *webhookDispatcher) tick(ctx context.Context) error {
 	// Recover expired leases after a crash. Attempt count was committed before I/O.
 	filter := "((state = 'pending' && next_attempt_at <= {:now}) || (state = 'in_flight' && lease_until <= {:now}))"
 	params := dbx.Params{"now": webhookDate(now)}
-	for agent, next := range w.next {
+	for destination, next := range w.next {
 		if next.After(now) {
 			key := fmt.Sprintf("limited%d", len(params))
-			filter += " && agent != {:" + key + "}"
-			params[key] = agent
+			filter += " && config != {:" + key + "}"
+			params[key] = destination
 		} else {
-			delete(w.next, agent)
+			delete(w.next, destination)
 		}
 	}
 	rows, err := w.app.FindRecordsByFilter("crew_webhook_deliveries", filter, "created", 100, 0, params)
@@ -407,7 +418,7 @@ func (w *webhookDispatcher) tick(ctx context.Context) error {
 		if row.GetString("state") == "in_flight" && webhookTime(row.GetString("lease_until")).After(now) {
 			continue
 		}
-		if webhookTime(row.GetString("next_attempt_at")).After(now) || w.next[row.GetString("agent")].After(now) {
+		if webhookTime(row.GetString("next_attempt_at")).After(now) || w.next[row.GetString("config")].After(now) {
 			continue
 		}
 		var delivery, config *core.Record
@@ -472,7 +483,7 @@ func (w *webhookDispatcher) tick(ctx context.Context) error {
 		if delivery == nil {
 			continue
 		}
-		w.next[delivery.GetString("agent")] = now.Add(6 * time.Second)
+		w.next[delivery.GetString("config")] = now.Add(6 * time.Second)
 		code, retryAfter, fail := w.send(ctx, delivery, config)
 		if err = w.finish(delivery, code, retryAfter, fail, now); err != nil {
 			return err
@@ -490,7 +501,7 @@ func (w *webhookDispatcher) send(ctx context.Context, d, c *core.Record) (int, s
 	if err != nil {
 		return 0, "", "credential_unavailable"
 	}
-	if c.GetString("adapter") != "crew-v1" {
+	if c.GetString("adapter") != "grok-dispatch-v1" {
 		return 0, "", "unsupported_adapter"
 	}
 	payload := []byte(d.GetString("payload"))

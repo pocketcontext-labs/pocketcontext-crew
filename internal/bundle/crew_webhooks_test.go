@@ -25,21 +25,35 @@ func webhookOperation(t *testing.T, a *testApp, action, id string, revision int,
 	if id != "" {
 		b["id"] = id
 	}
-	if revision > 0 {
+	if revision > 0 || action == "webhook.mapping.update" {
 		b["expected_revision"] = revision
 	}
 	if key != "" {
 		b["idempotency_key"] = key
 	}
 	raw, _ := json.Marshal(b)
-	return a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
+	route := "/api/crew/agent-write"
+	if action == "webhook.credentials.update" {
+		route = "/api/crew/write"
+	}
+	return a.request(t, "POST", route, a.token, string(raw), 200)
 }
 func webhookFixture(t *testing.T) (*testApp, *core.Record, *core.Record, *core.Record) {
 	t.Helper()
 	a := newTestApp(t)
 	agent := webhookOperation(t, a, "agent.ensure", "", 0, map[string]any{"name": "Synthetic webhook agent"}, "ensure")
-	c := webhookOperation(t, a, "webhook.create", "", 0, map[string]any{"agent": agent["id"], "url": "https://93.184.216.34/receiver", "adapter": "crew-v1", "subscriptions": []string{"created", "ready", "assigned", "reassigned", "review_outcome", "reopened", "catch_up"}, "secret": "synthetic-bearer"}, "create")
-	webhookOperation(t, a, "webhook.enable", c["id"].(string), 1, map[string]any{}, "")
+	configs, err := a.app.FindRecordsByFilter("crew_webhook_configs", "scope='global'", "", 1, 0)
+	if err != nil || len(configs) != 1 {
+		t.Fatal("global config missing", err)
+	}
+	global := configs[0]
+	c := webhookOperation(t, a, "webhook.integration.update", global.Id, global.GetInt("revision"), map[string]any{"agent": agent["id"]}, "")
+	webhookOperation(t, a, "webhook.mapping.update", "", 0, map[string]any{"agent": agent["id"], "bot_ref": "synthetic-bot"}, "")
+	global, _ = a.app.FindRecordById("crew_webhook_configs", global.Id)
+	c["revision"] = float64(global.GetInt("revision"))
+	c = webhookOperation(t, a, "webhook.credentials.update", global.Id, int(c["revision"].(float64)), map[string]any{"url": "https://93.184.216.34/receiver", "secret": "synthetic-bearer"}, "")
+	c = webhookOperation(t, a, "webhook.instructions.sync", global.Id, int(c["revision"].(float64)), map[string]any{"instruction_revision": c["instruction_revision"], "routine_ref": "synthetic-routine", "status": "reported"}, "")
+	c = webhookOperation(t, a, "webhook.enable", global.Id, int(c["revision"].(float64)), map[string]any{}, "")
 	task := webhookOperation(t, a, "task.create", "", 0, map[string]any{"title": "Synthetic actionable task", "assigned_agent": agent["id"], "readiness": "ready"}, "")
 	config, e := a.app.FindRecordById("crew_webhook_configs", c["id"].(string))
 	if e != nil {
