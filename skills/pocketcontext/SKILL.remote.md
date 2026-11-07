@@ -54,7 +54,10 @@ constructing operations. Administration commands are separate from agent work.
 Tasks default to waiting. Explicitly set `readiness: "ready"` on creation or update
 when work can start; assignment alone does not make a task actionable. Use
 `waiting_reason` for prerequisites. Pending review blocks wakes; editing a pending
-draft withdraws review and leaves the task waiting.
+draft withdraws review and leaves the task waiting. Your comments through MCP never
+wake anyone; only owner browser comments can (opt-in `comment` reason). Repeated
+agent reassignments past the owner's `max_bot_handoffs` stop the task as Waiting;
+do not try to set it Ready again, report it to the owner.
 
 Use one global webhook hosted by an existing bot's dispatcher routine. Reuse the
 agent and integration; configure the dispatcher selection, bot mappings and

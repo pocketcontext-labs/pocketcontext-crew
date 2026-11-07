@@ -560,3 +560,38 @@ it("renders development and older hosted version strings without inventing a rel
     screen.getByRole("contentinfo", { name: "Running server" }),
   ).not.toHaveTextContent("Build");
 });
+it("marks a hop-limit stop and a pending owner comment wake on task cards", async () => {
+  fixtures.reviews = [];
+  fixtures.tasks = [
+    {
+      ...task,
+      status: "todo",
+      readiness: "waiting",
+      waiting_reason: "Bot handoff limit reached",
+      handoff_limited: true,
+    },
+    {
+      ...task,
+      id: "task00000000002",
+      title: "Running task",
+      status: "in_progress",
+      readiness: "ready",
+      wake_generation: 3,
+      comment_wake_generation: 3,
+    },
+    {
+      ...task,
+      id: "task00000000003",
+      title: "Superseded marker",
+      status: "in_progress",
+      readiness: "ready",
+      wake_generation: 4,
+      comment_wake_generation: 3,
+    },
+  ];
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Running task" });
+  expect(screen.getByText("Handoff limit")).toBeInTheDocument();
+  expect(screen.getAllByText("Comment wake pending")).toHaveLength(1);
+  expect(crewApi.write).not.toHaveBeenCalled();
+});

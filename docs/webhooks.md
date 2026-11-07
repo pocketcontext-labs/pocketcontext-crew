@@ -226,6 +226,59 @@ pong. Complete through `execution.complete`; `mark_done:true` plus task_revision
 commits task completion and execution outcome together. Review/Waiting/reassignment
 changes invalidate previous authority; later eligible work uses a new generation.
 
+## Owner comment wakes
+
+Wake reasons are `created`, `assigned`, `reassigned`, `unassigned`, `ready`,
+`reopened`, `review_outcome`, `catch_up` and `comment`. `comment` is opt-in: no
+existing or default configuration subscribes to it, and upgrades never add it.
+Enable it under Advanced settings or with `webhook.integration.update`.
+
+Only a comment written through the authenticated owner browser session (actor
+`owner:`) can wake. Comments through shared MCP (`mcp:`) never wake anyone,
+because MCP agent names are unverified; this prevents bot comment ping-pong. The
+task must also be eligible exactly as for other wakes: Ready, todo/in_progress,
+no pending review, an active routed recipient with a mapping and an enabled
+integration subscribed to `comment`. Otherwise the comment is only recorded.
+
+- No live execution: the comment advances `wake_generation`, cancels pending
+  deliveries and enqueues one `comment` wake in the comment's transaction.
+- Live execution (current generation, `dispatching`/`running` with an unexpired
+  lease, or `handed_off` before its handoff deadline): the execution is not
+  invalidated. The task records `comment_wake_generation` and
+  `comment_wake_event`. When that execution reaches `execution.complete`
+  (completed or failed) and the task is still eligible at the same generation,
+  Crew emits one `comment` wake and clears the marker. A task finished with
+  `mark_done` or otherwise made ineligible drops it.
+- Any other wake or generation change clears the marker; one wake suffices.
+- An expired lease never fires the marker by itself, because expiry is a recovery
+  condition, not proof that work stopped. The pending marker is visible on the
+  task card. An owner comment after expiry counts as no live execution and wakes
+  immediately; the new generation fences the old worker. Owner
+  `execution.recover` with `cancel` drops the marker (comment again or set
+  Waiting then Ready to authorize new work); `retry` keeps it for the recovered
+  execution. Owner Waiting clears it.
+
+Comment wakes never change the task revision. The payload carries
+`reason: "comment"` and `comment_event_id` (the `events` record), never the
+comment text; read the event through Crew after revalidating the wake.
+
+## Bot handoff limit
+
+Each task counts consecutive assignment changes made through shared MCP in
+`bot_handoffs`: every change of `assigned_agent`, including to or from empty, by
+`task.update`, `task.claim` or an assigned `task.create`. Any owner write to the
+task (update, comment, review request, decision or withdrawal) resets it to 0.
+
+`webhook_routing.max_bot_handoffs` (default 4, range 1–20) sets the limit. Only
+the owner browser can change it: `webhook.routing.update` remains available to
+shared MCP for `triage_agent`, but a `max_bot_handoffs` field from MCP is refused.
+When an MCP assignment change would exceed the limit, the write still applies,
+but the task becomes Waiting in the same transaction with a waiting reason,
+`handoff_limited: true` and a `task.hop_limit` event with reason `hop_limit`. No
+wake is emitted and current execution authority is invalidated as for any
+Waiting transition. Shared MCP cannot set the stopped task Ready; the owner
+reviews it and sets Ready, which resets the count.
+
 ## Operation reference
 
 Read capabilities for the current machine-readable schemas. All mutations are
@@ -250,7 +303,7 @@ metadata path.
 | webhook.bridge.ack         | bridge id/revision; recipient_agent_id, automatic:true; automatic diagnostic recipient observation                                    |
 | webhook.retry              | failed delivery id/revision, config_revision; no stale event replay                                                                   |
 | webhook.catch_up           | config id/revision, tasks [{id,expected_revision}], at most 100; explicit request only                                                |
-| webhook.routing.update     | routing revision, triage_agent ID/null                                                                                                |
+| webhook.routing.update     | routing revision; triage_agent ID/null and/or owner-only max_bot_handoffs 1–20                                                        |
 | execution.begin            | event_id, epoch, generation, worker_id, role dispatcher/recipient; actual native_handoff capability; optional lease_seconds 30–900    |
 | execution.test_ack         | event_id, epoch; no task work                                                                                                         |
 | execution.renew            | execution id/revision; worker_id, fence; optional lease_seconds                                                                       |

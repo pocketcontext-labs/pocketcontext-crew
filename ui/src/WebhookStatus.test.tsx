@@ -480,3 +480,33 @@ it("does not require a recipient acknowledgment for a dispatcher-only bridge tes
   expect(screen.getByRole("button", { name: "Enable delivery" })).toBeEnabled();
   expect(screen.queryByText(/Native send:/)).not.toBeInTheDocument();
 });
+it("offers opt-in owner comment wakes and saves an owner-only handoff limit", async () => {
+  const routing: Row = {
+    id: "routing",
+    revision: 7,
+    singleton: "routing",
+    max_bot_handoffs: 4,
+  };
+  fixtures.webhook_routing = [routing];
+  await open();
+  const comment = screen.getByLabelText(/Owner comment/);
+  expect(comment).not.toBeChecked();
+  const limit = screen.getByLabelText("Bot handoff limit");
+  expect(limit).toHaveValue(4);
+  const save = screen.getByRole("button", { name: "Save handoff limit" });
+  expect(save).toBeDisabled();
+  fireEvent.change(limit, { target: { value: "21" } });
+  expect(save).toBeDisabled();
+  fireEvent.change(limit, { target: { value: "2" } });
+  fireEvent.click(save);
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "webhook.routing.update",
+      { max_bot_handoffs: 2 },
+      routing,
+      "",
+      { idempotency_key: expect.any(String) },
+    ),
+  );
+  expect(crewApi.write).toHaveBeenCalledTimes(1);
+});

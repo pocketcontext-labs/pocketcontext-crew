@@ -417,7 +417,14 @@ function handle(app, b, actor, isAgent) {
           current(app, deliveryFor(app, r));
           r.set("state", "handed_off");
           r.set("handoff_deadline_at", handoffDeadline());
-        } else r.set("handoff_deadline_at", "");
+        } else {
+          r.set("handoff_deadline_at", "");
+          // Cancellation is explicit owner reconciliation: a pending comment
+          // wake is dropped; comment again or set Ready to authorize new work.
+          const task = wh.get(app, "tasks", r.getString("task"));
+          if (task.getInt("wake_generation") === r.getInt("generation"))
+            wh.clearCommentWake(app, task);
+        }
         return save(app, r, b, actor);
       }
       only(
@@ -487,6 +494,9 @@ function handle(app, b, actor, isAgent) {
         );
         r.set("completed_at", new Date().toISOString());
         r.set("lease_until", "");
+        // An owner comment received during this execution wakes once now, if
+        // the task is still eligible at the same generation.
+        wh.deferredCommentWake(app, info.task);
       } else bad("Unknown execution action");
       return save(app, r, b, actor);
     },

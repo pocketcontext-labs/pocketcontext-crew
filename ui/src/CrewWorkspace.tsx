@@ -495,6 +495,21 @@ export default function CrewWorkspace() {
                           {pending.some((r) => val(r, "task") === x.id) && (
                             <span className="crew-human">Human</span>
                           )}
+                          {x.handoff_limited === true && (
+                            <span
+                              className="crew-human"
+                              title="Stopped after too many consecutive agent reassignments. Review it, then set Ready."
+                            >
+                              Handoff limit
+                            </span>
+                          )}
+                          {Number(x.comment_wake_generation) > 0 &&
+                            Number(x.comment_wake_generation) ===
+                              Number(x.wake_generation) && (
+                              <span title="Your comment wakes the assignee when the current execution finishes.">
+                                Comment wake pending
+                              </span>
+                            )}
                           {list(x, "labels").map((l) => (
                             <span key={l}>{l}</span>
                           ))}

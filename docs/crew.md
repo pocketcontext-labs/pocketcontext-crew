@@ -80,6 +80,13 @@ through revision-checked operations; URL and secret entry is owner-browser-only;
 general host administration. Read [webhooks](webhooks.md) for the operation and
 receiver contracts, idempotency, destination versions and restore epochs.
 
+Owner browser comments can wake an eligible task's assignee when the integration
+opts into the `comment` reason; shared-MCP comments never wake. A comment during
+live execution is deferred until `execution.complete`. Consecutive shared-MCP
+reassignments are counted per task; exceeding the owner-set
+`max_bot_handoffs` (default 4) applies the write but stops the task as Waiting
+without a wake until the owner sets it Ready.
+
 ## Capability discovery and cached tool schemas
 
 Read collection `capabilities` to discover protocol version, server build, operation

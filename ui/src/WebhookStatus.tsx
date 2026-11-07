@@ -15,6 +15,7 @@ const reasons = [
   "review_outcome",
   "unassigned",
   "catch_up",
+  "comment",
 ];
 const labels: Record<string, string> = {
   created: "Created ready",
@@ -25,6 +26,8 @@ const labels: Record<string, string> = {
   review_outcome: "Review resolved",
   unassigned: "Unassigned (triage)",
   catch_up: "Explicit catch-up",
+  comment:
+    "Owner comment (your browser comments only; agent comments never wake)",
 };
 const deliveryStates: Record<string, string> = {
   pending: "Queued",
@@ -110,6 +113,8 @@ function Blockers({ items }: { items: Blocker[] }) {
 export default function WebhookStatus({ agents }: { agents: Row[] }) {
   const [config, setConfig] = useState<Row>();
   const [mappings, setMappings] = useState<Row[]>([]);
+  const [routing, setRouting] = useState<Row>();
+  const [handoffLimit, setHandoffLimit] = useState("4");
   const [deliveries, setDeliveries] = useState<Row[]>([]);
   const [executions, setExecutions] = useState<Row[]>([]);
   const [legacyCount, setLegacyCount] = useState(0);
@@ -138,14 +143,17 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
       crewApi.read("webhook_mappings"),
       crewApi.read("webhook_deliveries"),
       crewApi.read("webhook_executions"),
+      crewApi.read("webhook_routing"),
     ])
-      .then(([cs, ms, ds, es]) => {
+      .then(([cs, ms, ds, es, rs]) => {
         if (!alive) return;
         const current = cs.find((x) => x.scope === "global");
         setConfig(current);
         setMappings(ms);
         setDeliveries(ds);
         setExecutions(es);
+        setRouting(rs[0]);
+        setHandoffLimit(String(Number(rs[0]?.max_bot_handoffs) || 4));
         setLegacyCount(cs.filter((x) => x.scope === "legacy").length);
         setSubscriptions(list(current, "subscriptions"));
         setRoleInstructions(val(current, "role_instructions"));
@@ -990,6 +998,50 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 Save advanced settings
               </button>
             </form>
+            {routing && (
+              <form
+                aria-label="Bot handoff limit settings"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void mutate(
+                    "webhook.routing.update",
+                    { max_bot_handoffs: Number(handoffLimit) },
+                    routing,
+                    "Bot handoff limit saved.",
+                  );
+                }}
+              >
+                <label className="crew-field">
+                  <span>Bot handoff limit</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    step={1}
+                    value={handoffLimit}
+                    disabled={blocked}
+                    onChange={(e) => setHandoffLimit(e.target.value)}
+                  />
+                </label>
+                <p className="crew-footnote">
+                  Consecutive agent reassignments allowed before Crew stops the
+                  task as Waiting without a wake. Any owner edit or comment
+                  resets the count; only you can set a stopped task Ready.
+                </p>
+                <button
+                  disabled={
+                    blocked ||
+                    !/^\d+$/.test(handoffLimit) ||
+                    Number(handoffLimit) < 1 ||
+                    Number(handoffLimit) > 20 ||
+                    Number(handoffLimit) ===
+                      (Number(routing.max_bot_handoffs) || 4)
+                  }
+                >
+                  Save handoff limit
+                </button>
+              </form>
+            )}
             <ExecutionRecovery
               executions={executions}
               disabled={blocked}

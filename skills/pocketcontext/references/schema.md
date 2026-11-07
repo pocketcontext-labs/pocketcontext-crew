@@ -4,7 +4,7 @@ Agents: name, brief, archived. Buckets: name, purpose, responsible_agent, archiv
 Notes: bucket, title, body, links (note IDs), archived. Note revisions preserve
 immutable title/body/links snapshots. Tasks: title, description, assigned_agent,
 labels, status, draft, links, archived, readiness, waiting_reason and server-managed
-wake_generation. Reviews preserve exact draft snapshots and
+wake_generation, bot_handoffs, handoff_limited and comment wake markers. Reviews preserve exact draft snapshots and
 owner decisions. Events preserve action, actor, reported_agent, reason and changes.
 All records have id, revision, created and updated. There is no space field.
 

@@ -9,7 +9,9 @@ const reasons = [
   "ready",
   "created",
   "catch_up",
+  "comment",
 ];
+const DEFAULT_MAX_BOT_HANDOFFS = 4;
 const collections = [
   "webhook_configs",
   "webhook_mappings",
@@ -219,6 +221,9 @@ function enqueue(app, config, payload, t, target) {
   const now = new Date();
   if (t) {
     t.set("execution_required_generation", t.getInt("wake_generation"));
+    // Any emitted wake satisfies a deferred owner-comment wake.
+    t.set("comment_wake_generation", 0);
+    t.set("comment_wake_event", "");
     app.save(t);
   }
   row.set("config", config.id);
@@ -238,7 +243,7 @@ function enqueue(app, config, payload, t, target) {
   app.save(row);
   return exported(row, app);
 }
-function wake(app, t, causes, outcome) {
+function wake(app, t, causes, outcome, extra) {
   const target = route(app, t);
   if (!target) return null;
   const subscriptions = json(target.config, "subscriptions", []);
@@ -269,6 +274,7 @@ function wake(app, t, causes, outcome) {
     task_url: $pocketcontext.webhookBaseURL(app) + "/#/tasks/" + t.id,
   };
   if (outcome) payload.review_outcome = outcome;
+  if (extra) Object.assign(payload, extra);
   return enqueue(app, target.config, payload, t, target.kind);
 }
 function transition(app, t, old, options) {
@@ -305,10 +311,83 @@ function transition(app, t, old, options) {
     eligible(current) && causes.length > 0 && !options.autoWithdraw;
   if (invalidate || notify) {
     t.set("wake_generation", t.getInt("wake_generation") + 1);
+    // A generation change ends the execution a deferred comment was waiting for.
+    t.set("comment_wake_generation", 0);
+    t.set("comment_wake_event", "");
     app.save(t);
     cancel(app, "task={:task}", { task: t.id });
   }
   if (notify) wake(app, t, causes, options.outcome);
+}
+// A live execution is current-generation work that may still be running or
+// about to start: an unexpired lease, or a prepared handoff before its deadline.
+function liveExecution(app, t) {
+  const now = Date.now(),
+    future = (value) =>
+      Number.isFinite(Date.parse(value)) && Date.parse(value) > now;
+  return rows(
+    app,
+    "webhook_executions",
+    "task={:task} && generation={:generation} && (state='dispatching' || state='handed_off' || state='running')",
+    { task: t.id, generation: t.getInt("wake_generation") },
+  ).some((r) =>
+    r.getString("state") === "handed_off"
+      ? future(r.getString("handoff_deadline_at"))
+      : future(r.getString("lease_until")),
+  );
+}
+function commentRoutable(app, t) {
+  const target = route(app, t);
+  return (
+    !!target && json(target.config, "subscriptions", []).includes("comment")
+  );
+}
+function commentWakeNow(app, t, eventId) {
+  t.set("wake_generation", t.getInt("wake_generation") + 1);
+  app.save(t);
+  cancel(app, "task={:task}", { task: t.id });
+  return wake(app, t, ["comment"], null, { comment_event_id: eventId });
+}
+// Owner browser comments only; shared-MCP comments never call this. Returns
+// "woken", "deferred" or "" so callers and tests can observe the decision.
+function ownerComment(app, t, eventId) {
+  if (!commentRoutable(app, t)) return "";
+  if (liveExecution(app, t)) {
+    t.set("comment_wake_generation", t.getInt("wake_generation"));
+    t.set("comment_wake_event", eventId);
+    app.save(t);
+    return "deferred";
+  }
+  return commentWakeNow(app, t, eventId) ? "woken" : "";
+}
+function commentWakePending(t) {
+  return (
+    t.getInt("comment_wake_generation") > 0 &&
+    t.getInt("comment_wake_generation") === t.getInt("wake_generation")
+  );
+}
+// Called by execution.complete after the execution reaches a terminal outcome.
+function deferredCommentWake(app, t) {
+  if (!commentWakePending(t)) return null;
+  const eventId = t.getString("comment_wake_event");
+  t.set("comment_wake_generation", 0);
+  t.set("comment_wake_event", "");
+  app.save(t);
+  if (!commentRoutable(app, t)) return null;
+  return commentWakeNow(app, t, eventId);
+}
+function clearCommentWake(app, t) {
+  if (
+    !t.getInt("comment_wake_generation") &&
+    !t.getString("comment_wake_event")
+  )
+    return;
+  t.set("comment_wake_generation", 0);
+  t.set("comment_wake_event", "");
+  app.save(t);
+}
+function maxBotHandoffs(app) {
+  return routing(app).getInt("max_bot_handoffs") || DEFAULT_MAX_BOT_HANDOFFS;
 }
 function validateEndpoint(url) {
   try {
@@ -557,6 +636,13 @@ function handle(app, b, actor, isAgent) {
   // replayed through MCP and credentials can never enter the agent API.
   if (b.action === "webhook.credentials.update" && isAgent)
     throw new ForbiddenError("Enter webhook credentials in the owner UI");
+  // The bot handoff limit stops agent loops, so agents cannot raise it.
+  if (
+    b.action === "webhook.routing.update" &&
+    isAgent &&
+    d.max_bot_handoffs !== undefined
+  )
+    throw new ForbiddenError("Only the owner can change the bot handoff limit");
   if (["webhook.create", "webhook.update"].includes(b.action))
     bad(
       "Use the global integration; legacy per-agent configuration is retired",
@@ -596,21 +682,35 @@ function handle(app, b, actor, isAgent) {
         return exported(agent, app);
       }
       if (b.action === "webhook.routing.update") {
-        only(d, ["triage_agent"]);
+        only(d, ["triage_agent", "max_bot_handoffs"]);
         const rt = routing(app);
         check(rt, b.expected_revision);
-        if (d.triage_agent === undefined)
+        if (d.triage_agent === undefined && d.max_bot_handoffs === undefined)
           bad("triage_agent is required; use null to clear");
-        const id = d.triage_agent || "";
-        if (id && !activeAgent(app, id)) bad("Active triage agent required");
-        if (rt.getString("triage_agent") !== id) {
-          invalidateTriage(app, b, actor);
-          cancel(app, "target_kind='triage'", {});
+        const changes = {};
+        if (d.max_bot_handoffs !== undefined) {
+          if (
+            !Number.isInteger(d.max_bot_handoffs) ||
+            d.max_bot_handoffs < 1 ||
+            d.max_bot_handoffs > 20
+          )
+            bad("max_bot_handoffs must be an integer from 1 to 20");
+          rt.set("max_bot_handoffs", d.max_bot_handoffs);
+          changes.max_bot_handoffs = d.max_bot_handoffs;
         }
-        rt.set("triage_agent", id);
+        if (d.triage_agent !== undefined) {
+          const id = d.triage_agent || "";
+          if (id && !activeAgent(app, id)) bad("Active triage agent required");
+          if (rt.getString("triage_agent") !== id) {
+            invalidateTriage(app, b, actor);
+            cancel(app, "target_kind='triage'", {});
+          }
+          rt.set("triage_agent", id);
+          changes.triage_agent = id;
+        }
         rt.set("revision", rt.getInt("revision") + 1);
         app.save(rt);
-        audit(app, rt, b, actor, { triage_agent: id });
+        audit(app, rt, b, actor, changes);
         return exported(rt, app);
       }
       if (b.action === "webhook.mapping.update") {
@@ -1119,4 +1219,10 @@ module.exports = {
   eligible,
   transition,
   deactivate,
+  ownerComment,
+  deferredCommentWake,
+  clearCommentWake,
+  commentWakePending,
+  maxBotHandoffs,
+  reasons,
 };

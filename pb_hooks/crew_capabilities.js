@@ -255,9 +255,20 @@ function describe() {
     ["tasks"],
     { revision: "config", key: true },
   );
-  op("webhook.routing.update", { triage_agent: nullable }, ["triage_agent"], {
-    revision: "routing",
-  });
+  op(
+    "webhook.routing.update",
+    {
+      triage_agent: nullable,
+      max_bot_handoffs: { type: "integer", minimum: 1, maximum: 20 },
+    },
+    [],
+    {
+      revision: "routing",
+      owner_only_fields: ["max_bot_handoffs"],
+      description:
+        "Supply triage_agent, max_bot_handoffs or both. Only the owner browser may change max_bot_handoffs.",
+    },
+  );
   op("execution.validate", event, ["event_id", "epoch", "generation"], {
     result: {
       type: "object",
@@ -382,6 +393,10 @@ function describe() {
       ...task,
       wake_generation: num,
       execution_required_generation: num,
+      bot_handoffs: num,
+      handoff_limited: bool,
+      comment_wake_generation: num,
+      comment_wake_event: str,
     },
     note_revisions: {
       note: str,
@@ -451,6 +466,7 @@ function describe() {
       epoch: str,
       triage_agent: str,
       paused: bool,
+      max_bot_handoffs: num,
     },
     webhook_deliveries: {
       config: str,
@@ -657,6 +673,13 @@ function describe() {
           native_handoff_is_caller_reported: true,
           bridge_context_is_caller_reported: true,
           external_effects_exactly_once: false,
+        },
+        wake_reasons: require(`${__hooks}/crew_webhooks.js`).reasons.slice(),
+        wake_rules: {
+          comment:
+            "Opt-in. Only an owner browser comment wakes; shared-MCP comments never wake. During a live execution the wake is deferred until execution.complete; payloads carry comment_event_id, never comment text.",
+          bot_handoffs:
+            "Consecutive shared-MCP assignment changes; any owner task write resets it. Exceeding webhook_routing.max_bot_handoffs applies the write but sets Waiting without a wake; only the owner can set Ready again.",
         },
         setup_entry:
           "Read webhook_configs; follow the canonical managed routine instructions. Never request credentials through chat or MCP.",

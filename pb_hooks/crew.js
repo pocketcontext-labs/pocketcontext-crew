@@ -59,6 +59,12 @@ function event(app, r, action, b, actor, changes) {
   ev.set("changes", changes || b.data || {});
   ev.set("revision", 1);
   app.save(ev);
+  return ev;
+}
+// Any owner write to a task ends a run of consecutive shared-MCP handoffs.
+function ownerTouch(t) {
+  t.set("bot_handoffs", 0);
+  t.set("handoff_limited", false);
 }
 function active(app, col, id) {
   if (!id) return;
@@ -367,7 +373,15 @@ function write(e, isAgent) {
             true,
           );
         } else {
-          event(app, r, b.action, b, actor);
+          const comment = event(app, r, b.action, b, actor);
+          // Only the authenticated owner session can wake through a comment.
+          // Shared-MCP names are unverified, so agent comments never wake.
+          if (!isAgent) {
+            ownerTouch(r);
+            app.save(r);
+            webhooks.ownerComment(app, r, comment.id);
+            execution.invalidateStale(app, r, b, actor);
+          }
           result = r;
         }
         return;
@@ -453,6 +467,39 @@ function write(e, isAgent) {
         if (values.status === "done" && pending(app, r.id).length)
           bad("Resolve or withdraw the pending review before completion");
       }
+      let hopStop = null;
+      if (kind === "task" && !isAgent) ownerTouch(r);
+      else if (kind === "task") {
+        if (r.getBool("handoff_limited") && values.readiness === "ready")
+          throw new ForbiddenError(
+            "The bot handoff limit stopped this task; the owner must review it and set Ready",
+          );
+        const before = op === "create" ? "" : r.getString("assigned_agent");
+        if (
+          values.assigned_agent !== undefined &&
+          (values.assigned_agent || "") !== before
+        ) {
+          const count = r.getInt("bot_handoffs") + 1,
+            max = webhooks.maxBotHandoffs(app);
+          r.set("bot_handoffs", count);
+          if (count > max) {
+            // The write applies, but the loop stops for owner review: Waiting
+            // emits no wake and invalidates any current execution authority.
+            values = {
+              ...values,
+              readiness: "waiting",
+              waiting_reason:
+                "Bot handoff limit reached: " +
+                count +
+                " consecutive agent reassignments (limit " +
+                max +
+                "). Review, then set Ready.",
+            };
+            r.set("handoff_limited", true);
+            hopStop = { bot_handoffs: count, max_bot_handoffs: max };
+          }
+        }
+      }
       for (const k of Object.keys(values)) r.set(k, values[k]);
       if (values.archived !== undefined) {
         r.set("archived_at", values.archived ? new Date().toISOString() : "");
@@ -485,6 +532,15 @@ function write(e, isAgent) {
           new: r.getString("responsible_agent"),
         };
       event(app, r, b.action, b, actor, changes);
+      if (hopStop)
+        event(
+          app,
+          r,
+          "task.hop_limit",
+          { reason: "hop_limit", reported_agent: b.reported_agent, data: {} },
+          actor,
+          { ...hopStop, readiness: "waiting" },
+        );
       result = kind === "bucket" ? bucketExport(app, r) : r;
       return;
     }
@@ -505,6 +561,7 @@ function write(e, isAgent) {
       r.set("requested_by", actor);
       r.set("reported_agent", b.reported_agent || "");
       app.save(r);
+      if (!isAgent) ownerTouch(t);
       t.set("status", "needs_review");
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
@@ -540,6 +597,7 @@ function write(e, isAgent) {
       } else r.set("status", "withdrawn");
       r.set("revision", r.getInt("revision") + 1);
       app.save(r);
+      if (!isAgent) ownerTouch(t);
       t.set("status", "in_progress");
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
