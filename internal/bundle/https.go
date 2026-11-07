@@ -74,7 +74,7 @@ func publicRoute(method, p string) bool {
 	}
 	if method == http.MethodPost {
 		switch p {
-		case "/api/crew/read", "/api/crew/write", "/api/crew/agent-write", "/api/bundle/redeem", "/api/collections/users/auth-with-password", "/api/collections/users/auth-refresh", "/api/realtime":
+		case "/api/crew/read", "/api/crew/search", "/api/crew/write", "/api/crew/agent-write", "/api/bundle/redeem", "/api/collections/users/auth-with-password", "/api/collections/users/auth-refresh", "/api/realtime":
 			return true
 		}
 	}

@@ -677,6 +677,8 @@ function document() {
     server_commit: metadata.commit,
     $defs: definitions,
     collections,
+    read: readDiscovery(),
+    search: searchDiscovery(),
     operations,
     write_envelope: object(
       {
@@ -774,6 +776,92 @@ function describe(selector) {
     items: [selector === "execution" ? execution(doc) : doc],
     has_more: false,
     next_offset: null,
+  };
+}
+// Compact read and ranked search discovery. Omitted read parameters keep the
+// original full-record, 100-per-page behavior.
+function readDiscovery() {
+  return {
+    route: "POST /api/crew/read (MCP crew_read)",
+    parameters: object({
+      collection: str,
+      id: str,
+      parent: str,
+      query: str,
+      archived: bool,
+      offset: num,
+      limit: { type: "integer", minimum: 1, maximum: 100, default: 100 },
+      fields: {
+        type: "array",
+        items: str,
+        description:
+          "Top-level field projection of the normal export; id and revision always included; unknown or redacted fields are rejected.",
+      },
+      responsible_agent: nullable,
+      assigned_agent: {
+        type: ["string", "null"],
+        description:
+          "Tasks: agent ID or unique exact name; empty string selects unassigned.",
+      },
+      status: {
+        anyOf: [
+          { enum: ["todo", "in_progress", "needs_review", "done"] },
+          {
+            type: "array",
+            items: { enum: ["todo", "in_progress", "needs_review", "done"] },
+          },
+        ],
+        description: "Tasks only",
+      },
+      readiness: { enum: ["waiting", "ready"], description: "Tasks only" },
+      label: { type: "string", description: "Tasks with this exact label" },
+      changed_since: {
+        type: "string",
+        format: "date-time",
+        description: "RFC3339; records updated at or after it",
+      },
+    }),
+    result: "items, has_more, next_offset (offset + limit)",
+    strategy:
+      "Filter and project first; read one record by id with fields; request full records only when their bodies are needed.",
+  };
+}
+function searchDiscovery() {
+  return {
+    route: "POST /api/crew/search (MCP crew_search)",
+    parameters: object(
+      {
+        query: str,
+        collections: { type: "array", items: { enum: ["notes", "tasks"] } },
+        limit: { type: "integer", minimum: 1, maximum: 50, default: 10 },
+        offset: { type: "integer", minimum: 0, maximum: 10000 },
+        archived: bool,
+        generation: str,
+      },
+      ["query"],
+    ),
+    hit_fields: [
+      "collection",
+      "id",
+      "title",
+      "excerpt",
+      "revision",
+      "updated",
+      "score",
+      "bucket",
+      "bucket_name",
+      "status",
+      "readiness",
+      "assigned_agent",
+      "assigned_agent_name",
+    ],
+    ranking:
+      "SQLite FTS5 BM25 over note title/body and task title/description/draft; all terms must match; trailing * is a prefix.",
+    freshness:
+      "Results reflect edits, restores and archive changes immediately; pass generation when paging, and restart on 409.",
+    archived:
+      "Same as crew_read: default excludes archived notes, notes in archived buckets and archived tasks; archived:true selects only them.",
+    excludes: "Webhook, review, event and revision data are never searched.",
   };
 }
 module.exports = {

@@ -86,7 +86,7 @@ func maintenanceRead(r *http.Request) bool {
 		return true
 	}
 	if r.Method == http.MethodPost {
-		return p == "/api/crew/read" || p == "/api/realtime" ||
+		return p == "/api/crew/read" || p == "/api/crew/search" || p == "/api/realtime" ||
 			(len(parts) == 4 && parts[0] == "api" && parts[1] == "collections" && parts[3] == "auth-refresh")
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {

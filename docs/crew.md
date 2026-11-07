@@ -1,7 +1,7 @@
 # Crew v1 data and access contract
 
 The `crew_*` collections are accessed through authenticated operations, never
-through generic record writes. There are no spaces, SQL endpoints or inherited knowledge collections.
+through generic record writes. There are no spaces or inherited knowledge collections.
 
 | Collection     | Purpose                                                                     |
 | -------------- | --------------------------------------------------------------------------- |
@@ -16,8 +16,31 @@ through generic record writes. There are no spaces, SQL endpoints or inherited k
 `POST /api/crew/read` accepts collection, optional id/parent/query/archived/offset and responsible_agent for buckets.
 It returns items, has_more and next_offset (100 records per page). Default note
 reads exclude archived notes and notes in archived buckets. Explicit history
-reads retain revisions, events and closed review snapshots. Search scans note
-content, task text or agent/bucket names; semantic ranking is not provided.
+reads retain revisions, events and closed review snapshots. The `query` filter
+is a substring match over note content, task text or agent/bucket names.
+
+Compact reads are optional; omitting them keeps the behavior above. `limit`
+(1-100) sets the page size and next_offset advances by it. `fields` projects
+top-level fields of the normal export (id and revision are always returned);
+unknown fields, and fields the export hides or redacts such as webhook URLs and
+secrets, are rejected. Task reads accept `assigned_agent` (ID or unique exact
+name, empty string for unassigned), `status` (one value or a list), `readiness`
+and `label` (exact element of labels). `changed_since` (RFC3339) selects records
+updated at or after that time in any collection. Archive semantics are unchanged.
+
+`POST /api/crew/search` ranks notes (title, body) and tasks (title, description,
+draft) with SQLite FTS5 BM25. It takes query (all terms must match; a trailing
+`*` is a prefix), optional collections (notes, tasks), limit (default 10, at most
+50), offset and archived with crew_read's archive semantics. Hits are compact:
+collection, id, title, a short highlighted excerpt, revision, updated, score and
+the note bucket or the task status, readiness and assignment. A `generation`
+token identifies the indexed content; pass it when following next_offset, and
+restart on 409 when content changed. The index is in memory, rebuilt from the
+application's own database connection whenever a change fingerprint (id,
+revision, updated and effective archive state of every note and task) changes,
+so edits, restores and archive changes, including bucket archival, are visible
+immediately. Indexed text is bounded (64 MiB). Webhook, event, review and
+revision records are never indexed or returned.
 
 `POST /api/crew/write` is the owner path. MCP only forwards to
 `POST /api/crew/agent-write`, which denies decisions, bucket archival
@@ -51,7 +74,8 @@ messages, publish posts or perform payments.
 
 ## Verification
 
-Crew integration tests exercise authenticated read/write, immutable history,
+Crew integration tests exercise authenticated read/write, compact read filters
+and projections, ranked search freshness and archive semantics, immutable history,
 conflicts and concurrent claims, archive ancestry, review invalidation, owner-only
 decisions, generic REST/batch rejection and restart persistence. MCP tests cover
 transport allowlists and the agent path. Hosted image gates additionally rehearse

@@ -16,8 +16,13 @@ func TestCrewMCPAuthorityBoundary(t *testing.T) {
 			}
 		}
 	}
-	if !mcpAPIAllowed("POST", "/api/crew/read") || !mcpAPIAllowed("POST", "/api/crew/agent-write") {
+	if !mcpAPIAllowed("POST", "/api/crew/read") || !mcpAPIAllowed("POST", "/api/crew/agent-write") || !mcpAPIAllowed("POST", "/api/crew/search") {
 		t.Fatal("Crew agent routes unavailable")
+	}
+	for _, method := range []string{"GET", "PATCH", "DELETE"} {
+		if mcpAPIAllowed(method, "/api/crew/search") {
+			t.Fatalf("MCP exposes %s search", method)
+		}
 	}
 	calls := 0
 	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -323,5 +328,47 @@ func TestCrewDiscoveryAndCachedEnvelopeCompatibility(t *testing.T) {
 		if dig(c, "scope") == "global" {
 			mcpCall(t, h, token, "crew_write", map[string]any{"action": "webhook.credentials.update", "reported_agent": "Synthetic", "id": dig(c, "id"), "expected_revision": dig(c, "revision"), "data": map[string]any{"secret": "synthetic-never-save", "_crew": map[string]any{"idempotency_key": "blocked-credential"}}}, true)
 		}
+	}
+}
+
+// Compact reads and ranked search through the MCP adapter and the real API.
+func TestCrewMCPCompactReadsAndSearch(t *testing.T) {
+	api, token := mcpRealAPI(t)
+	h := mcpTestHandler(api)
+	call := func(name string, args map[string]any) any { return mcpCall(t, h, token, name, args, false) }
+	write := func(action string, data map[string]any) any {
+		return call("crew_write", map[string]any{"action": action, "reported_agent": "Synthetic", "data": data})
+	}
+	agent := write("agent.create", map[string]any{"name": "Atlas"})
+	bucket := write("bucket.create", map[string]any{"name": "Archive research"})
+	note := write("note.create", map[string]any{"bucket": dig(bucket, "id"), "title": "Heliograph signalling", "body": "Mirrors flash Morse over long distances."})
+	ready := write("task.create", map[string]any{"title": "Calibrate heliograph", "assigned_agent": dig(agent, "id"), "readiness": "ready", "labels": []string{"optics"}})
+	write("task.create", map[string]any{"title": "Unrelated waiting task", "assigned_agent": dig(agent, "id")})
+
+	page := call("crew_read", map[string]any{"collection": "tasks", "assigned_agent": "Atlas", "readiness": "ready", "status": []string{"todo"}, "label": "optics", "fields": []string{"title"}, "limit": 5, "changed_since": "2000-01-01T00:00:00Z"})
+	items := dig(page, "items").([]any)
+	if len(items) != 1 || dig(items[0], "id") != dig(ready, "id") || len(items[0].(map[string]any)) != 3 {
+		t.Fatalf("filtered compact read: %v", page)
+	}
+	mcpCall(t, h, token, "crew_read", map[string]any{"collection": "tasks", "fields": []string{"secret_ciphertext"}}, true)
+	result := call("crew_search", map[string]any{"query": "heliograph", "limit": 1})
+	hits := dig(result, "items").([]any)
+	if len(hits) != 1 || dig(result, "has_more") != true || dig(result, "generation") == "" {
+		t.Fatalf("search page: %v", result)
+	}
+	next := call("crew_search", map[string]any{"query": "heliograph", "limit": 1, "offset": 1, "generation": dig(result, "generation")})
+	both := []any{dig(hits[0], "id"), dig(dig(next, "items").([]any)[0], "id")}
+	if !(both[0] == dig(note, "id") || both[1] == dig(note, "id")) || both[0] == both[1] {
+		t.Fatalf("search pages: %v", both)
+	}
+	notes := call("crew_search", map[string]any{"query": "morse", "collections": []string{"notes"}})
+	if hit := dig(notes, "items").([]any); len(hit) != 1 || dig(hit[0], "bucket") != dig(bucket, "id") {
+		t.Fatalf("note hit: %v", notes)
+	}
+	mcpCall(t, h, token, "crew_search", map[string]any{"query": "x", "collections": []string{"webhook_configs"}}, true)
+	mcpCall(t, h, token, "crew_search", map[string]any{"query": ""}, true)
+	capabilities := dig(call("crew_read", map[string]any{"collection": "capabilities"}), "items").([]any)[0]
+	if dig(capabilities, "read", "parameters", "properties", "fields") == nil || dig(capabilities, "search", "parameters", "properties", "generation") == nil {
+		t.Fatal("capabilities omit compact read or search discovery")
 	}
 }

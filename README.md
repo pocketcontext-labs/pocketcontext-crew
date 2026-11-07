@@ -16,7 +16,8 @@ Task work remains revision checked and fenced; credential entry stays in the own
 ## First version
 
 - Memory buckets with editable Markdown notes, immutable versions and restoration.
-- Full-content text search, explicit note links and archived-item views.
+- Ranked full-text search (FTS5/BM25) over notes and tasks, compact filtered
+  reads, explicit note links and archived-item views.
 - Agent briefs and designated bucket responsibility: read all buckets, write your
   own, request changes elsewhere through tasks. This is behavior, not isolation.
 - AI Team board: To do, In progress, Needs review, Done; assignments, labels,
@@ -37,7 +38,8 @@ approval boundary is between owner credentials and the MCP OAuth connection.
 Sign in with the native owner password/sign-in link, or the configured owner email
 for a hosted container. Connect
 an assistant to `https://YOUR_HOST/mcp` and authorize it in that
-signed-in browser. The two Crew tools are `crew_read` and `crew_write`; their
+signed-in browser. The Crew tools are `crew_read` (filtered, projected reads),
+`crew_search` (ranked full-text search over notes and tasks) and `crew_write`; their
 schemas describe collections, operations and revision requirements. The browser
 provides the same work and memory operations plus owner-only decisions.
 

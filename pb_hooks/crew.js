@@ -166,6 +166,66 @@ function withdraw(app, t, b, actor) {
     event(app, r, "review.withdraw", b, actor);
   }
 }
+// Fields that a projection may name, beyond the collection's non-hidden schema
+// fields. Projection only subsets the normal export, so redacted values such as
+// webhook URLs and secrets can never be selected.
+const derivedFields = {
+  buckets: ["responsible_agent_details"],
+  webhook_configs: [
+    "secret_configured",
+    "url_configured",
+    "receiver_host",
+    "setup",
+  ],
+  webhook_executions: ["waiting_overdue", "lease_expired"],
+  webhook_bridges: ["overdue"],
+};
+const redactedFields = ["url", "secret", "secret_ciphertext"];
+const taskStatuses = ["todo", "in_progress", "needs_review", "done"];
+function projectable(app, col) {
+  const out = ["collectionId", "collectionName"];
+  const collection = app.findCollectionByNameOrId("crew_" + col);
+  for (const f of collection.fields)
+    if (!f.getHidden() && !redactedFields.includes(f.getName()))
+      out.push(f.getName());
+  return out.concat(derivedFields[col] || []);
+}
+function projection(app, col, requested) {
+  if (requested === undefined) return null;
+  if (
+    !Array.isArray(requested) ||
+    !requested.length ||
+    requested.length > 50 ||
+    requested.some((x) => typeof x !== "string" || !x)
+  )
+    bad("fields must be a non-empty array of at most 50 field names");
+  const allowed = projectable(app, col);
+  for (const f of requested)
+    if (!allowed.includes(f))
+      bad("Unknown or unavailable field for " + col + ": " + f);
+  const keep = ["id", "revision"];
+  for (const f of requested) if (!keep.includes(f)) keep.push(f);
+  return keep;
+}
+function pick(value, keep) {
+  const out = {};
+  for (const k of keep) if (value[k] !== undefined) out[k] = value[k];
+  return out;
+}
+function sinceFilter(value) {
+  if (typeof value !== "string" || value.length > 64)
+    bad("Invalid changed_since");
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(
+      value,
+    )
+  )
+    bad("changed_since must be an RFC3339 timestamp");
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) bad("changed_since must be an RFC3339 timestamp");
+  // PocketBase stores UTC autodates as "YYYY-MM-DD HH:MM:SS.mmmZ".
+  return new Date(ms).toISOString().replace("T", " ");
+}
 function read(e) {
   const b = e.requestInfo().body;
   only(b, [
@@ -176,21 +236,82 @@ function read(e) {
     "archived",
     "offset",
     "responsible_agent",
+    "limit",
+    "fields",
+    "assigned_agent",
+    "status",
+    "readiness",
+    "label",
+    "changed_since",
   ]);
   if (b.collection === "capabilities")
     return e.json(200, capabilities.describe(b.id));
   if (!names.includes(b.collection)) bad("Unknown collection");
   const col = b.collection,
     params = {},
-    clauses = [];
+    clauses = [],
+    // Parallel raw SQL for task reads with a label filter: PocketBase filters
+    // cannot match one exact element of a JSON array.
+    sql = [];
   if (b.responsible_agent !== undefined) {
     if (col !== "buckets")
       bad("Responsible agent filter is only supported for buckets");
     params.agent = resolveAgent(e.app, b.responsible_agent);
     clauses.push("responsible_agent={:agent}");
   }
+  for (const k of ["assigned_agent", "status", "readiness", "label"])
+    if (b[k] !== undefined && col !== "tasks")
+      bad(k + " filter is only supported for tasks");
+  if (b.assigned_agent !== undefined) {
+    params.assigned = resolveAgent(e.app, b.assigned_agent);
+    clauses.push("assigned_agent={:assigned}");
+    sql.push("COALESCE([[assigned_agent]],'')={:assigned}");
+  }
+  if (b.status !== undefined) {
+    const statuses = Array.isArray(b.status) ? b.status : [b.status];
+    if (
+      !statuses.length ||
+      statuses.length > taskStatuses.length ||
+      statuses.some((x) => !taskStatuses.includes(x))
+    )
+      bad("status must be one or more of " + taskStatuses.join(", "));
+    const keys = statuses.map((x, i) => {
+      params["status" + i] = x;
+      return "{:status" + i + "}";
+    });
+    clauses.push("(" + keys.map((k) => "status=" + k).join(" || ") + ")");
+    sql.push("[[status]] IN (" + keys.join(",") + ")");
+  }
+  if (b.readiness !== undefined) {
+    if (!["waiting", "ready"].includes(b.readiness))
+      bad("readiness must be waiting or ready");
+    params.readiness = b.readiness;
+    clauses.push("readiness={:readiness}");
+    sql.push("[[readiness]]={:readiness}");
+  }
+  if (b.label !== undefined) {
+    if (typeof b.label !== "string" || !b.label || b.label.length > 500)
+      bad("label must be a non-empty string");
+    params.label = b.label;
+    sql.push(
+      "EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid([[labels]]) AND json_type([[labels]])='array' THEN [[labels]] ELSE '[]' END) AS label WHERE label.type='text' AND label.value={:label})",
+    );
+  }
+  if (b.changed_since !== undefined) {
+    params.since = sinceFilter(b.changed_since);
+    clauses.push("updated>={:since}");
+    sql.push("[[updated]]>={:since}");
+  }
+  let limit = 100;
+  if (b.limit !== undefined) {
+    if (!Number.isInteger(b.limit) || b.limit < 1 || b.limit > 100)
+      bad("limit must be an integer from 1 to 100");
+    limit = b.limit;
+  }
+  const keep = projection(e.app, col, b.fields);
   if (b.id) {
     clauses.push("id={:id}");
+    sql.push("[[id]]={:id}");
     params.id = b.id;
   }
   if (b.parent) {
@@ -224,8 +345,10 @@ function read(e) {
     clauses.push(key + "={:parent}");
     params.parent = b.parent;
   }
-  if (["agents", "buckets", "tasks"].includes(col))
+  if (["agents", "buckets", "tasks"].includes(col)) {
     clauses.push(b.archived ? "archived=true" : "archived=false");
+    sql.push(b.archived ? "[[archived]]=TRUE" : "[[archived]]=FALSE");
+  }
   if (col === "notes")
     clauses.push(
       b.archived
@@ -246,30 +369,55 @@ function read(e) {
     clauses.push(
       "(" + searchFields.map((k) => k + " ~ {:q}").join(" || ") + ")",
     );
+    // Same contains semantics as the PocketBase ~ operator.
+    const text = String(b.query);
+    params.qlike = text.includes("%")
+      ? text
+      : "%" + text.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
+    sql.push(
+      "(" +
+        searchFields
+          .map((k) => "[[" + k + "]] LIKE {:qlike} ESCAPE '\\'")
+          .join(" OR ") +
+        ")",
+    );
   }
   const offset = Number.isInteger(b.offset) && b.offset >= 0 ? b.offset : 0;
-  const rows = e.app.findRecordsByFilter(
-    "crew_" + col,
-    clauses.join(" && "),
-    col === "note_revisions" ? "-revision" : "-created",
-    101,
-    offset,
-    params,
-  );
+  let rows;
+  if (col === "tasks" && b.label !== undefined) {
+    rows = arrayOf(new Record());
+    let query = e.app.recordQuery("crew_tasks");
+    for (const clause of sql) query = query.andWhere($dbx.exp(clause, params));
+    query
+      .orderBy("created DESC", "id DESC")
+      .limit(limit + 1)
+      .offset(offset)
+      .all(rows);
+  } else
+    rows = e.app.findRecordsByFilter(
+      "crew_" + col,
+      clauses.join(" && "),
+      col === "note_revisions" ? "-revision" : "-created",
+      limit + 1,
+      offset,
+      params,
+    );
   return e.json(200, {
-    items: rows
-      .slice(0, 100)
-      .map((r) =>
+    items: rows.slice(0, limit).map((r) => {
+      const value =
         col === "buckets"
           ? bucketExport(e.app, r)
           : webhooks.collections.includes(col)
             ? webhooks.exported(r, e.app)
             : execution.collections.includes(col)
               ? execution.exported(r)
-              : r,
-      ),
-    has_more: rows.length > 100,
-    next_offset: rows.length > 100 ? offset + 100 : null,
+              : keep
+                ? r.publicExport()
+                : r;
+      return keep ? pick(value, keep) : value;
+    }),
+    has_more: rows.length > limit,
+    next_offset: rows.length > limit ? offset + limit : null,
   });
 }
 function write(e, isAgent) {

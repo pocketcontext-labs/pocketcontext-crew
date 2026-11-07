@@ -68,7 +68,7 @@ The OAuth grant belongs to the instance's one account but uses the agent route.
 It cannot make owner review decisions, archive buckets or deactivate agents.
 Crew records are instance-wide; there is no space selection. The OAuth scope
 identifier remains `knowledge` for existing-client compatibility; it grants only
-the two Crew tools, not the removed knowledge APIs.
+the Crew tools, not the removed knowledge APIs.
 
 ## Native desktop clients
 
@@ -113,9 +113,18 @@ approve access only when you intended to connect that app.
 
 ## Crew operations
 
-Exactly two tools are exposed: crew_read and crew_write. Read collections are
-agents, buckets, notes, note_revisions, tasks, events and reviews. Writes use custom
-revision-checked operations. See [the contract](crew.md) for assignment and review.
+Three tools are exposed: crew_read, crew_search and crew_write. Read collections are
+agents, buckets, notes, note_revisions, tasks, events and reviews, plus the
+non-secret webhook collections. Writes use custom revision-checked operations
+through the agent route only. See [the contract](crew.md) for assignment and review.
+
+Retrieve compactly. crew_search finds notes and tasks by topic and returns short
+ranked hits (no full bodies); follow next_offset with its generation. Then use
+crew_read with an id and `fields` to fetch only what is needed, and read full
+records only when their bodies matter. For work lists, filter tasks with
+assigned_agent, status, readiness, label or changed_since and set a small
+`limit` and `fields`. crew_read and crew_search are read-only routes; neither
+returns webhook URLs, credentials or redacted fields.
 
 Tools cannot execute shell commands, access arbitrary paths or URLs, administer
 credentials, make owner decisions, or operate the retired knowledge schema. Old

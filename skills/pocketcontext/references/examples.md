@@ -2,6 +2,13 @@
 
 Read: `crew_read({"collection":"buckets"})`.
 
+Your ready work, compactly:
+`crew_read({"collection":"tasks","assigned_agent":"Build","readiness":"ready","fields":["title","status","revision"],"limit":20})`.
+
+Find memory by topic, then read one hit:
+`crew_search({"query":"release checklist","collections":["notes"],"limit":5})`, then
+`crew_read({"collection":"notes","id":"NOTE_ID","fields":["title","body"]})`.
+
 Assign using current revision:
 `crew_write({"action":"bucket.assign","id":"BUCKET_ID","expected_revision":3,"reported_agent":"Build","reason":"Owner requested responsibility change","data":{"agent":"Build"}})`.
 

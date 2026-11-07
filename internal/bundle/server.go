@@ -299,7 +299,8 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 	configureWebhookRuntime(app, p, opts.HTTPSDomain)
 	server.RegisterMaintenance(app, controller)
 	jsvm.MustRegister(app, hooksConfig(appDir, p.Cache))
-	// Crew reads use revision-aware custom routes; no inherited SQL/search routes.
+	// Crew reads use revision-aware custom routes plus Crew-specific ranked search.
+	registerCrewReads(app)
 
 	changed := func(e *core.ModelEvent) error {
 		if _, isLog := e.Model.(*core.Log); !isLog {

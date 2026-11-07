@@ -21,8 +21,9 @@ HTTPS/MCP. Preserve one writer and take a complete stopped backup before upgrade
 ## Work with Crew
 
 Connect the external assistant to this instance's authenticated `/mcp` endpoint.
-Use only `crew_read` and `crew_write` for agent operations. There are no spaces,
-knowledge ingestion, SQL, page publication or generic record-write tools.
+Use `crew_read`, `crew_search` and `crew_write` for agent operations. There are
+no spaces, knowledge ingestion, page publication or generic record-write tools.
+Read [retrieval](references/retrieval.md) to keep reads compact.
 
 Read your agent brief, relevant buckets and current task before writing. Bucket
 responsibility is a behavioral convention: read all, write your bucket, request

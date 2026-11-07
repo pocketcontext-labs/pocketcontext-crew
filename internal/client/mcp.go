@@ -175,7 +175,7 @@ func (t *mcpTransport) RoundTrip(req *http.Request) (response *http.Response, er
 }
 
 func mcpAPIAllowed(method, path string) bool {
-	return method == http.MethodPost && (path == "/api/crew/read" || path == "/api/crew/agent-write")
+	return method == http.MethodPost && (path == "/api/crew/read" || path == "/api/crew/search" || path == "/api/crew/agent-write")
 }
 
 func mcpClient(ctx context.Context, api http.Handler) (*Client, error) {

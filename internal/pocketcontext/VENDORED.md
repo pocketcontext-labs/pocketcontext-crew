@@ -17,6 +17,8 @@ Local changes:
   encodes a Windows drive path as a URI authority, which SQLite rejects.
 - `database/` and `tracing/`: platform files. Windows has no `O_NOFOLLOW`, and
   its mode bits cannot prove that a file is private.
+- `server/maintenance.go`: maintenance admits Crew's read-only routes
+  (`/api/crew/read`, `/api/crew/search`) as reader operations.
 - `server.RegisterDatabase`: reads SQL from an explicit database path, because
   PocketContext keeps its live database in a per-machine cache.
 - Test and benchmark names and fixtures contain no application product names.

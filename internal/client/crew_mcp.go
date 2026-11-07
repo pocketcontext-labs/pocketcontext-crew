@@ -6,13 +6,29 @@ import (
 )
 
 type crewRead struct {
-	Collection       string  `json:"collection" jsonschema:"capabilities (versioned operation schemas), agents, buckets, notes, note_revisions, tasks, events, reviews, webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings, webhook_bridges, or webhook_executions"`
-	ID               string  `json:"id,omitempty"`
-	Parent           string  `json:"parent,omitempty" jsonschema:"Bucket for notes, note for revisions, task for reviews, record for events, config for webhook_deliveries/webhook_bridges, delivery for webhook_attempts"`
-	Query            string  `json:"query,omitempty"`
-	Archived         bool    `json:"archived,omitempty"`
-	Offset           int     `json:"offset,omitempty"`
-	ResponsibleAgent *string `json:"responsible_agent,omitempty" jsonschema:"Buckets only: agent ID or unique exact name; empty string selects unassigned buckets."`
+	Collection       string   `json:"collection" jsonschema:"capabilities (versioned operation schemas), agents, buckets, notes, note_revisions, tasks, events, reviews, webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings, webhook_bridges, or webhook_executions"`
+	ID               string   `json:"id,omitempty"`
+	Parent           string   `json:"parent,omitempty" jsonschema:"Bucket for notes, note for revisions, task for reviews, record for events, config for webhook_deliveries/webhook_bridges, delivery for webhook_attempts"`
+	Query            string   `json:"query,omitempty"`
+	Archived         bool     `json:"archived,omitempty"`
+	Offset           int      `json:"offset,omitempty"`
+	ResponsibleAgent *string  `json:"responsible_agent,omitempty" jsonschema:"Buckets only: agent ID or unique exact name; empty string selects unassigned buckets."`
+	Limit            int      `json:"limit,omitempty" jsonschema:"Page size 1-100 (default 100). next_offset advances by this size."`
+	Fields           []string `json:"fields,omitempty" jsonschema:"Return only these top-level fields (id and revision are always included), e.g. [\"title\",\"status\"]. Unknown or redacted fields are rejected."`
+	AssignedAgent    *string  `json:"assigned_agent,omitempty" jsonschema:"Tasks only: agent ID or unique exact name; empty string selects unassigned tasks."`
+	Status           []string `json:"status,omitempty" jsonschema:"Tasks only: one or more of todo, in_progress, needs_review, done."`
+	Readiness        string   `json:"readiness,omitempty" jsonschema:"Tasks only: waiting or ready."`
+	Label            string   `json:"label,omitempty" jsonschema:"Tasks only: tasks carrying this exact label."`
+	ChangedSince     string   `json:"changed_since,omitempty" jsonschema:"RFC3339 timestamp; records updated at or after it."`
+}
+
+type crewSearch struct {
+	Query       string   `json:"query" jsonschema:"Words to find (all must match; append * for a prefix). Ranked by relevance (BM25)."`
+	Collections []string `json:"collections,omitempty" jsonschema:"notes and/or tasks (default both)."`
+	Limit       int      `json:"limit,omitempty" jsonschema:"Hits per page 1-50 (default 10)."`
+	Offset      int      `json:"offset,omitempty"`
+	Archived    bool     `json:"archived,omitempty" jsonschema:"Search only archived items (archived notes, notes in archived buckets, archived tasks), like crew_read."`
+	Generation  string   `json:"generation,omitempty" jsonschema:"When following next_offset, pass the generation from the first page; a conflict means content changed, so restart."`
 }
 
 type crewWrite struct {
@@ -27,12 +43,42 @@ type crewWrite struct {
 }
 
 func addCrewMCPTools(s *mcp.Server, api http.Handler) {
-	addMCPTool(s, api, "crew_read", "Read capabilities first for versioned operation schemas and legacy-envelope compatibility; then read or search Crew memory and work. Archived notes/buckets are excluded by default. Follow next_offset when has_more. Buckets retain responsible_agent IDs and include responsible_agent_details (id/name or null). Read note_revisions for history and reviews for exact draft snapshots.", true, func(c *Client, a crewRead) (any, error) {
+	addMCPTool(s, api, "crew_read", "Read capabilities first for versioned operation schemas and legacy-envelope compatibility; then read Crew memory and work. Keep reads compact: filter tasks (assigned_agent, status, readiness, label), use changed_since, a small limit and fields (for example [\"title\",\"status\"]); read one record by id with fields; request full records only when you need their bodies. Use crew_search to find notes/tasks by topic. Archived notes/buckets are excluded by default. Follow next_offset when has_more. Buckets retain responsible_agent IDs and include responsible_agent_details (id/name or null). Read note_revisions for history and reviews for exact draft snapshots.", true, func(c *Client, a crewRead) (any, error) {
 		body := map[string]any{"collection": a.Collection, "id": a.ID, "parent": a.Parent, "query": a.Query, "archived": a.Archived, "offset": a.Offset}
 		if a.ResponsibleAgent != nil {
 			body["responsible_agent"] = *a.ResponsibleAgent
 		}
+		if a.AssignedAgent != nil {
+			body["assigned_agent"] = *a.AssignedAgent
+		}
+		if a.Limit != 0 {
+			body["limit"] = a.Limit
+		}
+		if a.Fields != nil {
+			body["fields"] = a.Fields
+		}
+		if a.Status != nil {
+			body["status"] = a.Status
+		}
+		for k, v := range map[string]string{"readiness": a.Readiness, "label": a.Label, "changed_since": a.ChangedSince} {
+			if v != "" {
+				body[k] = v
+			}
+		}
 		return c.Must("POST", "/api/crew/read", body)
+	})
+	addMCPTool(s, api, "crew_search", "Find notes and tasks by topic with ranked full-text search. Returns compact hits (collection, id, title, short excerpt, revision, updated, bucket or status/assignment, score), not full bodies. Then crew_read the chosen id with fields, and read full records only when needed. Follow next_offset with the returned generation; archived items require archived: true. Webhook data is never searched.", true, func(c *Client, a crewSearch) (any, error) {
+		body := map[string]any{"query": a.Query, "offset": a.Offset, "archived": a.Archived}
+		if a.Collections != nil {
+			body["collections"] = a.Collections
+		}
+		if a.Limit != 0 {
+			body["limit"] = a.Limit
+		}
+		if a.Generation != "" {
+			body["generation"] = a.Generation
+		}
+		return c.Must("POST", "/api/crew/search", body)
 	})
 	addMCPTool(s, api, "crew_write", "Create and update Crew memory/tasks or request human review. Cannot record approval decisions. Bucket ownership is a behavioral convention. On conflict reread and reassess. Updating a draft withdraws its pending review; approval never executes an external action.", false, func(c *Client, a crewWrite) (any, error) {
 		return c.Must("POST", "/api/crew/agent-write", map[string]any{"execution": a.Execution, "idempotency_key": a.IdempotencyKey, "action": a.Action, "id": a.ID, "expected_revision": a.ExpectedRevision, "reported_agent": a.ReportedAgent, "reason": a.Reason, "data": a.Data})
