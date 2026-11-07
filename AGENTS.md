@@ -18,7 +18,8 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
 - Tests: build ui/dist first; pnpm test/build in ui; CGO_ENABLED=1 go test with
   build-tags.txt; tests/crew_e2e.py, tests/upgrades.py and tests/e2e.py with built binary.
   Preserve Windows support. Hosted releases require image lifecycle and populated
-  backup/restore gates before deployment. Pin the exact tested OCI digest.
+  backup/restore gates before deployment. Deploy the exact tested OCI digest;
+  a desired `:latest` reference must resolve to a digest before replacement.
 - No databases, generated ui/dist, bin, credentials or user data in commits.
 - Historical upstream docs describe inherited infrastructure, not a Crew release.
 

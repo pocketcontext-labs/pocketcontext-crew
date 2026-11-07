@@ -13,8 +13,10 @@ HTTPS and project layout do not change.
 
 The image contains the Go binary and its embedded reader, plus a small Python
 container supervisor for complete S3 backups. It contains no Litestream or Node
-runtime. Operators pin a verified multi-platform image digest for deliberate
+runtime. Operators select a verified multi-platform image digest for deliberate
 manual deployment or explicitly enroll a Crew instance in validated CI delivery.
+A desired `:latest` reference is supported for an enrolled instance; PocketDeploy
+resolves it to an immutable digest before preparing or replacing the writer.
 There is no automatic signup or container creation.
 
 See [hosted Crew rate limits](rate-limits.md) for authenticated operation budgets,
@@ -133,13 +135,21 @@ health probes; all application routes require the configured public Host. Public
 
 ## Release delivery
 
-Crew's image workflow publishes validated source-tagged and immutable-digest
-images. Unenrolled installations retain deliberate manual upgrades. An operator
+Every push to Crew's `main` starts its image workflow, including documentation-only
+pushes. After its gates pass, the workflow publishes source-tagged images and
+`latest`, then automatically deploys the exact published digest to enrolled
+instances. Superseded revisions are refused before publication and deployment,
+so every push starts a pipeline but not every commit necessarily reaches production.
+A push containing several commits builds its final revision. Unenrolled
+installations retain deliberate manual upgrades. An operator
 can enroll an initialized, healthy PocketDeploy Crew instance by adding
 `github: pocketcontext-labs/pocketcontext-crew` to that instance's application
-entry, retaining its digest pin and these stop-first preparation settings:
+entry. The managed `crew.pocketcontext.com` instance uses `:latest` as its desired
+image reference, with these settings:
 
 ```yaml
+image: ghcr.io/pocketcontext-labs/pocketcontext-crew:latest
+auto_update: false
 deploy-strategy: stop-first
 deploy-prepare-command: [pocketcontext-container, prepare-upgrade]
 deploy-prepare-timeout: 900
@@ -162,9 +172,20 @@ cancellation; a failed backup prevents replacement. CI verifies every enrolled
 public `/up` endpoint. The dispatcher cannot execute arbitrary SSH commands,
 change other products or deploy an image outside the Crew repository.
 
-Record the delivered digest in the scaffold's pin and private deployment state.
-Its enrolled release policy can override that recorded pin with the next validated
-Crew digest. Crew never follows upstream PocketContext releases. Preserve any
+CI supplies an exact digest override; it does not deploy by looking up `latest`.
+Manual convergence resolves the desired `latest` tag once before backup preparation
+and stop-first replacement. Keep `auto_update: false`: a new tag alone does not
+start an ONCE background update. The tag identifies the latest successfully
+published image, which may not yet have deployed successfully.
+`CONTEXT_DEPLOY_PAUSED=true` stops CI delivery only; it does not stop publication
+or prevent an operator's manual convergence from deploying the new `latest`.
+Pushing the private scaffold repository alone does not deploy applications.
+
+Record each delivered immutable digest, source revision and matching verified
+backup in deployment records and private state. The scaffold need not change its
+desired `:latest` reference after each release. For rollback, select the recorded
+exact digest and compatible complete backup; never use `latest` to identify a
+historical release. Crew never follows upstream PocketContext releases. Preserve any
 private OAuth callback exceptions in both operator and CI deployment configuration;
 see [MCP callback policy](mcp.md#native-desktop-clients).
 
@@ -198,8 +219,10 @@ pocketcontext-container prepare-upgrade
 ```
 
 It stops the writer, verifies and uploads a complete backup, then leaves the service
-paused. Keep its successful receipt and advance the PocketDeploy digest pin using
-stop-first delivery. The new image verifies the receipt still matches every stopped
+paused. Keep its successful receipt and deploy the selected immutable digest using
+stop-first delivery. For an enrolled instance whose configuration uses `:latest`,
+normal PocketDeploy convergence resolves the tag before running this preparation
+command automatically. The new image verifies the receipt still matches every stopped
 file and verifies the remote archive before invoking the new binary. A stale receipt
 or changed data forces a fresh stopped backup. A backup failure prevents the new
 binary from running migrations. An upgrade without preparation also takes that
