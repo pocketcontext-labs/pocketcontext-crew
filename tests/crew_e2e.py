@@ -21,8 +21,10 @@ def scenario(pc):
         assert status == expected, (path, body, status, data)
         return json.loads(data)
 
-    def write(action, data=None, record=None, agent=True, expected=200):
+    def write(action, data=None, record=None, agent=True, expected=200, key=None):
         body = {'action': action, 'data': data or {}, 'reported_agent': 'Network', 'reason': 'Synthetic workflow'}
+        if key:
+            body['idempotency_key'] = key
         if record:
             body.update(id=record['id'], expected_revision=record['revision'])
         return request('/api/crew/agent-write' if agent else '/api/crew/write', body, expected)
@@ -123,6 +125,7 @@ def scenario(pc):
     bucket = write('bucket.assign', {'agent': None}, bucket)
     write('bucket.assign', {'agent': design['id']}, bucket, expected=400)
     bucket = write('bucket.assign', {'agent': network['id']}, bucket)
+    historical = current('tasks', historical)  # Deactivation invalidates old wake generations.
     historical = write('task.update', {'title': 'Still editable', 'assigned_agent': design['id']}, historical)
     long_note = write('note.create', {'bucket': bucket['id'], 'title': 'Long synthetic note', 'body': 'x' * 90000, 'links': []})
     assert len(long_note['body']) == 90000
@@ -177,6 +180,70 @@ def scenario(pc):
     assert current('reviews', pending)['status'] == 'withdrawn'
     assert current('reviews', approved)['status'] == 'approved'
 
+    # Shared-MCP webhook setup is idempotent and redacts credentials. Keep the
+    # synthetic receiver disabled: this test must make no outbound requests.
+    build = write('agent.ensure', {'name': 'Webhook synthetic', 'brief': 'Test only'}, key='setup-agent')
+    assert write('agent.ensure', {'name': 'Webhook synthetic', 'brief': 'Test only'}, key='setup-agent') == build
+    write('agent.ensure', {'name': 'Different'}, key='setup-agent', expected=409)
+    reused = write('agent.ensure', {'name': 'Webhook synthetic'}, key='reuse-agent')
+    assert reused['id'] == build['id']
+    secret = 'synthetic-webhook-secret-not-a-real-credential'
+    config_data = {'agent': build['id'], 'url': 'https://93.184.216.34/crew-test',
+                   'adapter': 'crew-v1', 'subscriptions': ['ready', 'assigned', 'catch_up'], 'secret': secret}
+    config = write('webhook.create', config_data, key='setup-webhook')
+    assert config['enabled'] is False and config['secret_configured'] is True
+    assert write('webhook.create', config_data, key='setup-webhook') == config
+    write('webhook.create', dict(config_data, url='https://93.184.216.34/other'), key='setup-webhook', expected=409)
+    assert not read('webhook_deliveries')
+    for collection in ['webhook_configs', 'webhook_deliveries', 'webhook_attempts', 'webhook_routing']:
+        output = json.dumps(read(collection))
+        assert secret not in output and 'secret_ciphertext' not in output, collection
+    assert secret not in json.dumps(read('events', parent=config['id']))
+    request('/api/crew/read', {'collection': 'webhook_idempotency'}, expected=400)
+    for url in ['http://example.com', 'https://127.0.0.1/', 'https://[::1]/',
+                'https://169.254.169.254/', 'https://user:password@example.com/',
+                'https://10.0.0.1/', 'https://[::ffff:127.0.0.1]/']:
+        write('webhook.update', {'url': url}, config, expected=400)
+    changed = write('webhook.update', {'subscriptions': ['ready']}, config)
+    assert changed['destination_version'] == config['destination_version']
+    write('webhook.update', {'subscriptions': ['assigned']}, config, expected=409)
+    changed = write('webhook.update', {'secret': 'synthetic-replacement'}, changed)
+    assert changed['destination_version'] == config['destination_version'] + 1
+    assert changed['secret_configured'] and not changed['enabled']
+    changed = write('webhook.update', {'clear_secret': True}, changed)
+    assert not changed['secret_configured']
+    write('webhook.enable', {}, changed, expected=400)
+    assert not read('webhook_deliveries'), 'Saving configuration must not send'
+
+    # Readiness/generation invalidates already delivered wakes independently of
+    # configuration. Each task mutation increments its revision only once.
+    waiting = write('task.create', {'title': 'Waiting webhook work', 'assigned_agent': build['id']})
+    assert waiting['readiness'] == 'waiting' and waiting['wake_generation'] == 0
+    ready = write('task.update', {'readiness': 'ready'}, waiting)
+    assert ready['wake_generation'] == 1 and ready['revision'] == waiting['revision'] + 1
+    edited = write('task.update', {'description': 'Ordinary edit'}, ready)
+    assert edited['wake_generation'] == ready['wake_generation']
+    blocked = write('task.update', {'readiness': 'waiting', 'waiting_reason': 'Needs input'}, edited)
+    assert blocked['wake_generation'] == edited['wake_generation'] + 1
+    ready = write('task.update', {'readiness': 'ready', 'draft': 'Synthetic draft'}, blocked)
+    rev = write('review.request', record=ready)
+    reviewed = current('tasks', ready)
+    assert reviewed['wake_generation'] == ready['wake_generation'] + 1
+    withdrawn = write('task.update', {'draft': 'Changed draft'}, reviewed)
+    assert withdrawn['readiness'] == 'waiting'
+    assert withdrawn['wake_generation'] > reviewed['wake_generation']
+    assert current('reviews', rev)['status'] == 'withdrawn'
+    ready = write('task.update', {'readiness': 'ready'}, withdrawn)
+    done = write('task.update', {'status': 'done'}, ready)
+    assert done['wake_generation'] == ready['wake_generation'] + 1
+    reopened = write('task.update', {'status': 'todo'}, done)
+    assert reopened['wake_generation'] == done['wake_generation'] + 1
+    archived_task = write('task.update', {'archived': True}, reopened)
+    assert archived_task['wake_generation'] == reopened['wake_generation'] + 1
+    routing = read('webhook_routing')[0]
+    assert routing['epoch'] and routing['instance_id']
+    old_epoch = routing['epoch']
+
     # Generic REST and batch cannot create decisions or modify immutable history.
     for collection, record in [('crew_notes', note), ('crew_note_revisions', first), ('crew_reviews', approved), ('crew_events', read('events', parent=task['id'])[0])]:
         base = '/api/collections/' + collection + '/records'
@@ -192,6 +259,8 @@ def scenario(pc):
     pc.json('open', '--no-browser')
     assert current('reviews', approved)['status'] == 'approved'
     assert len(read('note_revisions', parent=note['id'])) == 5
+    assert read('webhook_routing')[0]['epoch'] == old_epoch, 'Ordinary restart preserves delivery epoch'
+    assert current('webhook_configs', changed)['secret_configured'] is False
     print('Crew end-to-end workflow, conflicts, archive/restore and authorization checks passed.')
 
 

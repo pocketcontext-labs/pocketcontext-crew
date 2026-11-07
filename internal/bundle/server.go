@@ -288,6 +288,7 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 	app.OnCollectionAfterCreateSuccess().Unbind(notifyWatcher)
 	app.OnCollectionAfterUpdateSuccess().Unbind(notifyWatcher)
 	app.OnCollectionAfterDeleteSuccess().Unbind(notifyWatcher)
+	configureWebhookRuntime(app, p, opts.HTTPSDomain)
 	server.RegisterMaintenance(app, controller)
 	jsvm.MustRegister(app, hooksConfig(appDir, p.Cache))
 	// Crew reads use revision-aware custom routes; no inherited SQL/search routes.
@@ -318,6 +319,15 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 		return n
 	}
 
+	webhookCtx, stopWebhooks := context.WithCancel(parent)
+	webhookDone := make(chan struct{})
+	webhookStarted := false
+	defer func() {
+		stopWebhooks()
+		if webhookStarted {
+			<-webhookDone
+		}
+	}()
 	stop := make(chan struct{}, 1)
 	local := &localRoutes{p: p, store: store, key: key, stop: stop, uiDev: opts.UIDev, mcp: opts.MCP, hosted: opts.Hosted}
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
@@ -347,13 +357,21 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 				}
 			}
 		}
+		if err := restoreLocalWebhookMarker(app, p); err != nil {
+			return err
+		}
 		local.register(e)
 		if devUI != nil {
 			devUI.register(e)
 		} else {
 			registerReader(e, filepath.Join(appDir, "ui", "dist"))
 		}
-		return e.Next()
+		if err := e.Next(); err != nil {
+			return err
+		}
+		webhookStarted = true
+		go func() { defer close(webhookDone); newWebhookDispatcher(app).run(webhookCtx) }()
+		return nil
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -381,6 +399,11 @@ func ServeContext(parent context.Context, p *Project, opts ServeOptions) (result
 	log.Printf("pocketcontext %s serving %s", Version, p.DB)
 	serveErr := serveHTTPContext(parent, app, p, opts, stop, local)
 	cancel()
+	stopWebhooks()
+	if webhookStarted {
+		<-webhookDone
+		webhookStarted = false
+	}
 	<-backgroundDone
 	closeErr := closeApp()
 	if err := store.Close(); err != nil {

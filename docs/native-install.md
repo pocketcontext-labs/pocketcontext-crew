@@ -17,15 +17,15 @@ replace existing services or assume a server behind CGNAT is reachable. Agree on
 costs before provisioning new resources. The native server obtains and renews
 Let's Encrypt certificates; `--domain` accepts its subscriber agreement.
 
-Install only Crew **v0.1.1**, from
-<https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.1.1>.
+Install only Crew **v0.3.0**, from
+<https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.3.0>.
 Download `install.sh` and `checksums.txt` from that release, verify the installer's
 SHA-256 against the manifest, inspect it, then run it with the new absolute project
 directory. The installer verifies the selected archive and installs
 `pocketcontext-crew`; do not use PocketContext's installers. Keep the release
 manifest and source revision with your operating notes. Do not substitute `latest`.
 The executable currently reports the compatibility prefix `pocketcontext` in
-`--version`; require version `0.1.1` and the release's source revision.
+`--version`; require version `0.3.0` and the release's source revision.
 
 ```sh
 sh /private/downloads/install.sh /var/lib/pocketcontext-crew/project
@@ -137,23 +137,30 @@ A restored server needs a fresh runtime home/cache, certificates and OAuth conse
 Owner credentials and records remain in the database; do not claim that all old
 browser sessions are revoked. Handle a compromised-account restore separately.
 
+Webhook credentials are encrypted with a machine-private key. The helper includes
+only that key in a separately hashed private snapshot section; keep the entire
+snapshot confidential. It never copies the OAuth/certificate/cache directory.
+
 ## Restore rehearsal and recovery
 
 Before maintenance or restoration, stop the backup timer, wait for any active
 backup job to finish, then stop Crew cleanly. Do not race the backup service's
 conditional restart. Keep the original project and private cache intact.
 
-Verify the snapshot, copy its `project/` to a **new absent directory**, and use the
-matching binary. Never overlay a running project, copy a live private working
+Use the pinned backup helper to verify and restore the snapshot to a **new absent
+directory**, under the destination runtime account, and use the matching binary.
+The helper restores the separately hashed webhook key into that account's private
+cache and marks the restore so the server rotates its delivery epoch and disables
+webhooks before serving. Do not replace this step with a manual project copy. Never overlay a running project, copy a live private working
 SQLite file or overwrite the old project. Use a separate dedicated runtime account
 and home/cache for a rehearsal. Inspect synthetic note/history counts only while
 the restored database is stopped, or start it isolated on loopback without
 `--domain`/`--mcp`; never expose a duplicate service on the production domain.
 
-For example, after copying a verified snapshot to `/private/rehearsal/project`,
-run under a separate rehearsal account with its own HOME:
+For example, run under a separate rehearsal account with its own HOME:
 
 ```sh
+python3 /path/to/pinned/deploy/native/backup.py --restore /private/backups/SNAPSHOT --project /private/rehearsal/project
 /private/rehearsal/project/pocketcontext-crew serve --tcp-only --port 18096 --db /private/rehearsal/project/pocketcontext.db
 ```
 
@@ -162,7 +169,9 @@ synthetic note, revision history and task, then cleanly stop the rehearsal. This
 checks data/password recovery, not public certificate issuance or MCP consent.
 For a real cutover, fence the original writer first, adapt the production service
 to the restored directory/runtime account, establish native HTTPS, reauthorize
-MCP clients, verify the owner data and take a new verified backup. Only then
+MCP clients, verify the owner data and take a new verified backup. Webhooks remain
+disabled; explicitly enable them and request any desired catch-up through MCP.
+Receivers must reject events carrying the old delivery epoch. Only then
 re-enable the backup timer. Never downgrade a database with an older binary.
 
 ## Upgrades and interrupted setup

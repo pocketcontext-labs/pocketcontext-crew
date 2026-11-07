@@ -177,3 +177,57 @@ func TestCrewMCPRealWorkflowAndApprovalBoundary(t *testing.T) {
 		t.Fatal("Historical approval snapshot changed")
 	}
 }
+
+func TestCrewMCPWebhookReadinessAndIdempotency(t *testing.T) {
+	api, token := mcpRealAPI(t)
+	h := mcpTestHandler(api)
+	write := func(args map[string]any, denied bool) any {
+		args["reported_agent"] = "Synthetic Build"
+		return mcpCall(t, h, token, "crew_write", args, denied)
+	}
+	ensure := map[string]any{"action": "agent.ensure", "idempotency_key": "synthetic-agent-1", "data": map[string]any{"name": "Synthetic Build"}}
+	agent := write(ensure, false)
+	replayed := write(ensure, false)
+	if dig(agent, "id") != dig(replayed, "id") {
+		t.Fatal("agent.ensure duplicated its result")
+	}
+	write(map[string]any{"action": "agent.ensure", "idempotency_key": "synthetic-agent-1", "data": map[string]any{"name": "Other"}}, true)
+	task := write(map[string]any{"action": "task.create", "data": map[string]any{"title": "Synthetic immediate work", "assigned_agent": dig(agent, "id"), "readiness": "ready"}}, false)
+	if dig(task, "readiness") != "ready" || dig(task, "wake_generation") != float64(1) {
+		t.Fatalf("ready creation did not create a generation: %v", task)
+	}
+	update := func(record any, data map[string]any) any {
+		return write(map[string]any{"action": "task.update", "id": dig(record, "id"), "expected_revision": dig(record, "revision"), "data": data}, false)
+	}
+	task = update(task, map[string]any{"description": "Ordinary metadata edit"})
+	if dig(task, "wake_generation") != float64(1) {
+		t.Fatal("ordinary edit changed generation")
+	}
+	task = update(task, map[string]any{"readiness": "waiting"})
+	if dig(task, "wake_generation") != float64(2) {
+		t.Fatal("waiting did not invalidate delivered generation")
+	}
+	task = update(task, map[string]any{"readiness": "ready", "draft": "Synthetic review draft"})
+	write(map[string]any{"action": "review.request", "id": dig(task, "id"), "expected_revision": dig(task, "revision"), "data": map[string]any{}}, false)
+	read := mcpCall(t, h, token, "crew_read", map[string]any{"collection": "tasks", "id": dig(task, "id")}, false)
+	task = dig(read, "items").([]any)[0]
+	if dig(task, "wake_generation") != float64(4) {
+		t.Fatalf("review request did not invalidate generation: %v", task)
+	}
+	task = update(task, map[string]any{"draft": "Changed draft", "readiness": "ready"})
+	if dig(task, "readiness") != "waiting" || dig(task, "wake_generation") != float64(5) {
+		t.Fatalf("automatic withdrawal must remain waiting and invalidate: %v", task)
+	}
+	triageTask := write(map[string]any{"action": "task.create", "data": map[string]any{"title": "Synthetic triage", "readiness": "ready"}}, false)
+	routingRead := mcpCall(t, h, token, "crew_read", map[string]any{"collection": "webhook_routing"}, false)
+	routing := dig(routingRead, "items").([]any)[0]
+	for _, target := range []any{dig(agent, "id"), nil, dig(agent, "id")} {
+		routing = write(map[string]any{"action": "webhook.routing.update", "expected_revision": dig(routing, "revision"), "data": map[string]any{"triage_agent": target}}, false)
+	}
+	triageRead := mcpCall(t, h, token, "crew_read", map[string]any{"collection": "tasks", "id": dig(triageTask, "id")}, false)
+	triageTask = dig(triageRead, "items").([]any)[0]
+	if dig(triageTask, "wake_generation") != float64(4) {
+		t.Fatalf("triage changes must invalidate old delivered generations: %v", triageTask)
+	}
+	write(map[string]any{"action": "webhook.create", "idempotency_key": "synthetic-private", "data": map[string]any{"agent": dig(agent, "id"), "url": "https://127.0.0.1/receiver", "adapter": "crew-v1", "subscriptions": []string{"ready"}, "secret": "synthetic"}}, true)
+}

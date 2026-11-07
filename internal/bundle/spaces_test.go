@@ -32,6 +32,7 @@ func newTestApp(t *testing.T) *testApp {
 		t.Fatal(err)
 	}
 	app := core.NewBaseApp(core.BaseAppConfig{DataDir: t.TempDir()})
+	configureWebhookRuntime(app, &Project{Cache: t.TempDir()}, "")
 	jsvm.MustRegister(app, hooksConfig(root, ""))
 	if err := app.Bootstrap(); err != nil {
 		t.Fatal(err)

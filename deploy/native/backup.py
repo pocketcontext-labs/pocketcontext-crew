@@ -115,6 +115,22 @@ def validate_project(project):
                 raise ValueError('Original source is missing or corrupt')
 
 
+def webhook_key_path(project):
+    # Matches Go Resolve on native Linux; this helper is Linux/systemd only.
+    database = str(Path(project).resolve() / 'pocketcontext.db')
+    identity = hashlib.sha256(database.encode()).hexdigest()[:16]
+    cache = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache')))
+    return cache / 'pocketcontext' / identity / 'crew-webhook.key'
+
+
+def requires_webhook_key(project):
+    with sqlite3.connect((project / 'pocketcontext.db').as_uri() + '?mode=ro', uri=True) as db:
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        secrets = 'crew_webhook_configs' in tables and db.execute("SELECT count(*) FROM crew_webhook_configs WHERE secret_ciphertext != ''").fetchone()[0]
+        idempotency = 'crew_webhook_idempotency' in tables and db.execute("SELECT count(*) FROM crew_webhook_idempotency").fetchone()[0]
+        return bool(secrets or idempotency)
+
+
 def snapshot(project, destination):
     """Caller must hold the service stopped for this whole operation."""
     project, destination = Path(project), Path(destination)
@@ -155,7 +171,22 @@ def snapshot(project, destination):
             for name, checksum in hashes.items():
                 if digest(project / name) != checksum:
                     raise ValueError('Project changed during backup')
+            private_hashes = {}
+            key = webhook_key_path(project)
+            if key.exists():
+                if key.is_symlink() or not key.is_file() or key.stat().st_size != 32:
+                    raise ValueError('Webhook key is not a regular 32-byte key')
+                private = staging / 'private'
+                private.mkdir(mode=0o700)
+                shutil.copy2(key, private / 'crew-webhook.key', follow_symlinks=False)
+                (private / 'crew-webhook.key').chmod(0o600)
+                private_hashes['crew-webhook.key'] = digest(private / 'crew-webhook.key')
+                if private_hashes['crew-webhook.key'] != digest(key):
+                    raise ValueError('Webhook key changed during backup')
+            elif requires_webhook_key(project):
+                raise ValueError('Configured webhook credentials require their private key for backup')
             manifest = {'format': 1, 'kind': 'crew-native-project', 'sha256': hashes,
+                        'private_sha256': private_hashes,
                         'excluded': ['machine-local OAuth, certificates, caches and profiles']}
             (staging / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
             for file in regular_tree(staging):
@@ -191,17 +222,64 @@ def verify(snapshot_path):
               for p in regular_tree(root / 'project')}
     if actual != manifest.get('sha256'):
         raise ValueError('Snapshot files do not match their recorded hashes')
+    private = root / 'private'
+    private_hashes = {p.relative_to(private).as_posix(): digest(p) for p in regular_tree(private)} if private.exists() else {}
+    if private_hashes != manifest.get('private_sha256', {}) or set(private_hashes) - {'crew-webhook.key'}:
+        raise ValueError('Private webhook key does not match its recorded hash')
+    if private_hashes and (private / 'crew-webhook.key').stat().st_size != 32:
+        raise ValueError('Invalid webhook key size')
+    if requires_webhook_key(root / 'project') and not private_hashes:
+        raise ValueError('Snapshot is missing its webhook credential key')
     validate_project(root / 'project')
+
+
+def restore(snapshot_path, project):
+    """Restore to a new project; caller fences the original writer first."""
+    verify(snapshot_path)
+    root, project = Path(snapshot_path).resolve(), Path(project)
+    if not project.is_absolute() or project.exists() or project.is_symlink():
+        raise ValueError('Restore requires a new absolute project path')
+    key = webhook_key_path(project)
+    if key.exists():
+        raise ValueError('Restore destination already has a private webhook key')
+    project.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix='.crew-restore-', dir=project.parent))
+    copied_key = False
+    try:
+        shutil.copytree(root / 'project', staging / 'project')
+        # Consumed before serving; invalidates payloads from the old incarnation.
+        (staging / 'project/crew-restore.json').write_text('{"version":1}\n')
+        source_key = root / 'private/crew-webhook.key'
+        if source_key.exists():
+            key.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            with key.open('xb') as stream:
+                stream.write(source_key.read_bytes())
+            key.chmod(0o600)
+            copied_key = True
+        (staging / 'project').rename(project)
+    except Exception:
+        if copied_key:
+            key.unlink()
+        raise
+    finally:
+        shutil.rmtree(staging)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--verify', metavar='SNAPSHOT')
+    parser.add_argument('--restore', metavar='SNAPSHOT')
     parser.add_argument('--project')
     parser.add_argument('--destination')
     parser.add_argument('--service')
     args = parser.parse_args()
     os.umask(0o077)
+    if args.restore:
+        if not args.project:
+            parser.error('restore requires --project pointing to a new destination')
+        restore(args.restore, args.project)
+        print('Native snapshot restored; webhook delivery will remain disabled')
+        return
     if args.verify:
         verify(args.verify)
         print('Native snapshot hashes and database verified')

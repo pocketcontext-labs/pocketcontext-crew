@@ -12,6 +12,7 @@ import Brand from "./Brand";
 import { api } from "./api";
 import { crewApi, val, list, statuses, lineDiff, type Row } from "./crewApi";
 import "./crew.css";
+import WebhookStatus from "./WebhookStatus";
 type View = "board" | "memory" | "reviews" | "agents" | "archive";
 type Kind = "task" | "note" | "bucket" | "agent" | "review";
 type Data = Record<string, Row[]>;
@@ -114,7 +115,8 @@ export default function CrewWorkspace() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [query, setQuery] = useState(""),
-    [bucket, setBucket] = useState("");
+    [bucket, setBucket] = useState(""),
+    [assignmentFilter, setAssignmentFilter] = useState("all");
   const [dialog, setDialog] = useState<{ kind: Kind; row?: Row } | null>(null),
     generation = useRef(0);
   const load = useCallback(async () => {
@@ -147,6 +149,26 @@ export default function CrewWorkspace() {
       generation.current++;
     };
   }, [load]);
+  useEffect(() => {
+    const openLinkedTask = () => {
+      const match = /^#\/tasks\/([a-zA-Z0-9]+)$/.exec(location.hash);
+      if (!match) return;
+      const task = data.tasks.find((row) => row.id === match[1]);
+      if (task) setDialog({ kind: "task", row: task });
+    };
+    openLinkedTask();
+    window.addEventListener("hashchange", openLinkedTask);
+    return () => window.removeEventListener("hashchange", openLinkedTask);
+  }, [data.tasks]);
+  const closeDialog = () => {
+    if (location.hash.startsWith("#/tasks/"))
+      history.replaceState(
+        null,
+        "",
+        location.pathname + location.search + "#/",
+      );
+    setDialog(null);
+  };
   const perform = async (work: () => Promise<unknown>, message = "Saved.") => {
     setBusy(true);
     setError("");
@@ -174,13 +196,22 @@ export default function CrewWorkspace() {
     reason = "",
   ) => {
     if (await perform(() => crewApi.write(action, fields, row, reason)))
-      setDialog(null);
+      closeDialog();
   };
   const name = (id: string, c = "agents") =>
     val(
       [...data[c], ...(archived[c] || [])].find((x) => x.id === id),
       "name",
-    ) || "Unassigned";
+    ) || (id ? "Unavailable agent" : "Unassigned");
+  const invalidAssignment = (task: Row) => {
+    const id = val(task, "assigned_agent");
+    return !!id && !data.agents.some((agent) => agent.id === id);
+  };
+  const openTasks = data.tasks.filter((task) => val(task, "status") !== "done");
+  const unassignedCount = openTasks.filter(
+    (task) => !val(task, "assigned_agent"),
+  ).length;
+  const invalidCount = openTasks.filter(invalidAssignment).length;
   const pending = data.reviews.filter((x) => val(x, "status") === "pending");
   const matches = (x: Row) =>
     [
@@ -392,6 +423,21 @@ export default function CrewWorkspace() {
                   onChange={(e) => setQuery(e.target.value)}
                 />
               </label>
+              {view === "board" && (
+                <select
+                  aria-label="Filter by assignment"
+                  value={assignmentFilter}
+                  onChange={(e) => setAssignmentFilter(e.target.value)}
+                >
+                  <option value="all">All tasks</option>
+                  <option value="unassigned">
+                    Unassigned ({unassignedCount})
+                  </option>
+                  <option value="invalid">
+                    Invalid assignments ({invalidCount})
+                  </option>
+                </select>
+              )}
               {view === "memory" && (
                 <select
                   aria-label="Filter by bucket"
@@ -412,7 +458,14 @@ export default function CrewWorkspace() {
             <div className="crew-board">
               {statuses.map(([status, label]) => {
                 const tasks = data.tasks.filter(
-                  (x) => val(x, "status") === status && matches(x),
+                  (x) =>
+                    val(x, "status") === status &&
+                    matches(x) &&
+                    (assignmentFilter === "all" ||
+                      (status !== "done" &&
+                        (assignmentFilter === "unassigned"
+                          ? !val(x, "assigned_agent")
+                          : invalidAssignment(x)))),
                 );
                 return (
                   <section className="crew-column" key={status}>
@@ -437,6 +490,21 @@ export default function CrewWorkspace() {
                         </div>
                         <h3>{val(x, "title")}</h3>
                         <p>{val(x, "description").slice(0, 150)}</p>
+                        <p className="crew-readiness">
+                          {val(x, "readiness") === "ready"
+                            ? "Ready"
+                            : "Waiting"}
+                          {val(x, "readiness") !== "ready" &&
+                          val(x, "waiting_reason")
+                            ? ` · ${val(x, "waiting_reason")}`
+                            : ""}
+                        </p>
+                        {invalidAssignment(x) && (
+                          <p className="crew-assignment-warning">
+                            Assigned agent is inactive or unavailable. Reassign
+                            this task.
+                          </p>
+                        )}
                         <footer>
                           <span className="crew-avatar">
                             {name(val(x, "assigned_agent")).slice(0, 1)}
@@ -589,6 +657,7 @@ export default function CrewWorkspace() {
                   </button>
                 ))}
               </div>
+              <WebhookStatus agents={[...data.agents, ...archived.agents]} />
               <section className="crew-connect">
                 <h2>One connection for your agents</h2>
                 <p>
@@ -658,7 +727,7 @@ export default function CrewWorkspace() {
               : `${dialog.row ? "Edit" : "New"} ${dialog.kind}`
           }
           close={() => {
-            if (!busy) setDialog(null);
+            if (!busy) closeDialog();
           }}
         >
           <Editor
@@ -674,7 +743,7 @@ export default function CrewWorkspace() {
             error={error}
             save={save}
             perform={perform}
-            close={() => setDialog(null)}
+            close={closeDialog}
           />
         </Modal>
       )}
@@ -740,6 +809,8 @@ function Editor({
       ) || (kind === "note" ? data.buckets[0]?.id || "" : ""),
     ),
     [status, setStatus] = useState(val(row, "status") || "todo"),
+    [readiness, setReadiness] = useState(val(row, "readiness") || "waiting"),
+    [waitingReason, setWaitingReason] = useState(val(row, "waiting_reason")),
     [labels, setLabels] = useState(list(row, "labels").join(", "));
   useEffect(() => {
     let alive = true;
@@ -785,6 +856,8 @@ function Editor({
               description: body,
               draft,
               assigned_agent: selection,
+              readiness,
+              waiting_reason: readiness === "waiting" ? waitingReason : "",
               ...(status === "needs_review" ? {} : { status }),
               labels: labels
                 .split(",")
@@ -939,6 +1012,13 @@ function Editor({
                 <option value="">
                   {kind === "note" ? "Choose a bucket" : "Unassigned"}
                 </option>
+                {kind === "task" &&
+                  selection &&
+                  !data.agents.some((x) => x.id === selection) && (
+                    <option value={selection} disabled>
+                      Unavailable agent
+                    </option>
+                  )}
                 {data[kind === "note" ? "buckets" : "agents"]
                   .filter(
                     (x) =>
@@ -1007,6 +1087,32 @@ function Editor({
                   />
                 </Field>
               </div>
+              <div className="crew-form-grid">
+                <Field label="Readiness">
+                  <select
+                    value={readiness}
+                    onChange={(e) => setReadiness(e.target.value)}
+                  >
+                    <option value="waiting">Waiting</option>
+                    <option value="ready">Ready</option>
+                  </select>
+                </Field>
+                {readiness === "waiting" && (
+                  <Field label="Waiting reason">
+                    <input
+                      value={waitingReason}
+                      onChange={(e) => setWaitingReason(e.target.value)}
+                      placeholder="What needs to happen first?"
+                      maxLength={2000}
+                    />
+                  </Field>
+                )}
+              </div>
+              <p className="crew-footnote">
+                Ready tasks can wake their assigned agent. Assignment alone does
+                not make a waiting task ready. Pending human review still blocks
+                work.
+              </p>
               <Field label="Draft for review (Markdown)">
                 <textarea
                   className="crew-long-text"

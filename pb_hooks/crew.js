@@ -1,4 +1,6 @@
+const webhooks = require(`${__hooks}/crew_webhooks.js`);
 const names = [
+  ...webhooks.collections,
   "agents",
   "buckets",
   "notes",
@@ -20,6 +22,8 @@ const fields = {
     "draft",
     "links",
     "archived",
+    "readiness",
+    "waiting_reason",
   ],
 };
 function bad(m) {
@@ -102,6 +106,13 @@ function validateData(app, col, d, r) {
         d[k].some((x) => typeof x !== "string" || x.length > 500))
     )
       bad(k + " must contain at most 100 short strings");
+  if (d.readiness !== undefined && !["waiting", "ready"].includes(d.readiness))
+    bad("readiness must be waiting or ready");
+  if (
+    d.waiting_reason !== undefined &&
+    (typeof d.waiting_reason !== "string" || d.waiting_reason.length > 2000)
+  )
+    bad("Invalid waiting_reason");
   if (d.status === "needs_review")
     bad("Use review.request to enter Needs review");
   if (d.labels && d.labels.some((x) => x.toLowerCase() === "human"))
@@ -179,8 +190,21 @@ function read(e) {
           ? "note"
           : col === "reviews"
             ? "task"
-            : "parent";
-    if (!["notes", "note_revisions", "reviews", "events"].includes(col))
+            : col === "webhook_deliveries"
+              ? "config"
+              : col === "webhook_attempts"
+                ? "delivery"
+                : "parent";
+    if (
+      ![
+        "notes",
+        "note_revisions",
+        "reviews",
+        "events",
+        "webhook_deliveries",
+        "webhook_attempts",
+      ].includes(col)
+    )
       bad("Invalid parent filter");
     clauses.push(key + "={:parent}");
     params.parent = b.parent;
@@ -220,7 +244,13 @@ function read(e) {
   return e.json(200, {
     items: rows
       .slice(0, 100)
-      .map((r) => (col === "buckets" ? bucketExport(e.app, r) : r)),
+      .map((r) =>
+        col === "buckets"
+          ? bucketExport(e.app, r)
+          : webhooks.collections.includes(col)
+            ? webhooks.exported(r)
+            : r,
+      ),
     has_more: rows.length > 100,
     next_offset: rows.length > 100 ? offset + 100 : null,
   });
@@ -234,6 +264,7 @@ function write(e, isAgent) {
     "reported_agent",
     "reason",
     "data",
+    "idempotency_key",
   ]);
   if (
     typeof b.action !== "string" ||
@@ -248,6 +279,10 @@ function write(e, isAgent) {
   const actor = (isAgent ? "mcp:" : "owner:") + e.auth.id;
   let result;
   e.app.runInTransaction((app) => {
+    if (b.action === "agent.ensure" || b.action.startsWith("webhook.")) {
+      result = webhooks.handle(app, b, actor);
+      return;
+    }
     const parts = b.action.split("."),
       kind = parts[0],
       op = parts[1];
@@ -273,6 +308,9 @@ function write(e, isAgent) {
           ? new Record(app.findCollectionByNameOrId("crew_" + col))
           : get(app, col, b.id);
       if (op !== "create") check(r, b);
+      const oldTask =
+        kind === "task" && op !== "create" ? webhooks.state(app, r) : null;
+      let autoWithdraw = false;
       if (
         isAgent &&
         ((kind === "agent" && d.archived !== undefined) ||
@@ -322,7 +360,18 @@ function write(e, isAgent) {
           archived: false,
         };
       } else if (op === "claim") {
-        only(d, ["assigned_agent"]);
+        only(d, ["assigned_agent", "expected_generation"]);
+        if (
+          d.expected_generation !== undefined &&
+          (!Number.isInteger(d.expected_generation) ||
+            r.getInt("wake_generation") !== d.expected_generation ||
+            !webhooks.eligible(webhooks.state(app, r)))
+        )
+          throw new ApiError(
+            409,
+            "Task is no longer ready at the requested generation",
+            {},
+          );
         if (r.getString("assigned_agent"))
           throw new ApiError(409, "Task is already assigned", {});
         if (!d.assigned_agent) bad("Agent required");
@@ -345,6 +394,7 @@ function write(e, isAgent) {
         r.set("revision", 1);
         if (kind === "task") {
           r.set("status", "todo");
+          r.set("readiness", "waiting");
           r.set("created_by_agent", b.reported_agent || "");
         }
       } else r.set("revision", r.getInt("revision") + 1);
@@ -358,7 +408,12 @@ function write(e, isAgent) {
             values.draft !== r.getString("draft")) ||
           values.archived === true
         ) {
+          autoWithdraw =
+            pending(app, r.id).length > 0 &&
+            values.draft !== undefined &&
+            values.draft !== r.getString("draft");
           withdraw(app, r, b, actor);
+          if (autoWithdraw) values = { ...values, readiness: "waiting" };
           if (
             r.getString("status") === "needs_review" &&
             values.status === undefined
@@ -374,8 +429,16 @@ function write(e, isAgent) {
         r.set("archived_by", values.archived ? actor : "");
       }
       app.save(r);
+      if (kind === "task")
+        webhooks.transition(app, r, oldTask, { autoWithdraw });
+      if (kind === "agent" && values.archived === true)
+        webhooks.deactivate(app, r.id, b, actor);
       if (kind === "note") snapshot(app, r, b, actor);
       const changes = { ...d };
+      if (kind === "task") {
+        changes.readiness = r.getString("readiness");
+        changes.wake_generation = r.getInt("wake_generation");
+      }
       if (kind === "bucket" && values.responsible_agent !== undefined)
         changes.responsible_agent = {
           old: oldAgent,
@@ -389,6 +452,7 @@ function write(e, isAgent) {
       only(d, []);
       const t = active(app, "tasks", b.id);
       check(t, b);
+      const oldTask = webhooks.state(app, t);
       if (!t.getString("draft").trim()) bad("Add a draft first");
       if (pending(app, t.id).length)
         throw new ApiError(409, "A review is already pending", {});
@@ -403,7 +467,12 @@ function write(e, isAgent) {
       t.set("status", "needs_review");
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
-      event(app, t, b.action, b, actor);
+      webhooks.transition(app, t, oldTask, {});
+      event(app, t, b.action, b, actor, {
+        ...d,
+        readiness: t.getString("readiness"),
+        wake_generation: t.getInt("wake_generation"),
+      });
       result = r;
       return;
     }
@@ -415,6 +484,7 @@ function write(e, isAgent) {
       check(r, b);
       if (r.getString("status") !== "pending") bad("Review already closed");
       const t = active(app, "tasks", r.getString("task"));
+      const oldTask = webhooks.state(app, t);
       if (op === "decide") {
         if (!["approved", "changes_requested", "rejected"].includes(d.decision))
           bad("Invalid decision");
@@ -430,8 +500,13 @@ function write(e, isAgent) {
       t.set("status", "in_progress");
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
+      webhooks.transition(app, t, oldTask, { outcome: r.getString("status") });
       event(app, r, b.action, b, actor);
-      event(app, t, b.action, b, actor);
+      event(app, t, b.action, b, actor, {
+        ...d,
+        readiness: t.getString("readiness"),
+        wake_generation: t.getInt("wake_generation"),
+      });
       result = r;
       return;
     }

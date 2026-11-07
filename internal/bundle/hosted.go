@@ -141,6 +141,9 @@ func startHostedHTTP(ctx context.Context, app core.App, p *Project, opts ServeOp
 // invalidateHostedRestore deliberately invalidates copied browser/OTP/MCP credentials
 // before a restored instance accepts any public request. Ordinary restarts retain them.
 func invalidateHostedRestore(app core.App, p *Project) error {
+	if err := restoreWebhookState(app); err != nil {
+		return err
+	}
 	if err := app.RunInTransaction(func(tx core.App) error {
 		users, err := tx.FindAllRecords("users")
 		if err != nil {

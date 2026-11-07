@@ -61,6 +61,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  history.replaceState(null, "", "/");
   vi.restoreAllMocks();
 });
 it("derives Human from a pending request while preserving the assigned agent", async () => {
@@ -303,4 +304,194 @@ it("keeps bucket assignment conflicts visible for reassessment", async () => {
     expect(dialog.getByRole("alert")).toHaveTextContent("Revision conflict"),
   );
   expect(screen.queryByText("Saved.")).toBeNull();
+});
+
+it("defaults new tasks to waiting and explicitly creates assigned ready work", async () => {
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  fireEvent.click(screen.getByRole("button", { name: /New task/ }));
+  const dialog = within(screen.getByRole("dialog"));
+  expect(dialog.getByLabelText("Readiness")).toHaveValue("waiting");
+  expect(dialog.getByLabelText("Waiting reason")).toBeInTheDocument();
+  fireEvent.change(dialog.getByLabelText("Title"), {
+    target: { value: "Prepare research" },
+  });
+  fireEvent.change(dialog.getByLabelText("Assigned agent"), {
+    target: { value: agent.id },
+  });
+  fireEvent.change(dialog.getByLabelText("Readiness"), {
+    target: { value: "ready" },
+  });
+  expect(dialog.queryByLabelText("Waiting reason")).toBeNull();
+  fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "task.create",
+      expect.objectContaining({
+        title: "Prepare research",
+        assigned_agent: agent.id,
+        readiness: "ready",
+        waiting_reason: "",
+      }),
+      undefined,
+      "",
+    ),
+  );
+});
+
+it("keeps assignment separate from readiness and saves the waiting reason", async () => {
+  fixtures.tasks = [
+    {
+      ...task,
+      status: "todo",
+      assigned_agent: "",
+      readiness: "waiting",
+      waiting_reason: "Need source material",
+    },
+  ];
+  fixtures.reviews = [];
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  fireEvent.click(screen.getByRole("button", { name: /Launch post/ }));
+  const dialog = within(screen.getByRole("dialog"));
+  fireEvent.change(dialog.getByLabelText("Assigned agent"), {
+    target: { value: agent.id },
+  });
+  expect(dialog.getByLabelText("Readiness")).toHaveValue("waiting");
+  fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "task.update",
+      expect.objectContaining({
+        assigned_agent: agent.id,
+        readiness: "waiting",
+        waiting_reason: "Need source material",
+      }),
+      fixtures.tasks[0],
+      "",
+    ),
+  );
+});
+
+it("separates unassigned work from invalid assignments and excludes completed work from queues", async () => {
+  fixtures.tasks = [
+    {
+      ...task,
+      id: "unassigned00001",
+      title: "Needs an owner",
+      status: "todo",
+      assigned_agent: "",
+    },
+    {
+      ...task,
+      id: "missing00000001",
+      title: "Missing agent task",
+      status: "todo",
+      assigned_agent: "missingagent001",
+    },
+    {
+      ...task,
+      id: "finished0000001",
+      title: "Completed work",
+      status: "done",
+      assigned_agent: "",
+    },
+    { ...task, status: "todo" },
+  ];
+  fixtures.reviews = [];
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Needs an owner" });
+  const filter = screen.getByLabelText("Filter by assignment");
+  expect(
+    within(filter).getByRole("option", { name: "Unassigned (1)" }),
+  ).toBeInTheDocument();
+  expect(
+    within(filter).getByRole("option", { name: "Invalid assignments (1)" }),
+  ).toBeInTheDocument();
+  fireEvent.change(filter, { target: { value: "unassigned" } });
+  expect(
+    screen.getByRole("heading", { name: "Needs an owner" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Missing agent task" }),
+  ).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Completed work" })).toBeNull();
+  fireEvent.change(filter, { target: { value: "invalid" } });
+  expect(
+    screen.getByRole("heading", { name: "Missing agent task" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Needs an owner" })).toBeNull();
+  expect(
+    screen.getByText(
+      "Assigned agent is inactive or unavailable. Reassign this task.",
+    ),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Missing agent task/ }));
+  const select = within(screen.getByRole("dialog")).getByLabelText(
+    "Assigned agent",
+  );
+  expect(select).toHaveValue("missingagent001");
+  expect(
+    within(select).getByRole("option", { name: "Unavailable agent" }),
+  ).toBeDisabled();
+});
+
+it("shows redacted webhook health without exposing credential fields, URL paths or payloads", async () => {
+  fixtures.webhook_configs = [
+    {
+      id: "webhook00000001",
+      revision: 1,
+      agent: agent.id,
+      enabled: true,
+      url: "https://receiver.example/private-path?key=private-query",
+      secret_configured: true,
+      secret: "private-credential",
+      subscriptions: ["ready"],
+    },
+  ];
+  fixtures.webhook_deliveries = [
+    {
+      id: "delivery0000001",
+      revision: 1,
+      config: "webhook00000001",
+      task: task.id,
+      state: "accepted",
+      attempts: 2,
+      payload: "private-payload",
+      last_error: "private-error",
+    },
+  ];
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  fireEvent.click(screen.getByRole("button", { name: "Agents" }));
+  await screen.findByText("Credential: configured");
+  const section = screen.getByRole("region", { name: "Agent webhooks" });
+  expect(section).toHaveTextContent("receiver.example");
+  expect(section).toHaveTextContent("Accepted by receiver");
+  expect(section).toHaveTextContent("2 attempts");
+  expect(section).toHaveTextContent(
+    "Receiver acceptance does not mean the task started or completed",
+  );
+  for (const secret of [
+    "private-path",
+    "private-query",
+    "private-credential",
+    "private-payload",
+    "private-error",
+  ]) {
+    expect(section).not.toHaveTextContent(secret);
+  }
+  expect(crewApi.write).not.toHaveBeenCalled();
+});
+
+it("opens webhook task links and clears the route when the editor closes", async () => {
+  history.replaceState(null, "", `/#/tasks/${task.id}`);
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  expect(dialog.getByLabelText("Title")).toHaveValue("Launch post");
+  fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(location.hash).toBe("#/");
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });

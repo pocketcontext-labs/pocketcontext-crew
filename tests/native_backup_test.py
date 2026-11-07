@@ -16,6 +16,8 @@ class NativeBackupTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        self.cache_patch = patch.dict(backup.os.environ, {"XDG_CACHE_HOME": str(self.root / "cache")})
+        self.cache_patch.start()
         self.project = self.root / 'project'
         self.project.mkdir()
         self.destination = self.root / 'backups'
@@ -30,6 +32,7 @@ class NativeBackupTests(unittest.TestCase):
         (self.project / 'storage').mkdir()
         (self.project / 'storage/source.txt').write_text('synthetic original')
     def tearDown(self):
+        self.cache_patch.stop()
         self.temp.cleanup()
     def test_missing_required_migration_archive_fails(self):
         with sqlite3.connect(self.project / 'pocketcontext.db') as db:
@@ -52,6 +55,27 @@ class NativeBackupTests(unittest.TestCase):
         (result / 'project/storage/source.txt').write_text('tampered')
         with self.assertRaises(ValueError):
             backup.verify(result)
+    def test_webhook_key_backup_restore_and_marker(self):
+        with sqlite3.connect(self.project / 'pocketcontext.db') as db:
+            db.execute('CREATE TABLE crew_webhook_configs(secret_ciphertext TEXT)')
+            db.execute("INSERT INTO crew_webhook_configs VALUES('encrypted-synthetic')")
+        with self.assertRaises(ValueError):
+            backup.snapshot(self.project, self.destination)
+        key = backup.webhook_key_path(self.project)
+        key.parent.mkdir(parents=True)
+        key.write_bytes(b'k' * 32)
+        result = backup.snapshot(self.project, self.destination)
+        backup.verify(result)
+        restored = self.root / 'restored-with-key'
+        backup.restore(result, restored)
+        self.assertEqual(backup.webhook_key_path(restored).read_bytes(), b'k' * 32)
+        self.assertTrue((restored / 'crew-restore.json').is_file())
+        with self.assertRaises(ValueError):
+            backup.restore(result, restored)
+        (result / 'private/crew-webhook.key').write_bytes(b'x' * 32)
+        with self.assertRaises(ValueError):
+            backup.verify(result)
+
     def test_failed_copy_never_publishes_snapshot(self):
         with patch.object(backup.shutil, 'copy2', side_effect=OSError('synthetic disk failure')):
             with self.assertRaises(OSError):

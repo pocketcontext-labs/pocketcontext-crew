@@ -79,6 +79,7 @@ class Backups(unittest.TestCase):
         runtime.mkdir(parents=True)
         hosted.atomic_json(runtime / "mcp-oauth-synthetic.json", {"grants": {"synthetic": "preserved"}})
         (runtime / "server.log").write_text("not part of recovery")
+        (runtime / "crew-webhook.key").write_bytes(b"k" * 32)
         self.store = store()
 
     def test_populated_roundtrip_preserves_originals_private_state_and_revision(self):
@@ -91,6 +92,7 @@ class Backups(unittest.TestCase):
         self.assertEqual((target.project / "storage/sources/synthetic/note.txt").read_text(), "synthetic immutable original")
         self.assertFalse((target.private / "cache/pocketcontext/test/mcp-oauth-synthetic.json").exists())
         self.assertTrue((target.private / "restore-pending.json").exists())
+        self.assertEqual((target.private / "cache/pocketcontext/test/crew-webhook.key").read_bytes(), b"k" * 32)
         self.assertFalse((target.private / "cache/pocketcontext/test/server.log").exists())
         self.assertEqual(hosted.read_json(target.state)["revision"], self.config.revision)
         with self.assertRaises(hosted.Failure):

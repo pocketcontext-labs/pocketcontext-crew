@@ -176,7 +176,16 @@ def rehearse(target, previous, root):
         run(alpha, 'stop')
         stopped.add(alpha)
         after = table_rows(old_db, CREW_TABLES)
-        assert after == {name:before[name] for name in CREW_TABLES}, 'Crew rows/history changed during migration'
+        # Added task fields are intentional; every preexisting column and immutable
+        # history row must still be byte-for-byte equivalent.
+        with closing(sqlite3.connect((backup / 'pocketcontext.db').as_uri()+'?mode=ro',uri=True)) as old, closing(sqlite3.connect(old_db.as_uri()+'?mode=ro',uri=True)) as current:
+            for name in CREW_TABLES:
+                columns = [row[1] for row in old.execute('PRAGMA table_info("' + name + '")')]
+                projection = ','.join('"' + column + '"' for column in columns)
+                rows = current.execute('SELECT ' + projection + ' FROM "' + name + '" ORDER BY id').fetchall()
+                assert rows == before[name], ('Crew rows/history changed during migration', name)
+            assert current.execute("SELECT count(*) FROM crew_tasks WHERE readiness != 'waiting' OR wake_generation != 0").fetchone() == (0,)
+            assert current.execute('SELECT count(*) FROM crew_webhook_deliveries').fetchone() == (0,)
         with closing(sqlite3.connect(old_db.as_uri()+'?mode=ro',uri=True)) as db:
             tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             assert not tables.intersection(LEGACY_TABLES)

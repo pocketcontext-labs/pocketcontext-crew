@@ -10,8 +10,11 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   metadata, never credentials. Buckets are not security boundaries.
 - All Crew mutations use revision-checked custom operations. Generic REST/batch
   writes remain disabled. History is immutable. Archive, never purge.
-- MCP uses only the agent-write route. Never expose owner decisions, local keys,
+- MCP uses only the agent-write route. Shared MCP may configure and activate
+  per-agent HTTPS webhooks through the revision-checked Crew operations. This
+  narrow exception does not expose owner decisions, local keys, general host
   administration, shell, arbitrary host paths or network fetching through MCP.
+  Webhook credentials are write-only; agent names remain reported attribution.
 - Owner tokens must not be shared with agents. Reported names are not identity.
 - External platforms run agents. Crew never posts, sends or pays.
 - Keep runtime credentials and OAuth state private and out of Git and knowledge.
