@@ -197,7 +197,7 @@ function read(e) {
             ? "task"
             : col === "webhook_executions"
               ? "task"
-              : col === "webhook_deliveries"
+              : ["webhook_deliveries", "webhook_bridges"].includes(col)
                 ? "config"
                 : col === "webhook_attempts"
                   ? "delivery"
@@ -209,6 +209,7 @@ function read(e) {
         "reviews",
         "events",
         "webhook_deliveries",
+        "webhook_bridges",
         "webhook_attempts",
         "webhook_executions",
       ].includes(col)

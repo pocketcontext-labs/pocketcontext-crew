@@ -51,6 +51,15 @@ type Setup = {
   test_acknowledged: boolean;
   runtime_reported: boolean;
   native_handoff_reported: boolean;
+  dispatch_mode?: "native" | "parent_bridge";
+  parent_wake_reported?: boolean;
+  parent_received?: boolean;
+  recipient_acknowledged?: boolean;
+  bridge_test_recipient_agent_id?: string;
+  bridge_test_state?: string;
+  bridge_test_overdue?: boolean;
+  bridge_send_reported?: boolean;
+  test_event_id?: string;
 };
 function ago(value: unknown, now: number) {
   const time = Date.parse(String(value || ""));
@@ -114,6 +123,7 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
   const [reportingInstructions, setReportingInstructions] = useState("");
   const [url, setUrl] = useState("");
   const [secret, setSecret] = useState("");
+  const [testRecipient, setTestRecipient] = useState("");
   const [now, setNow] = useState(Date.now());
   const retryKeys = useRef(new Map<string, string>());
   useEffect(() => {
@@ -211,7 +221,19 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
         runtime_unverified:
           "Send the safe connection test and wait for the actual webhook routine to report its capabilities.",
         native_handoff_missing:
-          "The webhook routine has not reported native handoff support. Check its available tools in Grok.",
+          "The routine has not reported native messaging. If it uses WakeParent, select the parent bridge and apply its current instructions.",
+        parent_wake_missing:
+          "The routine has not reported WakeParent. Check its actual tools and run the connection test again.",
+        parent_receipt_missing:
+          "The dispatcher parent has not acknowledged the wake. Check its Grok conversation before sending another test.",
+        parent_native_handoff_missing:
+          "The dispatcher parent has not reported native bot messaging. Check its available tools.",
+        parent_execution_protocol_missing:
+          "The dispatcher parent cannot use Crew's execution protocol. Refresh its tools before testing again.",
+        recipient_test_required:
+          "Choose a mapped teammate and run the end-to-end test before enabling delivery.",
+        recipient_ack_missing:
+          "The recipient has not acknowledged the test. Check its Grok conversation and prior authorization; do not resend an uncertain message.",
         execution_required:
           "This task requires its current execution authority. The recipient must use execution.begin and the fenced task protocol.",
         test_ack_missing:
@@ -266,9 +288,20 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
       message: `Apply instruction revision ${Number(config?.instruction_revision) || 1} in Grok using the setup prompt.`,
     });
   const setup = config?.setup as Setup | undefined;
+  const parentBridge = val(config, "dispatch_mode") === "parent_bridge";
+  const testRecipients = activeAgents.filter((a) =>
+    mappings.some((m) => m.agent === a.id && val(m, "bot_ref")),
+  );
+  const selectedTestRecipient =
+    testRecipients.find((a) => a.id === testRecipient) ||
+    testRecipients.find((a) => a.id !== config?.agent) ||
+    testRecipients.find((a) => a.id === config?.agent);
   const testBlockers = setup?.test_blockers ?? baseBlockers;
   const canTest = setup?.can_test ?? !baseBlockers.length;
   const canEnable = setup?.can_enable ?? false;
+  const testDelivery = setup?.test_event_id
+    ? deliveries.find((d) => d.event_id === setup.test_event_id)
+    : undefined;
   const enableBlockers = setup?.blockers ?? [
     ...baseBlockers,
     {
@@ -280,7 +313,20 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
   const mapped = mappings.filter(
     (m) => activeAgents.some((a) => a.id === m.agent) && val(m, "bot_ref"),
   ).length;
-  const setupPrompt = `Set up this existing Grok Bot as the Crew dispatcher, keeping its normal responsibilities. Use the existing shared Crew MCP connection; do not create another bot or connection.\n\n1. Read crew_read collection capabilities for the current operation contracts, then read webhook_configs, agents and webhook_mappings. Do not infer unsupported operations from stale tool descriptions. If this client cannot submit required execution or idempotency fields, follow the advertised data._crew compatibility envelope. If neither path is available, stop and report the blocker.\n2. Reuse the selected dispatcher ${JSON.stringify(val(currentAgent, "name"))} (Crew agent ${JSON.stringify(val(currentAgent, "id"))}). Discover the existing Grok Bots and save confirmed mappings, including readable names where supported; ask only about ambiguous matches. Never guess identifiers.\n3. Apply Crew's current managed dispatcher instruction block to the existing webhook routine. Preserve the bot's role and required reporting settings outside that block. Read saved text back if supported and report instruction synchronization honestly.\n4. Check the tools available inside the actual webhook routine, not only this parent chat. The routine must report its execution and native-handoff capabilities using the current Crew contract. If native messaging is unavailable, report the blocker; never pretend a handoff was sent.\n5. I will copy the webhook URL and key directly from Grok into Crew's browser form. Never read, request, print or copy those values into chat, notes or MCP. Reuse the existing routine and credential binding.\n6. Do not enable delivery, test, replay tasks or perform work from this setup request. Report readiness and exact remaining blockers.\n\nThe canonical managed block is available in the global configuration's instructions field; always fetch its current revision. The runtime must stop if execution.begin cannot establish authority; never fall back to ordinary task writes.`;
+  const setupPrompt = `Set up this existing Grok Bot as the Crew dispatcher, keeping its normal responsibilities. Use the existing shared Crew MCP connection; do not create another bot or connection.
+
+1. Read crew_read collection capabilities for current operation contracts, then read webhook_configs, agents and webhook_mappings. Use the advertised data._crew compatibility envelope if this client lacks top-level execution or idempotency fields. Stop if neither path is available.
+2. Reuse the selected dispatcher ${JSON.stringify(val(currentAgent, "name"))} (Crew agent ${JSON.stringify(val(currentAgent, "id"))}). Discover existing Grok Bots and save confirmed mappings, including readable names; ask only about ambiguous matches. Never guess identifiers or use a Crew agent ID as a native messaging address.
+3. The configured dispatch mode is ${parentBridge ? "parent_bridge: the webhook routine wakes this bot's parent conversation with WakeParent; the parent handles its own work or calls SendToAgent with priority:true for a teammate" : "native: dispatch directly inside the webhook routine using its native messaging tools"}. Apply Crew's current managed instruction block to the existing webhook routine, preserving the bot's role and reporting settings outside it. Read saved text back and report synchronization honestly.
+4. Inspect tools in their actual execution context. Do not claim native messaging inside a routine merely because the parent can send. Follow Crew's durable wake/send guards and report missing tools honestly. Never retry an ambiguous native call.
+5. Confirm that each recipient has the owner's direct authorization to use this Crew instance for its assigned work and explicit setup diagnostics. Report any missing authorization; do not claim that your message grants it.
+6. I will copy the webhook URL and key directly from Grok into Crew's browser form. Never read, request, print or copy those values into chat, notes or MCP. Reuse the existing routine and credential binding.
+7. Do not enable delivery, test, send bot messages, replay tasks or perform work from this setup request. Report readiness and exact remaining blockers.
+
+Fetch the current canonical managed block from the global configuration's instructions field. The runtime must stop if execution.begin cannot establish authority; never fall back to ordinary task writes.`;
+  const authorizationPrompt = `I authorize this bot to use my Crew instance at ${window.location.origin}/mcp through our shared MCP connection for explicitly tagged setup diagnostics and work assigned to its Crew agent. This authorization is subject to my existing task and human-review rules. It does not authorize other Crew instances, production changes, external actions or unrelated bot messages.
+
+For a setup diagnostic, verify the connected instance, use Crew's current capability contract, and record only your own receipt and acknowledgment. Distinguish an automatically started turn from a human follow-up. Do no task work during a diagnostic and do not send acknowledgment loops. If the instance or recipient is ambiguous, stop and report the issue.`;
   async function copy(text: string, success: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -313,7 +359,7 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
   );
   const selfEvidence = routeEvidence.some((ex) => ex.agent === config?.agent);
   const otherEvidence = routeEvidence.some((ex) => ex.agent !== config?.agent);
-  const routingPrompt = `Verify Crew routing with two clearly labeled synthetic tasks, one assigned to the selected dispatcher and one to a mapped specialist. First read crew_read collection capabilities and the current integration. Stop unless delivery is enabled. This prompt explicitly authorizes creating these two synthetic Ready tasks. Reuse existing test tasks if present. Each task should comment pong once and complete through execution.begin and the current fenced completion protocol. Verify an actual native handoff from the webhook routine. Do not infer success from HTTP acceptance or a reported send. Do not change credentials, mappings, dispatcher, ordinary tasks or perform backlog catch-up. Report event, execution and task evidence separately. This prompt authorizes only these synthetic routing tests; no external actions.`;
+  const routingPrompt = `Verify Crew routing with two clearly labeled synthetic tasks, one assigned to the selected dispatcher and one to a mapped specialist. First read crew_read collection capabilities and the current integration. Stop unless delivery is enabled. This prompt explicitly authorizes creating these two synthetic Ready tasks. Reuse existing test tasks if present. Each task should comment pong once and complete through execution.begin and the current fenced completion protocol. Verify the configured dispatch path, including the parent wake when parent_bridge is selected and the actual native handoff to the recipient. Do not infer success from HTTP acceptance or a reported send. Do not change credentials, mappings, dispatcher, ordinary tasks or perform backlog catch-up. Report event, execution and task evidence separately. This prompt authorizes only these synthetic routing tests; no external actions.`;
   return (
     <section className="crew-webhooks" aria-label="Grok Bot integration">
       <div className="crew-section-title">
@@ -390,6 +436,33 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
                 Changing the dispatcher pauses delivery and clears the previous
                 webhook binding.
               </p>
+              <label className="crew-field">
+                <span>Dispatch path</span>
+                <select
+                  value={parentBridge ? "parent_bridge" : "native"}
+                  disabled={blocked}
+                  onChange={(e) =>
+                    void mutate(
+                      "webhook.integration.update",
+                      { dispatch_mode: e.target.value },
+                      config,
+                      "Dispatch path changed. Apply the current instructions and test again. Credentials were preserved.",
+                    )
+                  }
+                >
+                  <option value="parent_bridge">
+                    Via the bot's parent conversation
+                  </option>
+                  <option value="native">
+                    Directly inside the webhook routine
+                  </option>
+                </select>
+              </label>
+              <p className="crew-footnote">
+                {parentBridge
+                  ? "The routine wakes its parent conversation, which can work or message a teammate."
+                  : "Use direct dispatch only when native bot messaging is available inside the routine. For Grok routines with WakeParent, choose the parent conversation."}
+              </p>
             </Step>
             <Step
               number={2}
@@ -450,6 +523,26 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
                   );
                 })}
               </ul>
+              <details>
+                <summary>Authorize your bots to use Crew</summary>
+                <p>
+                  Give each bot direct authorization in its own Grok chat before
+                  testing. A dispatcher's message does not replace your
+                  authorization.
+                </p>
+                <button
+                  disabled={blocked}
+                  onClick={() =>
+                    void copy(
+                      authorizationPrompt,
+                      "Authorization prompt copied. Paste it into each bot's own conversation.",
+                    )
+                  }
+                >
+                  Copy bot authorization prompt
+                </button>
+                <pre className="crew-copy-prompt">{authorizationPrompt}</pre>
+              </details>
               {mapped < activeAgents.length && (
                 <p className="crew-footnote">
                   Unmapped agents cannot receive Ready-task notifications. The
@@ -536,38 +629,127 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
                 </form>
               </details>
             </Step>
-            <Step
-              number={4}
-              title="Verify the connection"
-              done={!!setup?.test_acknowledged}
-            >
+            <Step number={4} title="Verify the connection" done={canEnable}>
               <p>
-                Send a harmless test to the routine. It may start a Grok run,
-                but must acknowledge the test without task work or forwarding.
+                {parentBridge
+                  ? "Test the complete route: routine, parent conversation, and selected recipient. This explicitly sends a diagnostic message to a teammate when selected, but performs no task work."
+                  : "Send a connection test to the routine. It acknowledges the test without task work or forwarding."}
               </p>
+              {parentBridge && (
+                <label className="crew-field">
+                  <span>Test recipient</span>
+                  <select
+                    value={selectedTestRecipient?.id || ""}
+                    disabled={blocked}
+                    onChange={(e) => setTestRecipient(e.target.value)}
+                  >
+                    {!testRecipients.length && (
+                      <option value="">Map a bot first</option>
+                    )}
+                    {testRecipients.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {val(a, "name")}
+                        {a.id === config.agent ? " (dispatcher)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <button
-                disabled={blocked || !canTest}
+                disabled={
+                  blocked ||
+                  !canTest ||
+                  (parentBridge && !selectedTestRecipient)
+                }
                 onClick={() =>
                   void mutate(
                     "webhook.test",
-                    {},
+                    parentBridge
+                      ? { recipient_agent_id: selectedTestRecipient?.id }
+                      : {},
                     config,
-                    "Test queued. Refresh to check its acknowledgment and runtime capability report.",
+                    "Test queued. Refresh to follow acknowledgment progress. Do not send another test while the outcome is uncertain.",
                   )
                 }
               >
                 Send test
               </button>
               {!canTest && <Blockers items={testBlockers} />}
-              <p>
-                {setup?.test_acknowledged
-                  ? "Test acknowledged by the routine."
-                  : "No current test acknowledgment yet."}
-              </p>
+              <ul aria-label="Connection test progress">
+                <li>
+                  Webhook:{" "}
+                  {testDelivery
+                    ? deliveryStates[val(testDelivery, "state")] ||
+                      "Unknown delivery status"
+                    : "no current delivery recorded"}
+                </li>
+                <li>
+                  Routine:{" "}
+                  {setup?.test_acknowledged
+                    ? "test acknowledged"
+                    : "awaiting acknowledgment"}
+                </li>
+                <li>
+                  Routine capabilities:{" "}
+                  {setup?.runtime_reported ? "reported" : "awaiting report"}
+                </li>
+                {parentBridge && (
+                  <>
+                    <li>
+                      Parent wake capability:{" "}
+                      {setup?.parent_wake_reported
+                        ? "reported"
+                        : "awaiting report"}
+                    </li>
+                    <li>
+                      Parent conversation:{" "}
+                      {setup?.parent_received
+                        ? "receipt recorded"
+                        : "awaiting receipt"}
+                    </li>
+                    {setup?.bridge_test_recipient_agent_id &&
+                      setup.bridge_test_recipient_agent_id !== config.agent && (
+                        <li>
+                          Native send:{" "}
+                          {setup.bridge_send_reported
+                            ? "reported"
+                            : "not reported"}
+                        </li>
+                      )}
+                    <li>
+                      Recipient:{" "}
+                      {setup?.bridge_test_recipient_agent_id === config.agent
+                        ? "not needed for this dispatcher-only test"
+                        : setup?.recipient_acknowledged
+                          ? "acknowledgment recorded"
+                          : "awaiting acknowledgment"}
+                    </li>
+                  </>
+                )}
+              </ul>
+              {parentBridge && setup?.bridge_test_overdue && (
+                <p className="crew-assignment-warning">
+                  Test acknowledgment overdue. Check the bot conversations and
+                  authorization before starting a new test. No automatic resend.
+                </p>
+              )}
+              {parentBridge && setup?.bridge_test_recipient_agent_id && (
+                <p>
+                  Latest test recipient:{" "}
+                  {val(
+                    agents.find(
+                      (a) => a.id === setup.bridge_test_recipient_agent_id,
+                    ),
+                    "name",
+                  ) || "Unavailable agent"}
+                </p>
+              )}
               <p className="crew-footnote">
-                A successful HTTP response is not a test acknowledgment. Runtime
-                capability reports describe the tools available to that webhook
-                run; they are not independent certification.
+                Receiver acceptance, parent receipt and recipient acknowledgment
+                are separate stages. Reports are supplied by bots using the
+                shared connection; they do not independently identify a bot or
+                guarantee reliable delivery. Check Grok before retrying an
+                uncertain outcome.
               </p>
             </Step>
             <Step

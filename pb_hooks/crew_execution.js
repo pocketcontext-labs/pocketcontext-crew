@@ -192,6 +192,7 @@ function handle(app, b, actor, isAgent) {
           config = wh.get(app, "webhook_configs", delivery.getString("config"));
         if (
           payload.event_type !== "webhook.test" ||
+          config.getString("test_event_id") !== d.event_id ||
           d.epoch !== rt.getString("epoch") ||
           delivery.getString("epoch") !== d.epoch ||
           config.getInt("destination_version") !==
@@ -250,6 +251,22 @@ function handle(app, b, actor, isAgent) {
           info = current(app, delivery, d);
         const self =
           info.target.agent === info.target.config.getString("agent");
+        if (info.target.config.getString("dispatch_mode") === "parent_bridge") {
+          const bridge = require(`${__hooks}/crew_bridge.js`).forEvent(
+            app,
+            d.event_id,
+          );
+          if (
+            !bridge ||
+            !bridge.getString("parent_received_at") ||
+            !bridge.getBool("parent_execution_protocol") ||
+            !bridge.getBool("parent_native_handoff")
+          )
+            fail(
+              "Parent receipt and capability report required before dispatch",
+              "parent_receipt_required",
+            );
+        }
         if (phase === "dispatch" && !self && d.native_handoff !== true)
           fail(
             "This runtime must report native handoff capability before dispatching another bot",
@@ -513,6 +530,7 @@ function guardTaskWrite(app, task, b, isAgent) {
 }
 module.exports = {
   collections,
+  current,
   exported,
   handle,
   guardTaskWrite,

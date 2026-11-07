@@ -344,3 +344,139 @@ it("explains a managed block mismatch instead of claiming a revision conflict", 
     screen.queryByText(/configuration changed elsewhere/),
   ).not.toBeInTheDocument();
 });
+
+it("switches dispatch path without exposing or replacing credentials", async () => {
+  await open();
+  fireEvent.change(screen.getByRole("combobox", { name: "Dispatch path" }), {
+    target: { value: "parent_bridge" },
+  });
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "webhook.integration.update",
+      { dispatch_mode: "parent_bridge" },
+      config,
+      "",
+      { idempotency_key: expect.any(String) },
+    ),
+  );
+  expect(crewApi.write).toHaveBeenCalledTimes(1);
+});
+
+it("sends an explicit parent bridge test to a mapped teammate while delivery is disabled", async () => {
+  config.dispatch_mode = "parent_bridge";
+  fixtures.webhook_mappings.push({
+    id: "learn-mapping",
+    revision: 1,
+    agent: "learn",
+    bot_ref: "native-learn",
+  });
+  await open();
+  expect(screen.getByRole("combobox", { name: "Test recipient" })).toHaveValue(
+    "learn",
+  );
+  expect(
+    screen.getByText(/explicitly sends a diagnostic message/),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Send test" }));
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "webhook.test",
+      { recipient_agent_id: "learn" },
+      config,
+      "",
+      { idempotency_key: expect.any(String) },
+    ),
+  );
+  expect(crewApi.write).toHaveBeenCalledTimes(1);
+});
+
+it("keeps parent receipt separate from recipient acknowledgment and shows its blocker", async () => {
+  config.dispatch_mode = "parent_bridge";
+  config.setup = {
+    can_test: true,
+    can_enable: false,
+    test_acknowledged: true,
+    runtime_reported: true,
+    parent_wake_reported: true,
+    parent_received: true,
+    recipient_acknowledged: false,
+    bridge_test_recipient_agent_id: "learn",
+    test_event_id: "test-event",
+    bridge_test_overdue: true,
+    blockers: [
+      {
+        code: "recipient_ack_missing",
+        message: "Wait for the recipient acknowledgment.",
+      },
+    ],
+  };
+  fixtures.webhook_deliveries = [
+    {
+      id: "delivery",
+      revision: 1,
+      event_id: "test-event",
+      state: "accepted",
+      attempts: 1,
+    },
+  ];
+  await open();
+  expect(screen.getByText("Webhook: Accepted by receiver")).toBeVisible();
+  expect(
+    screen.getByText("Parent conversation: receipt recorded"),
+  ).toBeVisible();
+  expect(screen.getByText("Recipient: awaiting acknowledgment")).toBeVisible();
+  expect(screen.getByText("Latest test recipient: Learn")).toBeVisible();
+  expect(screen.getByText(/Test acknowledgment overdue/)).toBeVisible();
+  expect(
+    screen.getByText("Wait for the recipient acknowledgment."),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Enable delivery" }),
+  ).toBeDisabled();
+  expect(crewApi.write).not.toHaveBeenCalled();
+});
+
+it("copies parent bridge setup and direct owner authorization separately without sending", async () => {
+  config.dispatch_mode = "parent_bridge";
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Copy setup prompt" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+  expect(writeText.mock.calls[0][0]).toContain("WakeParent");
+  expect(writeText.mock.calls[0][0]).toContain("priority:true");
+  expect(writeText.mock.calls[0][0]).toContain("owner's direct authorization");
+  fireEvent.click(screen.getByText("Authorize your bots to use Crew"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Copy bot authorization prompt" }),
+  );
+  await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+  expect(writeText.mock.calls[1][0]).toContain(`${window.location.origin}/mcp`);
+  expect(writeText.mock.calls[1][0]).toContain("human-review rules");
+  expect(writeText.mock.calls[1][0]).not.toContain("hooks.example");
+  expect(crewApi.write).not.toHaveBeenCalled();
+});
+
+it("does not require a recipient acknowledgment for a dispatcher-only bridge test", async () => {
+  config.dispatch_mode = "parent_bridge";
+  config.setup = {
+    can_test: true,
+    can_enable: true,
+    blockers: [],
+    test_acknowledged: true,
+    runtime_reported: true,
+    parent_wake_reported: true,
+    parent_received: true,
+    recipient_acknowledged: false,
+    bridge_test_recipient_agent_id: "build",
+  };
+  await open();
+  expect(
+    screen.getByText("Recipient: not needed for this dispatcher-only test"),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: "Enable delivery" })).toBeEnabled();
+  expect(screen.queryByText(/Native send:/)).not.toBeInTheDocument();
+});

@@ -3,15 +3,15 @@
 The `crew_*` collections are accessed through authenticated operations, never
 through generic record writes. There are no spaces, SQL endpoints or inherited knowledge collections.
 
-| Collection | Purpose |
-| --- | --- |
-| agents | Role metadata and brief; not auth accounts |
-| buckets | Name, purpose and responsible agent |
-| notes | One bucket, title, Markdown body, note-ID links, archive state |
-| note_revisions | Immutable snapshots, version, actor, reported agent and reason |
-| tasks | Board status, assignment, creator attribution, labels, draft and note links |
-| events | Immutable changes/comments, actor and reported attribution |
-| reviews | Immutable draft snapshot with monotonic decision state |
+| Collection     | Purpose                                                                     |
+| -------------- | --------------------------------------------------------------------------- |
+| agents         | Role metadata and brief; not auth accounts                                  |
+| buckets        | Name, purpose and responsible agent                                         |
+| notes          | One bucket, title, Markdown body, note-ID links, archive state              |
+| note_revisions | Immutable snapshots, version, actor, reported agent and reason              |
+| tasks          | Board status, assignment, creator attribution, labels, draft and note links |
+| events         | Immutable changes/comments, actor and reported attribution                  |
+| reviews        | Immutable draft snapshot with monotonic decision state                      |
 
 `POST /api/crew/read` accepts collection, optional id/parent/query/archived/offset and responsible_agent for buckets.
 It returns items, has_more and next_offset (100 records per page). Default note
@@ -71,7 +71,7 @@ including unchanged assignments; events include normalized old/new responsibilit
 Reads preserve responsible_agent as an ID and add responsible_agent_details with
 id/name or null. The optional filter accepts an ID or unique exact name.
 
-## Ready tasks and global dispatcher integration (0.5.0)
+## Ready tasks and global dispatcher integration
 
 Tasks expose readiness (waiting by default), waiting_reason and server-managed
 wake_generation. Ready work, assignment, review and invalidation changes share a
@@ -89,3 +89,15 @@ without bypassing checks or exposing owner credentials. Conflicting top-level
 and nested metadata is refused. `execution.begin` atomically validates/acquires
 work. Governed tasks require proof even before an execution exists; explicit owner
 Waiting releases governance. Read the webhook guide for the full lifecycle.
+
+## Parent bridge coordination
+
+The global integration selects `native` or `parent_bridge` dispatch. Parent bridge
+mode reserves each routine-to-parent wake before the native call, records parent
+receipt separately, and enters the same fenced task execution lifecycle from the
+parent turn. `webhook_bridges` is readable stage evidence, not a separate bot
+identity or authorization boundary. Diagnostic tests can reserve one mapped native
+send while task delivery is disabled; recipient acknowledgment must be reported
+from the automatically activated turn. Shared MCP cannot independently authenticate
+these reported execution contexts. See the webhook guide for exact operations,
+setup checks, prior recipient authorization and uncertain-result handling.

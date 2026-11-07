@@ -16,6 +16,7 @@ const collections = [
   "webhook_deliveries",
   "webhook_attempts",
   "webhook_routing",
+  "webhook_bridges",
 ];
 function bad(message) {
   throw new BadRequestError(message);
@@ -58,6 +59,8 @@ function routing(app) {
   return rows(app, "webhook_routing", "singleton='routing'")[0];
 }
 function exported(record, app) {
+  if (record.collection().name === "crew_webhook_bridges")
+    return require(`${__hooks}/crew_bridge.js`).exported(record);
   const result = record.publicExport();
   delete result.secret_ciphertext;
   if (record.collection().name === "crew_webhook_configs") {
@@ -249,6 +252,8 @@ function wake(app, t, causes, outcome) {
     epoch: target.routing.getString("epoch"),
     config_id: target.config.id,
     destination_version: target.config.getInt("destination_version"),
+    instruction_revision: target.config.getInt("instruction_revision"),
+    dispatch_mode: target.config.getString("dispatch_mode") || "native",
     target_agent_id: target.agent,
     recipient_agent_id: target.agent,
     dispatcher_agent_id: target.config.getString("agent"),
@@ -386,6 +391,7 @@ function setupStatus(app, c) {
     );
   const rt = routing(app);
   const runtime =
+    c.getString("runtime_event_id") === c.getString("test_event_id") &&
     c.getString("runtime_context") === "webhook" &&
     c.getString("runtime_epoch") === rt.getString("epoch") &&
     c.getInt("runtime_destination_version") ===
@@ -400,6 +406,31 @@ function setupStatus(app, c) {
       "event_id={:event} && state='test_acknowledged'",
       { event: c.getString("runtime_event_id") },
     ).length > 0;
+  const mode = c.getString("dispatch_mode") || "native";
+  const bridgeModule = require(`${__hooks}/crew_bridge.js`);
+  let bridge = c.getString("test_event_id")
+    ? bridgeModule.forEvent(app, c.getString("test_event_id"))
+    : null;
+  if (bridge) {
+    try {
+      bridgeModule.current(
+        app,
+        get(app, "webhook_deliveries", bridge.getString("delivery")),
+      );
+    } catch (_) {
+      bridge = null;
+    }
+  }
+  const parent = !!bridge && !!bridge.getString("parent_received_at");
+  const crossRequired = rows(app, "webhook_mappings", "agent!={:agent}", {
+    agent: c.getString("agent"),
+  }).some(
+    (m) => !!m.getString("bot_ref") && activeAgent(app, m.getString("agent")),
+  );
+  const recipientAck =
+    !!bridge &&
+    !!bridge.getString("recipient_received_at") &&
+    bridge.getBool("recipient_automatic");
   const blockers = test.slice();
   if (!runtime)
     blockers.push({
@@ -414,12 +445,53 @@ function setupStatus(app, c) {
         message:
           "The webhook routine cannot use the required Crew execution protocol. Refresh its tools and test again.",
       });
-    if (!c.getBool("runtime_native_handoff"))
+    if (mode === "native" && !c.getBool("runtime_native_handoff"))
       blockers.push({
         code: "native_handoff_missing",
         message:
-          "Native bot messaging is unavailable in the webhook routine. Do not use a parent chat as an assumed bridge.",
+          "Native bot messaging is unavailable in the webhook routine. Select and test the parent bridge if supported.",
       });
+  }
+  if (mode === "parent_bridge") {
+    const block = (code, message) => blockers.push({ code, message });
+    if (!runtime || !c.getBool("runtime_parent_wake"))
+      block(
+        "parent_wake_missing",
+        "The routine must report an available parent-wake tool.",
+      );
+    if (!parent)
+      block(
+        "parent_receipt_missing",
+        "Wait for the automatically activated parent to acknowledge the test.",
+      );
+    if (parent && !bridge.getBool("parent_native_handoff"))
+      block(
+        "parent_native_handoff_missing",
+        "Native bot messaging is unavailable in the parent turn.",
+      );
+    if (parent && !bridge.getBool("parent_execution_protocol"))
+      block(
+        "parent_execution_protocol_missing",
+        "The parent cannot use Crew's execution protocol.",
+      );
+    if (
+      crossRequired &&
+      (!bridge || bridge.getString("recipient_agent") === c.getString("agent"))
+    )
+      block(
+        "recipient_test_required",
+        "Select another mapped bot and run an end-to-end test.",
+      );
+    else if (crossRequired && !recipientAck)
+      block(
+        "recipient_ack_missing",
+        "Wait for the recipient's automatic acknowledgment; authorize development access in its chat if needed.",
+      );
+    if (bridge && bridgeModule.exported(bridge).overdue)
+      block(
+        "bridge_overdue",
+        "The bridge acknowledgment deadline expired. Inspect the conversations before starting a new test.",
+      );
   }
   if (!ack)
     blockers.push({
@@ -428,6 +500,17 @@ function setupStatus(app, c) {
         "Wait for the harmless connection test acknowledgment before enabling.",
     });
   return {
+    dispatch_mode: mode,
+    test_event_id: c.getString("test_event_id"),
+    parent_wake_reported: runtime && c.getBool("runtime_parent_wake"),
+    parent_received: parent,
+    bridge_send_reported: !!bridge && !!bridge.getString("send_reported_at"),
+    recipient_acknowledged: recipientAck,
+    bridge_test_recipient_agent_id: bridge
+      ? bridge.getString("recipient_agent")
+      : "",
+    bridge_test_state: bridge ? bridge.getString("state") : "",
+    bridge_test_overdue: !!bridge && bridgeModule.exported(bridge).overdue,
     can_test: test.length === 0,
     can_enable: blockers.length === 0,
     test_blockers: test,
@@ -468,6 +551,8 @@ function invalidateAgent(app, agent, b, actor) {
 }
 function handle(app, b, actor, isAgent) {
   const d = b.data || {};
+  if (b.action.startsWith("webhook.bridge."))
+    return require(`${__hooks}/crew_bridge.js`).handle(app, b, actor);
   // Check authorization before idempotency replay, so an owner result cannot be
   // replayed through MCP and credentials can never enter the agent API.
   if (b.action === "webhook.credentials.update" && isAgent)
@@ -680,9 +765,20 @@ function handle(app, b, actor, isAgent) {
           "subscriptions",
           "role_instructions",
           "reporting_instructions",
+          "dispatch_mode",
         ]);
         validateConfig(app, d);
         let changed = false;
+        if (d.dispatch_mode !== undefined) {
+          if (!["native", "parent_bridge"].includes(d.dispatch_mode))
+            bad("Unsupported dispatch mode");
+          if (d.dispatch_mode !== c.getString("dispatch_mode")) {
+            c.set("dispatch_mode", d.dispatch_mode);
+            c.set("destination_version", c.getInt("destination_version") + 1);
+            c.set("sync_status", "unverified");
+            changed = true;
+          }
+        }
         if (d.agent !== undefined && d.agent !== c.getString("agent")) {
           if (d.agent && !activeAgent(app, d.agent))
             bad("Active dispatcher required");
@@ -729,6 +825,7 @@ function handle(app, b, actor, isAgent) {
               bad("Invalid role or reporting instructions");
             if (d[field] !== c.getString(field)) {
               c.set(field, d[field]);
+              c.set("test_event_id", "");
               c.set("sync_status", "unverified");
               changed = true;
             }
@@ -779,11 +876,13 @@ function handle(app, b, actor, isAgent) {
           "context",
           "native_handoff",
           "execution_protocol",
+          "parent_wake",
         ]);
         if (
           d.context !== "webhook" ||
           typeof d.native_handoff !== "boolean" ||
-          typeof d.execution_protocol !== "boolean"
+          typeof d.execution_protocol !== "boolean" ||
+          (d.parent_wake !== undefined && typeof d.parent_wake !== "boolean")
         )
           bad("Report actual webhook-run capabilities");
         const delivery = rows(app, "webhook_deliveries", "event_id={:event}", {
@@ -794,6 +893,7 @@ function handle(app, b, actor, isAgent) {
         if (
           !delivery ||
           p.event_type !== "webhook.test" ||
+          c.getString("test_event_id") !== d.event_id ||
           delivery.getString("config") !== c.id ||
           delivery.getString("epoch") !== rt.getString("epoch") ||
           delivery.getInt("destination_version") !==
@@ -810,6 +910,7 @@ function handle(app, b, actor, isAgent) {
         c.set("runtime_destination_version", c.getInt("destination_version"));
         c.set("runtime_instruction_revision", c.getInt("instruction_revision"));
         c.set("runtime_native_handoff", d.native_handoff);
+        c.set("runtime_parent_wake", d.parent_wake === true);
         c.set("runtime_execution_protocol", d.execution_protocol);
         c.set("runtime_reported_at", new Date().toISOString());
       } else if (
@@ -839,7 +940,7 @@ function handle(app, b, actor, isAgent) {
         }
         c.set("enabled", enabled);
       } else if (b.action === "webhook.test") {
-        only(d, []);
+        only(d, ["recipient_agent_id"]);
         requireReady(app, c);
         const rt = routing(app);
         // Explicit test resumes transport only; restored integrations remain disabled.
@@ -848,6 +949,22 @@ function handle(app, b, actor, isAgent) {
           rt.set("revision", rt.getInt("revision") + 1);
           app.save(rt);
         }
+        const recipient =
+          d.recipient_agent_id === undefined
+            ? c.getString("agent")
+            : d.recipient_agent_id;
+        if (
+          recipient !== c.getString("agent") &&
+          c.getString("dispatch_mode") !== "parent_bridge"
+        )
+          bad("Cross-bot connection tests require parent bridge mode");
+        const mapping = mappingFor(app, recipient);
+        if (
+          !activeAgent(app, recipient) ||
+          !mapping ||
+          !mapping.getString("bot_ref")
+        )
+          bad("Choose an active mapped test recipient");
         const payload = {
           schema_version: 1,
           event_id: $pocketcontext.webhookUUID(),
@@ -855,13 +972,19 @@ function handle(app, b, actor, isAgent) {
           instruction_revision: c.getInt("instruction_revision"),
           test: true,
           dispatcher_agent_id: c.getString("agent"),
-          recipient_agent_id: c.getString("agent"),
+          recipient_agent_id: recipient,
+          recipient_bot_ref: mapping.getString("bot_ref"),
+          mapping_revision: mapping.getInt("revision"),
+          dispatch_mode: c.getString("dispatch_mode") || "native",
           config_id: c.id,
           destination_version: c.getInt("destination_version"),
           instance_id: rt.getString("instance_id"),
           epoch: rt.getString("epoch"),
           occurred_at: new Date().toISOString(),
         };
+        c.set("test_event_id", payload.event_id);
+        c.set("revision", c.getInt("revision") + 1);
+        app.save(c);
         const result = enqueue(app, c, payload, null, "test");
         audit(app, c, b, actor, { delivery: result.id });
         return result;

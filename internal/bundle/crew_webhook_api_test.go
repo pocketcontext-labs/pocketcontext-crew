@@ -2,7 +2,9 @@ package bundle
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -357,6 +359,7 @@ func TestWebhookAPISetupRequiresCurrentWebhookRuntime(t *testing.T) {
 		t.Fatal(state)
 	}
 	event := webhookOperation(t, a, "webhook.test", c.Id, int(result["revision"].(float64)), map[string]any{}, "new-test")
+	result["revision"] = float64(apiWebhookRecord(t, a, "webhook_configs", c.Id).GetInt("revision"))
 	report := map[string]any{"event_id": event["event_id"], "context": "parent", "native_handoff": true, "execution_protocol": true}
 	executionOperation(t, a, "webhook.runtime.report", c.Id, int(result["revision"].(float64)), report, "", false, 400)
 	report["context"] = "webhook"
@@ -373,7 +376,6 @@ func TestWebhookAPISetupRequiresCurrentWebhookRuntime(t *testing.T) {
 
 func TestWebhookManagedMigrationPreservesCredentialsAndHistory(t *testing.T) {
 	a, c, task, event := webhookFixture(t)
-	canonical, canonicalHash := c.GetString("instructions"), c.GetString("managed_hash")
 	beforeCipher, beforeURL, beforeAgent := c.GetString("secret_ciphertext"), c.GetString("url"), c.GetString("agent")
 	c.Set("instructions", "legacy custom instructions")
 	if err := a.app.Save(c); err != nil {
@@ -392,8 +394,8 @@ func TestWebhookManagedMigrationPreservesCredentialsAndHistory(t *testing.T) {
 	if len(apiWebhookDeliveries(t, a, task.Id)) != 1 {
 		t.Fatal("migration emitted new wake")
 	}
-	if updated.GetString("instructions") != canonical || updated.GetString("managed_hash") != canonicalHash {
-		t.Fatal("migration differs from canonical managed protocol")
+	if !strings.Contains(updated.GetString("instructions"), "Crew dispatcher protocol 2.") || updated.GetString("managed_hash") != fmt.Sprintf("%x", sha256.Sum256([]byte(updated.GetString("instructions")))) {
+		t.Fatal("historical migration must retain its protocol 2 block and matching hash")
 	}
 	mappings, err := a.app.FindRecordsByFilter("crew_webhook_mappings", "agent={:agent}", "", 0, 0, dbx.Params{"agent": beforeAgent})
 	if err != nil || len(mappings) != 1 {

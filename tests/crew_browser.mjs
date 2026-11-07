@@ -5,8 +5,9 @@ const base = process.env.CREW_TEST_URL;
 if(!base || !new URL(base).hostname.match(/^(127\.0\.0\.1|localhost)$/)) throw new Error('Synthetic loopback server required');
 const browser = await chromium.launch({headless:true});
 const page = await browser.newPage({viewport:{width:1440,height:1000}});
-const errors=[],outside=[];
+const errors=[],outside=[],writeActions=[];
 page.on('pageerror',e=>errors.push(e.message));
+page.on('request',r=>{if(r.url().endsWith('/api/crew/write')){try{writeActions.push(r.postDataJSON()?.action);}catch{}}});
 page.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('data:'))outside.push(new URL(r.url()).origin);});
 const dialog=()=>page.getByRole('dialog');
 const close=()=>dialog().getByRole('button',{name:'Close dialog'}).click();
@@ -71,6 +72,19 @@ try {
  await dialog().getByLabel('Status').selectOption('done');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('.crew-task-card').count(),1);
+ // Bridge setup is configuration only: viewing/selecting never sends a probe.
+ await page.getByRole('button',{name:'Agents',exact:true}).click();
+ const integration=page.getByRole('region',{name:'Grok Bot integration'});
+ await integration.getByRole('combobox',{name:'Crew dispatcher',exact:true}).selectOption({label:'Build'});
+ await page.getByText('Dispatcher changed. Connect its routine before enabling delivery.',{exact:true}).waitFor();
+ await integration.getByRole('combobox',{name:'Dispatch path',exact:true}).selectOption('parent_bridge');
+ await page.getByText('Dispatch path changed. Apply the current instructions and test again. Credentials were preserved.',{exact:true}).waitFor();
+ assert.equal(await integration.getByRole('combobox',{name:'Dispatch path',exact:true}).inputValue(),'parent_bridge');
+ await integration.getByLabel('Connection test progress').waitFor();
+ assert.equal(await integration.getByRole('button',{name:'Send test',exact:true}).isDisabled(),true);
+ assert.equal(await integration.getByRole('button',{name:'Enable delivery',exact:true}).isDisabled(),true);
+ assert.equal(writeActions.includes('webhook.test'),false,'Setup controls unexpectedly sent a test');
+ await snap('crew-parent-bridge-setup');
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:900});
   for(const name of ['AI Team','Shared memory','Human approvals','Agents','Archive']){

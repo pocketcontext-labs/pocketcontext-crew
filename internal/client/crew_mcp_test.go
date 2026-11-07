@@ -287,17 +287,17 @@ func TestCrewDiscoveryAndCachedEnvelopeCompatibility(t *testing.T) {
 	h := mcpTestHandler(api)
 	listed := mcpRequest(t, h, token, "tools/list", map[string]any{})
 	raw, _ := json.Marshal(listed)
-	for _, term := range []string{"capabilities", "execution.begin", "idempotency_key", "execution", "webhook_mappings", "webhook_executions"} {
+	for _, term := range []string{"capabilities", "execution.begin", "idempotency_key", "execution", "webhook_mappings", "webhook_executions", "webhook_bridges", "webhook.bridge.prepare"} {
 		if !bytes.Contains(raw, []byte(term)) {
 			t.Fatalf("tools/list omits %s", term)
 		}
 	}
 	result := mcpCall(t, h, token, "crew_read", map[string]any{"collection": "capabilities"}, false)
 	cap := dig(result, "items").([]any)[0]
-	if dig(cap, "protocol_version") != float64(2) {
+	if dig(cap, "protocol_version") != float64(3) {
 		t.Fatal(cap)
 	}
-	for _, action := range []string{"execution.begin", "execution.complete", "webhook.instructions.sync", "webhook.runtime.report", "webhook.mapping.update"} {
+	for _, action := range []string{"execution.begin", "execution.complete", "webhook.instructions.sync", "webhook.runtime.report", "webhook.mapping.update", "webhook.bridge.prepare", "webhook.bridge.parent", "webhook.bridge.sent", "webhook.bridge.ack"} {
 		if dig(cap, "operations", action) == nil {
 			t.Fatalf("capabilities omit %s", action)
 		}

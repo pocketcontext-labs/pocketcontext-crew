@@ -161,6 +161,7 @@ function describe() {
     "webhook.integration.update",
     {
       agent: str,
+      dispatch_mode: { enum: ["native", "parent_bridge"] },
       instructions: str,
       role_instructions: str,
       reporting_instructions: str,
@@ -198,16 +199,44 @@ function describe() {
       event_id: str,
       context: { const: "webhook" },
       native_handoff: bool,
+      parent_wake: bool,
       execution_protocol: bool,
     },
     ["event_id", "context", "native_handoff", "execution_protocol"],
     { revision: "config" },
   );
-  for (const action of ["enable", "disable", "test"])
-    op("webhook." + action, {}, [], {
-      revision: "config",
-      key: action === "test",
-    });
+  for (const action of ["enable", "disable"])
+    op("webhook." + action, {}, [], { revision: "config" });
+  op("webhook.test", { recipient_agent_id: str }, [], {
+    revision: "config",
+    key: true,
+    description:
+      "Explicit diagnostic only. In parent_bridge mode an optional mapped recipient authorizes one diagnostic native handoff and acknowledgment while delivery is disabled; never task work.",
+  });
+  op(
+    "webhook.bridge.prepare",
+    { event_id: str, epoch: str, worker_id: str },
+    ["event_id", "epoch", "worker_id"],
+    { key: true },
+  );
+  op(
+    "webhook.bridge.parent",
+    { native_handoff: bool, execution_protocol: bool },
+    ["native_handoff", "execution_protocol"],
+    { revision: "bridge", key: true },
+  );
+  op(
+    "webhook.bridge.sent",
+    { sent: { const: true }, message_ref: str },
+    ["sent"],
+    { revision: "bridge", key: true },
+  );
+  op(
+    "webhook.bridge.ack",
+    { recipient_agent_id: str, automatic: { const: true } },
+    ["recipient_agent_id", "automatic"],
+    { revision: "bridge", key: true },
+  );
   op("webhook.retry", { config_revision: num }, ["config_revision"], {
     revision: "delivery",
   });
@@ -327,6 +356,7 @@ function describe() {
     "webhook_deliveries",
     "webhook_attempts",
     "webhook_executions",
+    "webhook_bridges",
   ])
     collections[name] = { result_schema: record };
   for (const [name, parent] of Object.entries({
@@ -337,6 +367,7 @@ function describe() {
     webhook_deliveries: "config",
     webhook_attempts: "delivery",
     webhook_executions: "task",
+    webhook_bridges: "config",
   }))
     collections[name].parent = parent;
 
@@ -384,6 +415,7 @@ function describe() {
       scope: str,
       agent: str,
       adapter: str,
+      dispatch_mode: { enum: ["native", "parent_bridge"] },
       enabled: bool,
       subscriptions: strings,
       destination_version: num,
@@ -394,6 +426,7 @@ function describe() {
       routine_ref: str,
       managed_hash: str,
       applied_hash: str,
+      test_event_id: str,
       runtime_event_id: str,
       runtime_epoch: str,
       runtime_context: str,
@@ -401,6 +434,7 @@ function describe() {
       runtime_destination_version: num,
       runtime_instruction_revision: num,
       runtime_native_handoff: bool,
+      runtime_parent_wake: bool,
       runtime_execution_protocol: bool,
       previous_instructions: str,
       role_instructions: str,
@@ -446,6 +480,34 @@ function describe() {
       error_code: str,
       started_at: str,
       finished_at: str,
+    },
+    webhook_bridges: {
+      task_id: str,
+      generation: num,
+      dispatch_mode: str,
+      event_type: str,
+      instruction_revision: num,
+      destination_version: num,
+      overdue: bool,
+      event_id: str,
+      delivery: str,
+      config: str,
+      epoch: str,
+      state: str,
+      wake_worker_id: str,
+      parent_native_handoff: bool,
+      parent_execution_protocol: bool,
+      recipient_agent: str,
+      recipient_bot_ref: str,
+      mapping_revision: num,
+      wake_prepared_at: str,
+      parent_received_at: str,
+      send_prepared_at: str,
+      send_reported_at: str,
+      recipient_received_at: str,
+      recipient_automatic: bool,
+      deadline_at: str,
+      message_ref: str,
     },
     webhook_executions: {
       event_id: str,
@@ -504,18 +566,41 @@ function describe() {
       execution: "webhook_executions",
     }[prefix];
     if (prefix === "webhook")
-      collection = name.includes("mapping")
-        ? "webhook_mappings"
-        : name.includes("routing")
-          ? "webhook_routing"
-          : ["webhook.test", "webhook.retry"].includes(name)
-            ? "webhook_deliveries"
-            : name === "webhook.catch_up"
-              ? null
-              : "webhook_configs";
+      collection = name.startsWith("webhook.bridge.")
+        ? "webhook_bridges"
+        : name.includes("mapping")
+          ? "webhook_mappings"
+          : name.includes("routing")
+            ? "webhook_routing"
+            : ["webhook.test", "webhook.retry"].includes(name)
+              ? "webhook_deliveries"
+              : name === "webhook.catch_up"
+                ? null
+                : "webhook_configs";
     if (collection && !["execution.validate", "execution.begin"].includes(name))
       operation.result_schema = { $ref: "#/$defs/" + collection };
   }
+  for (const action of ["prepare", "parent", "sent", "ack"])
+    operations["webhook.bridge." + action].result_schema = {
+      type: "object",
+      properties: {
+        ...definitions.webhook_bridges.properties,
+        next_step: {
+          enum: [
+            "wake_parent",
+            "dispatch_task",
+            "test_complete",
+            "send_test",
+            "stop",
+            "reconcile",
+          ],
+        },
+        replayed: bool,
+      },
+      additionalProperties: true,
+      description:
+        "Durable bridge stage evidence. Only a fresh next_step authorizes a wake or diagnostic send; reconcile never authorizes replaying an external effect. Reported contexts are not authenticated bot identities.",
+    };
   operations["execution.begin"].result_schema = {
     type: "object",
     properties: {
@@ -541,7 +626,7 @@ function describe() {
     items: [
       {
         id: "crew-capabilities",
-        protocol_version: 2,
+        protocol_version: 3,
         server_version: metadata.version,
         server_commit: metadata.commit,
         $defs: definitions,
@@ -570,6 +655,7 @@ function describe() {
           shared_mcp_identity: true,
           worker_ids_are_identity: false,
           native_handoff_is_caller_reported: true,
+          bridge_context_is_caller_reported: true,
           external_effects_exactly_once: false,
         },
         setup_entry:
