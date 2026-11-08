@@ -87,6 +87,8 @@ jobs:
       - name: Build and inspect the release binary; package notices
         run: $PY scripts/release.py build --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --platform "$RELEASE_PLATFORM" --output dist
       - name: End-to-end test of the release binary
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           exe=pocketcontext-crew
           if [ "$RUNNER_OS" = Windows ]; then exe=pocketcontext-crew.exe; fi

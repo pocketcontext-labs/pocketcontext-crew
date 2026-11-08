@@ -67,6 +67,8 @@ jobs:
       - name: Name check of the repository and binary
         run: $PY tests/name_check.py --binary "$EXE"
       - name: End-to-end test with synthetic notes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           POCKETCONTEXT_REHEARSAL_BINARY="$PWD/$EXE" CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" ./internal/client -run TestInvitationCLIRehearsal -count=1 -timeout 4m
           $PY tests/installers.py --binary "$EXE"

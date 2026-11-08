@@ -19,12 +19,58 @@ import subprocess
 import tarfile
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 
 from e2e import isolated_env, free_port, PASSWORD
 
 PREVIOUS = '0.1.1'
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def _api_asset(name, timeout):
+    """Fetch through the REST API; the token never follows the storage redirect."""
+    headers = {'Accept': 'application/vnd.github+json', 'User-Agent': 'crew-upgrade-test'}
+    if os.environ.get('GITHUB_TOKEN'):
+        headers['Authorization'] = 'Bearer ' + os.environ['GITHUB_TOKEN']
+    repository = f'https://api.github.com/repos/pocketcontext-labs/pocketcontext-crew/releases/tags/v{PREVIOUS}'
+    with urllib.request.urlopen(urllib.request.Request(repository, headers=headers), timeout=timeout) as response:
+        asset = next(a for a in json.load(response)['assets'] if a['name'] == name)
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        with opener.open(urllib.request.Request(asset['url'], headers={**headers, 'Accept': 'application/octet-stream'}), timeout=timeout) as response:
+            return response.read()
+    except urllib.error.HTTPError as redirect:
+        if redirect.code not in (301, 302, 307) or not redirect.headers.get('Location'):
+            raise
+        location = redirect.headers['Location']
+    with urllib.request.urlopen(location, timeout=timeout) as response:
+        return response.read()
+
+
+def fetch_release_file(base, name, timeout):
+    """Download a release file, surviving download-endpoint outages. The caller
+    still verifies the archive against the release checksum."""
+    last = None
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(f'{base}/{name}', timeout=timeout) as response:
+                return response.read()
+        except (urllib.error.URLError, TimeoutError) as error:
+            last = error
+            if isinstance(error, urllib.error.HTTPError) and error.code < 500:
+                raise
+        try:
+            return _api_asset(name, timeout)
+        except (urllib.error.URLError, TimeoutError, StopIteration) as error:
+            last = error
+        time.sleep(10 * (attempt + 1))
+    raise AssertionError(f'could not download {name}: {last}')
 
 
 def download_previous(destination):
@@ -35,13 +81,11 @@ def download_previous(destination):
     extension = 'zip' if system == 'windows' else 'tar.gz'
     archive = f'pocketcontext-crew_{PREVIOUS}_{system}_{arch}.{extension}'
     base = f'https://github.com/pocketcontext-labs/pocketcontext-crew/releases/download/v{PREVIOUS}'
-    with urllib.request.urlopen(f'{base}/checksums.txt', timeout=120) as response:
-        checksums = response.read().decode('utf-8')
+    checksums = fetch_release_file(base, 'checksums.txt', 120).decode('utf-8')
     expected = [line.split()[0] for line in checksums.splitlines() if len(line.split()) == 2 and line.split()[1] == archive]
     if len(expected) != 1:
         raise AssertionError('previous archive must have exactly one release checksum')
-    with urllib.request.urlopen(f'{base}/{archive}', timeout=180) as response:
-        data = response.read()
+    data = fetch_release_file(base, archive, 180)
     if hashlib.sha256(data).hexdigest() != expected[0]:
         raise AssertionError('previous release archive checksum mismatch')
     name = 'pocketcontext-crew.exe' if system == 'windows' else 'pocketcontext-crew'
