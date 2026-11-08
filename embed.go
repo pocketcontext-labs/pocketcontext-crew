@@ -19,5 +19,5 @@ var Skill embed.FS
 // ManualSources embeds the exact release documentation. Export transforms it
 // deterministically; there is no independently maintained documentation copy.
 //
-//go:embed README.md docs/crew.md docs/data-model.md docs/upgrades.md docs/reader-setup.md docs/service.md docs/https.md docs/mcp.md docs/local.md docs/hosting.md docs/releases/0.2.0.md
+//go:embed README.md docs/crew.md docs/data-model.md docs/upgrades.md docs/reader-setup.md docs/service.md docs/https.md docs/mcp.md docs/local.md docs/hosting.md docs/releases/*.md
 var ManualSources embed.FS

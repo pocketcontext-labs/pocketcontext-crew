@@ -146,3 +146,19 @@ by 0.7.0 pointed at a nonexistent release; after the host runs 0.7.1, issue a
 fresh `tunnel invite` to any client whose setup failed. Upgrade connected clients
 to 0.7.1 so client and server releases match. Rolling back to the 0.7.0 binary
 needs no database restore.
+
+## Crew 0.8.0 agent commands
+
+No migrations. Take the usual complete stopped backup, stop the server, replace
+the 0.7.1 binary or image with 0.8.0 and verify authenticated Crew operations.
+Then refresh each profile's skill on every computer that has one, with `skill`
+(`--db` on the host, `--url` on paired computers): until then `profile check`
+reports that the binary changed from 0.7.1 to 0.8.0, and agents keep the old
+skill text without the `read`, `search`, `schema`, `query` and `write` commands.
+Upgrade paired clients to 0.8.0 so client and server releases match.
+
+Rolling back to the 0.7.1 binary needs no database restore. A synthetic native
+rehearsal (0.7.1 project, upgrade, CLI write, stop, 0.7.1 again) showed 0.7.1
+starting on the database and reading records written by 0.8.0; run `skill`
+again after rolling back so profiles and skills match 0.7.1, which has no CLI
+work commands.

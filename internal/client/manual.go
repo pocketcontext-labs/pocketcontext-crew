@@ -14,9 +14,12 @@ import (
 	assets "github.com/pocketcontext-labs/pocketcontext-crew"
 )
 
-const manualVersion = "0.2.0"
+// manualVersion is the release the manual documents. It follows the client
+// release pin, so its title, manifest and GitHub links name the tag the binary
+// is released from, and it exports that release's notes.
+const manualVersion = clientRelease
 
-var manualFiles = []string{"README.md", "docs/crew.md", "docs/data-model.md", "docs/upgrades.md", "docs/reader-setup.md", "docs/service.md", "docs/https.md", "docs/mcp.md", "docs/local.md", "docs/hosting.md", "docs/releases/0.2.0.md"}
+var manualFiles = []string{"README.md", "docs/crew.md", "docs/data-model.md", "docs/upgrades.md", "docs/reader-setup.md", "docs/service.md", "docs/https.md", "docs/mcp.md", "docs/local.md", "docs/hosting.md", "docs/releases/" + manualVersion + ".md"}
 var markdownLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 
 func manualContent(name string) ([]byte, error) {

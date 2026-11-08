@@ -40,4 +40,13 @@ func TestManualOfflineDeterministicAndExclusive(t *testing.T) {
 	if json.Unmarshal(b, &m) != nil || m["version"] != manualVersion {
 		t.Fatal("invalid manifest")
 	}
+	// The manual names the current release: its notes, and GitHub links to its tag.
+	notes, err := os.ReadFile(filepath.Join(one, "docs", "releases", clientRelease+".md"))
+	if err != nil || !bytes.Contains(notes, []byte("# Crew "+clientRelease)) {
+		t.Fatalf("manual lacks the %s release notes: %v", clientRelease, err)
+	}
+	local, _ := os.ReadFile(filepath.Join(one, "docs", "local.md"))
+	if !bytes.Contains(local, []byte("pocketcontext-crew/blob/v"+clientRelease+"/docs/webhooks.md")) || bytes.Contains(local, []byte("blob/v0.2.0/")) {
+		t.Fatal("manual links do not point at the release tag")
+	}
 }
