@@ -278,6 +278,41 @@ func TestMCPTransportBoundsAndCancellation(t *testing.T) {
 // A real headless server exercises Crew transactions and access boundaries.
 func mcpRealAPI(t *testing.T) (http.Handler, string) {
 	t.Helper()
+	p := realTestProject(t)
+	c, err := New(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Proxy only the test's adapter to the actual private transport. Production
+	// receives the raw router directly and retains the public-request marker.
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		inner := r.Clone(r.Context())
+		inner.URL.Scheme = "http"
+		u := strings.TrimPrefix(p.URL(), "http://")
+		inner.URL.Host = u
+		inner.Host = u
+		inner.RequestURI = ""
+		response, err := c.http.Do(inner)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		defer response.Body.Close()
+		for k, values := range response.Header {
+			for _, v := range values {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(response.StatusCode)
+		_, _ = io.Copy(w, response.Body)
+	})
+	return api, c.token
+}
+
+// realTestProject serves an initialized synthetic project with its account in
+// this process until the test ends, with a private home and cache.
+func realTestProject(t *testing.T) *bundle.Project {
+	t.Helper()
 	root := t.TempDir()
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -331,34 +366,7 @@ func mcpRealAPI(t *testing.T) (http.Handler, string) {
 	if _, err := bundle.LocalCall(p, "/api/bundle/account", map[string]string{"password": "synthetic-mcp-password"}); err != nil {
 		t.Fatal(err)
 	}
-	c, err := New(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Proxy only the test's adapter to the actual private transport. Production
-	// receives the raw router directly and retains the public-request marker.
-	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		inner := r.Clone(r.Context())
-		inner.URL.Scheme = "http"
-		u := strings.TrimPrefix(p.URL(), "http://")
-		inner.URL.Host = u
-		inner.Host = u
-		inner.RequestURI = ""
-		response, err := c.http.Do(inner)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		defer response.Body.Close()
-		for k, values := range response.Header {
-			for _, v := range values {
-				w.Header().Add(k, v)
-			}
-		}
-		w.WriteHeader(response.StatusCode)
-		_, _ = io.Copy(w, response.Body)
-	})
-	return api, c.token
+	return p
 }
 
 func TestMCPRejectsOversizedAndMalformedProtocolBodies(t *testing.T) {

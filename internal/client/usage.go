@@ -1,7 +1,7 @@
 package client
 
 // Usage is the help text.
-const Usage = `pocketcontext — PocketContext Crew server and administration
+const Usage = `pocketcontext — PocketContext Crew server, administration and agent commands
 
 The project is the database file (default: pocketcontext.db beside this binary, or
 --db PATH, or POCKETCONTEXT_DB), the storage/ folder and pocketcontext.json beside
@@ -47,9 +47,19 @@ Setup and server:
 
 Instance:
   whoami               show the signed-in Crew instance, name and version
-  Use the reader or the authenticated Crew MCP tools (crew_read, crew_search,
-  crew_schema, crew_query, crew_write) for memory, tasks and human review.
-  All Crew records are instance-wide.
+
+Crew work (agents; the routes of the MCP tools, with the same JSON input;
+JSON|- takes one object as an argument or from standard input):
+  read JSON|-          filtered, projected reads (crew_read)
+  search JSON|-        ranked full-text search over notes and tasks (crew_search)
+  schema               read-only SQL views and limits (crew_schema)
+  query JSON|-         one bounded read-only SQL statement (crew_query)
+  write JSON|-         revision-checked agent writes and review requests
+                       (crew_write); owner decisions, bucket archival and
+                       agent deactivation are refused
+  They work locally (--db) and through a paired computer (--url). Without a
+  domain they act with the owner's sign-in; the agent route still applies.
+  Use the reader for owner decisions. All Crew records are instance-wide.
 
 Tunnel (carry the server's port to another computer):
   tunnel serve [--new-address]
@@ -84,6 +94,8 @@ Remote client (the server runs on another computer, reached through
                        skip by default on SSH/headless/unknown sessions
   skill --url URL [--agent A] [--dir DIR]
                        install the agent skill for the remote server
+  read|search|schema|query|write --url URL [JSON|-]
+                       Crew work through the signed-in session
   URL must be http://127.0.0.1:PORT or
   http://localhost:PORT. Remote mode never creates a database or starts a
   server; serve, start, ensure-running, stop, flush, recover, init, password
@@ -92,5 +104,9 @@ Remote client (the server runs on another computer, reached through
 Run ` + "`pocketcontext help COMMAND`" + ` or ` + "`pocketcontext COMMAND --help`" + ` for usage, details and an example.
 Options for every command: --db PATH or --url URL, --pretty.
 --url and --db exclude each other; --db overrides POCKETCONTEXT_URL.
-Exit codes: 0 ok, 1 HTTP or transport error, 2 usage, 3 check differences, 4 HTTP 409.
+Exit codes: 0 ok, 1 HTTP or transport error (including 403 owner-only refusals
+and 429 rate limits, which name the seconds to wait), 2 usage or invalid input,
+3 check differences, 4 HTTP 409: either a revision conflict (reread, reassess,
+retry) or a Crew refusal with a reason code such as handoff_limited (do not
+retry unchanged); the last stderr line says which.
 `

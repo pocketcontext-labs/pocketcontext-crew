@@ -276,6 +276,48 @@ def scenario(pc):
     print('Crew end-to-end workflow, conflicts, archive/restore and authorization checks passed.')
 
 
+def cli_scenario(pc):
+    """The agent CLI commands against the running synthetic project (local key)."""
+    def cli(command, payload=None, stdin=None, expect=0):
+        args = [command] if payload is None else [command, json.dumps(payload)]
+        if stdin is not None:
+            args = [command, '-']
+            stdin = json.dumps(stdin)
+        result = pc.run(*args, stdin=stdin, expect=expect)
+        return json.loads(result.stdout) if expect == 0 else result.stderr
+
+    def write(action, data, record=None, expect=0, **extra):
+        body = {'action': action, 'reported_agent': 'CLI agent', 'reason': 'Synthetic CLI workflow', 'data': data, **extra}
+        if record:
+            body.update(id=record['id'], expected_revision=record['revision'])
+        return cli('write', body, expect=expect)
+
+    agent = write('agent.create', {'name': 'CLI agent', 'brief': 'Synthetic CLI checks'})
+    bucket = write('bucket.create', {'name': 'CLI', 'responsible_agent': agent['id']})
+    note = cli('write', stdin={'action': 'note.create', 'reported_agent': 'CLI agent',
+                               'data': {'bucket': bucket['id'], 'title': 'Semaphore towers', 'body': 'Optical telegraph relay notes.'}})
+    task = write('task.create', {'title': 'Survey semaphore towers', 'assigned_agent': agent['id'], 'draft': 'Synthetic CLI draft', 'readiness': 'ready'})
+    hits = cli('search', {'query': 'semaphore', 'collections': ['notes']})['items']
+    assert [h['id'] for h in hits] == [note['id']], hits
+    rows = cli('read', {'collection': 'tasks', 'assigned_agent': agent['id'], 'fields': ['title']})['items']
+    assert rows == [{'id': task['id'], 'revision': task['revision'], 'title': 'Survey semaphore towers'}], rows
+    assert 'tasks' in json.dumps(cli('schema'))
+    counted = cli('query', {'sql': "SELECT count(*) FROM tasks WHERE archived = 0 AND assigned_agent = '%s'" % agent['id']})
+    assert counted['rows'] == [[1]], counted
+    review = write('review.request', {}, task)
+    assert review['status'] == 'pending' and review['draft'] == 'Synthetic CLI draft'
+    assert 'HTTP 403' in write('review.decide', {'decision': 'approved'}, review, expect=1)
+    assert 'HTTP 403' in write('bucket.update', {'archived': True}, bucket, expect=1)
+    assert 'HTTP 403' in write('agent.update', {'archived': True}, agent, expect=1)
+    assert cli('read', {'collection': 'reviews', 'id': review['id']})['items'][0]['status'] == 'pending'
+    write('note.update', {'body': 'Changed by the CLI.'}, note)
+    stale = write('note.update', {'body': 'Stale overwrite'}, note, expect=4)
+    assert 'another request changed the record first' in stale, stale
+    assert 'unknown' in cli('read', {'collection': 'notes', 'unknown': True}, expect=2)
+    assert 'not valid JSON' in pc.run('write', '{"action":', expect=2).stderr
+    print('Crew CLI commands, agent-route refusals and conflicts passed.')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--binary', required=True, type=Path)
@@ -284,6 +326,7 @@ def main():
         pc = Project(binary, Path(temp))
         try:
             scenario(pc)
+            cli_scenario(pc)
         finally:
             subprocess.run([str(binary), '--db', str(pc.db), 'stop'], env=pc.env, capture_output=True, timeout=60)
 

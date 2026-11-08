@@ -21,6 +21,7 @@ type args struct {
 	pos   []string
 	flags map[string]string
 	bools map[string]bool
+	crew  *crewRequest // a validated Crew work request (read, search, schema, query, write)
 }
 
 // parseArgs accepts the given value flags and boolean flags (without dashes).
@@ -199,6 +200,11 @@ parsed:
 		"password":       {nil, {"password-stdin"}},
 		"skill":          {{"agent", "dir"}, nil},
 		"whoami":         {nil, nil},
+		"read":           {nil, nil},
+		"search":         {nil, nil},
+		"schema":         {nil, nil},
+		"query":          {nil, nil},
+		"write":          {nil, nil},
 		"login-code":     {{"ttl"}, nil},
 		"login":          {nil, {"password-stdin", "code-stdin"}},
 		"logout":         {nil, nil},
@@ -213,6 +219,12 @@ parsed:
 		return err
 	}
 	pretty := a.bools["pretty"]
+	// Work commands validate their input before a server is started or contacted.
+	if _, work := crewCommandUsage[command]; work {
+		if a.crew, err = prepareCrewCommand(command, a); err != nil {
+			return err
+		}
+	}
 	if command == "environment" {
 		if len(a.pos) != 0 || len(a.flags) != 0 {
 			return fail(2, "usage: pocketcontext environment [--pretty]")
@@ -479,8 +491,17 @@ func runRemote(base, command string, a *args, pretty bool) error {
 	return runData(c, command, a, pretty)
 }
 
-// runData reports the authenticated instance without selecting a partition.
+// runData runs a Crew work command, or reports the authenticated instance
+// without selecting a partition.
 func runData(c *Client, command string, a *args, pretty bool) error {
+	if a.crew != nil {
+		data, err := a.crew.send(c)
+		if err != nil {
+			return err
+		}
+		Print(data, pretty)
+		return nil
+	}
 	if command != "whoami" {
 		return fail(2, "unknown command %q", command)
 	}

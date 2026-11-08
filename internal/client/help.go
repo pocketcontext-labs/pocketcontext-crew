@@ -55,7 +55,26 @@ var commandHelp = map[string]helpEntry{
 		"pocketcontext tunnel invite --db pocketcontext.db"},
 
 	"whoami": {"whoami", "Show the authenticated Crew instance URL, name and version.", "pocketcontext whoami"},
+
+	"read": {"read JSON|-",
+		"Read Crew records through POST /api/crew/read, like the MCP tool crew_read. JSON is one object with collection (capabilities, agents, buckets, notes, note_revisions, tasks, events, reviews or a non-secret webhook collection) and optional id, parent, query, archived, offset, limit (1-100), fields, responsible_agent (buckets), assigned_agent, status, readiness and label (tasks) and changed_since (RFC3339). Read collection capabilities once for operation schemas. Keep reads compact: filter, project fields and use a small limit; follow next_offset while has_more. Archived records need archived: true. " + crewInputHelp,
+		"pocketcontext read '{\"collection\":\"tasks\",\"assigned_agent\":\"Build\",\"readiness\":\"ready\",\"fields\":[\"title\",\"status\"],\"limit\":20}'"},
+	"search": {"search JSON|-",
+		"Rank notes and tasks by topic through POST /api/crew/search, like the MCP tool crew_search. JSON has query (all words must match; a trailing * matches a prefix) and optional collections (notes, tasks), limit (1-50, default 10), offset, archived and generation (from the first page when following next_offset; a conflict means content changed, so restart). Hits are compact; read a chosen id with `read` and fields. " + crewInputHelp,
+		"pocketcontext search '{\"query\":\"release checklist\",\"collections\":[\"notes\"],\"limit\":5}'"},
+	"schema": {"schema",
+		"List the read-only SQL views, their columns and query limits through GET /api/crew/schema, like the MCP tool crew_schema. Takes no input. Not needed for wake or execution protocol steps.",
+		"pocketcontext schema --pretty"},
+	"query": {"query JSON|-",
+		"Run one bounded read-only SELECT/WITH statement over the schema views through POST /api/crew/query, like the MCP tool crew_query. JSON is {\"sql\": \"...\"} with at most 64 KiB of SQL; results are columns and rows, at most 1000 rows and 1 MiB (truncated reports a cut). SQL includes archived records, so filter archived explicitly. Prefer `read` filters or `search` for ordinary lookups. " + crewInputHelp,
+		"pocketcontext query '{\"sql\":\"SELECT status, count(*) FROM tasks WHERE archived = 0 GROUP BY status\"}'"},
+	"write": {"write JSON|-",
+		"Create and change Crew memory and tasks, or request review, through POST /api/crew/agent-write, the agent route of the MCP tool crew_write. JSON has action, reported_agent (attribution, not identity), data and, for changes, id and expected_revision from your last read; optional reason, idempotency_key and execution. Writes behave like MCP agent writes: comments never wake anyone, reassignments count toward max_bot_handoffs, and owner decisions, bucket archival, agent deactivation and credential entry are refused (HTTP 403, exit 1). On an install without a domain this command acts with the owner's sign-in (local key, or the saved session of a paired computer); the server still applies the agent route's limits. Exit 4 means HTTP 409: the last line says either that another request changed the record first (reread, reassess, then retry) or that Crew refused the operation with a reason code such as execution_required or handoff_limited (do not retry it unchanged). A rate limit exits 1 and names the seconds to wait. " + crewInputHelp,
+		"pocketcontext write '{\"action\":\"task.create\",\"reported_agent\":\"Build\",\"data\":{\"title\":\"Draft launch post\",\"readiness\":\"ready\"}}'"},
 }
+
+// crewInputHelp ends the help of the work commands that take JSON input.
+const crewInputHelp = "`-` reads the object from standard input (use it on Windows and for long input). Invalid JSON, a non-object, unknown fields, missing required fields or wrong types exit 2 before any request."
 
 // printHelp prints the help of one command, or the overview for "".
 func printHelp(command string) error {

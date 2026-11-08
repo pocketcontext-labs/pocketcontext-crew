@@ -307,7 +307,7 @@ def crew(pc, collection):
 def scenario(pc):
     help_text = pc.run('help').stdout
     check('PocketContext Crew' in help_text and '--space' not in help_text, 'help describes Crew without spaces')
-    for command in ('spaces', 'schema', 'query', 'create', 'batch', 'ingest', 'extract', 'stage', 'publish', 'page'):
+    for command in ('spaces', 'sql', 'create', 'batch', 'ingest', 'extract', 'stage', 'publish', 'page'):
         check('unknown command' in pc.run(command, expect=2).stderr, f'{command} is retired')
     check(pc.run('help', 'serve').stdout == pc.run('serve', '--help').stdout, 'command help agrees')
     saved_env = pc.env
@@ -469,6 +469,10 @@ def remote_scenario(pc, r):
     check(me['instance'] == local['instance'] and me['url'] == pc.url and 'db' not in me and me['signedIn'],
           'remote whoami reports the same instance without a database or space')
     check('space' not in me, 'remote identity has no space')
+    buckets = r.json('read', json.dumps({'collection': 'buckets', 'fields': ['name']}))['items']
+    check([b['name'] for b in buckets] == ['Lifecycle'], 'remote read through --url uses the signed-in session')
+    hits = r.json('search', '-', stdin=json.dumps({'query': 'durable', 'collections': ['notes']}))['items']
+    check(len(hits) == 1 and hits[0]['title'] == 'Persistence', 'remote search reads JSON from standard input')
 
     for args in (['stop'], ['ensure-running'], ['flush'], ['recover'], ['init'], ['password', '--password-stdin'], ['login-code']):
         refused = r.run(*args, expect=2)
@@ -519,6 +523,7 @@ def remote_scenario(pc, r):
 
     check(r.json('logout') == {'url': pc.url, 'loggedOut': True}, 'remote logout ends the session')
     r.run('whoami', expect=2)
+    r.run('read', json.dumps({'collection': 'buckets'}), expect=2)
     r.run('open', '--no-browser', expect=2)
     check(not r.json('status')['loggedIn'], 'after logout the remote is logged out')
 

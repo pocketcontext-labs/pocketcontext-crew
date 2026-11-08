@@ -68,7 +68,7 @@ func TestEveryCommandHasHelp(t *testing.T) {
 }
 
 func TestRetiredKnowledgeCommandsRejected(t *testing.T) {
-	for _, name := range []string{"spaces", "create-space", "rename-space", "archive-space", "restore-space", "default-space", "query", "sql", "schema", "check", "ingest", "extract", "pending", "original", "passages", "search", "lint", "stage", "publish", "stage-home", "page", "get", "create", "update", "batch", "newid"} {
+	for _, name := range []string{"spaces", "create-space", "rename-space", "archive-space", "restore-space", "default-space", "sql", "check", "ingest", "extract", "pending", "original", "passages", "lint", "stage", "publish", "stage-home", "page", "get", "create", "update", "batch", "newid"} {
 		if _, exists := commandHelp[name]; exists {
 			t.Errorf("retired command %s has help", name)
 		}
