@@ -13,12 +13,24 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import time
 import urllib.request
 
 import e2e
 import upgrades
 
 PREVIOUS = '0.8.0'
+
+
+def settled(operation, *args):
+    """Windows keeps files locked briefly after a stopped server exits."""
+    for attempt in range(60):
+        try:
+            return operation(*args)
+        except PermissionError:
+            if attempt == 59:
+                raise
+            time.sleep(1)
 
 
 def sha(path):
@@ -89,7 +101,7 @@ def rehearse(target, previous, root):
     shutil.copytree(project, backup)
 
     # Upgrade: replace the executable, start, then verify identity and data.
-    shutil.copy2(target, old)
+    settled(shutil.copy2, target, old)
     run('ensure-running')
     st = data('status')
     assert st['running'] and st['instance'] == instance and st['port'] == port, st
@@ -115,7 +127,7 @@ def rehearse(target, previous, root):
     assert migrations(project / 'pocketcontext.db') == migrations(backup / 'pocketcontext.db')
 
     # Rollback: restore the complete backup and matching binary, then verify.
-    shutil.rmtree(project)
+    settled(shutil.rmtree, project)
     shutil.copytree(backup, project)
     assert sha(project / 'pocketcontext.db') == before
     assert subprocess.check_output([str(old), '--version'], text=True, env=env).split()[1] == PREVIOUS
@@ -130,7 +142,7 @@ def main():
     parser.add_argument('--binary', required=True, type=Path)
     parser.add_argument('--previous-binary', type=Path)
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix='pocketcontext-upgrades-') as directory:
+    with tempfile.TemporaryDirectory(prefix='pocketcontext-upgrades-', ignore_cleanup_errors=True) as directory:
         root = Path(directory)
         upgrades.PREVIOUS = PREVIOUS
         previous = args.previous_binary.resolve() if args.previous_binary else upgrades.download_previous(root / 'previous-release')
