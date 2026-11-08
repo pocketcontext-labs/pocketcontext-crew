@@ -33,6 +33,9 @@ GO_IMAGE = "golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422
 PACKAGE = "github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
 VERSION_RE = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
+# Generated client setup prompts pin the Crew release clients install.
+PAIRING_PROMPT = ROOT / "internal" / "client" / "pairing_prompt.go"
+CLIENT_RELEASE_RE = re.compile(r'^const clientRelease = "([^"]*)"\s*$', re.MULTILINE)
 # A static MinGW build may only import Windows system libraries.
 WINDOWS_DLLS = {"kernel32.dll", "advapi32.dll", "msvcrt.dll", "ws2_32.dll", "user32.dll", "shell32.dll", "ole32.dll",
                 "winmm.dll", "ntdll.dll", "userenv.dll", "bcrypt.dll", "bcryptprimitives.dll", "crypt32.dll", "iphlpapi.dll",
@@ -61,6 +64,12 @@ def version(value):
 def commit(value):
     require(COMMIT_RE.fullmatch(value), "Commit must be a full lowercase Git SHA")
     return value
+
+
+def client_release():
+    found = CLIENT_RELEASE_RE.findall(PAIRING_PROMPT.read_text(encoding="utf-8"))
+    require(len(found) == 1, "Client setup prompt must declare exactly one clientRelease")
+    return version(found[0])
 
 
 def executable(target):
@@ -147,6 +156,8 @@ def metadata(args):
     else:
         require(ref == "refs/heads/main", "Manual validation must run from main")
         release_version = version(args.version)
+    require(client_release() == release_version,
+            f"Client setup prompt pins {client_release()}, not release {release_version}")
     head = commit(output(["git", "rev-parse", "HEAD"], cwd=ROOT))
     run(["git", "merge-base", "--is-ancestor", head, "origin/main"], cwd=ROOT)
     if event == "push":

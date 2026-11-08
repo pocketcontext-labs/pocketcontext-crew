@@ -102,6 +102,15 @@ class NamesTest(unittest.TestCase):
         self.assertEqual(release.archive_name("0.4.0", "windows_amd64"), "pocketcontext-crew_0.4.0_windows_amd64.zip")
 
 
+class ClientReleaseTest(unittest.TestCase):
+    def test_client_release_matches_repository_version(self):
+        root = Path(release.ROOT)
+        package = json.loads((root / "ui" / "package.json").read_text(encoding="utf-8"))
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        self.assertEqual(release.client_release(), package["version"])
+        self.assertIn(f"default: '{release.client_release()}'", workflow)
+
+
 class VersionTest(unittest.TestCase):
     def test_versions(self):
         self.assertEqual(release.version("0.1.0"), "0.1.0")

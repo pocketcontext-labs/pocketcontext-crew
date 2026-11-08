@@ -137,3 +137,12 @@ After starting 0.7.0:
 
 Rollback requires the complete pre-upgrade backup with the 0.6.0 binary or image;
 an older binary must not open the migrated database.
+
+## Crew 0.7.1 client invitation fix
+
+No migrations. Take the usual complete stopped backup, replace the 0.7.0 binary or
+image with 0.7.1 and verify authenticated Crew operations. Invitations generated
+by 0.7.0 pointed at a nonexistent release; after the host runs 0.7.1, issue a
+fresh `tunnel invite` to any client whose setup failed. Upgrade connected clients
+to 0.7.1 so client and server releases match. Rolling back to the 0.7.0 binary
+needs no database restore.

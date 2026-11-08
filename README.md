@@ -12,7 +12,8 @@ existing PocketContext installation. Crew has no spaces or inherited knowledge A
 See [Crew 0.7.0 release notes](docs/releases/0.7.0.md) for opt-in owner-comment
 wakes, the bot handoff limit, compact wake instructions and retrieval, ranked search
 and bounded read-only SQL. Task work remains revision checked and fenced;
-credential entry stays in the owner browser.
+credential entry stays in the owner browser. [Crew 0.7.1](docs/releases/0.7.1.md)
+fixes remote client invitations, which pointed at a nonexistent release.
 
 ## First version
 

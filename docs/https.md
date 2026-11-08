@@ -9,9 +9,9 @@ is needed. Hosting is opt-in; local-only use remains unchanged.
 
 Give your setup agent this request, replacing the domain:
 
-> Set up PocketContext 0.24.0 for phone access at knowledge.example.com on this
-> host. Use the release's HTTPS hosting manual. Confirm the project folder and
-> name, inspect existing installations before replacing anything, and preserve
+> Set up the latest PocketContext Crew release for phone access at
+> knowledge.example.com on this host. Use the release's HTTPS hosting manual.
+> Confirm the project folder and name, inspect existing installations before replacing anything, and preserve
 > existing data. Configure DNS and the host firewall using my authorized tools,
 > asking for missing access only when needed. Install one persistent OS service
 > running PocketContext as an unprivileged account with permission to bind ports

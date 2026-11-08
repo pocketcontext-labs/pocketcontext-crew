@@ -2,19 +2,26 @@ package client
 
 import "fmt"
 
+// clientRelease is the Crew release that generated client setup prompts tell the
+// remote computer to install. It is the one place this pin lives: it must equal
+// the reader package version and the release workflow default (checked by
+// TestClientReleaseMatchesRepositoryVersion) and the pushed vX.Y.Z tag (checked
+// by scripts/release.py metadata before publication).
+const clientRelease = "0.7.1"
+
 // The complete handoff is deliberately printable: the user pastes this one
 // prompt into the agent on their other computer. Invitation data is never code.
 func clientSetupPrompt(invitationJSON []byte) string {
 	return fmt.Sprintf(`Connect the computer where I will use the reader to my PocketContext Crew instance, then open its reader signed in when a browser is available. This prompt contains everything needed for pairing; do not ask me to copy another setup prompt, transfer a file, or separately supply a login code.
 
-Use PocketContext 0.24.0 from https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.24.0. Read https://github.com/pocketcontext-labs/pocketcontext-crew/blob/v0.24.0/README.md and installed help. Check the OS and architecture: Linux amd64/arm64, macOS arm64 on macOS 15+, or Windows amd64. Confirm a dedicated client-program folder if needed, inspect existing files, and preserve other installations and databases. Reuse 0.24.0; never silently replace another version. This computer is a client: never run init or local --db commands.
+Use PocketContext Crew %[1]s from https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v%[1]s. Read https://github.com/pocketcontext-labs/pocketcontext-crew/blob/v%[1]s/README.md and installed help. Check the OS and architecture: Linux amd64/arm64, macOS arm64 on macOS 15+, or Windows amd64. Confirm a dedicated client-program folder if needed, inspect existing files, and preserve other installations and databases. Reuse %[1]s; never silently replace another version. This computer is a client: never run init or local --db commands.
 
 First identify where your command tools execute. If they are running through SSH or in an isolated remote container, do not assume its localhost address is reachable from my browser. Use my stated computer choice and your tool context; ask where the reader will be viewed only if that is still unknown. Do not redeem this invitation on the wrong computer. A specifically requested CLI-only client is valid and uses --skip-reader.
 
 If installation is needed, download and review the pinned installer:
-https://github.com/pocketcontext-labs/pocketcontext-crew/releases/download/v0.24.0/install.sh
-https://github.com/pocketcontext-labs/pocketcontext-crew/releases/download/v0.24.0/install.ps1
-On Unix run sh INSTALLER CONFIRMED_ABSOLUTE_FOLDER. On Windows set POCKETCONTEXT_INSTALL_DIR to that folder and run the reviewed PowerShell installer. Do not pipe a download into a shell. The installer verifies its archive against checksums.txt. Verify --version afterward and use the absolute binary path.
+https://github.com/pocketcontext-labs/pocketcontext-crew/releases/download/v%[1]s/install.sh
+https://github.com/pocketcontext-labs/pocketcontext-crew/releases/download/v%[1]s/install.ps1
+On Unix run sh INSTALLER CONFIRMED_ABSOLUTE_FOLDER. On Windows set CREW_INSTALL_DIR to that folder and run the reviewed PowerShell installer. Do not pipe a download into a shell. The installer verifies its archive against checksums.txt. Verify --version afterward and use the absolute binary path.
 
 After installation, run environment to inspect the session and browser capability signals. SSH, headless and unknown sessions normally skip the reader step. Your knowledge that execution is remote takes precedence over optimistic signals. An installed browser or a TTY does not prove that I can use it. If I requested this machine as a CLI-only client, use --skip-reader. When your tools are known to execute remotely and no reachable browser has been established, pass --skip-reader explicitly even if environment reports desktop signals. Use --no-browser only when I have a browser known to reach this computer's forward but you cannot launch it; this explicitly requests a short-lived sign-in link, and is not a headless-mode flag. Never combine --no-browser and --skip-reader.
 
@@ -29,6 +36,6 @@ Invitations, one-time codes and single-use reader links are authorized for shari
 Finish with the Crew instance name and separate CLI authentication, tunnel readiness and reader status. Ask whether the reader opened and the user could access this Crew instance; until confirmed, report browser access as pending verification. Tell the user to return to the server agent with that result, or with a concise failure/completion report if it did not work. The return checkpoint is for verification and recovery; complete desktop reader sign-in here without waiting for the server agent. Include the normal reader URL only when it is reachable from my browser. If reader setup was skipped, say why and distinguish completed CLI access from pending browser access; do not present the remote host's localhost links as usable here.
 
 Invitation JSON (use the complete object unchanged):
-%s
-`, invitationJSON)
+%[2]s
+`, clientRelease, invitationJSON)
 }
