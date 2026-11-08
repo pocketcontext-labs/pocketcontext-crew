@@ -51,6 +51,9 @@ jobs:
           packages=./...
           if [ "$RUNNER_OS" = Windows ]; then packages="./internal/appconfig ./internal/crewpolicy ./internal/crewruntime ./internal/client"; fi
           CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" $packages
+      # Needs core's test server, newer than the core release Crew ships; go.mod is untouched.
+      - name: Tests on core's test server
+        run: CGO_ENABLED=1 go test -modfile=tests/core-testkit.mod -tags "$(cat build-tags.txt),crew_core_testkit" ./internal/appconfig
       - name: Build the binary
         run: |
           exe=pocketcontext-crew
