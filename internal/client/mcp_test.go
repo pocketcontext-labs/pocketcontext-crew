@@ -17,7 +17,8 @@ import (
 
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/router"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 )
 
 // The protocol fixture injects the ordinary user identity that the separately
@@ -311,7 +312,7 @@ func mcpRealAPI(t *testing.T) (http.Handler, string) {
 
 // realTestProject serves an initialized synthetic project with its account in
 // this process until the test ends, with a private home and cache.
-func realTestProject(t *testing.T) *bundle.Project {
+func realTestProject(t *testing.T) *appserver.Project {
 	t.Helper()
 	root := t.TempDir()
 	cwd, err := os.Getwd()
@@ -326,7 +327,7 @@ func realTestProject(t *testing.T) *bundle.Project {
 	t.Setenv("APPDATA", filepath.Join(root, "config"))
 	t.Setenv("POCKETCONTEXT_URL", "")
 	t.Setenv("POCKETCONTEXT_SPACE", "")
-	p, err := bundle.Resolve(filepath.Join(root, "project", "pocketcontext.db"))
+	p, err := appconfig.Runtime.Resolve(filepath.Join(root, "project", "pocketcontext.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +342,7 @@ func realTestProject(t *testing.T) *bundle.Project {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- bundle.ServeContext(ctx, p, bundle.ServeOptions{Headless: true}) }()
+	go func() { done <- appserver.ServeContext(ctx, p, appserver.ServeOptions{Headless: true}) }()
 	t.Cleanup(func() {
 		cancel()
 		select {
@@ -355,7 +356,7 @@ func realTestProject(t *testing.T) *bundle.Project {
 	})
 	deadline := time.Now().Add(15 * time.Second)
 	for {
-		if _, err := bundle.Health(p); err == nil {
+		if _, err := appserver.Health(p); err == nil {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -363,7 +364,7 @@ func realTestProject(t *testing.T) *bundle.Project {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if _, err := bundle.LocalCall(p, "/api/bundle/account", map[string]string{"password": "synthetic-mcp-password"}); err != nil {
+	if _, err := appserver.LocalCall(p, "/api/bundle/account", map[string]string{"password": "synthetic-mcp-password"}); err != nil {
 		t.Fatal(err)
 	}
 	return p

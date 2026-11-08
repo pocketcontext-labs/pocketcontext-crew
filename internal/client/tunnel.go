@@ -16,21 +16,21 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-core/atomicfile"
+	"github.com/pocketcontext-labs/pocketcontext-core/tunnel"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 	"github.com/tailscale/tailcat"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/profiles"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/tunnel"
 )
 
 // identityFile is the tunnel identity in the project's private cache: never
 // in the synced project folder, which other computers and people may read.
-func identityFile(p *bundle.Project) string { return filepath.Join(p.Cache, "tunnel.json") }
+func identityFile(p *appserver.Project) string { return filepath.Join(p.Cache, "tunnel.json") }
 
 // runTunnel dispatches server tunnels and foreground or managed client forwards.
 func runTunnel(a *args, pretty bool) error {
 	if len(a.pos) == 0 {
-		return fail(2, "usage: pocketcontext tunnel serve|forward|invite|join|status|stop; run `pocketcontext tunnel --help`")
+		return fail(2, "usage: pocketcontext-crew tunnel serve|forward|invite|join|status|stop; run `pocketcontext-crew tunnel --help`")
 	}
 	if err := validateTunnelOptions(a); err != nil {
 		return err
@@ -51,7 +51,7 @@ func runTunnel(a *args, pretty bool) error {
 	case "join":
 		return tunnelJoin(ctx, a, pretty)
 	}
-	return fail(2, "usage: pocketcontext tunnel serve|forward|invite|join|status|stop; run `pocketcontext tunnel --help`")
+	return fail(2, "usage: pocketcontext-crew tunnel serve|forward|invite|join|status|stop; run `pocketcontext-crew tunnel --help`")
 }
 
 func tunnelServe(ctx context.Context, a *args, pretty bool) error {
@@ -59,24 +59,24 @@ func tunnelServe(ctx context.Context, a *args, pretty bool) error {
 		return fail(2, "tunnel serve runs on the agent computer beside the database; use --db, not --url")
 	}
 	if len(a.pos) != 1 || a.bools["address-stdin"] {
-		return fail(2, "usage: pocketcontext tunnel serve [--new-address]")
+		return fail(2, "usage: pocketcontext-crew tunnel serve [--new-address]")
 	}
-	p, err := bundle.Resolve(a.flags["db"])
+	p, err := appconfig.Runtime.Resolve(a.flags["db"])
 	if err != nil {
 		return fail(2, "%v", err)
 	}
 	if _, err := os.Stat(p.DB); err != nil {
-		return fail(2, "no PocketContext database at %s; run `pocketcontext init` first, or pass --db", p.DB)
+		return fail(2, "no PocketContext database at %s; run `pocketcontext-crew init` first, or pass --db", p.DB)
 	}
-	if err := bundle.CheckLocalProject(p); err != nil {
+	if err := appserver.CheckLocalProject(p); err != nil {
 		return err
 	}
-	release, err := bundle.AcquireTunnelLock(p)
+	release, err := appserver.AcquireTunnelLock(p.Cache)
 	if err != nil {
 		return err
 	}
 	defer release()
-	if err := bundle.EnsureRunningContext(ctx, p, bundle.StartOptions{}); err != nil {
+	if err := appserver.EnsureRunningContext(ctx, p, appserver.StartOptions{}); err != nil {
 		return err
 	}
 	return runServerTunnel(ctx, p, a.bools["new-address"], pretty, false)
@@ -84,14 +84,14 @@ func tunnelServe(ctx context.Context, a *args, pretty bool) error {
 
 // serveWithTunnel owns both components in the same foreground process. It never
 // attaches to a separately running server or starts a detached child.
-func serveWithTunnel(p *bundle.Project, opts bundle.ServeOptions, pretty bool) error {
+func serveWithTunnel(p *appserver.Project, opts appserver.ServeOptions, pretty bool) error {
 	if _, err := os.Stat(p.DB); err != nil {
-		return fail(2, "no PocketContext database at %s; run `pocketcontext init` first, or pass --db", p.DB)
+		return fail(2, "no PocketContext database at %s; run `pocketcontext-crew init` first, or pass --db", p.DB)
 	}
-	if err := bundle.CheckLocalProject(p); err != nil {
+	if err := appserver.CheckLocalProject(p); err != nil {
 		return err
 	}
-	release, err := bundle.AcquireTunnelLock(p)
+	release, err := appserver.AcquireTunnelLock(p.Cache)
 	if err != nil {
 		return err
 	}
@@ -99,17 +99,17 @@ func serveWithTunnel(p *bundle.Project, opts bundle.ServeOptions, pretty bool) e
 	opts.Service = func(ctx context.Context) error {
 		return runServerTunnel(ctx, p, false, pretty, true)
 	}
-	return bundle.Serve(p, opts)
+	return appserver.Serve(p, opts)
 }
 
 // runServerTunnel requires a ready server and an already held tunnel lock.
-func runServerTunnel(parent context.Context, p *bundle.Project, rotate, pretty, combined bool) error {
+func runServerTunnel(parent context.Context, p *appserver.Project, rotate, pretty, combined bool) error {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	info, err := bundle.Health(p)
+	info, err := appserver.Health(p)
 	if err != nil {
 		return err
 	}
@@ -119,14 +119,14 @@ func runServerTunnel(parent context.Context, p *bundle.Project, rotate, pretty, 
 	if info.Instance != p.Config.Instance || info.Key != p.Key {
 		return fmt.Errorf("project identity mismatch")
 	}
-	if err := bundle.CheckServerCompatibility(info); err != nil {
+	if err := appconfig.Runtime.CheckServerCompatibility(info); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	path := identityFile(p)
-	id, err := tunnel.LoadIdentity(path, rotate)
+	id, err := tunnel.LoadIdentity(appconfig.Identity.Command, path, rotate)
 	if err != nil {
 		return fail(1, "%v", err)
 	}
@@ -146,12 +146,12 @@ func runServerTunnel(parent context.Context, p *bundle.Project, rotate, pretty, 
 			}
 		}
 		data, _ := json.Marshal(connection{Format: 1, Address: string(addr), URL: p.URL(), Instance: p.Config.Instance, Name: info.Name})
-		if e := bundle.WriteAtomic(endpoint, append(data, '\n'), 0600); e != nil {
+		if e := atomicfile.WriteAtomic(endpoint, append(data, '\n'), 0600); e != nil {
 			readyErr = fmt.Errorf("could not save private endpoint: %w", e)
 			cancel()
 			return
 		}
-		note := "Run tunnel invite to generate one client setup prompt to share in your chat. Keep this tunnel process supervised. Stopping the tunnel leaves the server running; use pocketcontext stop to stop the server."
+		note := "Run tunnel invite to generate one client setup prompt to share in your chat. Keep this tunnel process supervised. Stopping the tunnel leaves the server running; use pocketcontext-crew stop to stop the server."
 		if combined {
 			note = "Run tunnel invite to generate one client setup prompt to share in your chat. This process owns the server and tunnel; stopping it closes both and flushes the database."
 		}
@@ -181,7 +181,7 @@ func tunnelForward(ctx context.Context, a *args, pretty bool) error {
 		raw = os.Getenv("POCKETCONTEXT_URL")
 	}
 	if raw == "" {
-		r, err := profiles.Read()
+		r, err := appconfig.Profiles.Read()
 		if err != nil {
 			return err
 		}
@@ -209,7 +209,7 @@ func tunnelForward(ctx context.Context, a *args, pretty bool) error {
 			}
 		}
 		if raw == "" {
-			raw = fmt.Sprintf("http://127.0.0.1:%d", bundle.DefaultPort)
+			raw = fmt.Sprintf("http://127.0.0.1:%d", appconfig.Identity.DefaultPort)
 		}
 	}
 	base, err := normalizeURL(raw)
@@ -247,9 +247,9 @@ func tunnelForward(ctx context.Context, a *args, pretty bool) error {
 	case !a.bools["address-stdin"] && len(a.pos) == 2:
 		text = a.pos[1]
 	default:
-		return fail(2, "usage: pocketcontext tunnel forward (ADDRESS | --address-stdin) [--url http://127.0.0.1:PORT]")
+		return fail(2, "usage: pocketcontext-crew tunnel forward (ADDRESS | --address-stdin) [--url http://127.0.0.1:PORT]")
 	}
-	addr, err := tunnel.ParseAddress(strings.TrimSpace(text))
+	addr, err := tunnel.ParseAddress(appconfig.Identity.Command, strings.TrimSpace(text))
 	if err != nil {
 		return fail(2, "%v", err)
 	}
@@ -270,8 +270,8 @@ func tunnelForward(ctx context.Context, a *args, pretty bool) error {
 		}
 	}
 	Print(map[string]any{"url": base, "forwarding": true,
-		"note": "the agent computer's PocketContext is reachable at this URL while this runs; sign in with `pocketcontext login --url " + base + " --code-stdin`. Stop with Ctrl-C."}, pretty)
-	if err := tunnel.Forward(ctx, addr, ln, port); err != nil {
+		"note": "the agent computer's PocketContext is reachable at this URL while this runs; sign in with `pocketcontext-crew login --url " + base + " --code-stdin`. Stop with Ctrl-C."}, pretty)
+	if err := tunnel.Forward(ctx, appconfig.Identity.Command, addr, ln, port); err != nil {
 		return fail(1, "the forward stopped: %v", err)
 	}
 	return nil

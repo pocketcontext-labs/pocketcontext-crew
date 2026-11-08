@@ -27,7 +27,7 @@ pocketcontext_check_destination() {
         pc_observed=$("$pc_destination" --version) || pocketcontext_fail 'could not inspect the existing executable; keep it and choose a new directory'
         # Word splitting is intentional; pathname expansion is disabled.
         set -- $pc_observed
-        [ "$#" -ge 2 ] && [ "$1" = pocketcontext ] && [ "$2" = "$CREW_REPLACE_VERSION" ] || pocketcontext_fail 'existing executable version differs from CREW_REPLACE_VERSION; nothing replaced'
+        [ "$#" -ge 2 ] && { [ "$1" = pocketcontext-crew ] || [ "$1" = pocketcontext ]; } && [ "$2" = "$CREW_REPLACE_VERSION" ] || pocketcontext_fail 'existing executable version differs from CREW_REPLACE_VERSION; nothing replaced'
         pc_replacing=yes
     elif [ -e "$pc_bindir/pocketcontext.db" ]; then
         pocketcontext_fail 'existing database without a Crew executable; choose a fresh project directory'

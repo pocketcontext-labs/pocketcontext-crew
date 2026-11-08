@@ -8,15 +8,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-core/atomicfile"
+	"github.com/pocketcontext-labs/pocketcontext-core/tunnel"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/buildinfo"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"time"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/tunnel"
 )
 
 // Managed tunnels use a private heartbeat and stop request rather than killing a
@@ -66,7 +68,7 @@ func writeManagedState(path string, s managedState) error {
 	if e != nil {
 		return e
 	}
-	return bundle.WriteAtomic(path, b, 0600)
+	return atomicfile.WriteAtomic(path, b, 0600)
 }
 func managedWorker(ctx context.Context) error {
 	var input managedInput
@@ -80,7 +82,7 @@ func managedWorker(ctx context.Context) error {
 	if e != nil || base != c.URL || c.Format != 1 {
 		return fail(2, "invalid managed connection")
 	}
-	addr, e := tunnel.ParseAddress(c.Address)
+	addr, e := tunnel.ParseAddress(appconfig.Identity.Command, c.Address)
 	if e != nil {
 		return e
 	}
@@ -88,7 +90,7 @@ func managedWorker(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
-	release, e := bundle.AcquireTunnelLock(&bundle.Project{Cache: dir})
+	release, e := appserver.AcquireTunnelLock(dir)
 	if e != nil {
 		return e
 	}
@@ -102,8 +104,8 @@ func managedWorker(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- tunnel.Forward(ctx, addr, ln, n) }()
-	s := managedState{ID: input.ID, Version: bundle.Version, Fingerprint: connectionFingerprint(c)}
+	go func() { done <- tunnel.Forward(ctx, appconfig.Identity.Command, addr, ln, n) }()
+	s := managedState{ID: input.ID, Version: buildinfo.Version, Fingerprint: connectionFingerprint(c)}
 	if e = writeManagedState(statePath, s); e != nil {
 		return e
 	}
@@ -133,8 +135,8 @@ func ensureManagedForward(ctx context.Context, c connection) (string, error) {
 		return "", e
 	}
 	if s, e := readManagedState(statePath); e == nil {
-		if s.Version != bundle.Version {
-			return "", fail(1, "managed forward version %q differs from client %s; run tunnel stop --url %s, then restart the saved forward with this binary", s.Version, bundle.Version, c.URL)
+		if s.Version != buildinfo.Version {
+			return "", fail(1, "managed forward version %q differs from client %s; run tunnel stop --url %s, then restart the saved forward with this binary", s.Version, buildinfo.Version, c.URL)
 		}
 		if s.Fingerprint != connectionFingerprint(c) {
 			return "", fail(1, "a different managed connection uses this port; stop it explicitly before pairing")
@@ -148,7 +150,7 @@ func ensureManagedForward(ctx context.Context, c connection) (string, error) {
 	if e != nil {
 		return "", e
 	}
-	input := managedInput{c, bundle.RandomHex(24)}
+	input := managedInput{c, atomicfile.RandomHex(24)}
 	b, _ := json.Marshal(input)
 	cmd := exec.Command(executable, "tunnel", "_forward")
 	cmd.Stdin = bytes.NewReader(b)
@@ -201,7 +203,7 @@ func waitForwardIdentity(ctx context.Context, c connection) error {
 			if c.Instance != "" && i.Instance != c.Instance {
 				return fail(1, "invitation identity mismatch; no code was sent")
 			}
-			return bundle.CheckServerCompatibility(i)
+			return appconfig.Runtime.CheckServerCompatibility(i)
 		}
 		select {
 		case <-ctx.Done():
@@ -228,7 +230,7 @@ func stopManagedGeneration(base, expectedID string) error {
 	if expectedID != "" && s.ID != expectedID {
 		return nil
 	}
-	if e = bundle.WriteAtomic(stopPath, []byte(s.ID), 0600); e != nil {
+	if e = atomicfile.WriteAtomic(stopPath, []byte(s.ID), 0600); e != nil {
 		return e
 	}
 	deadline := time.Now().Add(5 * time.Second)
@@ -240,7 +242,7 @@ func stopManagedGeneration(base, expectedID string) error {
 		if os.IsNotExist(e) {
 			// The worker removes its state before its deferred listener close
 			// and final lock release. Wait for both before allowing a restart.
-			if release, err := bundle.AcquireTunnelLock(&bundle.Project{Cache: dir}); err == nil {
+			if release, err := appserver.AcquireTunnelLock(dir); err == nil {
 				release()
 				return nil
 			}
@@ -278,7 +280,7 @@ func joinManaged(ctx context.Context, in invitation, noBrowser, skipReader, pret
 }
 func managedCommand(a *args, pretty bool) error {
 	if len(a.pos) != 1 || a.has("db") || a.flags["url"] == "" {
-		return fail(2, "usage: pocketcontext tunnel %s --url URL", a.pos[0])
+		return fail(2, "usage: pocketcontext-crew tunnel %s --url URL", a.pos[0])
 	}
 	base, e := normalizeURL(a.flags["url"])
 	if e != nil {
@@ -296,6 +298,6 @@ func managedCommand(a *args, pretty bool) error {
 		return e
 	}
 	state, e := readManagedState(path)
-	Print(map[string]any{"url": base, "running": e == nil, "background": true, "version": state.Version, "clientVersion": bundle.Version, "compatible": e == nil && state.Version == bundle.Version}, pretty)
+	Print(map[string]any{"url": base, "running": e == nil, "background": true, "version": state.Version, "clientVersion": buildinfo.Version, "compatible": e == nil && state.Version == buildinfo.Version}, pretty)
 	return nil
 }

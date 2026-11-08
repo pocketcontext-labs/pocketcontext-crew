@@ -2,7 +2,7 @@ package client
 
 import (
 	"encoding/json"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/buildinfo"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,7 +15,7 @@ func TestInvitationChecksIdentityBeforeSendingCode(t *testing.T) {
 	var redemptions atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/bundle/instance" {
-			json.NewEncoder(w).Encode(map[string]string{"app": "pocketcontext", "version": bundle.Version, "instance": "other-project"})
+			json.NewEncoder(w).Encode(map[string]string{"app": "pocketcontext-crew", "version": buildinfo.Version, "instance": "other-project"})
 			return
 		}
 		redemptions.Add(1)
@@ -39,7 +39,7 @@ func TestInvitationSuccessStoresTokenNotCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/bundle/instance":
-			json.NewEncoder(w).Encode(map[string]string{"app": "pocketcontext", "version": bundle.Version, "instance": "expected-project"})
+			json.NewEncoder(w).Encode(map[string]string{"app": "pocketcontext-crew", "version": buildinfo.Version, "instance": "expected-project"})
 		case "/api/bundle/redeem":
 			var body map[string]string
 			json.NewDecoder(r.Body).Decode(&body)

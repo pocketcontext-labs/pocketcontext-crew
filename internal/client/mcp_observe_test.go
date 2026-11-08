@@ -5,19 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/crewpolicy"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/mcpobserve"
+	"github.com/pocketcontext-labs/pocketcontext-core/mcpobserve"
 )
 
 func diagnosticMCPHandler(s *mcp.Server, logs *bytes.Buffer) http.Handler {
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: mcpInputLimit})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, _ := mcpobserve.WithRequest(mcpobserve.WithWriter(r.Context(), logs), "knowledge.example.com", "diagnostic-test")
+		ctx, _ := mcpobserve.WithRequest(mcpobserve.WithWriter(r.Context(), logs), crewpolicy.Observe, "knowledge.example.com", "diagnostic-test")
 		h.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

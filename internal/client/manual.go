@@ -65,7 +65,7 @@ func manualContent(name string) ([]byte, error) {
 
 func exportManual(a *args, pretty bool) error {
 	if len(a.pos) != 0 || a.flags["out"] == "" || a.has("db") || a.has("url") {
-		return fail(2, "usage: pocketcontext manual --out NEW_DIRECTORY")
+		return fail(2, "usage: pocketcontext-crew manual --out NEW_DIRECTORY")
 	}
 	out, err := filepath.Abs(a.flags["out"])
 	if err != nil {

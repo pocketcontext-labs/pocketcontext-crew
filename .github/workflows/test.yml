@@ -33,6 +33,11 @@ jobs:
           pnpm typecheck
           pnpm test
           pnpm build
+      - name: Core dependency is a tagged release with matching build tags
+        run: |
+          ! grep -q '^replace' go.mod
+          test -z "$(go env GOWORK)"
+          diff build-tags.txt "$(go list -m -f '{{.Dir}}' github.com/pocketcontext-labs/pocketcontext-core)/build-tags.txt"
       - name: Launcher tests
         run: |
           node --test tests/dev_launcher.test.mjs
@@ -41,24 +46,21 @@ jobs:
       - name: Unit tests
         run: |
           packages=./...
-          if [ "$RUNNER_OS" = Windows ]; then packages="./internal/bundle ./internal/client ./internal/tunnel ./internal/profiles"; fi
+          if [ "$RUNNER_OS" = Windows ]; then packages="./internal/appconfig ./internal/crewpolicy ./internal/crewruntime ./internal/client"; fi
           CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" $packages
       - name: Build the binary
         run: |
-          exe=pocketcontext
-          if [ "$RUNNER_OS" = Windows ]; then exe=pocketcontext.exe; fi
+          exe=pocketcontext-crew
+          if [ "$RUNNER_OS" = Windows ]; then exe=pocketcontext-crew.exe; fi
           # Match release stripping so binary checks inspect the shipped content,
           # without arbitrary byte sequences from compressed debug sections.
-          CGO_ENABLED=1 go build -trimpath -tags "$(cat build-tags.txt)" -ldflags "-s -w" -o "bin/$exe" ./cmd/pocketcontext
+          CGO_ENABLED=1 go build -trimpath -tags "$(cat build-tags.txt)" -ldflags "-s -w" -o "bin/$exe" ./cmd/pocketcontext-crew
           echo "EXE=bin/$exe" >> "$GITHUB_ENV"
       - name: Crew authenticated browser workflow
         if: matrix.runner == 'ubuntu-24.04'
         run: |
           pnpm --dir ui exec playwright install --with-deps chromium
           python3 tests/crew_browser.py --binary "$EXE"
-      - name: MCP OAuth browser callback regression
-        if: matrix.runner == 'ubuntu-24.04'
-        run: POCKETCONTEXT_MCP_BROWSER_TEST=1 CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" ./internal/bundle -run '^TestMCPOAuthBrowser$' -count=1
       - name: Name check of the repository and binary
         run: $PY tests/name_check.py --binary "$EXE"
       - name: End-to-end test with synthetic notes
@@ -68,6 +70,7 @@ jobs:
           $PY tests/crew_e2e.py --binary "$EXE"
           $PY tests/e2e.py --binary "$EXE"
           $PY tests/upgrades.py --binary "$EXE"
+          $PY tests/upgrades_0_8.py --binary "$EXE"
       - name: Native Linux backup and restore
         if: runner.os == 'Linux'
         run: |

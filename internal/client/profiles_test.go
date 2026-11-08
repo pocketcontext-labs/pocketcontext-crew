@@ -1,7 +1,8 @@
 package client
 
 import (
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/profiles"
+	"github.com/pocketcontext-labs/pocketcontext-core/profiles"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,13 +38,13 @@ func TestRouterPreservesRegisteredLegacySkill(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("legacy skill"), 0600)
 	os.WriteFile(filepath.Join(dir, "references", "schema.md"), []byte("legacy schema"), 0600)
 	e := profiles.Entry{ID: profiles.ID("instance"), Instance: "instance", Name: "legacy", DB: db, Binary: filepath.Join(t.TempDir(), "binary"), Version: "0.12.1", Skill: dir}
-	if err := profiles.Put(e, false); err != nil {
+	if err := appconfig.Profiles.Put(e, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeRouter(dir); err != nil {
 		t.Fatal(err)
 	}
-	r, _ := profiles.Read()
+	r, _ := appconfig.Profiles.Read()
 	saved, _ := r.Find("legacy")
 	if saved.Skill == dir {
 		t.Fatal("legacy still points at router")

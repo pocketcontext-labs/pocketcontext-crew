@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 	"io"
 	"net"
 	"net/http"
@@ -16,8 +18,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
 )
 
 // Exercise a real TCP listener: the SDK inspects http.LocalAddrContextKey, which
@@ -33,7 +33,7 @@ func TestMCPPublicHostedLoopbackListener(t *testing.T) {
 	for key, value := range map[string]string{"HOME": root, "XDG_CACHE_HOME": filepath.Join(root, "cache"), "XDG_CONFIG_HOME": filepath.Join(root, "config"), "LOCALAPPDATA": filepath.Join(root, "cache"), "APPDATA": filepath.Join(root, "config"), "POCKETCONTEXT_URL": ""} {
 		t.Setenv(key, value)
 	}
-	p, err := bundle.Resolve(filepath.Join(root, "project", "pocketcontext.db"))
+	p, err := appconfig.Runtime.Resolve(filepath.Join(root, "project", "pocketcontext.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,10 +57,10 @@ func TestMCPPublicHostedLoopbackListener(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- bundle.ServeContext(ctx, p, bundle.ServeOptions{
+		done <- appserver.ServeContext(ctx, p, appserver.ServeOptions{
 			Headless: true, Hosted: true, HostedInit: true, HTTPSDomain: "dev.example.test", MCP: true, MCPHandler: newMCPHandler,
 			PublicUIDev: true, UIDev: ui.URL, DevHTTPAddress: address,
-			HostedConfig: &bundle.HostedConfig{OwnerEmail: "synthetic@example.test", From: "login@example.test"},
+			HostedConfig: &appserver.HostedConfig{OwnerEmail: "synthetic@example.test", From: "login@example.test"},
 		})
 	}()
 	t.Cleanup(func() {
@@ -76,7 +76,7 @@ func TestMCPPublicHostedLoopbackListener(t *testing.T) {
 	})
 	deadline := time.Now().Add(15 * time.Second)
 	for {
-		if _, err = bundle.Health(p); err == nil {
+		if _, err = appserver.Health(p); err == nil {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -84,7 +84,7 @@ func TestMCPPublicHostedLoopbackListener(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	owner, err := bundle.LocalCall(p, "/api/bundle/token", nil)
+	owner, err := appserver.LocalCall(p, "/api/bundle/token", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

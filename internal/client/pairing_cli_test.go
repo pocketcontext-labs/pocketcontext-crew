@@ -16,7 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/tunnel"
+	"github.com/pocketcontext-labs/pocketcontext-core/tunnel"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 	"tailscale.com/derp/derpserver"
 	"tailscale.com/net/stun/stuntest"
 	"tailscale.com/tailcfg"
@@ -98,7 +99,7 @@ func TestInvitationCLIRehearsal(t *testing.T) {
 	defer stopSTUN()
 	region := &tailcfg.DERPRegion{RegionID: 1, RegionCode: "test", Nodes: []*tailcfg.DERPNode{{Name: "t1", RegionID: 1, HostName: "127.0.0.1", IPv4: "127.0.0.1", IPv6: "none", STUNPort: stun.Port, DERPPort: relay.Listener.Addr().(*net.TCPAddr).Port, InsecureForTests: true, STUNTestIP: "127.0.0.1"}}}
 	identityPath := filepath.Join(cache, "tunnel.json")
-	identity, err := tunnel.LoadIdentity(identityPath, false)
+	identity, err := tunnel.LoadIdentity(appconfig.Identity.Command, identityPath, false)
 	if err != nil {
 		t.Fatal(err)
 	}

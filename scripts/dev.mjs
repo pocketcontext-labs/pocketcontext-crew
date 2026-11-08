@@ -17,7 +17,7 @@ export function parseOptions(args) {
     binary: join(
       root,
       "bin",
-      process.platform === "win32" ? "pocketcontext.exe" : "pocketcontext",
+      process.platform === "win32" ? "pocketcontext-crew.exe" : "pocketcontext-crew",
     ),
     vitePort: 5173,
   };
@@ -132,7 +132,7 @@ export async function projectOptions(options) {
     if (error.code !== "ENOENT") throw error;
   }
   const port = validPort(
-    config.port === undefined || config.port === 0 ? 8096 : config.port,
+    config.port === undefined || config.port === 0 ? 8099 : config.port,
   );
   const listenPort = options.publicDomain
     ? Number(options.devHTTPAddress.split(":")[1])
@@ -322,7 +322,7 @@ export async function run(args) {
           ),
         );
         return (
-          instance.app === "pocketcontext" &&
+          instance.app === "pocketcontext-crew" &&
           instance.instance === config.instance &&
           instance.pid === backend.child.pid &&
           instance.uiDev === upstream
@@ -333,7 +333,7 @@ export async function run(args) {
     console.log(
       options.publicDomain
         ? `\nDevelopment backend ready for ${origin}. Configure the HTTPS proxy to ${options.devHTTPAddress}; sign in with the development owner email. MCP: ${origin}/mcp`
-        : `\nReader ready at ${origin}. Sign in there, or run pocketcontext open --db PATH in another terminal.`,
+        : `\nReader ready at ${origin}. Sign in there, or run pocketcontext-crew open --db PATH in another terminal.`,
     );
     console.log(
       "Edit ui/src for hot updates. Press Ctrl-C to stop both development processes.\n",

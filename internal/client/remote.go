@@ -7,6 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-core/atomicfile"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/buildinfo"
 	"io"
 	"net/http"
 	"net/url"
@@ -15,8 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
 )
 
 // Remote client mode: the server runs on another computer (the agent
@@ -40,7 +42,7 @@ type session struct {
 
 // normalizeURL accepts only http://127.0.0.1:PORT or http://localhost:PORT.
 func normalizeURL(raw string) (string, error) {
-	bad := fail(2, "--url must be http://127.0.0.1:PORT or http://localhost:PORT; only loopback URLs are accepted (forward the server's port with `pocketcontext tunnel forward` or SSH)")
+	bad := fail(2, "--url must be http://127.0.0.1:PORT or http://localhost:PORT; only loopback URLs are accepted (forward the server's port with `pocketcontext-crew tunnel forward` or SSH)")
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
 		return "", bad
@@ -66,7 +68,7 @@ func sessionPath(base string) (string, error) {
 		return "", fmt.Errorf("no user cache directory: %w", err)
 	}
 	sum := sha256.Sum256([]byte(base))
-	return filepath.Join(cache, "pocketcontext", "remote-"+hex.EncodeToString(sum[:])[:16], "session.json"), nil
+	return filepath.Join(cache, appconfig.Identity.CacheRoot, "remote-"+hex.EncodeToString(sum[:])[:16], "session.json"), nil
 }
 
 // loadSession returns the stored session, or nil when there is none.
@@ -84,7 +86,7 @@ func loadSession(base string) (*session, error) {
 	}
 	var s session
 	if err := json.Unmarshal(data, &s); err != nil || s.Token == "" || s.URL != base {
-		return nil, fail(2, "the session file %s is damaged; run `pocketcontext login --url %s`", path, base)
+		return nil, fail(2, "the session file %s is damaged; run `pocketcontext-crew login --url %s`", path, base)
 	}
 	return &s, nil
 }
@@ -102,7 +104,7 @@ func saveSession(s *session) error {
 	if err != nil {
 		return err
 	}
-	return bundle.WriteAtomic(path, append(data, '\n'), 0600)
+	return atomicfile.WriteAtomic(path, append(data, '\n'), 0600)
 }
 
 func deleteSession(base string) error {
@@ -119,16 +121,16 @@ func deleteSession(base string) error {
 func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 // probe asks the remote URL which server answers. It never starts anything.
-func probe(base string) (*bundle.Instance, error) {
+func probe(base string) (*appserver.Instance, error) {
 	quick := &http.Client{Timeout: 5 * time.Second, CheckRedirect: noRedirect}
 	resp, err := quick.Get(base + "/api/bundle/instance")
 	if err != nil {
-		return nil, fail(1, "the PocketContext server at %s is not reachable. The server runs on the agent computer: check that it runs there and that the forward of the same port is active (for example `pocketcontext tunnel forward --address-stdin --url %s`, or `ssh -L %s:127.0.0.1:%s`). Nothing was started here.",
+		return nil, fail(1, "the PocketContext server at %s is not reachable. The server runs on the agent computer: check that it runs there and that the forward of the same port is active (for example `pocketcontext-crew tunnel forward --address-stdin --url %s`, or `ssh -L %s:127.0.0.1:%s`). Nothing was started here.",
 			base, base, port(base), port(base))
 	}
 	defer resp.Body.Close()
-	var i bundle.Instance
-	if resp.StatusCode != 200 || json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&i) != nil || i.App != "pocketcontext" {
+	var i appserver.Instance
+	if resp.StatusCode != 200 || json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&i) != nil || !appconfig.KnownApp(i.App) {
 		return nil, fail(1, "%s is answered by another program, not PocketContext (HTTP %d). Forward the server's own port to the same local port; the server refuses other ports.", base, resp.StatusCode)
 	}
 	return &i, nil
@@ -140,7 +142,7 @@ func port(base string) string {
 }
 
 // checkRemote probes the server and compares it with the stored session.
-func checkRemote(base string, s *session) (*bundle.Instance, error) {
+func checkRemote(base string, s *session) (*appserver.Instance, error) {
 	i, err := probe(base)
 	if err != nil {
 		return nil, err
@@ -148,7 +150,7 @@ func checkRemote(base string, s *session) (*bundle.Instance, error) {
 	if s != nil && s.Instance != i.Instance {
 		return nil, fail(1, "%s now serves a different PocketContext than the one you signed in to; sign in again: %s", base, signInHint(base))
 	}
-	if err := bundle.CheckServerCompatibility(i); err != nil {
+	if err := appconfig.Runtime.CheckServerCompatibility(i); err != nil {
 		return nil, fmt.Errorf("remote server compatibility: %w; select a matching client release or deliberately upgrade the server and its clients together", err)
 	}
 	return i, nil
@@ -156,7 +158,7 @@ func checkRemote(base string, s *session) (*bundle.Instance, error) {
 
 // signInHint says how to sign in to base.
 func signInHint(base string) string {
-	return fmt.Sprintf("get a one-time code on the agent computer (`pocketcontext login-code` there), then run `pocketcontext login --url %s --code-stdin` and write the code to standard input; or sign in with the project password: `pocketcontext login --url %s`", base, base)
+	return fmt.Sprintf("get a one-time code on the agent computer (`pocketcontext-crew login-code` there), then run `pocketcontext-crew login --url %s --code-stdin` and write the code to standard input; or sign in with the project password: `pocketcontext-crew login --url %s`", base, base)
 }
 
 func expired(base string) error {
@@ -212,7 +214,7 @@ func login(base string, passwordStdin bool) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	status, data, err := c.send("POST", "/api/collections/users/auth-with-password", map[string]string{"identity": bundle.LocalIdentity, "password": password}, nil, "", nil)
+	status, data, err := c.send("POST", "/api/collections/users/auth-with-password", map[string]string{"identity": appconfig.Identity.LocalAccountEmail, "password": password}, nil, "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +236,7 @@ func readCode() (string, error) {
 	}
 	code := strings.TrimSpace(line)
 	if code == "" {
-		return "", fail(2, "no sign-in code on standard input; usage: printf '%%s\\n' \"$CODE\" | pocketcontext login --url URL --code-stdin")
+		return "", fail(2, "no sign-in code on standard input; usage: printf '%%s\\n' \"$CODE\" | pocketcontext-crew login --url URL --code-stdin")
 	}
 	return code, nil
 }
@@ -289,8 +291,8 @@ func remoteStatus(base string) (map[string]any, error) {
 	if probeErr == nil {
 		out["reachable"], out["instance"] = true, i.Instance
 		out["name"], out["version"] = i.Name, i.Version
-		out["clientVersion"], out["databaseFormat"] = bundle.Version, i.DatabaseFormat
-		err := bundle.CheckServerCompatibility(i)
+		out["clientVersion"], out["databaseFormat"] = buildinfo.Version, i.DatabaseFormat
+		err := appconfig.Runtime.CheckServerCompatibility(i)
 		out["compatible"] = err == nil
 		if err != nil {
 			out["compatibilityError"] = err.Error()

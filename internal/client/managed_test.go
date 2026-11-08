@@ -2,13 +2,12 @@ package client
 
 import (
 	"encoding/json"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
 )
 
 func TestInvitationStdinAndGeneratedPrompt(t *testing.T) {
@@ -110,7 +109,7 @@ func TestManagedStopWaitsForWorkerLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	release, err := bundle.AcquireTunnelLock(&bundle.Project{Cache: dir})
+	release, err := appserver.AcquireTunnelLock(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -20,7 +20,7 @@ function option(name, fallback) {
   assert(args[index + 1], `${name} requires a value`);
   return args[index + 1];
 }
-const binary = path.resolve(option('--binary', path.join(root, 'bin/pocketcontext')));
+const binary = path.resolve(option('--binary', path.join(root, 'bin/pocketcontext-crew')));
 const playwrightPath = option('--playwright');
 const uiRequire = createRequire(path.join(root, 'ui/package.json'));
 const { chromium } = playwrightPath ? await import(pathToFileURL(path.resolve(playwrightPath)).href) : uiRequire('playwright');

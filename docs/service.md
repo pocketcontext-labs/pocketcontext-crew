@@ -71,7 +71,7 @@ journalctl --user -u pocketcontext.service -f
 ```
 
 Systemd's started state is not application readiness. Confirm the combined
-`ready: true` output in the journal and check `pocketcontext status --db DB`.
+`ready: true` output in the journal and check `pocketcontext-crew status --db DB`.
 Verify remote access through an authenticated client. For startup at boot and
 continued operation after logout, configure user lingering for the service's
 account (`loginctl enable-linger USER`, with administrator authorization if

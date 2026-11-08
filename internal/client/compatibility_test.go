@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-core/profiles"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,9 +12,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/profiles"
 )
 
 func TestRemoteMismatchPreservesDiagnosticsAndCredentials(t *testing.T) {
@@ -23,7 +22,7 @@ func TestRemoteMismatchPreservesDiagnosticsAndCredentials(t *testing.T) {
 	var authenticated atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/bundle/instance" {
-			json.NewEncoder(w).Encode(bundle.Instance{App: "pocketcontext", Instance: "expected", Version: "older"})
+			json.NewEncoder(w).Encode(appserver.Instance{App: "pocketcontext", Instance: "expected", Version: "older"})
 			return
 		}
 		authenticated.Add(1)
@@ -54,7 +53,7 @@ func TestRemoteMismatchPreservesDiagnosticsAndCredentials(t *testing.T) {
 
 func TestProfileChecksSelectedReleaseAndRecordedServer(t *testing.T) {
 	e := profiles.Entry{Name: "legacy", Version: "0.12.1", ServerVersion: "0.12.1"}
-	i := &bundle.Instance{Version: "0.12.1"}
+	i := &appserver.Instance{Version: "0.12.1"}
 	if err := checkProfileServer(e, i); err != nil {
 		t.Fatalf("current router cannot verify matching legacy pair: %v", err)
 	}

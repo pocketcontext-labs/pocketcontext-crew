@@ -21,7 +21,7 @@ import (
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/pocketcontext/sqliteuri"
+	"github.com/pocketcontext-labs/pocketcontext-core/sqliteuri"
 )
 
 // View exposes Columns of the ordinary table Table under Name. Columns must be

@@ -23,7 +23,8 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
 - External platforms run agents. Crew never posts, sends or pays.
 - Keep runtime credentials and OAuth state private and out of Git and knowledge.
 - Tests: build ui/dist first; pnpm test/build in ui; CGO_ENABLED=1 go test with
-  build-tags.txt; tests/crew_e2e.py, tests/upgrades.py and tests/e2e.py with built binary.
+  build-tags.txt; tests/crew_e2e.py, tests/upgrades.py, tests/upgrades_0_8.py and tests/e2e.py with built binary.
+  Shared server code lives in pocketcontext-core (tagged release in go.mod; no replace); Crew's identity and public route allowlist live in internal/crewpolicy and the golden table in internal/appconfig/testdata must not change without review.
   Preserve Windows support. Hosted releases require image lifecycle and populated
   backup/restore gates before deployment. Deploy the exact tested OCI digest;
   a desired `:latest` reference must resolve to a digest before replacement.

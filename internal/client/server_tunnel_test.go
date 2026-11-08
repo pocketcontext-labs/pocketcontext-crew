@@ -3,6 +3,9 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/buildinfo"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,8 +13,6 @@ import (
 	"strconv"
 	"testing"
 	"time"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
 )
 
 type tunnelRoundTripFunc func(*http.Request) (*http.Response, error)
@@ -25,13 +26,13 @@ func TestServerTunnelCancellationDuringRelayStartup(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", root)
 	t.Setenv("HOME", root)
 	t.Setenv("LOCALAPPDATA", root)
-	p, err := bundle.Resolve(filepath.Join(root, "pocketcontext.db"))
+	p, err := appconfig.Runtime.Resolve(filepath.Join(root, "pocketcontext.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	p.Config.Instance = "synthetic-instance"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(bundle.Instance{App: "pocketcontext", Version: bundle.Version, Key: p.Key, Instance: p.Config.Instance})
+		json.NewEncoder(w).Encode(appserver.Instance{App: "pocketcontext-crew", Version: buildinfo.Version, Key: p.Key, Instance: p.Config.Instance})
 	}))
 	defer server.Close()
 	p.Config.Port, err = strconv.Atoi(port(server.URL))

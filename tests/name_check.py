@@ -6,7 +6,7 @@ non-ignored file, case-insensitively. With --binary PATH it also scans the
 bytes of a built executable. Exceptions are listed explicitly below with their
 reasons. Standard-library Python; runs on Linux, macOS and Windows.
 
-    python3 tests/name_check.py [--binary bin/pocketcontext]
+    python3 tests/name_check.py [--binary bin/pocketcontext-crew]
 """
 import argparse
 from pathlib import Path

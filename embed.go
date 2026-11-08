@@ -1,5 +1,5 @@
 // Package assets embeds the application files that the single
-// pocketcontext binary unpacks into its private cache before serving.
+// pocketcontext-crew binary unpacks into its private cache before serving.
 package assets
 
 import "embed"
@@ -10,10 +10,10 @@ import "embed"
 //go:embed pb_hooks pb_migrations ui/dist
 var Assets embed.FS
 
-// Skill is the agent skill template that `pocketcontext skill` installs with this
+// Skill is the agent skill template that `pocketcontext-crew skill` installs with this
 // computer's absolute paths.
 //
-//go:embed skills/pocketcontext
+//go:embed skills/pocketcontext-crew
 var Skill embed.FS
 
 // ManualSources embeds the exact release documentation. Export transforms it

@@ -15,7 +15,7 @@ import {
 test("launcher requires an explicit database and valid port", () => {
   assert.throws(() => parseOptions([]), /explicit development database/);
   assert.throws(
-    () => parseOptions(["--db", "--binary", "bin/pocketcontext"]),
+    () => parseOptions(["--db", "--binary", "bin/pocketcontext-crew"]),
     /Usage/,
   );
   assert.throws(
@@ -38,7 +38,7 @@ test("launcher reads only explicit project settings and refuses missing database
     );
     await writeFile(db, "synthetic");
     assert.equal((await projectOptions(parseOptions(["--db", folder]))).db, db);
-    assert.equal((await projectOptions(parseOptions(["--db", db]))).port, 8096);
+    assert.equal((await projectOptions(parseOptions(["--db", db]))).port, 8099);
     await writeFile(
       join(folder, "pocketcontext.json"),
       JSON.stringify({ port: 18123 }),
@@ -132,7 +132,7 @@ test("public launch requires an exact DNS origin and loopback upstream", () => {
       "--vite-port",
       "5174",
     ]),
-    port: 8096,
+    port: 8099,
   };
   const configured = launchConfiguration(options, {
     PATH: "/synthetic/bin",
@@ -158,7 +158,7 @@ test("public launch requires an exact DNS origin and loopback upstream", () => {
   assert.equal(configured.viteEnv.POCKETCONTEXT_SMTP_PASSWORD, undefined);
   assert.equal(configured.viteEnv.PATH, "/synthetic/bin");
   const local = launchConfiguration(
-    { ...parseOptions(["--db", "example.db"]), port: 8096 },
+    { ...parseOptions(["--db", "example.db"]), port: 8099 },
     configured.viteEnv,
   );
   assert.equal(local.viteEnv.POCKETCONTEXT_DEV_PUBLIC_DOMAIN, undefined);

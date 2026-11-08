@@ -74,7 +74,7 @@ jobs:
           "$PY" - <<'PYTHON'
           import os, subprocess
           observed = subprocess.check_output([os.environ['EXE'], '--version'], text=True).strip()
-          assert observed == 'pocketcontext ' + os.environ['RELEASE_VERSION'] + ' (' + os.environ['RELEASE_SOURCE'] + ')', observed
+          assert observed == 'pocketcontext-crew ' + os.environ['RELEASE_VERSION'] + ' (' + os.environ['RELEASE_SOURCE'] + ')', observed
           print(observed)
           PYTHON
           "$PY" tests/crew_e2e.py --binary "$EXE"

@@ -9,7 +9,7 @@ on:
       version:
         description: 'Version to build and validate (X.Y.Z); manual runs never publish'
         required: true
-        default: '0.8.0'
+        default: '0.9.0'
         type: string
 
 permissions:
@@ -82,7 +82,7 @@ jobs:
       - name: Unit tests
         run: |
           packages=./...
-          if [ "$RUNNER_OS" = Windows ]; then packages="./internal/bundle ./internal/client ./internal/tunnel ./internal/profiles"; fi
+          if [ "$RUNNER_OS" = Windows ]; then packages="./internal/appconfig ./internal/crewpolicy ./internal/crewruntime ./internal/client"; fi
           CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" $packages
       - name: Build and inspect the release binary; package notices
         run: $PY scripts/release.py build --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" --platform "$RELEASE_PLATFORM" --output dist
@@ -90,7 +90,7 @@ jobs:
         run: |
           exe=pocketcontext-crew
           if [ "$RUNNER_OS" = Windows ]; then exe=pocketcontext-crew.exe; fi
-          "dist/$RELEASE_PLATFORM/$exe" version | grep -F "pocketcontext $RELEASE_VERSION ($RELEASE_COMMIT)"
+          "dist/$RELEASE_PLATFORM/$exe" version | grep -F "pocketcontext-crew $RELEASE_VERSION ($RELEASE_COMMIT)"
           "$PY" tests/name_check.py --binary "dist/$RELEASE_PLATFORM/$exe"
           POCKETCONTEXT_REHEARSAL_BINARY="$PWD/dist/$RELEASE_PLATFORM/$exe" CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" ./internal/client -run TestInvitationCLIRehearsal -count=1 -timeout 4m
           "$PY" tests/installers.py --binary "dist/$RELEASE_PLATFORM/$exe"

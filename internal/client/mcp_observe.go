@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/mcpobserve"
+	"github.com/pocketcontext-labs/pocketcontext-core/mcpobserve"
 )
 
 // Diagnostic reasons are assigned at controlled call sites. Error messages may
@@ -121,7 +121,7 @@ func observeMCPMethods(next mcp.MethodHandler) mcp.MethodHandler {
 		ctx = context.WithValue(ctx, mcpObservationKey{}, o)
 		tool := ""
 		if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok && params != nil {
-			tool = mcpobserve.SafeTool(params.Name)
+			tool = mcpobserve.SafeTool(ctx, params.Name)
 		}
 		event := mcpobserve.Event{Event: "mcp_complete", Method: mcpobserve.SafeMethod(method), Tool: tool, Outcome: "internal_error", Reason: "internal_error"}
 		// The default event also covers a panic without intercepting it or logging

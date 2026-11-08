@@ -1,12 +1,11 @@
 package client
 
 import (
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
 )
 
 func TestHTTPSCLIOptions(t *testing.T) {
@@ -79,7 +78,7 @@ func TestPublicReaderRequiresRunningServiceAndNeverStartsOne(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(db)); !os.IsNotExist(err) {
 		t.Fatal("public reader created a stopped project")
 	}
-	p, err := bundle.Resolve(db)
+	p, err := appconfig.Runtime.Resolve(db)
 	if err != nil {
 		t.Fatal(err)
 	}

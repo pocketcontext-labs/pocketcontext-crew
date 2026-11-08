@@ -1,7 +1,7 @@
 # build-tags.txt lists the SQLite features and the tailscale.com features the tunnel omits.
 TAGS := $(shell cat build-tags.txt)
 VERSION ?= $(shell git describe --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle.Version=$(VERSION)
+LDFLAGS := -s -w -X github.com/pocketcontext-labs/pocketcontext-crew/internal/buildinfo.Version=$(VERSION)
 GOBUILD := go build -trimpath -tags $(TAGS) -ldflags "$(LDFLAGS)"
 
 .PHONY: ui dev build windows test names e2e
@@ -10,18 +10,18 @@ ui:
 dev:
 	node scripts/dev.mjs --db "$(DB)"
 build:
-	CGO_ENABLED=1 $(GOBUILD) -o bin/pocketcontext ./cmd/pocketcontext
+	CGO_ENABLED=1 $(GOBUILD) -o bin/pocketcontext-crew ./cmd/pocketcontext-crew
 # Cross-compile from Linux or macOS with Zig as the C compiler (ZIG=/path/to/zig).
 windows:
 	CGO_ENABLED=1 GOOS=windows GOARCH=amd64 ZIG_TARGET=x86_64-windows-gnu CC="$(CURDIR)/scripts/zig-cc" \
-		$(GOBUILD) -o bin/windows_amd64/pocketcontext.exe ./cmd/pocketcontext
+		$(GOBUILD) -o bin/windows_amd64/pocketcontext-crew.exe ./cmd/pocketcontext-crew
 test:
 	CGO_ENABLED=1 go test -tags $(TAGS) ./...
 	node --test tests/dev_launcher.test.mjs
 # The repository and the binary must not contain the retired product name.
 names: build
-	python3 tests/name_check.py --binary bin/pocketcontext
+	python3 tests/name_check.py --binary bin/pocketcontext-crew
 e2e: names
-	python3 tests/e2e.py --binary bin/pocketcontext
-	python3 tests/crew_e2e.py --binary bin/pocketcontext
-	python3 tests/upgrades.py --binary bin/pocketcontext
+	python3 tests/e2e.py --binary bin/pocketcontext-crew
+	python3 tests/crew_e2e.py --binary bin/pocketcontext-crew
+	python3 tests/upgrades.py --binary bin/pocketcontext-crew

@@ -23,7 +23,7 @@
             if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'pocketcontext: destination must be a regular file or absent' }
             if (-not $env:CREW_REPLACE_VERSION) { throw 'pocketcontext: executable already exists; stop its servers and tunnels, back up the complete projects and matching binary, then set CREW_REPLACE_VERSION to its inspected --version (or choose a new directory)' }
             $observed = & $destination --version
-            if ($LASTEXITCODE -ne 0 -or (($observed -join "`n") -notmatch '^pocketcontext ([^\s]+)(?:\s|$)') -or $Matches[1] -cne $env:CREW_REPLACE_VERSION) { throw 'pocketcontext: existing executable version differs from CREW_REPLACE_VERSION; nothing replaced' }
+            if ($LASTEXITCODE -ne 0 -or (($observed -join "`n") -notmatch '^pocketcontext(?:-crew)? ([^\s]+)(?:\s|$)') -or $Matches[1] -cne $env:CREW_REPLACE_VERSION) { throw 'pocketcontext: existing executable version differs from CREW_REPLACE_VERSION; nothing replaced' }
             return $true
         }
         if (Test-Path -LiteralPath (Join-Path $dir 'pocketcontext.db')) { throw 'pocketcontext: existing database without a Crew executable; choose a fresh project directory' }

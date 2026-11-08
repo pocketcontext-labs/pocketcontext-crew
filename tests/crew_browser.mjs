@@ -79,6 +79,8 @@ try {
  await page.getByText('Dispatcher changed. Connect its routine before enabling delivery.',{exact:true}).waitFor();
  await integration.getByRole('combobox',{name:'Dispatch path',exact:true}).selectOption('parent_bridge');
  await page.getByText('Dispatch path changed. Apply the current instructions and test again. Credentials were preserved.',{exact:true}).waitFor();
+ // The select re-renders from the saved integration just after the toast appears.
+ await page.waitForFunction(()=>[...document.querySelectorAll('select')].some(s=>s.value==='parent_bridge'),undefined,{timeout:5000});
  assert.equal(await integration.getByRole('combobox',{name:'Dispatch path',exact:true}).inputValue(),'parent_bridge');
  await integration.getByLabel('Connection test progress').waitFor();
  assert.equal(await integration.getByRole('button',{name:'Send test',exact:true}).isDisabled(),true);

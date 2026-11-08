@@ -70,10 +70,10 @@ jobs:
       - name: Build the binary onto the desktop
         shell: bash
         run: |
-          CGO_ENABLED=1 go build -trimpath -tags "$(cat build-tags.txt)" -o bin/pocketcontext.exe ./cmd/pocketcontext
+          CGO_ENABLED=1 go build -trimpath -tags "$(cat build-tags.txt)" -o bin/pocketcontext-crew.exe ./cmd/pocketcontext-crew
           desktop="$(cygpath "$USERPROFILE")/Desktop/PocketContext"
           mkdir -p "$desktop"
-          cp bin/pocketcontext.exe "$desktop/"
+          cp bin/pocketcontext-crew.exe "$desktop/"
           "$desktop/pocketcontext.exe" version
 
       - name: Install tailcat 0.7.0

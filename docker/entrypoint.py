@@ -67,7 +67,7 @@ class Config:
         self.control = self.private / "control.sock"
         self.state = self.private / "container.json"
         self.revision = os.environ.get("POCKETCONTEXT_REVISION", "")
-        self.binary = "/usr/local/bin/pocketcontext"
+        self.binary = "/usr/local/bin/pocketcontext-crew"
         self.domain = os.environ.get("POCKETCONTEXT_DOMAIN", "")
 
     def initialize_dirs(self):

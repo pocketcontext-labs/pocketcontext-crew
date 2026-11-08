@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-core/atomicfile"
+	"github.com/pocketcontext-labs/pocketcontext-core/tunnel"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 	"io"
 	"net"
 	"os"
@@ -13,9 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/tunnel"
 )
 
 type connection struct {
@@ -47,7 +48,7 @@ func saveConnection(c connection) error {
 	if e != nil {
 		return e
 	}
-	return bundle.WriteAtomic(p, append(b, '\n'), 0600)
+	return atomicfile.WriteAtomic(p, append(b, '\n'), 0600)
 }
 func loadConnection(base string) (connection, error) {
 	var c connection
@@ -65,7 +66,7 @@ func loadConnection(base string) (connection, error) {
 	if json.Unmarshal(b, &c) != nil || c.Format != 1 || c.URL != base {
 		return c, fail(2, "invalid saved forward; pair again")
 	}
-	if _, e = tunnel.ParseAddress(c.Address); e != nil {
+	if _, e = tunnel.ParseAddress(appconfig.Identity.Command, c.Address); e != nil {
 		return c, fail(2, "invalid saved forward; pair again")
 	}
 	return c, nil
@@ -90,9 +91,9 @@ func privateNewFile(path string, b []byte) error {
 }
 func tunnelInvite(a *args, pretty bool) error {
 	if len(a.pos) != 1 || a.has("url") {
-		return fail(2, "usage: pocketcontext tunnel invite [--out NEW_FILE] --db DB")
+		return fail(2, "usage: pocketcontext-crew tunnel invite [--out NEW_FILE] --db DB")
 	}
-	p, e := bundle.Resolve(a.flags["db"])
+	p, e := appconfig.Runtime.Resolve(a.flags["db"])
 	if e != nil {
 		return e
 	}
@@ -115,7 +116,7 @@ func tunnelInvite(a *args, pretty bool) error {
 			return fail(2, "choose an invitation destination outside the project folder; use its setup chat for the handoff")
 		}
 	}
-	if release, err := bundle.AcquireTunnelLock(p); err == nil {
+	if release, err := appserver.AcquireTunnelLock(p.Cache); err == nil {
 		release()
 		return fail(1, "tunnel is not running; supervise tunnel serve before creating an invitation")
 	}
@@ -127,7 +128,7 @@ func tunnelInvite(a *args, pretty bool) error {
 	if json.Unmarshal(b, &c) != nil || c.Instance != p.Config.Instance || c.URL != p.URL() {
 		return fail(1, "tunnel endpoint is stale; restart tunnel serve")
 	}
-	if _, e = tunnel.ParseAddress(c.Address); e != nil {
+	if _, e = tunnel.ParseAddress(appconfig.Identity.Command, c.Address); e != nil {
 		return fail(1, "invalid tunnel endpoint; restart tunnel serve")
 	}
 	// Refuse overwriting before issuing a single-use code.
@@ -138,7 +139,7 @@ func tunnelInvite(a *args, pretty bool) error {
 			return e
 		}
 	}
-	data, e := bundle.LocalCall(p, "/api/bundle/login-code", map[string]any{"ttl": 600})
+	data, e := appserver.LocalCall(p, "/api/bundle/login-code", map[string]any{"ttl": 600})
 	if e != nil {
 		return e
 	}
@@ -192,7 +193,7 @@ func decodeInvitation(r io.Reader) (invitation, error) {
 	if e != nil || base != in.URL || in.Format != 1 || in.Instance == "" || in.Code == "" {
 		return in, fail(2, "invalid invitation JSON")
 	}
-	if _, e = tunnel.ParseAddress(in.Address); e != nil {
+	if _, e = tunnel.ParseAddress(appconfig.Identity.Command, in.Address); e != nil {
 		return in, fail(2, "invalid invitation address")
 	}
 	if !time.Now().Before(in.Expires) {
@@ -205,7 +206,7 @@ func tunnelJoin(ctx context.Context, a *args, pretty bool) error {
 		return fail(2, "choose --no-browser or --skip-reader, not both")
 	}
 	if len(a.pos) != 1 || a.has("file") == a.bools["stdin"] || a.has("db") || a.has("url") {
-		return fail(2, "usage: pocketcontext tunnel join (--stdin | --file INVITATION_FILE) [--no-browser | --skip-reader] [--foreground]")
+		return fail(2, "usage: pocketcontext-crew tunnel join (--stdin | --file INVITATION_FILE) [--no-browser | --skip-reader] [--foreground]")
 	}
 	var in invitation
 	var e error
@@ -220,7 +221,7 @@ func tunnelJoin(ctx context.Context, a *args, pretty bool) error {
 	if !a.bools["foreground"] {
 		return joinManaged(ctx, in, a.bools["no-browser"], a.bools["skip-reader"], pretty)
 	}
-	addr, e := tunnel.ParseAddress(in.Address)
+	addr, e := tunnel.ParseAddress(appconfig.Identity.Command, in.Address)
 	if e != nil {
 		return e
 	}
@@ -233,7 +234,7 @@ func tunnelJoin(ctx context.Context, a *args, pretty bool) error {
 	defer cancel()
 	defer ln.Close()
 	done := make(chan error, 1)
-	go func() { done <- tunnel.Forward(ctx, addr, ln, n) }()
+	go func() { done <- tunnel.Forward(ctx, appconfig.Identity.Command, addr, ln, n) }()
 	// A forward's listener is ready before the relay session. Probe with a bound.
 	deadline := time.Now().Add(45 * time.Second)
 	var ready bool
@@ -279,15 +280,15 @@ func tunnelJoin(ctx context.Context, a *args, pretty bool) error {
 	}
 }
 
-func dialTunnelBackend(p *bundle.Project) (net.Conn, error) {
-	i, e := bundle.Health(p)
+func dialTunnelBackend(p *appserver.Project) (net.Conn, error) {
+	i, e := appserver.Health(p)
 	if e != nil {
 		return nil, e
 	}
 	if i.Instance != p.Config.Instance || i.Key != p.Key {
 		return nil, fmt.Errorf("project identity mismatch")
 	}
-	if err := bundle.CheckServerCompatibility(i); err != nil {
+	if err := appconfig.Runtime.CheckServerCompatibility(i); err != nil {
 		return nil, err
 	}
 	if i.Socket != "" {

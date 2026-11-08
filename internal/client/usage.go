@@ -44,6 +44,8 @@ Setup and server:
   profile add|update|list|remove|default|check|repair [NAME]
                        manage private registrations; never delete project data
   manual --out NEW_DIR  export the embedded user manual offline
+  upgrade-check --db DB [--from VERSION] [--inventory]
+                       local, read-only upgrade diagnostic; starts nothing
 
 Instance:
   whoami               show the signed-in Crew instance, name and version
@@ -98,10 +100,10 @@ Remote client (the server runs on another computer, reached through
                        Crew work through the signed-in session
   URL must be http://127.0.0.1:PORT or
   http://localhost:PORT. Remote mode never creates a database or starts a
-  server; serve, start, ensure-running, stop, flush, recover, init, password
-  and login-code are not available with --url.
+  server; serve, start, ensure-running, stop, flush, recover, init, password,
+  upgrade-check and login-code are not available with --url.
 
-Run ` + "`pocketcontext help COMMAND`" + ` or ` + "`pocketcontext COMMAND --help`" + ` for usage, details and an example.
+Run ` + "`pocketcontext-crew help COMMAND`" + ` or ` + "`pocketcontext-crew COMMAND --help`" + ` for usage, details and an example.
 Options for every command: --db PATH or --url URL, --pretty.
 --url and --db exclude each other; --db overrides POCKETCONTEXT_URL.
 Exit codes: 0 ok, 1 HTTP or transport error (including 403 owner-only refusals

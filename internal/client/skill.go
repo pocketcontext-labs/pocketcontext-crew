@@ -8,21 +8,23 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-core/atomicfile"
+	"github.com/pocketcontext-labs/pocketcontext-core/profiles"
 	assets "github.com/pocketcontext-labs/pocketcontext-crew"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/profiles"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 )
 
 // marker identifies skill directories written by this command, which may be replaced.
-const marker = ".pocketcontext"
+var marker = appconfig.Identity.Marker
 
 // skillTargets are the user-level skill directories of supported agents. An
 // agent is skipped when its configuration directory does not exist.
 func skillTargets(home string) map[string][2]string {
 	return map[string][2]string{
-		"claude-code": {filepath.Join(home, ".claude"), filepath.Join(home, ".claude", "skills", "pocketcontext")},
-		"codex":       {filepath.Join(home, ".codex"), filepath.Join(home, ".codex", "skills", "pocketcontext")},
-		"antigravity": {filepath.Join(home, ".gemini"), filepath.Join(home, ".gemini", "antigravity", "skills", "pocketcontext")},
+		"claude-code": {filepath.Join(home, ".claude"), filepath.Join(home, ".claude", "skills", appconfig.Identity.SkillName)},
+		"codex":       {filepath.Join(home, ".codex"), filepath.Join(home, ".codex", "skills", appconfig.Identity.SkillName)},
+		"antigravity": {filepath.Join(home, ".gemini"), filepath.Join(home, ".gemini", "antigravity", "skills", appconfig.Identity.SkillName)},
 	}
 }
 
@@ -33,14 +35,14 @@ const remoteTemplate = "SKILL.remote.md"
 // empty, the remote variant for the forwarded server at url.
 func installSkills(db, url, agent, dir string, pretty bool) error {
 	if db != "" {
-		p, err := bundle.Resolve(db)
+		p, err := appconfig.Runtime.Resolve(db)
 		if err != nil {
 			return err
 		}
 		if _, err := os.Stat(p.DB); err != nil {
 			return fail(2, "initialize the project before installing its skill: %v", err)
 		}
-		registry, err := profiles.Read()
+		registry, err := appconfig.Profiles.Read()
 		if err != nil {
 			return err
 		}
@@ -49,7 +51,7 @@ func installSkills(db, url, agent, dir string, pretty bool) error {
 				return fail(2, "registered database path now belongs to another project; refusing skill replacement")
 			}
 		}
-		if err := bundle.EnsureRunning(p, bundle.StartOptions{}); err != nil {
+		if err := appserver.EnsureRunning(p, appserver.StartOptions{}); err != nil {
 			return err
 		}
 	}
@@ -58,7 +60,7 @@ func installSkills(db, url, agent, dir string, pretty bool) error {
 	if err != nil {
 		return err
 	}
-	r, err := profiles.Read()
+	r, err := appconfig.Profiles.Read()
 	if err != nil {
 		return err
 	}
@@ -77,7 +79,7 @@ func installSkills(db, url, agent, dir string, pretty bool) error {
 	if err := writeSkill(e.Skill, e.Binary, e.DB, e.URL); err != nil {
 		return err
 	}
-	if err := profiles.Put(e, true); err != nil {
+	if err := appconfig.Profiles.Put(e, true); err != nil {
 		return err
 	}
 	if dir != "" {
@@ -94,7 +96,8 @@ func installSkills(db, url, agent, dir string, pretty bool) error {
 }
 
 const routerFormat = 1
-const routerMarker = ".pocketcontext-router"
+
+var routerMarker = appconfig.Identity.RouterMarker
 
 func installRouters(agent string, pretty bool) error {
 	home, err := os.UserHomeDir()
@@ -121,7 +124,7 @@ func installRouters(agent string, pretty bool) error {
 		}
 		results[name] = target[1]
 	}
-	path, _ := profiles.Path()
+	path, _ := appconfig.Profiles.Path()
 	Print(map[string]any{"installed": results, "registry": path, "routerFormat": routerFormat}, pretty)
 	return nil
 }
@@ -133,7 +136,7 @@ func preserveLegacy(dir string) error {
 		return fail(2, "%s contains an unrelated skill; refusing replacement", dir)
 	}
 	target := strings.TrimSpace(string(markerBytes))
-	r, err := profiles.Read()
+	r, err := appconfig.Profiles.Read()
 	if err != nil {
 		return err
 	}
@@ -173,7 +176,7 @@ func preserveLegacy(dir string) error {
 		}
 		found = &e
 	}
-	dst, err := profiles.SkillDir(found.Instance)
+	dst, err := appconfig.Profiles.SkillDir(found.Instance)
 	if err != nil {
 		return err
 	}
@@ -187,7 +190,7 @@ func preserveLegacy(dir string) error {
 		return err
 	}
 	found.Skill = dst
-	return profiles.Put(*found, true)
+	return appconfig.Profiles.Put(*found, true)
 }
 func copySkillTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
@@ -226,33 +229,33 @@ func writeRouter(dir string) error {
 			return err
 		}
 	}
-	content, err := assets.Skill.ReadFile("skills/pocketcontext/ROUTER.md")
+	content, err := assets.Skill.ReadFile("skills/" + appconfig.Identity.SkillName + "/ROUTER.md")
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	if err := bundle.WriteAtomic(filepath.Join(dir, "SKILL.md"), content, 0600); err != nil {
+	if err := atomicfile.WriteAtomic(filepath.Join(dir, "SKILL.md"), content, 0600); err != nil {
 		return err
 	}
 	// Do not remove legacy references: preservation happened first, and readers may still hold paths.
-	if err := bundle.WriteAtomic(filepath.Join(dir, marker), []byte("router\n"), 0600); err != nil {
+	if err := atomicfile.WriteAtomic(filepath.Join(dir, marker), []byte("router\n"), 0600); err != nil {
 		return err
 	}
-	return bundle.WriteAtomic(filepath.Join(dir, routerMarker), []byte(strconv.Itoa(routerFormat)+"\n"), 0600)
+	return atomicfile.WriteAtomic(filepath.Join(dir, routerMarker), []byte(strconv.Itoa(routerFormat)+"\n"), 0600)
 }
 
 // registeredPorts supplies candidates to avoid; binding still checks unrelated applications.
 func registeredPorts() (map[int]bool, error) {
-	r, err := profiles.Read()
+	r, err := appconfig.Profiles.Read()
 	if err != nil {
 		return nil, err
 	}
 	ports := map[int]bool{}
 	for _, e := range r.Profiles {
 		if e.DB != "" {
-			p, er := bundle.Resolve(e.DB)
+			p, er := appconfig.Runtime.Resolve(e.DB)
 			if er == nil {
 				ports[p.Config.Port] = true
 			}
@@ -276,7 +279,7 @@ func writeSkill(dir, exe, db, url string) error {
 		}
 	}
 	replacer := strings.NewReplacer("{{BINARY}}", exe, "{{DB}}", db, "{{URL}}", url)
-	root := "skills/pocketcontext"
+	root := "skills/" + appconfig.Identity.SkillName
 	err := fs.WalkDir(assets.Skill, root, func(name string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err

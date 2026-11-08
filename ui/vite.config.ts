@@ -29,7 +29,7 @@ export default defineConfig({
       path: "/__ui_hmr",
       ...(publicDomain
         ? { protocol: "wss" as const, host: publicDomain, clientPort: 443 }
-        : { clientPort: Number(process.env.POCKETCONTEXT_DEV_PORT || 8096) }),
+        : { clientPort: Number(process.env.POCKETCONTEXT_DEV_PORT || 8099) }),
     },
   },
   test: {

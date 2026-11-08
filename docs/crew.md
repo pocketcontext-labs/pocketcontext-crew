@@ -143,7 +143,7 @@ and projections, ranked search freshness and archive semantics, SQL allowlists
 (each excluded secret column is rejected), mutation rejection and limits, immutable history,
 conflicts and concurrent claims, archive ancestry, review invalidation, owner-only
 decisions, generic REST/batch rejection and restart persistence. MCP tests cover
-transport allowlists and the agent path. `CREW_READ_BENCH=1 go test ./internal/bundle
+transport allowlists and the agent path. `CREW_READ_BENCH=1 go test ./internal/crewruntime
 -run TestCrewRetrievalBenchmark -v` (with the usual CGO and build tags) seeds a
 synthetic 500-note, 300-task project and compares response bytes and call counts
 of full pages with compact reads, search and SQL, checking identical answers. Hosted image gates additionally rehearse

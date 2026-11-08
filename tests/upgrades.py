@@ -90,7 +90,7 @@ def rehearse(target, previous, root):
     home = root / 'home'
     home.mkdir()
     env = isolated_env(home)
-    executable = 'pocketcontext.exe' if os.name == 'nt' else 'pocketcontext'
+    executable = 'pocketcontext-crew.exe' if os.name == 'nt' else 'pocketcontext-crew'
     alpha = root / 'Old project'
     beta = root / 'New project'
     for folder, source in ((alpha, previous), (beta, target)):
@@ -152,7 +152,7 @@ def rehearse(target, previous, root):
         assert data(alpha, 'status')['version'] == old_version
         assert data(beta, 'status')['version'] == new_version
         mismatch = run(alpha, 'ensure-running', binary=target, expect=1)
-        assert 'version' in mismatch.stderr and old_version in mismatch.stderr
+        assert 'earlier' in mismatch.stderr and old_version in mismatch.stderr
         assert data(alpha, 'status', binary=target)['compatible'] is False
         run(alpha, 'stop', binary=target)
         stopped.add(alpha)

@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/mcpobserve"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-core/mcpobserve"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/buildinfo"
 )
 
 const (
@@ -36,7 +38,7 @@ type mcpCaller struct {
 }
 
 func newMCPHandler(api http.Handler) http.Handler {
-	server := mcp.NewServer(&mcp.Implementation{Name: "PocketContext Crew", Version: bundle.Version}, &mcp.ServerOptions{
+	server := mcp.NewServer(&mcp.Implementation{Name: "PocketContext Crew", Version: buildinfo.Version}, &mcp.ServerOptions{
 		Instructions: mcpInstructions, Capabilities: &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}},
 	})
 	server.AddReceivingMiddleware(observeMCPMethods)
@@ -49,12 +51,12 @@ func newMCPHandler(api http.Handler) http.Handler {
 		DisableLocalhostProtection: true,
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := bundle.MCPAuthToken(r.Context())
+		token := appserver.MCPAuthToken(r.Context())
 		if token == "" {
 			http.Error(w, "MCP authorization required", http.StatusUnauthorized)
 			return
 		}
-		if !bundle.ValidatedMCPPublicRequest(r) {
+		if !appconfig.ValidatedMCPPublicRequest(r) {
 			http.Error(w, "Configured public MCP origin required", http.StatusForbidden)
 			return
 		}

@@ -436,10 +436,10 @@ def earlier_release_scenario(binary, root):
         db.commit()
     before = hashlib.sha256(earlier.db.read_bytes()).hexdigest()
     refused = earlier.run('init', '--port', str(earlier.port), '--password-stdin', stdin=PASSWORD + '\n', expect=1)
-    check('earlier PocketContext release' in refused.stderr and 'does not open databases from earlier releases' in refused.stderr,
+    check('earlier PocketContext Crew release' in refused.stderr and 'does not open databases from earlier releases' in refused.stderr,
           f'init refuses a database from an earlier release with a clear message: {refused.stderr.strip()}')
     again = earlier.run('ensure-running', expect=1)
-    check('earlier PocketContext release' in again.stderr, 'starting the server refuses it too')
+    check('earlier PocketContext Crew release' in again.stderr, 'starting the server refuses it too')
     check(not earlier.json('status')['running'], 'no server runs for a refused database')
     check(hashlib.sha256(earlier.db.read_bytes()).hexdigest() == before, 'the refused database file is unchanged')
     leftovers = sorted(p.name for p in earlier.project.iterdir() if p.name.startswith('pocketcontext.db') and p.name != 'pocketcontext.db')
@@ -450,7 +450,7 @@ def remote_scenario(pc, r):
     instance = json.loads((pc.project / 'pocketcontext.json').read_text(encoding='utf-8'))['instance']
     local = pc.json('whoami')
     missing = r.run('whoami', expect=2)
-    check('pocketcontext login' in missing.stderr, 'remote data commands require login')
+    check('pocketcontext-crew login' in missing.stderr, 'remote data commands require login')
     status = r.json('status')
     check(status['url'] == pc.url and status['reachable'] and not status['loggedIn'], 'remote status reports reachable and logged out')
     r.run('login', '--password-stdin', stdin='wrong password\n', expect=1)

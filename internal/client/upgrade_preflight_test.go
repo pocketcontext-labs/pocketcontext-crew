@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,17 +14,15 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
 )
 
-func incompatibleLocalProject(t *testing.T) *bundle.Project {
+func incompatibleLocalProject(t *testing.T) *appserver.Project {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_CACHE_HOME", root)
 	t.Setenv("LOCALAPPDATA", root)
-	p, err := bundle.Resolve(filepath.Join(root, "pocketcontext.db"))
+	p, err := appconfig.Runtime.Resolve(filepath.Join(root, "pocketcontext.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func incompatibleLocalProject(t *testing.T) *bundle.Project {
 			http.Error(w, "unexpected", 500)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(bundle.Instance{App: "pocketcontext", Version: "old-release", Instance: p.Config.Instance, Key: p.Key})
+		_ = json.NewEncoder(w).Encode(appserver.Instance{App: "pocketcontext", Version: "old-release", Instance: p.Config.Instance, Key: p.Key})
 	}))
 	t.Cleanup(server.Close)
 	p.Config.Port, err = strconv.Atoi(port(server.URL))
@@ -103,7 +103,7 @@ func TestTunnelCancellationDoesNotRotateIdentity(t *testing.T) {
 	if err != nil || !bytes.Equal(identity, after) {
 		t.Fatalf("cancelled tunnel serve changed identity: %v", err)
 	}
-	release, err := bundle.AcquireTunnelLock(p)
+	release, err := appserver.AcquireTunnelLock(p.Cache)
 	if err != nil {
 		t.Fatalf("cancelled tunnel retained lock: %v", err)
 	}

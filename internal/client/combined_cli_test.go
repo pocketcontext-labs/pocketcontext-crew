@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/pocketcontext/sqliteuri"
+	"github.com/pocketcontext-labs/pocketcontext-core/sqliteuri"
 )
 
 // Uses the invitation rehearsal's isolated project and local relay. The server

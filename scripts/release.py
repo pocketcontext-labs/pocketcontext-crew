@@ -30,7 +30,7 @@ PLATFORMS = ("linux_amd64", "linux_arm64", "darwin_arm64", "windows_amd64")
 TAGS = (ROOT / "build-tags.txt").read_text(encoding="utf-8").strip()
 GO_VERSION = "go1.27.3"
 GO_IMAGE = "golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb"
-PACKAGE = "github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
+PACKAGE = "github.com/pocketcontext-labs/pocketcontext-crew/internal/buildinfo"
 VERSION_RE = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 # Generated client setup prompts pin the Crew release clients install.
@@ -103,7 +103,7 @@ def legal_files(directory):
 def third_party_notices(target):
     """License and notice files of linked Go modules, bundled reader packages and runtimes."""
     environment = dict(os.environ, GOOS=target.split("_")[0], GOARCH=target.split("_")[1], CGO_ENABLED="1")
-    packages = json_objects(output(["go", "list", "-deps", "-json", "-tags", TAGS, "./cmd/pocketcontext"], cwd=ROOT, env=environment))
+    packages = json_objects(output(["go", "list", "-deps", "-json", "-tags", TAGS, "./cmd/pocketcontext-crew"], cwd=ROOT, env=environment))
     modules = {}
     for package in packages:
         module = package.get("Module")
@@ -260,7 +260,7 @@ def build(args):
         # native musl compiler; CGO remains enabled for the SQLite authorizer.
         script = f'''apk add --no-cache build-base
 test "$(go env GOVERSION)" = {GO_VERSION}
-CGO_ENABLED=1 go build -trimpath -buildvcs=false -tags "$1" -ldflags "$2" -o /out/pocketcontext-crew ./cmd/pocketcontext
+CGO_ENABLED=1 go build -trimpath -buildvcs=false -tags "$1" -ldflags "$2" -o /out/pocketcontext-crew ./cmd/pocketcontext-crew
 chown "$3:$4" /out/pocketcontext-crew
 '''
         run(["docker", "run", "--rm", "--mount", f"type=bind,src={ROOT},dst=/src,readonly",
@@ -278,7 +278,7 @@ chown "$3:$4" /out/pocketcontext-crew
             environment.update(MACOSX_DEPLOYMENT_TARGET="15.0",
                                CGO_CFLAGS="-mmacosx-version-min=15.0", CGO_LDFLAGS="-mmacosx-version-min=15.0")
         run(["go", "build", "-trimpath", "-buildvcs=false", "-tags", TAGS,
-             "-ldflags", flags, "-o", str(binary), "./cmd/pocketcontext"], cwd=ROOT, env=environment)
+             "-ldflags", flags, "-o", str(binary), "./cmd/pocketcontext-crew"], cwd=ROOT, env=environment)
         if target.startswith("darwin_"):
             run(["codesign", "--force", "--sign", "-", str(binary)])
     verify_binary(binary, target)

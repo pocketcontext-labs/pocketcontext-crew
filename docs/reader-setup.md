@@ -1,6 +1,6 @@
 # Reader setup in desktop and remote sessions
 
-Run `pocketcontext environment` before offering reader sign-in. This offline
+Run `pocketcontext-crew environment` before offering reader sign-in. This offline
 command reports the current session (`desktop`, `ssh`, `headless` or `unknown`),
 browser availability (`available`, `unavailable` or `unknown`) and the reason for
 its assessment. It does not start a server, create a database, issue credentials

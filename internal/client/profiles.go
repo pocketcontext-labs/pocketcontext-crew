@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
+	"github.com/pocketcontext-labs/pocketcontext-core/profiles"
+	"github.com/pocketcontext-labs/pocketcontext-crew/internal/appconfig"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/profiles"
 )
 
 func binaryVersion(path string) (string, error) {
@@ -22,18 +22,18 @@ func binaryVersion(path string) (string, error) {
 		return "", fmt.Errorf("check binary %s: %w", path, err)
 	}
 	fields := strings.Fields(string(b))
-	if len(fields) < 2 || fields[0] != "pocketcontext" {
+	if len(fields) < 2 || !appconfig.KnownApp(fields[0]) {
 		return "", errors.New("binary is not PocketContext")
 	}
 	return fields[1], nil
 }
-func profileTarget(db, url string) (*bundle.Instance, string, error) {
+func profileTarget(db, url string) (*appserver.Instance, string, error) {
 	if db != "" {
-		p, err := bundle.Resolve(db)
+		p, err := appconfig.Runtime.Resolve(db)
 		if err != nil {
 			return nil, "", err
 		}
-		i, err := bundle.Health(p)
+		i, err := appserver.Health(p)
 		if err != nil {
 			return nil, p.DB, err
 		}
@@ -82,7 +82,7 @@ func newProfile(name, db, url, binary, skill string) (profiles.Entry, error) {
 		return e, errors.New("server has no name; pass a profile name")
 	}
 	if skill == "" {
-		skill, err = profiles.SkillDir(i.Instance)
+		skill, err = appconfig.Profiles.SkillDir(i.Instance)
 	} else {
 		skill, err = filepath.Abs(skill)
 	}
@@ -126,7 +126,7 @@ func checkProfile(e profiles.Entry) error {
 
 // checkProfileServer compares the selected profile, not the verifier binary: a
 // current router must still be able to verify a healthy legacy project.
-func checkProfileServer(e profiles.Entry, i *bundle.Instance) error {
+func checkProfileServer(e profiles.Entry, i *appserver.Instance) error {
 	if i.Version != e.Version {
 		return fmt.Errorf("profile %q binary version %s differs from running server %s; stop and restart with the selected release", e.Name, e.Version, i.Version)
 	}
@@ -138,7 +138,7 @@ func checkProfileServer(e profiles.Entry, i *bundle.Instance) error {
 
 // checkRegisteredTarget verifies any registration for this endpoint before domain operations.
 func checkRegisteredTarget(db, url string) error {
-	r, err := profiles.Read()
+	r, err := appconfig.Profiles.Read()
 	if err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func runProfile(a *args, pretty bool) error {
 	}
 	switch sub {
 	case "list":
-		r, err := profiles.Read()
+		r, err := appconfig.Profiles.Read()
 		if err != nil {
 			return err
 		}
@@ -178,21 +178,21 @@ func runProfile(a *args, pretty bool) error {
 			}
 			rows = append(rows, row)
 		}
-		path, _ := profiles.Path()
+		path, _ := appconfig.Profiles.Path()
 		Print(map[string]any{"format": r.Format, "registry": path, "default": r.Default, "profiles": rows}, pretty)
 		return nil
 	case "remove":
 		if name == "" {
 			return fail(2, "profile remove NAME")
 		}
-		if err := profiles.Remove(name); err != nil {
+		if err := appconfig.Profiles.Remove(name); err != nil {
 			return err
 		}
 		Print(map[string]any{"removed": name, "dataRemoved": false}, pretty)
 		return nil
 	case "default":
 		if name == "" {
-			r, err := profiles.Read()
+			r, err := appconfig.Profiles.Read()
 			if err != nil {
 				return err
 			}
@@ -202,13 +202,13 @@ func runProfile(a *args, pretty bool) error {
 		if name == "none" {
 			name = ""
 		}
-		if err := profiles.Default(name); err != nil {
+		if err := appconfig.Profiles.Default(name); err != nil {
 			return err
 		}
 		Print(map[string]any{"default": name}, pretty)
 		return nil
 	case "check":
-		r, err := profiles.Read()
+		r, err := appconfig.Profiles.Read()
 		if err != nil {
 			return err
 		}
@@ -228,7 +228,7 @@ func runProfile(a *args, pretty bool) error {
 		binary, skill := a.flags["binary"], a.flags["skill-dir"]
 		var old *profiles.Entry
 		if sub == "update" {
-			r, err := profiles.Read()
+			r, err := appconfig.Profiles.Read()
 			if err != nil {
 				return err
 			}
@@ -254,7 +254,7 @@ func runProfile(a *args, pretty bool) error {
 			return fail(2, "choose --db or --url")
 		}
 		if db == "" && url == "" {
-			p, err := bundle.Resolve("")
+			p, err := appconfig.Runtime.Resolve("")
 			if err != nil {
 				return err
 			}
@@ -270,7 +270,7 @@ func runProfile(a *args, pretty bool) error {
 		if _, err := os.Stat(filepath.Join(e.Skill, "SKILL.md")); err != nil {
 			return fail(2, "skill is missing; run the project's skill command or pass --skill-dir for a legacy skill")
 		}
-		if err := profiles.Put(e, sub == "update"); err != nil {
+		if err := appconfig.Profiles.Put(e, sub == "update"); err != nil {
 			return err
 		}
 		Print(e, pretty)

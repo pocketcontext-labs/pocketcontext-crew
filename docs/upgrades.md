@@ -1,5 +1,55 @@
 # Crew upgrades and rollback
 
+## Crew 0.8.x to 0.9.0 (agent runbook)
+
+No data migration. The database, `pocketcontext.json`, `storage/`, `legacy-knowledge/`
+and the private cache are unchanged. New: skill directory `pocketcontext-crew`, registry
+`<config>/pocketcontext-crew/`, default port 8099 for new projects only (saved ports stay).
+
+Work one computer at a time and do not reorder: **stop, confirm flush, back up, upgrade,
+verify.** Never run `init` on an existing project. Never put passwords, tokens or local
+keys in chat. Keep `crew-webhook.key` in the cache: do not delete the cache to troubleshoot.
+
+1. Inventory (read-only): record the executable path and `--version`, each project's
+   `status --db DB`, paired clients and any service manager that owns the server. Stage
+   the new release outside the synced folder, verify its checksums and run
+   `pocketcontext-crew upgrade-check --db DB --from 0.8.0 --inventory`.
+2. Order: stop each paired client's forward first but upgrade clients after the server;
+   a client and server must report the same release.
+3. Stop with the old binary (`tunnel stop --url URL`, then `stop --db DB`) or the owning
+   service manager. Do not kill the process; the final write-back happens on the graceful
+   path. Never use `--take-over` to work around this.
+4. Confirm flush: `pocketcontext-crew upgrade-check --db DB --from 0.8.0` must report
+   `ready`, and the sync client must be idle. If a block reports unsaved changes, start
+   once with the old binary and stop it; if it reports a conflict, follow `recover`.
+5. Back up the complete stopped project to a separate destination outside the synced
+   folder: `pocketcontext.db`, `pocketcontext.json`, `storage/`, `legacy-knowledge/` and
+   the matching binary. Record the database checksum. Never copy cache working files,
+   tokens or local keys.
+6. Upgrade: `CREW_REPLACE_VERSION=0.8.0 sh install.sh /absolute/project` (PowerShell:
+   set `CREW_INSTALL_DIR` and `CREW_REPLACE_VERSION`). The installer refuses a folder with
+   a database and no Crew executable. Then `ensure-running --db DB` and
+   `skill --db DB`.
+7. Verify: `upgrade-check` is ready; `status` shows the same instance and port; `whoami`;
+   `read '{"collection":"notes"}' --db DB` returns a known note; the reader opens.
+8. Paired clients, after the server verifies: upgrade, `tunnel forward --url URL
+   --background`, `skill --url URL`, `whoami --url URL`. Do not rotate the tunnel address.
+9. Clean-up: remove the old `~/.claude/skills/pocketcontext` (and Codex/Antigravity
+   equivalents) only after PocketContext Atlas has also moved on that computer; other
+   products may still rely on it.
+
+Rollback before any write through 0.9.0: stop it, restore the old binary and start. After
+writes: stop, restore the complete backup with its matching binary, verify identity before
+any write. Never force an older release past a refused database.
+
+**Hosted instances.** No operator step changes. Delivery is the normal path: the workflow
+sends the immutable digest to the restricted deploy command, `pocketcontext-container
+prepare-upgrade` runs in the old container and verifies a complete backup, stop-first
+replacement then updates the same ONCE application in place with `once update` on its
+existing volume (no restore and no new volume). The image still ships
+`pocketcontext-container`, `/storage`, `pocketcontext.db`, `pocketcontext.json`,
+`POCKETCONTEXT_*`, the backup format and `/up`.
+
 ## Crew 0.2.0 standalone migration
 
 This release removes inherited PocketContext knowledge collections and exposes

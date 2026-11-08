@@ -10,7 +10,7 @@ Crew is a separate product derived from PocketContext source
 schema and application UI. Use a new project database; do not point it at an
 existing PocketContext installation. Crew has no spaces or inherited knowledge APIs. Notes need no publication run.
 
-See [Crew 0.8.0 release notes](docs/releases/0.8.0.md) for the agent commands
+See [Crew 0.9.0 release notes](docs/releases/0.9.0.md) for the move to `pocketcontext-core` and [Crew 0.8.0](docs/releases/0.8.0.md) for the agent commands
 `read`, `search`, `schema`, `query` and `write`, which give installs without a
 domain the same agent path through the CLI and the installed skill, locally and
 on tunnel-paired computers. [Crew 0.7.0](docs/releases/0.7.0.md) added opt-in
@@ -119,10 +119,10 @@ pnpm install --frozen-lockfile
 pnpm test
 pnpm build
 cd ..
-CGO_ENABLED=1 go build -tags "$(cat build-tags.txt)" -o bin/pocketcontext ./cmd/pocketcontext
+CGO_ENABLED=1 go build -tags "$(cat build-tags.txt)" -o bin/pocketcontext-crew ./cmd/pocketcontext-crew
 CGO_ENABLED=1 go test -tags "$(cat build-tags.txt)" ./...
-python3 tests/crew_e2e.py --binary bin/pocketcontext
-python3 tests/e2e.py --binary bin/pocketcontext
+python3 tests/crew_e2e.py --binary bin/pocketcontext-crew
+python3 tests/e2e.py --binary bin/pocketcontext-crew
 ```
 
 Use synthetic records and a temporary project for development. Hosted production

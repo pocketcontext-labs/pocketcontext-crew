@@ -1,17 +1,16 @@
 package client
 
 import (
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
 	"net/url"
 	"strings"
-
-	"github.com/pocketcontext-labs/pocketcontext-crew/internal/bundle"
 )
 
 // skippedReader decides before resolving a project, starting a server, enabling
 // TCP, loading authentication, or minting a browser code. Explicit --no-browser
 // means the caller has established that the user can reach this endpoint.
 func skippedReader(noBrowser, skipReader bool) map[string]any {
-	environment := bundle.ReaderEnvironment()
+	environment := appserver.ReaderEnvironment()
 	if !skipReader && (noBrowser || environment.CanOpen()) {
 		return nil
 	}
@@ -34,7 +33,7 @@ func readerHandoff(base, link string, noBrowser bool) map[string]any {
 	out := map[string]any{"url": base, "signInLink": link, "readerSkipped": false,
 		"browserLaunchRequested": false, "note": "Single-use reader sign-in link, valid for 2 minutes. Use a browser with verified access to this computer's loopback endpoint."}
 	if !noBrowser {
-		if err := bundle.OpenBrowser(link); err != nil {
+		if err := appserver.OpenBrowser(link); err != nil {
 			out["note"] = "Browser launcher did not accept the request. Use signInLink only in a browser with verified access to this endpoint; otherwise continue client setup on the user's computer."
 		} else {
 			out["browserLaunchRequested"] = true
@@ -44,14 +43,14 @@ func readerHandoff(base, link string, noBrowser bool) map[string]any {
 	return out
 }
 
-func openLocalReader(p *bundle.Project, noBrowser bool) (map[string]any, error) {
-	if err := bundle.EnsureRunning(p, bundle.StartOptions{}); err != nil {
+func openLocalReader(p *appserver.Project, noBrowser bool) (map[string]any, error) {
+	if err := appserver.EnsureRunning(p, appserver.StartOptions{}); err != nil {
 		return nil, err
 	}
-	if err := bundle.EnableTCP(p); err != nil {
+	if err := appserver.EnableTCP(p); err != nil {
 		return nil, err
 	}
-	data, err := bundle.LocalCall(p, "/api/bundle/login-code", map[string]any{})
+	data, err := appserver.LocalCall(p, "/api/bundle/login-code", map[string]any{})
 	if err != nil {
 		return nil, err
 	}
