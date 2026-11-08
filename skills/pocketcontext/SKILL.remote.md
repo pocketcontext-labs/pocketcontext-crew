@@ -1,6 +1,6 @@
 ---
 name: pocketcontext
-description: Connect to an existing PocketContext Crew instance and use its MCP tools for shared memory, tasks and human review.
+description: Connect to an existing PocketContext Crew instance and use its CLI commands or MCP tools for shared memory, tasks and human review.
 ---
 
 # PocketContext Crew (remote)
@@ -16,19 +16,47 @@ Read [reader setup](references/reader-setup.md) before opening the reader.
 
 ## Work with Crew
 
-Connect the external assistant to this instance's authenticated `/mcp` endpoint.
-Use `crew_read`, `crew_search`, `crew_schema`, `crew_query` and `crew_write` for
-agent operations. There are no spaces, knowledge ingestion, page publication or
-generic record-write tools; SQL is read-only.
-Read [retrieval](references/retrieval.md) to keep reads compact.
+Use the CLI work commands with the absolute binary and `--url "{{URL}}"`. Each
+takes one JSON object, the same input as the matching MCP tool, as an argument or `-`
+to read it from standard input (prefer `-` on Windows and for long text):
+
+| Command | MCP tool | Use |
+| --- | --- | --- |
+| `read JSON\|-` | crew_read | filtered, projected reads; collection capabilities |
+| `search JSON\|-` | crew_search | ranked notes/tasks by topic |
+| `schema` | crew_schema | SQL views and limits (no input) |
+| `query JSON\|-` | crew_query | one bounded read-only SQL statement |
+| `write JSON\|-` | crew_write | revision-checked agent writes and review requests |
+
+```sh
+"{{BINARY}}" read --url "{{URL}}" '{"collection":"capabilities"}'
+printf '%s' "$JSON" | "{{BINARY}}" write --url "{{URL}}" -
+```
+
+When the assistant is instead connected to this instance's authenticated HTTPS
+`/mcp` endpoint, use the MCP tools with the same JSON. There are no spaces,
+knowledge ingestion, page publication or generic record-write commands; SQL is
+read-only. Read [retrieval](references/retrieval.md) to keep reads compact.
+
+The commands act with the owner's authority through this paired computer's
+saved session. `write` always uses the agent route, so the server refuses owner
+decisions, bucket archival and agent deactivation there, but the human-review
+boundary is enforced only for OAuth MCP clients. Leave those decisions to the
+owner in the reader; never reach for owner routes or credentials yourself.
+
+Output is JSON on stdout. Exit 2 is invalid input (fix the JSON). Exit 1 with
+HTTP 403 is an owner-only refusal; a 429 names the seconds to wait. Exit 4 is
+HTTP 409: the last stderr line says either "another request changed the record
+first" (reread, reassess, then retry) or "Crew refused this operation (CODE)"
+(do not retry it unchanged).
 
 Read your agent brief, relevant buckets and current task before writing. Bucket
 responsibility is a behavioral convention: read all, write your bucket, request
 changes elsewhere through tasks. It does not grant credentials or isolate data.
 Reported agent names are attribution, not authenticated identity.
 
-Read collection capabilities once for versioned operation schemas (wake runs use the
-compact execution subset below). If a cached
+Read collection capabilities once (`read`, crew_read) for versioned operation
+schemas (wake runs use the compact execution subset below). If a cached
 connector omits execution/idempotency_key, use data._crew as documented there;
 never fall back to unfenced writes. Other read collections: agents, buckets, notes, note_revisions, tasks, events, reviews,
 webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings,
@@ -58,16 +86,18 @@ constructing operations. Administration commands are separate from agent work.
 Tasks default to waiting. Explicitly set `readiness: "ready"` on creation or update
 when work can start; assignment alone does not make a task actionable. Use
 `waiting_reason` for prerequisites. Pending review blocks wakes; editing a pending
-draft withdraws review and leaves the task waiting. Your comments through MCP never
-wake anyone; only owner browser comments can (opt-in `comment` reason). Repeated
-agent reassignments past the owner's `max_bot_handoffs` stop the task as Waiting;
+draft withdraws review and leaves the task waiting. Your comments (CLI or MCP)
+never wake anyone; only owner browser comments can (opt-in `comment` reason).
+Repeated agent reassignments past the owner's `max_bot_handoffs` stop the task as Waiting;
 do not try to set it Ready again, report it to the owner.
 
 Use one global webhook hosted by an existing bot's dispatcher routine. Reuse the
 agent and integration; configure the dispatcher selection, bot mappings and
-versioned routine instructions through MCP. The owner copies the URL and secret
-from Grok directly into Crew's browser form. Never ask for those values in chat
-or pass them through MCP. Saving and enabling do not replay existing tasks.
+versioned routine instructions with `write` or crew_write. The owner copies the
+URL and secret from Grok directly into Crew's browser form. Never ask for those values in chat
+or pass them through the CLI or MCP. Saving and enabling do not replay existing
+tasks. The dispatcher answers wakes through public HTTPS MCP; an install without
+a domain cannot receive answers from cloud bots.
 
 Apply the canonical instructions to the routine using supported harness tools,
 then report the applied revision. Only claim matching readback if the saved text
@@ -76,11 +106,11 @@ verification of Grok. Report missing mappings or unsupported harness capabilitie
 Read [webhook operations](references/webhooks.md) before configuring delivery or
 executing webhook-triggered work. Synthetic tests do not certify Grok Bot.
 
-For webhook-triggered work, read the compact `crew_read` capabilities with
-`id: "execution"` (skip it when you already hold the payload's
+For webhook-triggered work, read the compact capabilities (`read`, crew_read)
+with `id: "execution"` (skip it when you already hold the payload's
 `capabilities_digest`), then use execution.begin and its returned next_step and
-proof. Protocol steps never use crew_search, crew_schema or crew_query; task work
-reads compactly. Reread once and reassess only on a plain revision conflict; other
+proof. Protocol steps never use search, schema or query (crew_search,
+crew_schema, crew_query); task work reads compactly. Reread once and reassess only on a plain revision conflict; other
 refusals such as `handoff_limited` or `execution_required` are not retried
 unchanged. On replayed/reconcile responses, do not send or resume work; reconcile the
 current record first. Governed tasks require proof even before acquisition; only an explicit

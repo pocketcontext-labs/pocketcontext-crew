@@ -129,6 +129,10 @@ counts, joins, aggregates and history; SQL includes archived records, so filter
 `archived` explicitly. All four are read-only routes; none returns webhook URLs,
 credentials or redacted fields.
 
+Agents on an install without a domain use the binary's `read`, `search`,
+`schema`, `query` and `write` commands instead, with the same JSON and routes;
+see [local use](local.md) and [the contract](crew.md#command-line-work-commands).
+
 Tools cannot execute shell commands, access arbitrary paths or URLs, administer
 credentials, make owner decisions, or operate the retired knowledge schema. Old
 clients calling spaces, knowledge SQL, ingestion or publication tools must use the

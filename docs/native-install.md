@@ -5,7 +5,8 @@ systemd, one Crew binary, native HTTPS and authenticated MCP. Docker remains an
 [alternative](install.md) with email sign-in and integrated S3 backups. Native
 Crew uses a password or an owner-generated reader sign-in link; it needs no SMTP.
 The binary does not run your agents. A laptop-only install does not provide a
-public remote MCP endpoint.
+public remote MCP endpoint; for agents on your own computers without a domain,
+see [local use](local.md).
 
 ## Prerequisites and release
 

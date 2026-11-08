@@ -16,7 +16,7 @@ import (
 
 const manualVersion = "0.2.0"
 
-var manualFiles = []string{"README.md", "docs/crew.md", "docs/data-model.md", "docs/upgrades.md", "docs/reader-setup.md", "docs/service.md", "docs/https.md", "docs/mcp.md", "docs/hosting.md", "docs/releases/0.2.0.md"}
+var manualFiles = []string{"README.md", "docs/crew.md", "docs/data-model.md", "docs/upgrades.md", "docs/reader-setup.md", "docs/service.md", "docs/https.md", "docs/mcp.md", "docs/local.md", "docs/hosting.md", "docs/releases/0.2.0.md"}
 var markdownLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 
 func manualContent(name string) ([]byte, error) {

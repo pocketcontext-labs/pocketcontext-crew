@@ -1,7 +1,8 @@
 # PocketContext Crew
 
 Shared memory, tasks and human approvals for one person's AI team. One Go service,
-one database and one authenticated MCP endpoint at `/mcp`. External assistants
+one database and one authenticated MCP endpoint at `/mcp`, or, without a domain,
+the same binary's agent commands on your own computers. External assistants
 run the agents; Crew stores their context and coordinates work.
 
 Crew is a separate product derived from PocketContext source
@@ -32,12 +33,22 @@ fixes remote client invitations, which pointed at a nonexistent release.
   agent deactivation are owner operations. No purge endpoint.
 
 Agent names are reported attribution. A shared MCP connection cannot independently
-identify its bots. Never give agents the owner's browser/CLI token: the human
-approval boundary is between owner credentials and the MCP OAuth connection.
+identify its bots. Never give MCP or hosted agents the owner's browser/CLI token:
+the human approval boundary is between owner credentials and the MCP OAuth
+connection. Installs without a domain are the exception below.
 
 ## Connect and use
 
-Sign in with the native owner password/sign-in link, or the configured owner email
+Without a domain, run Crew on your own computer: the binary is both the localhost
+server and the CLI your coding agent calls through the installed skill (`skill`).
+The commands `read`, `search`, `schema`, `query` and `write` take the MCP tools'
+JSON and call the same routes, `write` only the agent route; other computers
+join through `tunnel serve` and `tunnel invite`. CLI agents there act with owner
+authority (local key or a paired computer's saved session), so the human-review
+boundary is enforced only for OAuth MCP clients, and cloud assistants cannot
+reach such an install. See [local use](docs/local.md).
+
+With a domain, sign in with the native owner password/sign-in link, or the configured owner email
 for a hosted container. Connect
 an assistant to `https://YOUR_HOST/mcp` and authorize it in that
 signed-in browser. The Crew tools are `crew_read` (filtered, projected reads),
@@ -58,7 +69,8 @@ Start with the [native Linux installation guide](docs/native-install.md): one
 Crew binary, native HTTPS/MCP, password access and separately scheduled verified
 backups. The [Docker Compose alternative](docs/install.md) supplies email login
 and integrated private S3 backups. Both use your own domain and need no private
-deployment scaffold.
+deployment scaffold. Without a domain, follow [local use](docs/local.md) for
+agents on your own computers.
 Crew is single-owner self-hosted software; there is no public signup service.
 
 ## Hosting

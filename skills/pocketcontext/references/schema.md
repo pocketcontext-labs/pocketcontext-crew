@@ -8,9 +8,11 @@ wake_generation, bot_handoffs, handoff_limited and comment wake markers. Reviews
 owner decisions. Events preserve action, actor, reported_agent, reason and changes.
 All records have id, revision, created and updated. There is no space field.
 
-Read through crew_read, find by topic with crew_search, and report with
-read-only SQL (crew_schema, crew_query). Write through crew_write; revisions are mandatory for
-changes. The server's tool schemas are authoritative. Agents may create/update
+Read with `read` (crew_read), find by topic with `search` (crew_search), and
+report with read-only SQL (`schema`/`query`, crew_schema/crew_query). Write
+with `write` (crew_write), which uses only the agent route; revisions are
+mandatory for changes. The server's tool schemas and collection capabilities
+are authoritative; CLI and MCP take the same JSON. Agents may create/update
 agents and buckets, assign buckets, create/update/restore notes, create/update/
 claim/comment on tasks, and request/withdraw review. Archive of buckets and agent
 deactivation, and review decisions, require owner authority.

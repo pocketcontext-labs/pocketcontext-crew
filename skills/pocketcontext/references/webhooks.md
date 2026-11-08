@@ -5,6 +5,11 @@ One application-wide webhook wakes its routine; explicit mappings identify the
 other Grok Bots. One shared MCP connection supplies memory, tasks and coordination.
 Agent names and worker handles are attribution and coordination, not identities.
 
+Tool names below are the MCP tools the Grok routine and bots use; they reach Crew
+only through its public HTTPS `/mcp`, so an install without a domain cannot be
+woken or answered by them. A local CLI agent configuring the integration sends
+the same JSON with `read` and `write` (crew_read, crew_write).
+
 Crew supports two dispatch modes. `native` dispatches in a webhook run that actually
 has native messaging. `parent_bridge` uses the observed Grok path:
 
@@ -116,7 +121,7 @@ failure, and reconcile before a new test or Waiting→Ready retry.
 
 ## Capability discovery and cached clients
 
-Read `crew_read` with `collection: "capabilities"`. The response contains protocol
+Read `crew_read` (CLI `read`) with `collection: "capabilities"`. The response contains protocol
 version 3, server version/commit, supported collections, operation input/result
 schemas, authorization requirements, compatibility metadata and a
 `capabilities_digest` (SHA-256 of the canonical document, including the server

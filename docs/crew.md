@@ -76,12 +76,42 @@ and multiple statements are rejected. Limits: 2 seconds, 1000 rows and 1 MiB per
 result, 64 KiB of SQL. Prefer crew_read filters and crew_search for ordinary
 lookups; use SQL for counts, joins, aggregates and history.
 
-`POST /api/crew/write` is the owner path. MCP only forwards to
-`POST /api/crew/agent-write`, which denies decisions, bucket archival
+`POST /api/crew/write` is the owner path. MCP and the CLI `write` command only
+forward to `POST /api/crew/agent-write`, which denies decisions, bucket archival
 and agent deactivation. All use the same transaction and revision checks.
 MCP OAuth credentials cannot authenticate ordinary REST; internal owner-account
 tokens are never returned by MCP. Direct owner credentials carry owner authority
-and must not be shared with agents. Claimed agent names never grant authority.
+and must not be shared with MCP or hosted agents; installs without a domain are
+the exception described below. Claimed agent names never grant authority.
+
+## Command-line work commands
+
+The binary's `read`, `search`, `schema`, `query` and `write` commands are the
+agent path for installs without a domain (see [local use](local.md)). They take
+the MCP tool's input as one JSON object (argument, or `-` for standard input),
+validate it against the same schema before any request, and share the MCP
+request builders:
+
+| Command  | MCP tool    | Route                        |
+| -------- | ----------- | ---------------------------- |
+| `read`   | crew_read   | `POST /api/crew/read`        |
+| `search` | crew_search | `POST /api/crew/search`      |
+| `schema` | crew_schema | `GET /api/crew/schema`       |
+| `query`  | crew_query  | `POST /api/crew/query`       |
+| `write`  | crew_write  | `POST /api/crew/agent-write` |
+
+They run locally with `--db` (the local key; the server starts if needed) or on
+a tunnel-paired computer with `--url` (its saved session token). `write` never
+uses the owner route, so CLI writes behave like MCP agent writes: events record
+an `mcp:` actor, comments never wake, reassignments count toward
+`max_bot_handoffs`, and owner decisions, bucket archival, agent deactivation and
+credential entry are refused (HTTP 403, exit 1). On these installs CLI agents
+act with owner authority, because the credential they use is the owner's; the
+human-review boundary is enforced only for OAuth MCP clients. Output is JSON on
+stdout. Invalid input exits 2; HTTP 409 exits 4, and the last stderr line
+distinguishes a revision conflict (reread, reassess, retry) from a refusal with
+a reason code such as `execution_required` or `handoff_limited` (do not retry
+unchanged). There is no local MCP endpoint and no unauthenticated route.
 
 Writes have action, optional id/expected_revision/reported_agent/reason, and data.
 Actions: agent.create/update; bucket.create/update/assign; note.create/update/restore;
