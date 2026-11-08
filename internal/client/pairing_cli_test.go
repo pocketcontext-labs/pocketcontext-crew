@@ -273,6 +273,12 @@ func TestInvitationCLIRehearsal(t *testing.T) {
 	if err != nil || response.StatusCode != 200 || buckets.Items == nil {
 		t.Fatalf("paired session cannot read Crew buckets: status=%d error=%v", response.StatusCode, err)
 	}
+	// The paired computer's agent commands use the saved session through the tunnel.
+	created := run(clientEnv, `{"action":"bucket.create","reported_agent":"Paired agent","data":{"name":"Paired"}}`, "write", "--url", url, "-")
+	listed := run(clientEnv, "", "read", "--url", url, `{"collection":"buckets","fields":["name"]}`)
+	if items, _ := listed["items"].([]any); len(items) != 1 || dig(items[0], "id") != created["id"] || dig(items[0], "name") != "Paired" {
+		t.Fatalf("paired CLI read: %v", listed)
+	}
 	run(clientEnv, "", "skill", "--url", url)
 	run(clientEnv, "", "profile", "check", "Pairing rehearsal")
 	if run(serverEnv, "", "status", "--db", db)["headless"] != true {
