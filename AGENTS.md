@@ -28,7 +28,8 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   backup/restore gates before deployment. Deploy the exact tested OCI digest;
   a desired `:latest` reference must resolve to a digest before replacement.
 - No databases, generated ui/dist, bin, credentials or user data in commits.
-- Historical upstream docs describe inherited infrastructure, not a Crew release.
+- Historical upstream docs (docs/releases/upstream/, docs/release-validation-*)
+  describe inherited infrastructure, not a Crew release.
 
 - Crew has no spaces or inherited knowledge APIs. Upgrades must verify a private
   legacy-knowledge archive before retiring populated knowledge collections.
