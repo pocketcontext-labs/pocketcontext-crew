@@ -37,7 +37,10 @@ jobs:
         run: |
           ! grep -q '^replace' go.mod
           test -z "$(go env GOWORK)"
-          diff build-tags.txt "$(go list -m -f '{{.Dir}}' github.com/pocketcontext-labs/pocketcontext-core)/build-tags.txt"
+          go mod download github.com/pocketcontext-labs/pocketcontext-core
+          core=$(go list -m -f '{{.Dir}}' github.com/pocketcontext-labs/pocketcontext-core)
+          test -n "$core"
+          diff --strip-trailing-cr build-tags.txt "$core/build-tags.txt"
       - name: Launcher tests
         run: |
           node --test tests/dev_launcher.test.mjs
