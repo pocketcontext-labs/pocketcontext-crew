@@ -5,6 +5,7 @@ Pass --previous-binary for a verified 0.8.0 executable; otherwise the pinned
 release archive is fetched and its checksum verified. Standard library only.
 """
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -122,7 +123,7 @@ def rehearse(target, previous, root):
     assert set(config_after) >= set(json.loads(config_before))
     # No migration added by the identity change: same applied ledger.
     def migrations(path):
-        with sqlite3.connect(f'file:{path}?mode=ro', uri=True) as db:
+        with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
             return sorted(row[0] for row in db.execute('SELECT file FROM _migrations'))
     assert migrations(project / 'pocketcontext.db') == migrations(backup / 'pocketcontext.db')
 
