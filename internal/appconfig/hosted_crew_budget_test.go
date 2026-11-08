@@ -1,5 +1,3 @@
-//go:build crew_core_testkit
-
 package appconfig
 
 import (

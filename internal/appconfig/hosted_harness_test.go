@@ -1,11 +1,3 @@
-//go:build crew_core_testkit
-
-// These tests compose Crew around core's appserver.TestServer, which needs a
-// newer core release than the one Crew ships. They compile only with the
-// crew_core_testkit build tag and -modfile=tests/core-testkit.mod, so go.mod and
-// the production binary are unaffected. Run them with:
-//
-//	CGO_ENABLED=1 go test -modfile=tests/core-testkit.mod -tags "$(cat build-tags.txt),crew_core_testkit" ./internal/appconfig
 package appconfig
 
 import (

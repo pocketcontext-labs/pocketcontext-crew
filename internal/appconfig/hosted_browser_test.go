@@ -1,5 +1,3 @@
-//go:build crew_core_testkit
-
 package appconfig
 
 import (
@@ -21,7 +19,8 @@ import (
 	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
 )
 
-// Opt-in: POCKETCONTEXT_HOSTED_BROWSER_TEST=1 with the command in core_testkit_test.go.
+// Opt-in integration check. Build ui/dist and install ui's Playwright Chromium first, then run:
+// POCKETCONTEXT_HOSTED_BROWSER_TEST=1 go test -tags "$(cat build-tags.txt)" ./internal/appconfig -run TestHostedEmailBrowser -count=1
 func TestHostedEmailBrowser(t *testing.T) {
 	if os.Getenv("POCKETCONTEXT_HOSTED_BROWSER_TEST") != "1" {
 		t.Skip("opt-in hosted email browser test")

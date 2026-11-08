@@ -1,5 +1,3 @@
-//go:build crew_core_testkit
-
 package appconfig
 
 import (
@@ -18,7 +16,7 @@ import (
 
 // Opt-in integration check: ordinary Go tests do not require Node or browsers.
 // Build ui/dist and install ui's Playwright Chromium first, then run:
-// POCKETCONTEXT_HTTPS_BROWSER_TEST=1 go test -modfile=tests/core-testkit.mod -tags "$(cat build-tags.txt),crew_core_testkit" ./internal/appconfig -run TestPublicHTTPSPhoneBrowser -count=1
+// POCKETCONTEXT_HTTPS_BROWSER_TEST=1 go test -tags "$(cat build-tags.txt)" ./internal/appconfig -run TestPublicHTTPSPhoneBrowser -count=1
 func TestPublicHTTPSPhoneBrowser(t *testing.T) {
 	if os.Getenv("POCKETCONTEXT_HTTPS_BROWSER_TEST") != "1" {
 		t.Skip("opt-in Playwright phone browser test")
