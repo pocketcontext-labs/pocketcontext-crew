@@ -55,7 +55,7 @@ try {
  await dialog().getByRole('button',{name:/Submit saved draft/}).click();await saved();
  await page.locator('.crew-human').filter({hasText:'Human'}).waitFor();
  await snap('crew-board-desktop');
- await page.getByRole('button',{name:/Human approvals/}).click();
+ await page.getByRole('button',{name:/^Approvals/}).click();
  await page.getByRole('button',{name:/Review exact draft/}).click();
  assert.equal(await dialog().locator('.crew-draft-snapshot').innerText(),'A synthetic draft for the owner to publish manually.');
  await dialog().getByLabel('Decision note').fill('Ready for manual publishing.');
@@ -89,7 +89,7 @@ try {
  await snap('crew-parent-bridge-setup');
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:900});
-  for(const name of ['AI Team','Shared memory','Human approvals','Agents','Archive']){
+  for(const name of ['AI Team','Shared memory','Approvals','Agents','Archive']){
    await page.getByRole('navigation').getByRole('button',{name:new RegExp('^'+name)}).click();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
   }

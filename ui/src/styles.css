@@ -101,6 +101,12 @@ select {
   width: 360px;
   max-width: 100%;
 }
+.login-card .crew-logo {
+  margin-bottom: 32px;
+}
+.login-card .crew-logo > strong {
+  margin-bottom: 0;
+}
 .login-card h1 {
   font-family: Georgia, serif;
   font-weight: 400;

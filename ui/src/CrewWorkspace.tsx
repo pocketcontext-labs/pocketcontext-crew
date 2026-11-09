@@ -336,7 +336,7 @@ export default function CrewWorkspace() {
   const nav: [View, string, string][] = [
     ["board", "AI Team", "▦"],
     ["memory", "Shared memory", "▤"],
-    ["reviews", "Human approvals", "✓"],
+    ["reviews", "Approvals", "✓"],
     ["agents", "Agents", "◎"],
     ["archive", "Archive", "↶"],
   ];
@@ -357,7 +357,6 @@ export default function CrewWorkspace() {
           <Brand />
           <strong>Crew</strong>
         </div>
-        <p className="crew-workspace-label">YOUR GTM WORKSPACE</p>
         <nav aria-label="Workspace">
           {nav.map(([key, label, icon]) => (
             <button

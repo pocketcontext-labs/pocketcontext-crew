@@ -82,7 +82,7 @@ it("derives Human from a pending request while preserving the assigned agent", a
 it("approves the exact review snapshot and does not complete or execute the task", async () => {
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: /Human approvals/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Approvals/ }));
   fireEvent.click(screen.getByRole("button", { name: /Review exact draft/ }));
   const dialog = screen.getByRole("dialog");
   expect(within(dialog).getByText("The submitted draft")).toBeInTheDocument();
@@ -161,7 +161,7 @@ it("renders draft Markdown without loading remote images or executing HTML", asy
   ];
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: /Human approvals/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Approvals/ }));
   expect(document.querySelector(".crew-review-list img")).toBeNull();
   expect(document.querySelector(".crew-review-list script")).toBeNull();
   expect(
@@ -174,7 +174,7 @@ it("shows an approval conflict without claiming success or closing the draft", a
   );
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: /Human approvals/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Approvals/ }));
   fireEvent.click(screen.getByRole("button", { name: /Review exact draft/ }));
   fireEvent.click(
     within(screen.getByRole("dialog")).getByRole("button", {

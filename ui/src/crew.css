@@ -82,12 +82,6 @@
   text-transform: uppercase;
   color: #638365;
 }
-.crew-workspace-label {
-  font-size: 10px;
-  letter-spacing: 1.5px;
-  color: #71806e;
-  margin: 0 12px 12px;
-}
 .crew-sidebar nav {
   display: grid;
   gap: 6px;
@@ -890,7 +884,6 @@
     width: 27px;
     height: 27px;
   }
-  .crew-workspace-label,
   .crew-sidebar-bottom {
     display: none;
   }

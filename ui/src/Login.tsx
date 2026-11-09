@@ -106,7 +106,10 @@ export default function Login({
   return (
     <main className="login-shell">
       <section className="login-card">
-        <Brand name="PocketContext Crew" />
+        <div className="crew-logo">
+          <Brand />
+          <strong>Crew</strong>
+        </div>
         {mode === null && !error && (
           <p role="status">Loading sign-in options…</p>
         )}
