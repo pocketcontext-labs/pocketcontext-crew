@@ -32,6 +32,9 @@ try {
   await page.getByLabel('Password', {exact:true}).waitFor();
   await page.goto(signIn);
   await page.waitForURL(`${origin}/`);
+  // A new owner lands on Home, whose New task waits for the earlier setup steps.
+  await page.getByRole('link', {name:'AI Team',exact:true}).click();
+  await page.waitForURL(`${origin}/#/team`);
   await page.getByRole('button', {name:'New task',exact:false}).click();
   await page.getByLabel('Title', {exact:true}).fill('Synthetic phone task');
   await page.getByRole('button', {name:'Save task',exact:true}).click();
@@ -46,6 +49,7 @@ try {
   await fresh.page.getByLabel('Password', {exact:true}).fill('synthetic-password');
   await fresh.page.getByRole('button', {name:'Sign in',exact:true}).click();
   await fresh.page.getByRole('button', {name:'Sign in',exact:true}).waitFor({state:'hidden'});
+  await fresh.page.getByRole('link', {name:'AI Team',exact:true}).click();
   await fresh.page.getByText('Synthetic phone task', {exact:true}).waitFor();
   await fresh.context.close();
   assert.deepEqual(problems,[]);

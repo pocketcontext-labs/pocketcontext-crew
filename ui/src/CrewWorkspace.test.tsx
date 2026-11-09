@@ -279,6 +279,21 @@ it("opens task Markdown in Read and edits it second", async () => {
   fireEvent.click(views.getByRole("tab", { name: "Edit" }));
   expect(dialog.getByLabelText("Description")).toHaveValue("**Bold step**");
 });
+it("gives agents with the same first letter distinct initials", async () => {
+  fixtures.agents = [
+    agent,
+    { id: "agent0000000002", revision: 1, name: "Deploy", brief: "Ships." },
+    { id: "agent0000000003", revision: 1, name: "Design", brief: "Draws." },
+  ];
+  history.replaceState(null, "", "/#/agents");
+  render(<CrewWorkspace />);
+  const card = async (name: string) =>
+    (await screen.findByRole("heading", { name })).closest("button")!;
+  expect((await card("Deploy")).querySelector(".crew-avatar")).toHaveTextContent(/^Dep$/);
+  expect((await card("Design")).querySelector(".crew-avatar")).toHaveTextContent(/^Des$/);
+  expect((await card("Network")).querySelector(".crew-avatar")).toHaveTextContent(/^N$/);
+  expect(screen.queryByText(/Edit brief and responsibilities/)).toBeNull();
+});
 it("derives Human from a pending request while preserving the assigned agent", async () => {
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });

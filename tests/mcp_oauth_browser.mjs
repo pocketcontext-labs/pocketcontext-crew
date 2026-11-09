@@ -77,6 +77,9 @@ try{
  // Capture Chromium's native-scheme navigation request. No OS handler is
  // installed by this fixture; native-client receipt remains a manual check.
  for(const redirect of ['com.example.app:/oauth/callback','cursor://anysphere.cursor-mcp/oauth/callback']){
+  // Each round makes three rate-limited OAuth requests from one address (10 burst,
+  // one more every 6s). Waiting lets the budget refill, so fast runners don't get 429.
+  await new Promise(resolve=>setTimeout(resolve,18000));
   const registeredNative=await call('/oauth/register',{client_name:'Synthetic native client',redirect_uris:[redirect],token_endpoint_auth_method:'none'});
   assert.equal(registeredNative.status,201);
   const nativeVerifier=randomBytes(32).toString('base64url');

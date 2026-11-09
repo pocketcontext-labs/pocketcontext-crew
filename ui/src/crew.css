@@ -728,8 +728,20 @@ a.crew-logo:hover .product-brand span {
   gap: 16px;
 }
 .crew-app .crew-agent-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
   text-align: left;
   padding: 23px;
+}
+.crew-agent-card .crew-avatar {
+  width: auto;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border-radius: 14px;
+  font-size: 12px;
 }
 .crew-agent-card .crew-avatar {
   width: 35px;

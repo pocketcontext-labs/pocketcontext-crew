@@ -99,6 +99,19 @@ const plainPreview = (markdown: string) =>
     .replace(/\*(\S[^*\n]*)\*/g, "$1")
     .replace(/\n{2,}/g, "\n")
     .trim();
+/** The shortest name prefix (up to three letters) no other agent shares. */
+function agentInitials(name: string, agents: Row[]) {
+  const letters = name.trim();
+  const others = agents
+    .map((agent) => val(agent, "name").trim().toLowerCase())
+    .filter((other) => other !== letters.toLowerCase());
+  for (let size = 1; size < 3; size++) {
+    const prefix = letters.slice(0, size).toLowerCase();
+    if (!others.some((other) => other.startsWith(prefix)))
+      return letters.slice(0, size);
+  }
+  return letters.slice(0, 3);
+}
 function Prose({ children }: { children: string }) {
   return (
     <div className="crew-prose">
@@ -403,7 +416,8 @@ function Modal({
       e.clientY > box.bottom
     );
   };
-  useEffect(() => {
+  // A layout effect: the dialog is focused in the commit that shows it.
+  useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement;
     ref.current?.showModal?.();
     // showModal focuses the first control; the dialog itself takes focus so
@@ -529,7 +543,9 @@ export default function CrewWorkspace() {
     loadFailed = useRef(false);
   const discardOk = () =>
     !edited.current || window.confirm("Discard your unsaved changes?");
-  useEffect(() => {
+  // A layout effect, so the reset precedes any edit to the newly shown dialog;
+  // a deferred effect could run after the first change and erase it.
+  useLayoutEffect(() => {
     edited.current = false;
   }, [dialog?.kind, dialog?.row?.id]);
   // A silent load is the background refresh: it changes data only when the data
@@ -616,7 +632,7 @@ export default function CrewWorkspace() {
       ? val(dialog.row, "title")
       : "";
   const pageTitle = openTitle || pages.find(([key]) => key === view)?.[1];
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.title = `${pageTitle} · PocketContext Crew`;
     return () => {
       document.title = "PocketContext Crew";
@@ -877,7 +893,9 @@ export default function CrewWorkspace() {
                   ? "YOUR FINAL SAY"
                   : view === "memory"
                     ? "CONTEXT THAT CARRIES FORWARD"
-                    : "FROM SHARED CONTEXT TO FINISHED WORK"}
+                    : view === "agents"
+                      ? "YOUR TEAM"
+                      : "FROM SHARED CONTEXT TO FINISHED WORK"}
               </p>
               <div className="crew-title-row">
                 <h1>{pages.find((x) => x[0] === view)?.[1]}</h1>
@@ -1284,9 +1302,8 @@ export default function CrewWorkspace() {
           {view === "agents" && (
             <>
               <div className="crew-callout">
-                All connected agents can read and write all shared memory. A
-                bucket's responsible agent is a convention, not a permission;
-                each agent's brief says where it should contribute.
+                Every connected agent can read and write all notes. Each agent's
+                brief says where it should add things.
               </div>
               {!data.agents.length && !!data.buckets.length && (
                 <Empty
@@ -1311,11 +1328,10 @@ export default function CrewWorkspace() {
                     onClick={() => setDialog({ kind: "agent", row: x })}
                   >
                     <span className="crew-avatar">
-                      {val(x, "name").slice(0, 1)}
+                      {agentInitials(val(x, "name"), data.agents)}
                     </span>
                     <h2>{val(x, "name")}</h2>
                     <p>{val(x, "brief")}</p>
-                    <small>Edit brief and responsibilities →</small>
                   </button>
                 ))}
               </div>

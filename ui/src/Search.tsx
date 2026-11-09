@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -179,7 +180,9 @@ export function GlobalSearch({
     inputRef.current?.select();
   }, [focusTick]);
 
-  useEffect(() => {
+  // A layout effect: once a dialog is shown, no key can reach a listener that
+  // still thinks the page is free.
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (disabled || e.defaultPrevented || e.altKey) return;
       const shortcut =
