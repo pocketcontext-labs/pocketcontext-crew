@@ -173,3 +173,11 @@ select {
 [hidden] {
   display: none !important;
 }
+/* iOS Safari zooms the page when a focused field's text is under 16px. */
+@media (hover: none) and (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
