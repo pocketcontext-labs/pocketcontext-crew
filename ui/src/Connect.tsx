@@ -176,10 +176,12 @@ function LocalSteps() {
 
 export default function Connect({
   agents,
+  tasks,
   connection,
   copyEndpoint,
 }: {
   agents: Row[];
+  tasks: Row[];
   connection: ConnectionState;
   copyEndpoint: ReactNode;
 }) {
@@ -204,6 +206,7 @@ export default function Connect({
       </p>
       <WebhookStatus
         agents={agents}
+        tasks={tasks}
         collapsible
         mcpUrl={connection.kind === "mcp" ? connection.url : null}
       />

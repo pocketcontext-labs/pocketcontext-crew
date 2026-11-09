@@ -15,8 +15,8 @@ const saved=async()=>{await page.getByRole('status').filter({hasText:'Saved.'}).
 const snap=async name=>{if(process.env.CREW_SCREENSHOTS) await page.screenshot({path:path.join(process.env.CREW_SCREENSHOTS,name+'.png'),fullPage:true});};
 const snapView=async name=>{if(process.env.CREW_SCREENSHOTS) await page.screenshot({path:path.join(process.env.CREW_SCREENSHOTS,name+'.png')});};
 // Exact label matching sees a textarea's own text, so match the label's span.
-const noteBody=()=>dialog().locator('label:has(> span:text-is("Note")) textarea');
-const edit=()=>dialog().getByRole('button',{name:'Edit',exact:true}).click();
+const noteBody=()=>dialog().getByLabel('Note',{exact:true});
+const edit=()=>dialog().getByRole('tab',{name:'Edit',exact:true}).click();
 try {
  await page.goto(base);
  await page.getByLabel('Password',{exact:true}).fill(process.env.CREW_TEST_PASSWORD);
@@ -61,7 +61,7 @@ try {
  await dialog().getByLabel('Description',{exact:true}).fill('Introduce our product in our voice.');
  await dialog().getByLabel('Assigned agent',{exact:true}).selectOption({label:'Network'});
  await dialog().getByLabel('Labels (comma separated)').fill('Network, Launch');
- await dialog().getByLabel('Draft for review (Markdown)').fill('A synthetic draft for the owner to publish manually.');
+ await dialog().getByLabel('Draft for review',{exact:true}).fill('A synthetic draft for the owner to publish manually.');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
  await dialog().getByRole('button',{name:'Send draft for approval'}).click();await saved();
@@ -78,11 +78,16 @@ try {
  await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/In progress/})}).locator('.crew-task-card').count(),1);
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
+ const taskDialogHeight=()=>dialog().evaluate(d=>Math.round(d.getBoundingClientRect().height));
+ const editHeight=await taskDialogHeight();
+ await dialog().getByRole('tab',{name:'Reviews'}).click();
+ assert.equal(await taskDialogHeight(),editHeight,'Reviews tab keeps the dialog height');
  await dialog().getByRole('tab',{name:'Activity'}).click();
+ assert.equal(await taskDialogHeight(),editHeight,'Activity tab keeps the dialog height');
  await dialog().getByLabel('Add a comment').fill('Owner completed the external action manually.');
  await dialog().getByRole('button',{name:'Add comment',exact:true}).click();
  await dialog().getByText('Owner completed the external action manually.',{exact:true}).waitFor();
- await dialog().getByRole('tab',{name:'Edit',exact:true}).click();
+ await dialog().getByRole('tablist',{name:'Record views'}).getByRole('tab',{name:'Edit',exact:true}).click();
  await dialog().getByLabel('Status').selectOption('done');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('.crew-task-card').count(),1);
@@ -101,11 +106,21 @@ try {
  // The select re-renders from the saved integration just after the toast appears.
  await page.waitForFunction(()=>[...document.querySelectorAll('select')].some(s=>s.value==='parent_bridge'),undefined,{timeout:5000});
  assert.equal(await integration.getByRole('combobox',{name:'Dispatch path',exact:true}).inputValue(),'parent_bridge');
+ // One step at a time: close the dispatcher step just used, leaving only the first incomplete one.
+ await integration.getByRole('button',{name:/Choose your dispatcher/}).click();
+ await integration.getByRole('button',{name:'Copy setup prompt',exact:true}).waitFor();
+ assert.equal(await integration.getByLabel('Connection test progress').count(),0,'Future steps show titles only');
+ await snap('crew-parent-bridge-setup');
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'Connect horizontal overflow at 390');
+ await snap('crew-parent-bridge-setup-390');
+ await page.setViewportSize({width:1440,height:1000});
+ await integration.getByRole('button',{name:/Verify the connection/}).click();
  await integration.getByLabel('Connection test progress').waitFor();
  assert.equal(await integration.getByRole('button',{name:'Send test',exact:true}).isDisabled(),true);
+ await integration.getByRole('button',{name:/Enable future notifications/}).click();
  assert.equal(await integration.getByRole('button',{name:'Enable delivery',exact:true}).isDisabled(),true);
  assert.equal(writeActions.includes('webhook.test'),false,'Setup controls unexpectedly sent a test');
- await snap('crew-parent-bridge-setup');
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:900});
   for(const name of ['Home','AI Team','Shared memory','Approvals','Agents','Archive']){
@@ -147,6 +162,19 @@ try {
  assert.deepEqual([sheet.x,sheet.y,sheet.width,sheet.height],[0,0,390,844],'overlay fills the phone screen');
  assert.equal(await dialog().getByRole('button',{name:'Copy link'}).evaluate(e=>e===document.activeElement),false,'Copy link is not focused');
  await snapView('crew-note-read-390');
+ await page.keyboard.press('Escape');
+ await page.setViewportSize({width:1280,height:800});
+ await page.getByRole('button',{name:/Synthetic launch voice/}).click();
+ await dialog().getByRole('tab',{name:'Edit',exact:true}).waitFor();
+ await snapView('crew-note-read-desktop');
+ const noteHeight=await dialog().evaluate(d=>Math.round(d.getBoundingClientRect().height));
+ await edit();
+ assert.equal(await dialog().evaluate(d=>Math.round(d.getBoundingClientRect().height)),noteHeight,'Edit keeps the note dialog height');
+ await dialog().getByRole('tab',{name:'Read',exact:true}).click();
+ await page.keyboard.press('Escape');
+ await page.setViewportSize({width:390,height:844});
+ await page.getByRole('button',{name:/Synthetic launch voice/}).click();
+ await dialog().getByRole('tab',{name:'Edit',exact:true}).waitFor();
  await edit();
  const noteField=noteBody();
  assert.equal(await dialog().getByRole('button',{name:'Save note'}).count(),0,'no Save before an edit');
@@ -207,6 +235,17 @@ try {
  await page.locator('nav a[aria-current=page]').filter({hasText:'Shared memory'}).waitFor();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  assert.equal(await dialog().locator('.crew-prose').innerText(),'Write plainly for independent founders.');await close();
+ await page.setViewportSize({width:1280,height:800});
+ await page.getByRole('link',{name:'AI Team',exact:true}).click();
+ await page.getByRole('button',{name:'New task'}).click();
+ await dialog().getByLabel('Title',{exact:true}).fill('Synthetic long description');
+ await dialog().getByLabel('Description',{exact:true}).fill(Array.from({length:40},(_,i)=>`Synthetic line ${i+1}`).join('\n'));
+ await dialog().getByRole('button',{name:'Save task'}).click();await saved();
+ await page.getByRole('button',{name:/Synthetic long description/}).click();
+ await dialog().getByRole('tablist',{name:'Description view'}).getByRole('tab',{name:'Edit',exact:true}).click();
+ assert.equal(await dialog().getByLabel('Description',{exact:true}).evaluate(e=>e.scrollHeight<=e.clientHeight+2&&e.clientHeight>300),true,'a saved description opens at full height in Edit');
+ await page.keyboard.press('Escape');
+ await dialog().waitFor({state:'hidden'});
  await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);

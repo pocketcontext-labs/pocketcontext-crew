@@ -254,6 +254,31 @@ it("manages connected apps inside Crew and confirms before disconnecting", async
   await screen.findByText("No apps connected yet.");
   expect(revoke).toHaveBeenCalledWith("grant1");
 });
+it("opens task Markdown in Read and edits it second", async () => {
+  history.replaceState(null, "", "/#/tasks/task00000000001");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  const views = within(dialog.getByRole("tablist", { name: "Description view" }));
+  expect(views.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+    "Read",
+    "Edit",
+  ]);
+  expect(views.getByRole("tab", { name: "Read" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(
+    dialog.getByText("Introduce our product", { selector: "p" }),
+  ).toBeInTheDocument();
+  fireEvent.click(views.getByRole("tab", { name: "Edit" }));
+  fireEvent.change(dialog.getByLabelText("Description"), {
+    target: { value: "**Bold step**" },
+  });
+  fireEvent.click(views.getByRole("tab", { name: "Read" }));
+  expect(dialog.getByText("Bold step").tagName).toBe("STRONG");
+  fireEvent.click(views.getByRole("tab", { name: "Edit" }));
+  expect(dialog.getByLabelText("Description")).toHaveValue("**Bold step**");
+});
 it("derives Human from a pending request while preserving the assigned agent", async () => {
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
@@ -299,7 +324,7 @@ it("requires saving a changed draft before submitting it for review", async () =
     within(dialog).getByRole("button", { name: "Send draft for approval" }),
   ).toBeEnabled();
   fireEvent.change(
-    within(dialog).getByLabelText("Draft for review (Markdown)"),
+    within(dialog).getByLabelText("Draft for review"),
     { target: { value: "Different draft" } },
   );
   expect(
@@ -663,6 +688,9 @@ it("shows redacted webhook health without exposing credential fields, URL paths 
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
   await openPage("Connect an agent");
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Enter webhook credentials/ }),
+  );
   await screen.findByText(/Credential: configured/);
   const section = screen.getByRole("region", { name: "Grok Bot integration" });
   expect(section).toHaveTextContent("receiver.example");
@@ -728,7 +756,7 @@ it("shows an existing owner the error when wake-up status cannot load", async ()
   await renderConnect();
   expect(
     await screen.findByText(
-      "Could not load the integration. Refresh to try again.",
+      "Could not load the integration. Crew will try again shortly.",
     ),
   ).toBeInTheDocument();
   expect(screen.queryByRole("button", wakeButton)).toBeNull();
@@ -739,6 +767,8 @@ it("shows the MCP address and connected apps when the server has MCP", async () 
   expect(
     await screen.findByText("https://crew.example/mcp"),
   ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Copy address" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
   expect(
     screen.getByRole("region", { name: "Connected apps" }),
   ).toBeInTheDocument();
@@ -768,6 +798,16 @@ it("shows the skill step on Home without a domain", async () => {
   expect(
     screen.getByRole("button", { name: "I've connected it" }),
   ).toBeInTheDocument();
+});
+
+it("labels the MCP copy button Copy address on Home's connect step", async () => {
+  fixtures = { ...fixtures, tasks: [], reviews: [] };
+  history.replaceState(null, "", "/#/home");
+  render(<CrewWorkspace />);
+  expect(
+    await screen.findByRole("button", { name: "Copy address" }),
+  ).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
 });
 
 it("claims neither setup when the server cannot be checked", async () => {
@@ -1165,7 +1205,7 @@ it("shows an archived note read-only without restore-revision actions", async ()
   expect(dialog.getByRole("status")).toHaveTextContent(
     "This note is archived and read-only.",
   );
-  expect(dialog.queryByRole("button", { name: "Edit" })).toBeNull();
+  expect(dialog.queryByRole("tab", { name: "Edit" })).toBeNull();
   expect(dialog.queryByLabelText("Note")).toBeNull();
   expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
   expect(dialog.queryByRole("button", { name: "Archive note" })).toBeNull();
@@ -1191,7 +1231,7 @@ it("treats a note hidden only by its archived bucket as archived", async () => {
   );
   expect(dialog.getByRole("heading", { name: "Voice guide" })).toBeTruthy();
   expect(dialog.getByText("NETWORK")).toBeInTheDocument();
-  expect(dialog.queryByRole("button", { name: "Edit" })).toBeNull();
+  expect(dialog.queryByRole("tab", { name: "Edit" })).toBeNull();
   expect(dialog.queryByRole("button", { name: "Archive note" })).toBeNull();
 });
 
@@ -1261,16 +1301,19 @@ describe("simple dialogs", () => {
     ).not.toHaveFocus();
   });
 
-  it("opens a note for reading with one Edit button and no tabs", async () => {
+  it("opens a note on Read with Edit as the second tab", async () => {
     const dialog = await openNote();
     expect(
       dialog.getByRole("heading", { name: "Voice guide" }),
     ).toBeInTheDocument();
     expect(dialog.getByText("Clear prose")).toBeInTheDocument();
     expect(dialog.getByText("NETWORK")).toBeInTheDocument();
-    expect(dialog.queryAllByRole("tab")).toHaveLength(0);
+    expect(dialog.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Read",
+      "Edit",
+    ]);
     expect(dialog.queryByLabelText("Title")).toBeNull();
-    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     expect(dialog.getByLabelText("Title")).toHaveValue("Voice guide");
     expect(dialog.getByLabelText("Note")).toHaveValue("Clear prose");
     expect(dialog.queryByLabelText("Bucket")).toBeNull();
@@ -1278,9 +1321,9 @@ describe("simple dialogs", () => {
 
   it("returns from edit to reading when nothing changed", async () => {
     const dialog = await openNote();
-    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
-    fireEvent.click(dialog.getByRole("button", { name: /Back to note/ }));
-    expect(dialog.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
+    fireEvent.click(dialog.getByRole("tab", { name: "Read" }));
+    expect(dialog.getByRole("tab", { name: "Edit" })).toBeInTheDocument();
     fireEvent.click(dialog.getByRole("button", { name: "History" }));
     expect(
       dialog.getByText(/Restoring creates a new revision/),
@@ -1303,7 +1346,7 @@ describe("simple dialogs", () => {
 
   it("shows the reason and Save only once something is edited, and submits the reason", async () => {
     const dialog = await openNote();
-    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     expect(dialog.queryByLabelText("Reason for change")).toBeNull();
     expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
     fireEvent.change(dialog.getByLabelText("Note"), {
@@ -1326,7 +1369,7 @@ describe("simple dialogs", () => {
   it("hides Save again when the edit is undone but still asks before discarding", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const dialog = await openNote();
-    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     const field = dialog.getByLabelText("Title");
     fireEvent.change(field, { target: { value: "Changed" } });
     expect(dialog.getByRole("button", { name: "Save note" })).toBeTruthy();
@@ -1352,7 +1395,7 @@ describe("simple dialogs", () => {
     const source = { ...linkedNote, links: [third.id] };
     fixtures.notes = [source, other, third];
     const dialog = await openNote(source);
-    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     expect(dialog.queryByRole("checkbox")).toBeNull();
     expect(dialog.getByText("Pricing")).toBeInTheDocument();
     expect(dialog.queryByRole("button", { name: "Launch checklist" })).toBeNull();
@@ -1379,7 +1422,7 @@ describe("simple dialogs", () => {
     const other: Row = { ...linkedNote, id: "note00000000002", title: "Other" };
     fixtures.notes = [linkedNote, other];
     const dialog = await openNote();
-    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     fireEvent.change(dialog.getByLabelText("Add related note"), {
       target: { value: "oth" },
     });
@@ -1395,7 +1438,7 @@ describe("simple dialogs", () => {
       within(more).getByRole("button", { name: "Archive note", hidden: true }),
     ).toBeTruthy();
     expect(more).toHaveTextContent("revision 2");
-    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     fireEvent.change(dialog.getByLabelText("Title"), {
       target: { value: "Changed" },
     });

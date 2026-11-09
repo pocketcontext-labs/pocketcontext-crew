@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useId,
   useRef,
   useState,
   type ComponentProps,
@@ -153,7 +154,15 @@ function Empty({
     </div>
   );
 }
-function CopyLink({ target }: { target: string }) {
+function CopyLink({
+  target,
+  label = "Copy link",
+  copiedLabel = "Link copied",
+}: {
+  target: string;
+  label?: string;
+  copiedLabel?: string;
+}) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const copy = async () => {
     try {
@@ -166,11 +175,11 @@ function CopyLink({ target }: { target: string }) {
   return (
     <span className="crew-copy-link">
       <button type="button" onClick={() => void copy()}>
-        {state === "copied" ? "Link copied" : "Copy link"}
+        {state === "copied" ? copiedLabel : label}
       </button>
       {state === "failed" && (
         <span role="alert" className="crew-copy-error">
-          Could not copy automatically. Copy this link: <code>{target}</code>
+          Could not copy automatically. Copy it from here: <code>{target}</code>
         </span>
       )}
     </span>
@@ -187,7 +196,8 @@ function GrowingTextarea({ value, ...props }: ComponentProps<"textarea">) {
     el.style.height = "auto";
     if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight + 2}px`;
     if (scroller && top !== undefined) scroller.scrollTop = top;
-  }, [value]);
+    // A hidden textarea measures zero, so measure again when it appears.
+  }, [value, props.hidden]);
   return (
     <textarea
       ref={ref}
@@ -195,6 +205,75 @@ function GrowingTextarea({ value, ...props }: ComponentProps<"textarea">) {
       {...props}
       className={`crew-grow ${props.className || ""}`}
     />
+  );
+}
+function MarkdownField({
+  label,
+  help,
+  required,
+  className,
+  value,
+  onChange,
+  tabs = true,
+}: {
+  label: string;
+  help?: ReactNode;
+  tabs?: boolean;
+  required?: boolean;
+  className?: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  const [reading, setReading] = useState(tabs && Boolean(value.trim()));
+  return (
+    <div className="crew-md-field">
+      <div className="crew-md-label">
+        <label htmlFor={id}>{label}</label>
+        <small>Markdown supported</small>
+        {help}
+      </div>
+      <div className="crew-md-box">
+        {tabs && (
+          <div
+            className="crew-md-tabs"
+            role="tablist"
+            aria-label={`${label} view`}
+          >
+            {[true, false].map((showRead) => (
+              <button
+                key={String(showRead)}
+                type="button"
+                role="tab"
+                aria-selected={reading === showRead}
+                onClick={() => setReading(showRead)}
+              >
+                {showRead ? "Read" : "Edit"}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* Hidden rather than removed, so undo and the height survive Read. */}
+        <GrowingTextarea
+          id={id}
+          hidden={reading}
+          required={required}
+          className={className}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onInvalid={() => setReading(false)}
+        />
+        {reading && (
+          <div className="crew-md-preview">
+            {value.trim() ? (
+              <Prose>{value}</Prose>
+            ) : (
+              <p>Nothing written yet.</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 function RelatedNotes({
@@ -344,6 +423,12 @@ function Modal({
       onPointerDown={() => {
         helpWasOpen.current = helpIsOpenIn(ref.current);
       }}
+      onScroll={(e) =>
+        e.currentTarget.classList.toggle(
+          "crew-scrolled",
+          e.currentTarget.scrollTop > 0,
+        )
+      }
       onMouseDown={(e) => {
         pressedBackdrop.current = onBackdrop(e) && !helpWasOpen.current;
       }}
@@ -408,7 +493,13 @@ export default function CrewWorkspace() {
     };
   }, []);
   const copyEndpoint =
-    connection.kind === "mcp" ? <CopyLink target={connection.url} /> : null;
+    connection.kind === "mcp" ? (
+      <CopyLink
+        target={connection.url}
+        label="Copy address"
+        copiedLabel="Address copied"
+      />
+    ) : null;
   const [dialog, setDialog] = useState<{ kind: Kind; row?: Row } | null>(null),
     // Set per hash navigation and consumed once, so data refreshes never open a dialog.
     [pendingLink, setPendingLink] = useState(() =>
@@ -879,6 +970,7 @@ export default function CrewWorkspace() {
           {view === "connect" && (
             <Connect
               agents={[...data.agents, ...archived.agents]}
+              tasks={[...data.tasks, ...archived.tasks]}
               connection={connection}
               copyEndpoint={copyEndpoint}
             />
@@ -936,7 +1028,7 @@ export default function CrewWorkspace() {
                           ))}
                         </div>
                         <h3>{val(x, "title")}</h3>
-                        <p>{val(x, "description").slice(0, 150)}</p>
+                        <p>{plainPreview(val(x, "description")).slice(0, 150)}</p>
                         <p className="crew-readiness">
                           {val(x, "readiness") === "ready"
                             ? "Ready"
@@ -1610,7 +1702,10 @@ function Editor({
   // Controls inside a disabled fieldset can't open, so read-only forms have no help.
   const help = (topic: HelpTopic) => (readOnly ? undefined : topic);
   return (
-    <div className="crew-dialog-body" ref={root}>
+    <div
+      className={`crew-dialog-body${row && (kind === "note" || kind === "task") ? " crew-switching-views" : ""}`}
+      ref={root}
+    >
       {readOnly && (
         <p className="crew-notice" role="status">
           {archiveNotice}
@@ -1632,6 +1727,25 @@ function Editor({
           ))}
         </div>
       )}
+      {row && kind === "note" && !readOnly && tab !== "history" && (
+        <div
+          className="crew-md-tabs crew-note-tabs"
+          role="tablist"
+          aria-label="Note view"
+        >
+          {["read", "edit"].map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+            >
+              {key === "read" ? "Read" : "Edit"}
+            </button>
+          ))}
+        </div>
+      )}
       {relatedError && <p className="crew-alert">{relatedError}</p>}
       {tab === "read" && row && (
         <div className="crew-read">
@@ -1639,8 +1753,8 @@ function Editor({
             {buckets && (
               <span className="crew-note-bucket">{val(buckets, "name")}</span>
             )}
-            <h3 className="crew-note-title">{val(row, "title")}</h3>
-            <Prose>{val(row, "body")}</Prose>
+            <h3 className="crew-note-title">{title}</h3>
+            <Prose>{body}</Prose>
             {list(row, "links").length > 0 && (
               <section className="crew-linked-notes">
                 <h3>Related memory</h3>
@@ -1675,9 +1789,9 @@ function Editor({
             {more}
           </div>
           {bar(
-            !readOnly && (
+            dirty && (
               <button className="crew-primary" onClick={() => setTab("edit")}>
-                Edit
+                Continue editing to save
               </button>
             ),
           )}
@@ -1685,7 +1799,6 @@ function Editor({
       )}
       {tab === "edit" && (
         <form className="crew-editor-form" onSubmit={submit}>
-          {kind === "note" && row && !dirty && backToNote}
           <fieldset className="crew-form-fields" disabled={readOnly}>
             <Field
               label={kind === "note" || kind === "task" ? "Title" : "Name"}
@@ -1753,36 +1866,26 @@ function Editor({
                 </select>
               </Field>
             )}
-            <Field
-              label={
-                kind === "note"
-                  ? "Note"
-                  : kind === "task"
-                    ? "Description"
-                    : kind === "agent"
-                      ? "Agent brief"
-                      : "Purpose"
-              }
-              help={kind === "agent" ? help("brief") : undefined}
-            >
-              <GrowingTextarea
+            {kind === "note" || kind === "task" ? (
+              <MarkdownField
+                label={kind === "note" ? "Note" : "Description"}
                 required={kind === "note"}
-                className={
-                  kind === "note"
-                    ? "crew-note-text"
-                    : kind === "agent"
-                      ? "crew-long-text"
-                      : ""
-                }
+                className={kind === "note" ? "crew-note-text" : ""}
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
+                onChange={setBody}
+                tabs={kind === "task"}
               />
-            </Field>
-            {kind === "note" && body.trim() && (
-              <details className="crew-preview">
-                <summary>Preview</summary>
-                <Prose>{body}</Prose>
-              </details>
+            ) : (
+              <Field
+                label={kind === "agent" ? "Agent brief" : "Purpose"}
+                help={kind === "agent" ? help("brief") : undefined}
+              >
+                <GrowingTextarea
+                  className={kind === "agent" ? "crew-long-text" : ""}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                />
+              </Field>
             )}
             {kind === "task" && (
               <>
@@ -1837,13 +1940,13 @@ function Editor({
                   does not make a waiting task ready. Pending human review still
                   blocks work.
                 </p>
-                <Field label="Draft for review (Markdown)" help={help("draft")}>
-                  <GrowingTextarea
-                    className="crew-long-text"
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                  />
-                </Field>
+                <MarkdownField
+                  label="Draft for review"
+                  help={help("draft")}
+                  className="crew-long-text"
+                  value={draft}
+                  onChange={setDraft}
+                />
                 {row && !readOnly && (
                   <div className="crew-review-row">
                     {reviewState}

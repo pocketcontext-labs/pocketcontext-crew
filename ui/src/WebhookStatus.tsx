@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -76,32 +77,130 @@ function ago(value: unknown, now: number) {
       ? `${Math.floor(seconds / 60)}m`
       : `${Math.floor(seconds / 3600)}h`;
 }
+/** An unresolved warning this old, with nothing tying it to live work, is history. */
+const staleWarningMs = 24 * 60 * 60 * 1000;
+const initialActivityEntries = 3;
+type ActivityWarning = "none" | "current" | "superseded" | "old";
+/**
+ * Decides how loudly a timeline entry may warn. Display only: delivery, overdue
+ * and lease rules stay on the server. Handed-off records are invalidated lazily,
+ * so a stale one can keep its state long after its task has moved on.
+ */
+function activityWarning(
+  d: Row,
+  ex: Row | undefined,
+  deliveries: Row[],
+  tasks: Row[],
+  now: number,
+): ActivityWarning {
+  if (!ex) return "none";
+  const waitingOverdue =
+    ex.state === "handed_off" &&
+    (ex.waiting_overdue === true ||
+      (!!ex.handoff_deadline_at &&
+        Date.parse(val(ex, "handoff_deadline_at")) <= now));
+  const leaseExpired =
+    !!ex.lease_until &&
+    (ex.lease_expired === true || Date.parse(val(ex, "lease_until")) <= now);
+  if (!waitingOverdue && !leaseExpired) return "none";
+  const taskId = val(d, "task");
+  const replaced =
+    !!taskId &&
+    deliveries.some(
+      (x) =>
+        x.id !== d.id &&
+        val(x, "task") === taskId &&
+        val(x, "created") > val(d, "created"),
+    );
+  const task = tasks.find((t) => t.id === taskId);
+  if (task) {
+    const generation = Number(ex.generation);
+    const moved =
+      task.archived === true ||
+      val(task, "status") === "done" ||
+      (!!val(task, "readiness") && val(task, "readiness") !== "ready") ||
+      (Number.isFinite(generation) &&
+        generation !== Number(task.wake_generation));
+    // The task still waits on this exact wake, so age alone never quiets it.
+    return replaced || moved ? "superseded" : "current";
+  }
+  if (replaced) return "superseded";
+  const since = Date.parse(
+    val(ex, "handoff_deadline_at") ||
+      val(ex, "lease_until") ||
+      val(ex, "handoff_at") ||
+      val(ex, "updated") ||
+      val(ex, "created"),
+  );
+  return Number.isFinite(since) && now - since > staleWarningMs
+    ? "old"
+    : "current";
+}
 function Step({
   number,
   title,
   done,
   help,
+  expanded,
+  future,
+  current,
+  onToggle,
+  onUse,
   children,
 }: {
   number: number;
   title: string;
   done?: boolean;
   help?: HelpTopic;
+  expanded: boolean;
+  future: boolean;
+  current: boolean;
+  onToggle: (step: number) => void;
+  onUse: (step: number) => void;
   children: ReactNode;
 }) {
+  const classes = ["crew-setup-step"];
+  if (done) classes.push("done");
+  if (future) classes.push("future");
   return (
-    <section className="crew-setup-step" aria-label={title}>
-      <div className={help ? "crew-setup-heading with-help" : "crew-setup-heading"}>
-        <span
-          className={done ? "crew-step-number complete" : "crew-step-number"}
-        >
-          {done ? "✓" : number}
-        </span>
-        <h3>{title}</h3>
+    <section
+      className={classes.join(" ")}
+      aria-label={title}
+      aria-current={current ? "step" : undefined}
+    >
+      <div className="crew-setup-heading">
+        <h3>
+          <button
+            type="button"
+            className="crew-setup-toggle"
+            aria-expanded={expanded}
+            onClick={() => onToggle(number)}
+          >
+            <span
+              aria-hidden="true"
+              className={done ? "crew-step-number complete" : "crew-step-number"}
+            >
+              {done ? "✓" : number}
+            </span>
+            <span className="crew-step-title">{title}</span>
+            {done && <span className="crew-step-complete">Complete</span>}
+          </button>
+        </h3>
         {help && <Help topic={help} />}
-        {done && <span className="crew-step-complete">Complete</span>}
       </div>
-      {children}
+      {expanded && (
+        // Editing or opening something inside a step holds it open across refreshes.
+        <div
+          className="crew-setup-body"
+          onChangeCapture={() => onUse(number)}
+          onClickCapture={(e) => {
+            if ((e.target as Element).closest("summary,[aria-expanded]"))
+              onUse(number);
+          }}
+        >
+          {children}
+        </div>
+      )}
     </section>
   );
 }
@@ -144,10 +243,13 @@ function Blockers({ items }: { items: Blocker[] }) {
 // Only explicitly named safe fields are rendered; credentials and raw errors are never serialized.
 export default function WebhookStatus({
   agents,
+  tasks = [],
   collapsible = false,
   mcpUrl = `${window.location.origin}/mcp`,
 }: {
   agents: Row[];
+  /** Current and archived tasks, used only to tell live warnings from old ones. */
+  tasks?: Row[];
   collapsible?: boolean;
   /** null when this install has no MCP endpoint to authorize bots against. */
   mcpUrl?: string | null;
@@ -171,60 +273,116 @@ export default function WebhookStatus({
   const [url, setUrl] = useState("");
   const [secret, setSecret] = useState("");
   const [testRecipient, setTestRecipient] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+  // Steps the owner opened or used, and steps the owner closed by hand.
+  const [openedSteps, setOpenedSteps] = useState<ReadonlySet<number>>(new Set());
+  const [closedSteps, setClosedSteps] = useState<ReadonlySet<number>>(new Set());
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const [now, setNow] = useState(Date.now());
   const retryKeys = useRef(new Map<string, string>());
+  const loadTicket = useRef(0);
+  const loadsInFlight = useRef(0);
+  const loadFailed = useRef(false);
+  const busyRef = useRef(false);
+  const formBase = useRef<{
+    subscriptions: string[];
+    role: string;
+    reporting: string;
+    limit: string;
+  }>(undefined);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15000);
     return () => clearInterval(timer);
   }, []);
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    void Promise.all([
-      crewApi.read("webhook_configs"),
-      crewApi.read("webhook_mappings"),
-      crewApi.read("webhook_deliveries"),
-      crewApi.read("webhook_executions"),
-      crewApi.read("webhook_routing"),
-    ])
-      .then(([cs, ms, ds, es, rs]) => {
-        if (!alive) return;
-        const current = cs.find((x) => x.scope === "global");
-        setConfig(current);
-        setMappings(ms);
-        setDeliveries(ds);
-        setExecutions(es);
-        setRouting(rs[0]);
-        setHandoffLimit(String(Number(rs[0]?.max_bot_handoffs) || 4));
-        setLegacyCount(cs.filter((x) => x.scope === "legacy").length);
-        setSubscriptions(list(current, "subscriptions"));
-        setRoleInstructions(val(current, "role_instructions"));
-        setReportingInstructions(val(current, "reporting_instructions"));
-        // Latched, so a later refresh cannot collapse a form in use.
-        if (
-          current?.enabled ||
-          current?.url_configured ||
-          current?.secret_configured ||
-          val(current, "agent") ||
-          ms.some((m) => val(m, "bot_ref")) ||
-          ds.length ||
-          es.length
-        )
-          setOpen(true);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setError("Could not load the integration. Refresh to try again.");
-        // Status is unknown, so show the error rather than hide live state.
+  const load = useCallback(async (silent = false) => {
+    const ticket = ++loadTicket.current;
+    loadsInFlight.current++;
+    if (!silent) setLoading(true);
+    try {
+      const [cs, ms, ds, es, rs] = await Promise.all([
+        crewApi.read("webhook_configs"),
+        crewApi.read("webhook_mappings"),
+        crewApi.read("webhook_deliveries"),
+        crewApi.read("webhook_executions"),
+        crewApi.read("webhook_routing"),
+      ]);
+      if (ticket !== loadTicket.current) return;
+      const current = cs.find((x) => x.scope === "global");
+      setConfig(current);
+      setMappings(ms);
+      setDeliveries(ds);
+      setExecutions(es);
+      setRouting(rs[0]);
+      setLegacyCount(cs.filter((x) => x.scope === "legacy").length);
+      // A field follows the server only while it still holds the last server
+      // value, so a refresh never overwrites what the owner is typing.
+      const next = {
+        subscriptions: list(current, "subscriptions"),
+        role: val(current, "role_instructions"),
+        reporting: val(current, "reporting_instructions"),
+        limit: String(Number(rs[0]?.max_bot_handoffs) || 4),
+      };
+      const base = formBase.current;
+      setSubscriptions((value) =>
+        !base || JSON.stringify(value) === JSON.stringify(base.subscriptions)
+          ? next.subscriptions
+          : value,
+      );
+      setRoleInstructions((value) =>
+        !base || value === base.role ? next.role : value,
+      );
+      setReportingInstructions((value) =>
+        !base || value === base.reporting ? next.reporting : value,
+      );
+      setHandoffLimit((value) =>
+        !base || value === base.limit ? next.limit : value,
+      );
+      formBase.current = next;
+      if (loadFailed.current) {
+        loadFailed.current = false;
+        setError("");
+      }
+      // Latched, so a later refresh cannot collapse a form in use.
+      if (
+        current?.enabled ||
+        current?.url_configured ||
+        current?.secret_configured ||
+        val(current, "agent") ||
+        ms.some((m) => val(m, "bot_ref")) ||
+        ds.length ||
+        es.length
+      )
         setOpen(true);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+    } catch {
+      if (silent || ticket !== loadTicket.current) return;
+      loadFailed.current = true;
+      setError("Could not load the integration. Crew will try again shortly.");
+      // Status is unknown, so show the error rather than hide live state.
+      setOpen(true);
+    } finally {
+      loadsInFlight.current--;
+      if (!silent) setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
     return () => {
-      alive = false;
+      loadTicket.current++;
     };
-  }, [refresh]);
+  }, [load, refresh]);
+  // Same terms as the workspace refresh: visible tab, no overlap, no feedback.
+  useEffect(() => {
+    const refreshSilently = () => {
+      if (document.hidden || busyRef.current || loadsInFlight.current) return;
+      void load(true);
+    };
+    const timer = setInterval(refreshSilently, 30_000);
+    document.addEventListener("visibilitychange", refreshSilently);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshSilently);
+    };
+  }, [load]);
   async function mutate(
     action: string,
     data: Record<string, unknown>,
@@ -234,6 +392,10 @@ export default function WebhookStatus({
   ) {
     if (busy) return false;
     setBusy(true);
+    busyRef.current = true;
+    loadFailed.current = false;
+    // A background read that started before this write must not land after it.
+    loadTicket.current++;
     setError("");
     setMessage("");
     try {
@@ -305,11 +467,13 @@ export default function WebhookStatus({
       setError(
         (reason && guidance[reason]) ||
           (conflict
-            ? "This configuration changed elsewhere. Refresh, review the latest settings, and try again."
+            ? "This configuration changed elsewhere. Review the latest settings and try again."
             : "The change could not be confirmed. Check the configuration and try again. Credentials are never included in this message."),
       );
+      if (conflict) setRefresh((x) => x + 1);
       return false;
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -412,6 +576,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
     if (ok) {
       setUrl("");
       setSecret("");
+      releaseStep(3);
     }
   }
   const routeEvidence = executions.filter(
@@ -423,6 +588,78 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
   const selfEvidence = routeEvidence.some((ex) => ex.agent === config?.agent);
   const otherEvidence = routeEvidence.some((ex) => ex.agent !== config?.agent);
   const routingPrompt = `Verify Crew routing with two clearly labeled synthetic tasks, one assigned to the selected dispatcher and one to a mapped specialist. First read crew_read collection capabilities and the current integration. Stop unless delivery is enabled. This prompt explicitly authorizes creating these two synthetic Ready tasks. Reuse existing test tasks if present. Each task should comment pong once and complete through execution.begin and the current fenced completion protocol. Verify the configured dispatch path, including the parent wake when parent_bridge is selected and the actual native handoff to the recipient. Do not infer success from HTTP acceptance or a reported send. Do not change credentials, mappings, dispatcher, ordinary tasks or perform backlog catch-up. Report event, execution and task evidence separately. This prompt authorizes only these synthetic routing tests; no external actions.`;
+  const stepDone = [
+    !!currentAgent,
+    synced && mapped === activeAgents.length && mapped > 0,
+    !!config?.url_configured && !!config?.secret_configured,
+    canEnable,
+    !!config?.enabled,
+    selfEvidence && otherEvidence,
+  ];
+  // Steps 1-5 are required, and step 5 is delivery itself; step 6 is optional.
+  const firstIncomplete = stepDone.slice(0, 5).findIndex((done) => !done);
+  const setupComplete = !!config && firstIncomplete === -1;
+  const autoStep =
+    firstIncomplete >= 0 ? firstIncomplete + 1 : stepDone[5] ? 0 : 6;
+  const showSteps = !setupComplete || reviewing || openedSteps.size > 0;
+  function withStep(steps: ReadonlySet<number>, step: number, present: boolean) {
+    const next = new Set(steps);
+    if (present) next.add(step);
+    else next.delete(step);
+    return next;
+  }
+  function stepExpanded(step: number) {
+    return (
+      openedSteps.has(step) || (step === autoStep && !closedSteps.has(step))
+    );
+  }
+  function toggleStep(step: number) {
+    const expand = !stepExpanded(step);
+    setOpenedSteps((steps) => withStep(steps, step, expand));
+    setClosedSteps((steps) => withStep(steps, step, !expand));
+  }
+  function useStep(step: number) {
+    setOpenedSteps((steps) => withStep(steps, step, true));
+    setClosedSteps((steps) => withStep(steps, step, false));
+  }
+  function releaseStep(step: number) {
+    setOpenedSteps((steps) => withStep(steps, step, false));
+  }
+  function resetSteps() {
+    setReviewing(false);
+    setOpenedSteps(new Set());
+    setClosedSteps(new Set());
+  }
+  const stepProps = (number: number) => ({
+    number,
+    done: stepDone[number - 1],
+    expanded: stepExpanded(number),
+    current: number === autoStep,
+    future: !stepDone[number - 1] && autoStep > 0 && number > autoStep,
+    onToggle: toggleStep,
+    onUse: useStep,
+  });
+  const recentDeliveries = deliveries
+    .slice()
+    .sort((a, b) => val(b, "created").localeCompare(val(a, "created")))
+    .slice(0, 30);
+  const activity = recentDeliveries.map((delivery, index) => {
+    const execution = executions.find((e) => e.delivery === delivery.id);
+    const warning = activityWarning(
+      delivery,
+      execution,
+      deliveries,
+      tasks,
+      now,
+    );
+    return { delivery, execution, warning, index };
+  });
+  // Anything still needing recovery stays listed however far down it falls.
+  const shownActivity = showAllActivity
+    ? activity
+    : activity.filter(
+        (x) => x.index < initialActivityEntries || x.warning === "current",
+      );
   if (!open)
     return loading ? null : (
       <button type="button" onClick={() => setOpen(true)}>
@@ -432,50 +669,56 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
   return (
     <section className="crew-webhooks" aria-label="Grok Bot integration">
       <div className="crew-section-title">
-        <h2>Connect your Grok team</h2>
-        <button
-          disabled={blocked}
-          onClick={() => {
-            setError("");
-            setRefresh((x) => x + 1);
-          }}
-        >
-          Refresh integration
-        </button>
+        <h2>Grok setup</h2>
       </div>
-      <p>
-        One existing bot receives Crew notifications and routes them to your
-        team. Keep your normal bot roles
-        {mcpUrl ? " and one shared MCP connection" : ""}.
-      </p>
+      {!setupComplete && (
+        <p>
+          One existing bot receives Crew notifications and routes them to your
+          team. Keep your normal bot roles
+          {mcpUrl ? " and one shared MCP connection" : ""}.
+        </p>
+      )}
       {loading && <p role="status">Loading integration…</p>}
       {error && <p role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
       {!loading && !config && !error && (
         <p>
-          No global integration is available. Refresh after the server upgrade
-          completes.
+          No global integration is available yet. It appears here after the
+          server upgrade completes.
         </p>
       )}
       {config && (
         <>
-          <div className="crew-callout">
-            <strong>
-              {config.enabled ? "Delivery enabled" : "Delivery disabled"}
-            </strong>{" "}
-            · Dispatcher:{" "}
-            {val(currentAgent, "name") || "Not selected or inactive"}
-            <p>
-              Only Ready tasks can wake a bot. Enabling does not notify existing
-              tasks.
-            </p>
-          </div>
-          <div className="crew-setup-grid">
-            <Step
-              number={1}
-              title="Choose your dispatcher"
-              done={!!currentAgent}
-            >
+          {setupComplete ? (
+            <div className="crew-wake-status">
+              <p>
+                <strong>Automatic wake-ups: on</strong> · {mapped} of{" "}
+                {activeAgents.length} agents mapped
+              </p>
+              <button
+                type="button"
+                aria-expanded={showSteps}
+                onClick={() => (showSteps ? resetSteps() : setReviewing(true))}
+              >
+                {showSteps ? "Hide setup" : "Review setup"}
+              </button>
+            </div>
+          ) : (
+            <div className="crew-callout">
+              <strong>
+                {config.enabled ? "Delivery enabled" : "Delivery disabled"}
+              </strong>{" "}
+              · Dispatcher:{" "}
+              {val(currentAgent, "name") || "Not selected or inactive"}
+              <p>
+                Only Ready tasks can wake a bot. Enabling does not notify
+                existing tasks.
+              </p>
+            </div>
+          )}
+          {showSteps && (
+          <div className="crew-setup-list">
+            <Step {...stepProps(1)} title="Choose your dispatcher">
               <p>
                 Use an existing bot. It keeps its main job and also routes Crew
                 notifications.
@@ -533,11 +776,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                   : "Use direct dispatch only when native bot messaging is available inside the routine. For Grok routines with WakeParent, choose the parent conversation."}
               </p>
             </Step>
-            <Step
-              number={2}
-              title="Prepare Grok"
-              done={synced && mapped === activeAgents.length && mapped > 0}
-            >
+            <Step {...stepProps(2)} title="Prepare Grok">
               <p>Two prompts, in this order. Both are required.</p>
               <h4 className="crew-prompt-step">
                 First: paste once into{" "}
@@ -572,8 +811,8 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               {!synced && (
                 <p className="crew-assignment-warning">
                   Apply instruction revision{" "}
-                  {Number(config.instruction_revision) || 1} in Grok, then
-                  refresh this page.
+                  {Number(config.instruction_revision) || 1} in Grok. This page
+                  updates automatically.
                 </p>
               )}
               <p>
@@ -615,6 +854,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     prompt={authorizationPrompt}
                     copyButton={
                       <button
+                            className="crew-primary"
                         disabled={blocked}
                         onClick={() =>
                           void copy(
@@ -637,10 +877,9 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               )}
             </Step>
             <Step
-              number={3}
+              {...stepProps(3)}
               title="Enter webhook credentials"
               help="webhook-credentials"
-              done={!!config.url_configured && !!config.secret_configured}
             >
               <p>
                 Copy the URL and key from the selected bot's Grok routine
@@ -655,7 +894,12 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 {config.secret_configured ? "configured" : "not configured"}
               </p>
               <details
-                open={!config.url_configured || !config.secret_configured}
+                open={
+                  !config.url_configured ||
+                  !config.secret_configured ||
+                  !!url ||
+                  !!secret
+                }
               >
                 <summary>
                   {config.url_configured && config.secret_configured
@@ -716,7 +960,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 </form>
               </details>
             </Step>
-            <Step number={4} title="Verify the connection" done={canEnable}>
+            <Step {...stepProps(4)} title="Verify the connection">
               <p>
                 {parentBridge
                   ? "Test the complete route: routine, parent conversation, and selected recipient. This explicitly sends a diagnostic message to a teammate when selected, but performs no task work."
@@ -755,7 +999,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                       ? { recipient_agent_id: selectedTestRecipient?.id }
                       : {},
                     config,
-                    "Test queued. Refresh to follow acknowledgment progress. Do not send another test while the outcome is uncertain.",
+                    "Test queued. Acknowledgment progress updates here automatically. Do not send another test while the outcome is uncertain.",
                   )
                 }
               >
@@ -839,11 +1083,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 uncertain outcome.
               </p>
             </Step>
-            <Step
-              number={5}
-              title="Enable future notifications"
-              done={!!config.enabled}
-            >
+            <Step {...stepProps(5)} title="Enable future notifications">
               <p>
                 Enable delivery after checking the routine's setup. Existing
                 tasks are not replayed.
@@ -851,16 +1091,19 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               <button
                 className="crew-primary"
                 disabled={blocked || (!config.enabled && !canEnable)}
-                onClick={() =>
+                onClick={() => {
+                  const enabling = !config.enabled;
                   void mutate(
-                    config.enabled ? "webhook.disable" : "webhook.enable",
+                    enabling ? "webhook.enable" : "webhook.disable",
                     {},
                     config,
-                    config.enabled
-                      ? "Delivery disabled."
-                      : "Delivery enabled. Existing tasks were not replayed.",
-                  )
-                }
+                    enabling
+                      ? "Delivery enabled. Existing tasks were not replayed."
+                      : "Delivery disabled.",
+                  ).then((ok) => {
+                    if (ok && enabling) resetSteps();
+                  });
+                }}
               >
                 {config.enabled ? "Disable delivery" : "Enable delivery"}
               </button>
@@ -868,11 +1111,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 <Blockers items={enableBlockers} />
               )}
             </Step>
-            <Step
-              number={6}
-              title="Verify task routing (optional)"
-              done={selfEvidence && otherEvidence}
-            >
+            <Step {...stepProps(6)} title="Verify task routing (optional)">
               <p>
                 Use an explicit synthetic test to check work for the dispatcher
                 itself and a handoff to another bot. This is separate from the
@@ -916,6 +1155,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               </p>
             </Step>
           </div>
+          )}
           <section
             className="crew-webhook-card"
             aria-label="Notification activity"
@@ -928,23 +1168,30 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
             {!deliveries.length ? (
               <p>No deliveries recorded.</p>
             ) : (
-              deliveries
-                .slice()
-                .sort((a, b) =>
-                  val(b, "created").localeCompare(val(a, "created")),
-                )
-                .slice(0, 30)
-                .map((d) => (
-                  <EventTimeline
-                    key={d.id}
-                    delivery={d}
-                    execution={executions.find((e) => e.delivery === d.id)}
-                    agents={agents}
-                    now={now}
-                  />
-                ))
+              shownActivity.map(({ delivery, execution, warning }) => (
+                <EventTimeline
+                  key={delivery.id}
+                  delivery={delivery}
+                  execution={execution}
+                  agents={agents}
+                  now={now}
+                  warning={warning}
+                />
+              ))
             )}
-            {deliveries.length > 30 && (
+            {shownActivity.length < activity.length ? (
+              <button type="button" onClick={() => setShowAllActivity(true)}>
+                Show all ({activity.length})
+              </button>
+            ) : (
+              showAllActivity &&
+              activity.length > initialActivityEntries && (
+                <button type="button" onClick={() => setShowAllActivity(false)}>
+                  Show fewer
+                </button>
+              )
+            )}
+            {showAllActivity && deliveries.length > 30 && (
               <p>Showing the 30 most recent deliveries.</p>
             )}
           </section>
@@ -964,7 +1211,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
             <div className="crew-integration-mappings">
               {activeAgents.map((a) => (
                 <AgentMapping
-                  key={`${a.id}:${mappings.find((m) => m.agent === a.id)?.revision ?? 0}`}
+                  key={a.id}
                   agent={a}
                   mapping={mappings.find((m) => m.agent === a.id)}
                   disabled={blocked}
@@ -1153,7 +1400,15 @@ function AgentMapping({
   disabled: boolean;
   onSave: (value: string, mapping?: Row) => Promise<boolean>;
 }) {
-  const [reference, setReference] = useState(val(mapping, "bot_ref"));
+  const saved = val(mapping, "bot_ref");
+  const [reference, setReference] = useState(saved);
+  const lastSaved = useRef(saved);
+  // A newer saved reference replaces the field only if the owner hasn't edited it.
+  useEffect(() => {
+    const previous = lastSaved.current;
+    lastSaved.current = saved;
+    setReference((value) => (value === previous ? saved : value));
+  }, [saved]);
   return (
     <form
       className="crew-webhook-card"
@@ -1187,11 +1442,13 @@ function EventTimeline({
   execution: ex,
   agents,
   now,
+  warning,
 }: {
   delivery: Row;
   execution?: Row;
   agents: Row[];
   now: number;
+  warning: ActivityWarning;
 }) {
   const recipient = agents.find((a) => a.id === d.agent);
   const task = val(d, "task");
@@ -1227,6 +1484,12 @@ function EventTimeline({
         ]
       : []),
   ];
+  const attempts = Number(d.attempts) || 0;
+  const quiet = warning === "superseded" || warning === "old";
+  const pastNote =
+    warning === "superseded"
+      ? "Later activity replaced this attempt; nothing to do here."
+      : "This is more than a day old. Review the bot conversation only if the outcome still matters.";
   const pending = ex?.state === "handed_off";
   const leaseExpired =
     ex?.lease_expired === true ||
@@ -1246,7 +1509,9 @@ function EventTimeline({
         ) : (
           <strong>Connection test</strong>
         )}
-        <span>{Number(d.attempts) || 0} attempts</span>
+        <span>
+          {attempts} {attempts === 1 ? "attempt" : "attempts"}
+        </span>
       </div>
       <ol className="crew-event-timeline">
         {timestamps
@@ -1263,7 +1528,11 @@ function EventTimeline({
           ))}
       </ol>
       {pending && (
-        <p className={overdue ? "crew-assignment-warning" : "crew-footnote"}>
+        <p
+          className={
+            overdue && !quiet ? "crew-assignment-warning" : "crew-footnote"
+          }
+        >
           {overdue
             ? "Recipient acknowledgment overdue"
             : "Waiting for recipient acquisition"}
@@ -1272,18 +1541,24 @@ function EventTimeline({
             : ""}
           .{" "}
           {overdue
-            ? "Review the bot conversation before recovery. No automatic resend."
+            ? quiet
+              ? pastNote
+              : "Review the bot conversation before recovery. No automatic resend."
             : "A reported send is not proof that the recipient started."}
         </p>
       )}
       {!!ex?.lease_until && (
         <p
-          className={leaseExpired ? "crew-assignment-warning" : "crew-footnote"}
+          className={
+            leaseExpired && !quiet ? "crew-assignment-warning" : "crew-footnote"
+          }
         >
           {leaseExpired ? "Execution lease expired" : "Execution lease expires"}{" "}
           · {new Date(val(ex, "lease_until")).toLocaleString()}
           {leaseExpired
-            ? ". Reconcile the outcome before authorizing another attempt."
+            ? quiet
+              ? `. ${pastNote}`
+              : ". Reconcile the outcome before authorizing another attempt."
             : ""}
         </p>
       )}

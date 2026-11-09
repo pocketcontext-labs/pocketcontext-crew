@@ -994,11 +994,20 @@ a.crew-logo:hover .product-brand span {
   margin-bottom: 14px;
 }
 .crew-quiet-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 18px;
+  position: relative;
   margin: 22px 0 18px;
   font-size: 13px;
+  line-height: 20px;
+}
+.crew-dialog .crew-quiet-row > .crew-quiet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0;
+  line-height: 20px;
+}
+.crew-quiet-row > .crew-more summary {
+  padding-left: 64px;
 }
 .crew-more summary {
   cursor: pointer;
@@ -1012,6 +1021,29 @@ a.crew-logo:hover .product-brand span {
 .crew-more[open] button {
   display: block;
   margin-top: 10px;
+}
+.crew-dialog .crew-more button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  color: #567257;
+  text-decoration: underline;
+}
+.crew-read .crew-prose {
+  color: #293e2c;
+}
+.crew-dialog > header {
+  transition: box-shadow 0.15s;
+}
+/* Views differ in length; a fixed height stops the dialog jumping. */
+@media (min-width: 681px) {
+  .crew-dialog:has(.crew-switching-views) {
+    height: min(90dvh, 860px);
+  }
+}
+.crew-dialog.crew-scrolled > header {
+  box-shadow: 0 6px 14px -10px #0e201e66;
 }
 .crew-more .crew-record-id {
   margin-top: 10px;
@@ -1027,13 +1059,76 @@ a.crew-logo:hover .product-brand span {
   margin: 2px 0 12px;
   overflow-wrap: anywhere;
 }
-.crew-preview {
-  margin: -8px 0 18px;
-  font-size: 13px;
+.crew-md-field {
+  margin-bottom: 18px;
 }
-.crew-preview summary {
-  cursor: pointer;
+.crew-md-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.crew-md-label label {
+  font-size: 13px;
+  font-weight: 650;
+}
+.crew-md-label small {
+  font-size: 11px;
+  color: #71806e;
+}
+.crew-md-box {
+  border: 1px solid #d6dfcc;
+  border-radius: 8px;
+  background: #fffefa;
+  overflow: hidden;
+}
+.crew-md-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: #f0f3e7;
+  border-bottom: 1px solid #dfe5d6;
+}
+.crew-dialog .crew-md-tabs button {
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  padding: 7px 14px;
+  font-size: 13px;
   color: #567257;
+  border-bottom: 2px solid transparent;
+}
+.crew-dialog .crew-md-tabs button[aria-selected="true"] {
+  background: #fffefa;
+  color: #293e2c;
+  font-weight: 650;
+  border-bottom-color: #2e493e;
+}
+.crew-note-tabs {
+  margin: -8px 0 18px;
+  background: transparent;
+  padding: 0;
+}
+.crew-md-box textarea {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  min-height: 120px;
+}
+.crew-md-box textarea:focus-visible {
+  outline: 2px solid #2e493e;
+  outline-offset: -2px;
+}
+.crew-md-preview {
+  padding: 12px;
+  min-height: 120px;
+}
+.crew-md-preview > p {
+  margin: 0;
+  color: #71806e;
+  font-size: 13px;
 }
 .crew-review-state {
   font-size: 13px;
@@ -1512,35 +1607,83 @@ a.crew-logo:hover .product-brand span {
   opacity: 0.55;
 }
 
-.crew-setup-grid {
+.crew-wake-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 12px 0;
+}
+.crew-wake-status p {
+  margin: 0;
+}
+.crew-setup-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 8px;
+  margin: 12px 0;
 }
 .crew-setup-step {
   min-width: 0;
-  padding: 20px;
+  padding: 10px 14px;
   border: 1px solid var(--line, #dedbd5);
-  border-radius: 16px;
+  border-radius: 10px;
   background: #fffefa;
+}
+.crew-setup-step.future {
+  background: none;
 }
 .crew-setup-heading {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 8px;
 }
 .crew-setup-heading h3 {
   flex: 1;
+  min-width: 0;
   margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.crew-app .crew-setup-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.crew-step-title {
+  flex: 1;
+  min-width: 0;
+}
+.crew-setup-step.done .crew-step-title,
+.crew-setup-step.future .crew-step-title {
+  font-weight: 500;
+  color: #71806e;
+}
+.crew-setup-body {
+  margin-top: 10px;
+}
+.crew-setup-body > :first-child {
+  margin-top: 0;
+}
+.crew-setup-body > :last-child {
+  margin-bottom: 0;
 }
 .crew-step-number {
   display: grid;
   place-items: center;
-  flex: 0 0 28px;
-  height: 28px;
+  flex: 0 0 24px;
+  height: 24px;
   border-radius: 50%;
   background: #e8e4dc;
+  font-size: 12px;
   font-weight: 700;
 }
 .crew-step-number.complete {
@@ -1627,14 +1770,6 @@ a.crew-logo:hover .product-brand span {
 .crew-advanced > summary {
   cursor: pointer;
   font-weight: 650;
-}
-@media (max-width: 760px) {
-  .crew-setup-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .crew-setup-step {
-    padding: 16px;
-  }
 }
 
 /* Help */
@@ -1728,12 +1863,6 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-section-title-first {
   margin-top: 8px;
-}
-.crew-setup-heading.with-help h3 {
-  flex: 0 1 auto;
-}
-.crew-setup-heading.with-help .crew-step-complete {
-  margin-left: auto;
 }
 .crew-related legend {
   display: flex;
