@@ -300,6 +300,14 @@ coordination. Owner edits remain authoritative. Non-governed tasks retain ordina
 revision-checked MCP behavior. These rules coordinate the shared principal, not
 independently authenticated bots.
 
+An agent can record work it has already started: an agent `task.create` that is
+Ready, `in_progress` and assigned to the agent named by its own `reported_agent`
+emits no wake, stays ungoverned (`execution_required_generation` remains 0) and
+records a `task.self_started` event. Owner writes, claims, Ready `todo` tasks and
+tasks for another agent wake as usual, and later transitions apply normally.
+`reported_agent` is unverified attribution, so this is a noise filter and not a
+security control: a caller that names the assignee only avoids its own wake.
+
 `execution.begin` validates current epoch, generation, destination, mapping,
 assignment, readiness and review state and acquires coordination in one transaction.
 Its result includes the execution record, `execution` proof, authoritative

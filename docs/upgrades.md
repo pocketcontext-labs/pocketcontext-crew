@@ -1,5 +1,12 @@
 # Crew upgrades and rollback
 
+## Crew 0.9.0 to 0.9.1
+
+No data migration, protocol change or operator step. Replace the binary or image with
+the normal procedure (`CREW_REPLACE_VERSION=0.9.0` for the installer) and upgrade
+paired clients with the server, then run `skill` to install the updated guidance. A
+client and server must report the same release.
+
 ## Crew 0.8.x to 0.9.0 (agent runbook)
 
 No data migration. The database, `pocketcontext.json`, `storage/`, `legacy-knowledge/`

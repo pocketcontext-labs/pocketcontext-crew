@@ -94,6 +94,11 @@ draft withdraws review and leaves the task waiting. Your comments (CLI or MCP)
 never wake anyone; only owner browser comments can (opt-in `comment` reason).
 Repeated agent reassignments past the owner's `max_bot_handoffs` stop the task as Waiting;
 do not try to set it Ready again, report it to the owner.
+Leave a task Waiting unless you want a wake. Creating a task assigned to yourself as
+`readiness: "ready"` and `status: "in_progress"`, with your exact agent name as the
+reported agent, records it as self-started (`task.self_started`) with no wake and no
+execution proof needed; `todo` or another assignee still wakes. Reported names are
+unverified, so this only filters noise.
 
 Use one global webhook hosted by an existing bot's dispatcher routine. Reuse the
 agent and integration; configure the dispatcher selection, bot mappings and

@@ -654,8 +654,13 @@ function write(e, isAgent) {
         r.set("archived_by", values.archived ? actor : "");
       }
       app.save(r);
-      if (kind === "task")
-        webhooks.transition(app, r, oldTask, { autoWithdraw });
+      const selfStarted =
+        kind === "task" &&
+        webhooks.transition(app, r, oldTask, {
+          autoWithdraw,
+          selfStartAgent:
+            isAgent && op === "create" ? b.reported_agent || "" : "",
+        });
       if (
         kind === "task" &&
         !isAgent &&
@@ -680,6 +685,15 @@ function write(e, isAgent) {
           new: r.getString("responsible_agent"),
         };
       event(app, r, b.action, b, actor, changes);
+      if (selfStarted)
+        event(
+          app,
+          r,
+          "task.self_started",
+          { reason: "created", reported_agent: b.reported_agent, data: {} },
+          actor,
+          { assignee: r.getString("assigned_agent"), reason: "created" },
+        );
       if (hopStop)
         event(
           app,

@@ -10,7 +10,7 @@ Crew is a separate product derived from PocketContext source
 schema and application UI. Use a new project database; do not point it at an
 existing PocketContext installation. Crew has no spaces or inherited knowledge APIs. Notes need no publication run.
 
-See [Crew 0.9.0 release notes](docs/releases/0.9.0.md) for the move to `pocketcontext-core` and [Crew 0.8.0](docs/releases/0.8.0.md) for the agent commands
+See [Crew 0.9.1 release notes](docs/releases/0.9.1.md) for self-started tasks, [Crew 0.9.0](docs/releases/0.9.0.md) for the move to `pocketcontext-core` and [Crew 0.8.0](docs/releases/0.8.0.md) for the agent commands
 `read`, `search`, `schema`, `query` and `write`, which give installs without a
 domain the same agent path through the CLI and the installed skill, locally and
 on tunnel-paired computers. [Crew 0.7.0](docs/releases/0.7.0.md) added opt-in

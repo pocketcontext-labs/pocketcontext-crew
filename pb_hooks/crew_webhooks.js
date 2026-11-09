@@ -280,10 +280,25 @@ function wake(app, t, causes, outcome, extra) {
   if (extra) Object.assign(payload, extra);
   return enqueue(app, target.config, payload, t, target.kind);
 }
+// An agent that creates a task for itself already at work needs no dispatcher
+// wake or execution governance. selfStartAgent is the reported name, supplied
+// only for agent task.create, so owner writes and claims can never match.
+function selfStarted(app, current, name) {
+  if (
+    !name ||
+    !current.assigned ||
+    !eligible(current) ||
+    current.status !== "in_progress"
+  )
+    return false;
+  return get(app, "agents", current.assigned).getString("name") === name;
+}
+// Returns true when a new task was recorded as self-started instead of waking.
 function transition(app, t, old, options) {
   options = options || {};
   const current = state(app, t),
     causes = [];
+  if (!old && selfStarted(app, current, options.selfStartAgent)) return true;
   if (!old) {
     if (eligible(current)) causes.push("created");
   } else {
