@@ -101,6 +101,19 @@ try {
   }
   await page.getByRole('link',{name:'AI Team',exact:true}).click();await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();await snap('crew-board-'+width);
  }
+ await page.getByRole('button',{name:/New task/}).click();
+ await page.getByRole('dialog').waitFor();
+ await page.mouse.click(5,5);
+ await page.getByRole('dialog').waitFor({state:'hidden'});
+ await page.getByRole('button',{name:/New task/}).click();
+ await page.getByRole('dialog').locator('input').first().fill('Unsaved synthetic title');
+ page.once('dialog',d=>d.dismiss());
+ await page.mouse.click(5,5);
+ await page.waitForTimeout(100);
+ assert.equal(await page.getByRole('dialog').isVisible(),true,'declining keeps the edits');
+ page.once('dialog',d=>d.accept());
+ await page.mouse.click(5,5);
+ await page.getByRole('dialog').waitFor({state:'hidden'});
  const currentPage=()=>page.locator('nav a[aria-current=page]').innerText();
  await page.getByRole('navigation').getByRole('link',{name:'Agents',exact:true}).click();
  await page.waitForURL('**/#/agents');

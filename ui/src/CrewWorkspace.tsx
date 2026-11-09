@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import ReactMarkdown from "react-markdown";
@@ -116,13 +117,27 @@ function Modal({
   actions,
   children,
   close,
+  onEdit,
 }: {
   title: string;
   actions?: ReactNode;
   children: ReactNode;
   close: () => void;
+  onEdit: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const pressedBackdrop = useRef(false);
+  // Backdrop clicks target the dialog itself, as do its scrollbars, so use position.
+  const onBackdrop = (e: MouseEvent<HTMLDialogElement>) => {
+    if (e.target !== ref.current) return false;
+    const box = ref.current.getBoundingClientRect();
+    return (
+      e.clientX < box.left ||
+      e.clientX > box.right ||
+      e.clientY < box.top ||
+      e.clientY > box.bottom
+    );
+  };
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
     ref.current?.showModal?.();
@@ -138,6 +153,15 @@ function Modal({
           : undefined
       }
       className="crew-dialog"
+      onChange={onEdit}
+      onMouseDown={(e) => {
+        pressedBackdrop.current = onBackdrop(e);
+      }}
+      onClick={(e) => {
+        // A drag that starts inside, such as selecting text, must not close it.
+        if (pressedBackdrop.current && onBackdrop(e)) close();
+        pressedBackdrop.current = false;
+      }}
       onCancel={(e) => {
         e.preventDefault();
         close();
@@ -184,7 +208,13 @@ export default function CrewWorkspace() {
       parseItemHash(location.hash),
     ),
     [ready, setReady] = useState(false),
-    generation = useRef(0);
+    generation = useRef(0),
+    edited = useRef(false);
+  const discardOk = () =>
+    !edited.current || window.confirm("Discard your unsaved changes?");
+  useEffect(() => {
+    edited.current = false;
+  }, [dialog?.kind, dialog?.row?.id]);
   const load = useCallback(async () => {
     const ticket = ++generation.current;
     setServerVersion(undefined);
@@ -229,6 +259,10 @@ export default function CrewWorkspace() {
     const receive = () => {
       setPendingLink(parseItemHash(location.hash));
       if (isItemHash(location.hash)) return;
+      if (!discardOk()) {
+        history.forward();
+        return;
+      }
       setView(viewFromHash(location.hash));
       setQuery("");
       setDialog(null);
@@ -882,8 +916,11 @@ export default function CrewWorkspace() {
               />
             )
           }
+          onEdit={() => {
+            edited.current = true;
+          }}
           close={() => {
-            if (!busy) closeDialog();
+            if (!busy && discardOk()) closeDialog();
           }}
         >
           <Editor

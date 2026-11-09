@@ -128,6 +128,52 @@ it("shows note previews without Markdown markers", async () => {
     screen.getByText(/^Summary Task: abc and snake_case site$/),
   ).toBeInTheDocument();
 });
+it("closes an overlay on a backdrop click but not on a drag from inside", async () => {
+  history.replaceState(null, "", "/#/tasks/task00000000001");
+  render(<CrewWorkspace />);
+  const dialog = await screen.findByRole("dialog");
+  const outside = { clientX: -5, clientY: -5 };
+  fireEvent.mouseDown(within(dialog).getAllByRole("textbox")[0]);
+  fireEvent.click(dialog, outside);
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  fireEvent.mouseDown(dialog, { clientX: 0, clientY: 0 });
+  fireEvent.click(dialog, { clientX: 0, clientY: 0 });
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  fireEvent.mouseDown(dialog, outside);
+  fireEvent.click(dialog, outside);
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(location.hash).toBe("#/");
+});
+it("asks before discarding edits, and only when something changed", async () => {
+  history.replaceState(null, "", "/#/tasks/task00000000001");
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  render(<CrewWorkspace />);
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.change(within(dialog).getAllByRole("textbox")[0], {
+    target: { value: "Edited title" },
+  });
+  const closeButton = within(dialog).getByRole("button", {
+    name: "Close dialog",
+  });
+  fireEvent.click(closeButton);
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  location.hash = "#/agents";
+  await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  confirm.mockReturnValue(true);
+  fireEvent.click(closeButton);
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+it("does not ask when nothing was edited", async () => {
+  history.replaceState(null, "", "/#/tasks/task00000000001");
+  const confirm = vi.spyOn(window, "confirm");
+  render(<CrewWorkspace />);
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(confirm).not.toHaveBeenCalled();
+});
 it("takes the brand link home to AI Team", async () => {
   history.replaceState(null, "", "/#/agents");
   render(<CrewWorkspace />);
