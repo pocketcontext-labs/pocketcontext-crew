@@ -83,6 +83,13 @@ const pageEntries = {
       other: "Follow the steps on this page once they have loaded.",
     },
   },
+  search: {
+    name: "Search",
+    question: "How does search work?",
+    what: "Finds tasks and notes by the words in their titles, descriptions, drafts and note text, and agents and buckets by name. Every word must match; the last word also matches longer words that start with it.",
+    action:
+      "Type in the search box at the top of any page, or press / or Ctrl+K (⌘K on a Mac). Use the arrow keys and Enter to open a result, or See all results for the full list. Archived items appear only when you turn on Include archived.",
+  },
 } satisfies Record<string, HelpEntry>;
 
 const glossaryEntries = {

@@ -1722,6 +1722,14 @@ a.crew-logo:hover .product-brand span {
   font-size: 14px;
   font-weight: 650;
 }
+.crew-prompt-fallback {
+  margin: 4px 0 10px;
+  font-size: 13px;
+}
+.crew-prompt-fallback summary {
+  cursor: pointer;
+  color: #567257;
+}
 .crew-prompt-actions {
   display: flex;
   align-items: stretch;
@@ -2020,4 +2028,269 @@ a.crew-logo:hover .product-brand span {
 .crew-dialog .crew-meta-row .crew-quiet {
   font-size: 12px;
   padding: 0;
+}
+
+/* Global search: a field in the top bar, an icon on phones. */
+.crew-topbar > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.crew-global-search {
+  position: relative;
+}
+.crew-app .crew-search-toggle,
+.crew-app .crew-search-close,
+.crew-global-field kbd {
+  display: none;
+}
+.crew-global-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(380px, 38vw);
+  border: 1px solid #dce2d8;
+  border-radius: 7px;
+  background: #fffefb;
+  padding: 0 8px 0 10px;
+}
+.crew-global-field:focus-within {
+  border-color: #487d55;
+  box-shadow: 0 0 0 1px #487d55;
+}
+.crew-global-field > span {
+  font-size: 20px;
+  color: #708069;
+  line-height: 1;
+}
+.crew-app .crew-global-field input,
+.crew-app .crew-global-field input:focus,
+.crew-app .crew-global-field input:focus-visible {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 8px 2px;
+  font: inherit;
+  font-size: 13px;
+  color: #263b32;
+  outline: none;
+  box-shadow: none;
+}
+.crew-global-field input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+@media (min-width: 681px) {
+  .crew-global-field kbd {
+    display: inline-block;
+    font: 11px/1 ui-monospace, monospace;
+    color: #7b8676;
+    border: 1px solid #dce2d8;
+    border-radius: 4px;
+    padding: 3px 6px;
+  }
+  .crew-global-field:focus-within kbd {
+    display: none;
+  }
+}
+.crew-search-popup {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  background: #fffefb;
+  border: 1px solid #dce2d8;
+  border-radius: 9px;
+  box-shadow: 0 16px 40px -18px #0e201e55;
+  padding: 6px;
+}
+.crew-search-status {
+  margin: 0;
+  padding: 10px 10px 8px;
+  color: #6a7767;
+  font-size: 13px;
+}
+.crew-search-group {
+  padding: 10px 10px 4px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: #66845a;
+}
+.crew-search-option {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.crew-search-option.active {
+  background: #eef2e6;
+  box-shadow: inset 3px 0 0 #487d55;
+}
+.crew-search-option strong,
+.crew-search-result strong,
+.crew-search-names strong {
+  display: block;
+  font-weight: 560;
+  color: #263b32;
+}
+.crew-search-option small,
+.crew-search-result small,
+.crew-search-names small {
+  display: block;
+  color: #6e7d60;
+  font-size: 11px;
+}
+.crew-excerpt {
+  display: block;
+  margin-top: 3px;
+  color: #556352;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.crew-search-option .crew-excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.crew-excerpt mark {
+  background: #f3e6a6;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.crew-search-option.all {
+  margin-top: 4px;
+  border-top: 1px solid #e5e8df;
+  border-radius: 0 0 6px 6px;
+  color: #2c4b36;
+  font-weight: 560;
+}
+
+/* The Search page. */
+.crew-search-page section {
+  margin-bottom: 28px;
+}
+.crew-search-page h2 {
+  font-size: 15px;
+  font-weight: 560;
+  margin: 0 0 10px;
+}
+.crew-search-prompt,
+.crew-search-none {
+  color: #6a7767;
+  max-width: 640px;
+}
+.crew-search-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 20px;
+  margin-bottom: 22px;
+}
+.crew-search-summary p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.crew-search-summary label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.crew-search-results,
+.crew-search-names {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.crew-search-names {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+}
+.crew-app .crew-search-result,
+.crew-app .crew-search-names button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
+}
+.crew-search-kind {
+  float: right;
+  margin-left: 10px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #66845a;
+}
+.crew-app .crew-search-more {
+  margin-top: 12px;
+}
+
+@media (max-width: 680px) {
+  .crew-topbar > div {
+    display: contents;
+  }
+  .crew-app .crew-search-toggle {
+    display: inline-block;
+    position: absolute;
+    top: 13px;
+    right: calc(56px + env(safe-area-inset-right));
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    font-size: 20px;
+    line-height: 1;
+  }
+  .crew-global-search {
+    position: static;
+  }
+  .crew-global-field {
+    display: none;
+  }
+  .crew-global-search.expanded .crew-global-field {
+    display: flex;
+    position: absolute;
+    z-index: 31;
+    top: 8px;
+    left: calc(16px + env(safe-area-inset-left));
+    right: calc(16px + env(safe-area-inset-right));
+    width: auto;
+    box-shadow: 0 6px 16px -10px #0e201e55;
+  }
+  .crew-app .crew-global-field input,
+  .crew-app .crew-global-field input:focus,
+  .crew-app .crew-global-field input:focus-visible {
+    font-size: 16px;
+    padding: 9px 2px;
+  }
+  /* Close search replaces the browser's own clear button here. */
+  .crew-global-field input::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .crew-app .crew-search-close {
+    display: inline-block;
+    border: 0;
+    padding: 4px 8px;
+    font-size: 20px;
+    line-height: 1;
+    background: transparent;
+  }
+  .crew-search-popup {
+    top: 58px;
+    left: calc(16px + env(safe-area-inset-left));
+    right: calc(16px + env(safe-area-inset-right));
+    width: auto;
+    max-height: calc(100dvh - 80px);
+  }
 }

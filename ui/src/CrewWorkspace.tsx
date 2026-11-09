@@ -34,6 +34,8 @@ import Help, {
 } from "./Help";
 import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
+import { GlobalSearch, SearchPage } from "./Search";
+import { searchHash, searchTextFromHash, type SearchHit } from "./search";
 import "./crew.css";
 import type { ServerVersion } from "./crewApi";
 import {
@@ -58,6 +60,7 @@ const pages: [View, string, string][] = [
   ...nav,
   ["connect", "Connect an agent", "⇄"],
   ["guide", "Guide", "?"],
+  ["search", "Search", "⌕"],
 ];
 const viewHelp: Partial<Record<View, HelpTopic>> = {
   home: "home",
@@ -67,6 +70,7 @@ const viewHelp: Partial<Record<View, HelpTopic>> = {
   agents: "agents",
   archive: "archive",
   connect: "connect",
+  search: "search",
 };
 const statusHelp: Record<(typeof statuses)[number][0], HelpTopic> = {
   todo: "todo",
@@ -475,7 +479,13 @@ export default function CrewWorkspace() {
     [notice, setNotice] = useState(""),
     [query, setQuery] = useState(""),
     [bucket, setBucket] = useState(""),
-    [assignmentFilter, setAssignmentFilter] = useState("all");
+    [assignmentFilter, setAssignmentFilter] = useState("all"),
+    // The Search page's query, from its address; null for an invalid address.
+    [searchText, setSearchText] = useState(() =>
+      searchTextFromHash(location.hash),
+    ),
+    // Bumped after each save, so search results show the change.
+    [saves, setSaves] = useState(0);
   // "Saved." confirms an action; it should not linger on other pages.
   useEffect(() => {
     if (!notice) return;
@@ -594,6 +604,7 @@ export default function CrewWorkspace() {
         return;
       }
       setView(viewFromHash(location.hash));
+      setSearchText(searchTextFromHash(location.hash));
       setQuery("");
       setDialog(null);
     };
@@ -631,8 +642,31 @@ export default function CrewWorkspace() {
     setDialog({ kind, row });
   };
   const closeDialog = () => {
-    if (isItemHash(location.hash)) pushAddress(viewHashes[view]);
+    if (isItemHash(location.hash))
+      pushAddress(
+        view === "search" && searchText ? searchHash(searchText) : viewHashes[view],
+      );
     setDialog(null);
+  };
+  // A hit is compact, so open the loaded record; one newer than the last load
+  // is read by id first.
+  const openHit = async (hit: SearchHit, inArchive = false) => {
+    const kind: ItemKind = hit.collection === "tasks" ? "task" : "note";
+    const row = [...data[hit.collection], ...archived[hit.collection]].find(
+      (x) => x.id === hit.id,
+    );
+    if (row) return openItem(kind, row);
+    try {
+      const [fresh] = await crewApi.read(hit.collection, {
+        id: hit.id,
+        archived: inArchive,
+      });
+      if (!fresh) throw new Error("missing");
+      openItem(kind, fresh);
+      void load({ silent: true });
+    } catch {
+      setNotice(`That ${kind} couldn't be opened. It may have just changed; try again.`);
+    }
   };
   const perform = async (work: () => Promise<unknown>, message = "Saved.") => {
     setBusy(true);
@@ -643,6 +677,7 @@ export default function CrewWorkspace() {
     try {
       await work();
       await load();
+      setSaves((n) => n + 1);
       setNotice(message);
       return true;
     } catch (e) {
@@ -752,6 +787,7 @@ export default function CrewWorkspace() {
     archive: "Restore notes, tasks and buckets without losing their history.",
     connect: "Crew needs one connection to your agent platform before agents can work here.",
     guide: "What Crew does, what each page is for, and the words it uses.",
+    search: "Every task, note, agent and bucket that matches your words.",
   };
   const titleHelp = viewHelp[view];
   return (
@@ -805,6 +841,15 @@ export default function CrewWorkspace() {
         <header className="crew-topbar">
           <span>POCKETCONTEXT / CREW</span>
           <div>
+            <GlobalSearch
+              agents={data.agents}
+              buckets={data.buckets}
+              pageText={view === "search" ? searchText : null}
+              disabled={dialog !== null}
+              onOpenHit={(hit) => void openHit(hit)}
+              onOpenAgent={(row) => setDialog({ kind: "agent", row })}
+              onOpenBucket={(row) => setDialog({ kind: "bucket", row })}
+            />
             <button
               className="crew-refresh"
               aria-label="Refresh"
@@ -822,6 +867,8 @@ export default function CrewWorkspace() {
               <p className="crew-eyebrow">
                 {view === "guide"
                   ? "HOW IT WORKS"
+                  : view === "search"
+                  ? "FIND ANYTHING"
                   : view === "connect"
                   ? "ONE CONNECTION FOR ALL YOUR AGENTS"
                   : view === "home"
@@ -888,6 +935,7 @@ export default function CrewWorkspace() {
             !data.buckets.length &&
             view !== "archive" &&
             view !== "home" &&
+            view !== "search" &&
             view !== "guide" && (
               <div className="crew-welcome">
                 <div>
@@ -973,6 +1021,17 @@ export default function CrewWorkspace() {
             />
           )}
           {view === "guide" && <Guide />}
+          {view === "search" && (
+            <SearchPage
+              text={searchText}
+              agents={data.agents}
+              buckets={data.buckets}
+              refreshKey={saves}
+              onOpenHit={(hit, inArchive) => void openHit(hit, inArchive)}
+              onOpenAgent={(row) => setDialog({ kind: "agent", row })}
+              onOpenBucket={(row) => setDialog({ kind: "bucket", row })}
+            />
+          )}
           {view === "connect" && (
             <Connect
               agents={[...data.agents, ...archived.agents]}

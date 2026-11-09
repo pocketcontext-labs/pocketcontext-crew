@@ -21,6 +21,7 @@ const pageViews: Record<HelpPageTopic, View> = {
   agents: "agents",
   archive: "archive",
   connect: "connect",
+  search: "search",
 };
 
 const flow: { title: string; detail: string }[] = [

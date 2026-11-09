@@ -1,4 +1,10 @@
 import type { Row } from "./crewApi";
+import {
+  isCanonicalSearchHash,
+  queryProblem,
+  searchHash,
+  searchTextFromHash,
+} from "./search";
 
 export type ItemKind = "task" | "note";
 export type ItemLink = { kind: ItemKind; id: string };
@@ -12,12 +18,17 @@ export const viewHashes = {
   archive: "#/archive",
   connect: "#/connect",
   guide: "#/guide",
+  search: "#/search",
 } as const;
 export type View = keyof typeof viewHashes;
 
-/** Item links and unknown addresses show Home; any Guide address shows the Guide. */
+/**
+ * Item links and unknown addresses show Home; any Guide address shows the Guide
+ * and any search address shows Search, which validates its own query.
+ */
 export function viewFromHash(hash: string): View {
   if (/^#\/guide(?:\/|$)/.test(hash)) return "guide";
+  if (/^#\/search(?:\?|$)/.test(hash)) return "search";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
   return match ? (match[0] as View) : "home";
 }
@@ -58,7 +69,7 @@ export function itemShareUrl(kind: ItemKind, row: Row): string {
 const returnKey = "pocketcontext.crew.login_return";
 const returnLifetimeMs = 15 * 60 * 1000;
 const returnPattern =
-  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|team|memory|approvals|agents|archive|connect|guide(?:\/[a-z-]+)?)$/;
+  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|team|memory|approvals|agents|archive|connect|search|guide(?:\/[a-z-]+)?)$/;
 
 // OAuth consent sends the browser here to sign in and come back. The path is
 // fixed: only the query (validated by the consent endpoint) can vary.
@@ -120,6 +131,12 @@ export function loginReturnHash(hash: string): string | null {
   const view = viewFromHash(hash);
   if (view === "guide")
     return returnPattern.test(hash) ? hash : viewHashes.guide;
+  if (view === "search") {
+    const text = searchTextFromHash(hash);
+    return text && queryProblem(text) === null
+      ? searchHash(text)
+      : viewHashes.search;
+  }
   return view === "home" ? null : hash;
 }
 
@@ -160,7 +177,9 @@ export function takeLoginReturn(): string | null {
     };
     const now = Date.now();
     return typeof hash === "string" &&
-      (returnPattern.test(hash) || isStoredSignin(hash)) &&
+      (returnPattern.test(hash) ||
+        isStoredSignin(hash) ||
+        isCanonicalSearchHash(hash)) &&
       typeof expires === "number" &&
       expires > now &&
       expires <= now + returnLifetimeMs

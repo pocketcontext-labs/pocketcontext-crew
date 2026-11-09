@@ -554,6 +554,17 @@ Fetch the current canonical managed block from the global configuration's instru
   const authorizationPrompt = `I authorize this bot to use my Crew instance at ${mcpUrl} through our shared MCP connection for explicitly tagged setup diagnostics and work assigned to its Crew agent. This authorization is subject to my existing task and human-review rules. It does not authorize other Crew instances, production changes, external actions or unrelated bot messages.
 
 For a setup diagnostic, verify the connected instance, use Crew's current capability contract, and record only your own receipt and acknowledgment. Distinguish an automatically started turn from a human follow-up. Do no task work during a diagnostic and do not send acknowledgment loops. If the instance or recipient is ambiguous, stop and report the issue.`;
+  // The owner posts this once in a Grok group with every bot: each bot reads the
+  // owner's own message, which a relayed message from another bot can't replace.
+  const groupAuthorizationPrompt = authorizationPrompt
+    .replace(
+      "I authorize this bot to use my Crew instance",
+      "I authorize every bot in this group chat to use my Crew instance",
+    )
+    .replace("work assigned to its Crew agent", "work assigned to its own Crew agent")
+    .concat(
+      "\n\nEach bot: reply once here to confirm, then stop. Do not respond to other bots' confirmations.",
+    );
   async function copy(text: string, success: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -839,22 +850,44 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               {mcpUrl && (
                 <div>
                   <h4 className="crew-prompt-step">
-                    Then: paste into each bot's own Grok chat
-                    {activeAgents.length > 1
-                      ? ` (${activeAgents.length} chats)`
-                      : ""}
+                    Then: paste once into a Grok group with all your bots
                   </h4>
                   <p>
-                    Do this after the first prompt and before testing. Each bot
-                    needs your authorization directly: the first bot can't give
-                    it on your behalf.
+                    Create a group chat with you and{" "}
+                    {activeAgents.length > 1
+                      ? `all ${activeAgents.length} bots`
+                      : "your bot"}
+                    , then paste this there. Do it after the first prompt and
+                    before testing. Each bot needs your authorization directly:
+                    the first bot can't give it on your behalf.
                   </p>
+                  <PromptActions
+                    readLabel="Read group authorization prompt"
+                    prompt={groupAuthorizationPrompt}
+                    copyButton={
+                      <button
+                        className="crew-primary"
+                        disabled={blocked}
+                        onClick={() =>
+                          void copy(
+                            groupAuthorizationPrompt,
+                            "Group authorization prompt copied. Paste it once in the group with all your bots.",
+                          )
+                        }
+                      >
+                        Copy group authorization prompt
+                      </button>
+                    }
+                  />
+                  <details className="crew-prompt-fallback">
+                    <summary>
+                      Can't use a group? Paste into each bot's own chat
+                    </summary>
                   <PromptActions
                     readLabel="Read bot authorization prompt"
                     prompt={authorizationPrompt}
                     copyButton={
                       <button
-                            className="crew-primary"
                         disabled={blocked}
                         onClick={() =>
                           void copy(
@@ -867,6 +900,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                       </button>
                     }
                   />
+                  </details>
                 </div>
               )}
               {mapped < activeAgents.length && (

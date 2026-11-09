@@ -47,8 +47,11 @@ bot, MCP connection or per-agent webhook credential is needed.
    Ambiguous bot identities require clarification, never guessed IDs.
 3. Authorize each participating bot to use this Crew instance and perform the
    intended coordination. A shared connection does not override a bot's own
-   instructions or need for direct owner authorization. Diagnostic authorization
-   alone does not authorize unrelated task work or external effects.
+   instructions or need for direct owner authorization. The owner can post one
+   authorization prompt in a Grok group chat containing every participating bot,
+   or in each bot's own chat; a message relayed by another bot is not owner
+   authorization. Diagnostic authorization alone does not authorize unrelated
+   task work or external effects.
 4. Copy the webhook URL/key directly from Grok's routine UI into Crew's browser
    form. Saved values are never returned; unchanged credentials need no re-entry.
 5. Explicitly run the setup test. In parent bridge mode choose a mapped recipient

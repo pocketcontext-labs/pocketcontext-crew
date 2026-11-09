@@ -468,12 +468,19 @@ it("copies parent bridge setup and direct owner authorization separately without
   expect(writeText.mock.calls[0][0]).toContain("priority:true");
   expect(writeText.mock.calls[0][0]).toContain("owner's direct authorization");
   fireEvent.click(
-    screen.getByRole("button", { name: "Copy bot authorization prompt" }),
+    screen.getByRole("button", { name: "Copy group authorization prompt" }),
   );
   await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+  expect(writeText.mock.calls[1][0]).toContain("every bot in this group chat");
+  expect(writeText.mock.calls[1][0]).toContain("Do not respond to other bots");
   expect(writeText.mock.calls[1][0]).toContain(`${window.location.origin}/mcp`);
-  expect(writeText.mock.calls[1][0]).toContain("human-review rules");
-  expect(writeText.mock.calls[1][0]).not.toContain("hooks.example");
+  fireEvent.click(
+    screen.getByRole("button", { name: "Copy bot authorization prompt" }),
+  );
+  await waitFor(() => expect(writeText).toHaveBeenCalledTimes(3));
+  expect(writeText.mock.calls[2][0]).toContain(`${window.location.origin}/mcp`);
+  expect(writeText.mock.calls[2][0]).toContain("human-review rules");
+  expect(writeText.mock.calls[2][0]).not.toContain("hooks.example");
   expect(crewApi.write).not.toHaveBeenCalled();
 });
 
