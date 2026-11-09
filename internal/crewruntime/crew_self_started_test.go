@@ -157,3 +157,33 @@ func TestGovernedTriageClaimStillWakesClaimant(t *testing.T) {
 		t.Fatal("claim recorded as self-started")
 	}
 }
+
+func TestTaskAssigneeAcceptsExactAgentName(t *testing.T) {
+	a, config, _, _ := webhookFixture(t)
+	assignee := config.GetString("agent")
+	created := selfStartWrite(t, a, "task.create", "", 0, map[string]any{"title": "Synthetic named assignee", "assigned_agent": selfStartName}, selfStartName, false, 200)
+	task := created["id"].(string)
+	if got := apiWebhookRecord(t, a, "tasks", task).GetString("assigned_agent"); got != assignee {
+		t.Fatal("create did not resolve the name", got)
+	}
+	updated := selfStartWrite(t, a, "task.update", task, 1, map[string]any{"assigned_agent": ""}, selfStartName, false, 200)
+	if got := apiWebhookRecord(t, a, "tasks", task).GetString("assigned_agent"); got != "" {
+		t.Fatal("assignee was not cleared", got, updated)
+	}
+	selfStartWrite(t, a, "task.claim", task, 2, map[string]any{"assigned_agent": selfStartName}, selfStartName, false, 200)
+	if got := apiWebhookRecord(t, a, "tasks", task).GetString("assigned_agent"); got != assignee {
+		t.Fatal("claim did not resolve the name", got)
+	}
+	selfStartWrite(t, a, "task.create", "", 0, map[string]any{"title": "Synthetic unknown assignee", "assigned_agent": "Synthetic nobody"}, selfStartName, false, 400)
+}
+
+func TestSelfCreatedNamedAssigneeUsesSelfStartRules(t *testing.T) {
+	a, _, _, _ := webhookFixture(t)
+	created := selfStartWrite(t, a, "task.create", "", 0, map[string]any{"title": "Synthetic named self start", "assigned_agent": selfStartName, "readiness": "ready", "status": "in_progress"}, selfStartName, false, 200)
+	task := created["id"].(string)
+	if len(selfStartDeliveries(t, a, task)) != 0 || len(selfStartEvents(t, a, task)) != 1 {
+		t.Fatal("named self-assignment did not record a self-start")
+	}
+	todo := selfStartWrite(t, a, "task.create", "", 0, map[string]any{"title": "Synthetic named todo", "assigned_agent": selfStartName, "readiness": "ready", "status": "todo"}, selfStartName, false, 200)
+	assertSelfStartWoke(t, a, todo["id"].(string), "created")
+}

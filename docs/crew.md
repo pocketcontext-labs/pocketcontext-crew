@@ -29,6 +29,8 @@ secrets, are rejected. Task reads accept `assigned_agent` (ID or unique exact
 name, empty string for unassigned), `status` (one value or a list), `readiness`
 and `label` (exact element of labels). `changed_since` (RFC3339) selects records
 updated at or after that time in any collection. Archive semantics are unchanged.
+Task create, update and claim also accept an ID or unique exact name for
+`assigned_agent`, and store the agent ID.
 
 `POST /api/crew/search` ranks notes (title, body) and tasks (title, description,
 draft) with SQLite FTS5 BM25. It takes query (all terms must match; a trailing

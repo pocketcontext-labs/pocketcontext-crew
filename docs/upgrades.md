@@ -1,5 +1,13 @@
 # Crew upgrades and rollback
 
+## Crew 0.9.2 to 0.9.3
+
+No data migration, protocol change or operator step. Replace the binary or image with
+the normal procedure (`CREW_REPLACE_VERSION=0.9.2` for the installer) and upgrade
+paired clients with the server. A client and server must report the same release. Task
+writes now accept an agent name for `assigned_agent`, and an unknown value returns 400
+instead of 404.
+
 ## Crew 0.9.1 to 0.9.2
 
 No data migration, protocol change or operator step. Replace the binary or image with

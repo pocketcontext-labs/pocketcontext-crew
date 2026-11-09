@@ -581,6 +581,11 @@ function write(e, isAgent) {
           ...values,
           responsible_agent: resolveAgent(app, values.responsible_agent),
         };
+      if (kind === "task" && values.assigned_agent)
+        values = {
+          ...values,
+          assigned_agent: resolveAgent(app, values.assigned_agent),
+        };
       validateData(app, col, values, r);
       if (op === "create") {
         r.set("revision", 1);
