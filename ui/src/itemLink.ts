@@ -4,7 +4,7 @@ import {
   queryProblem,
   searchHash,
   searchTextFromHash,
-} from "./search";
+} from "./searchApi";
 
 export type ItemKind = "task" | "note";
 export type ItemLink = { kind: ItemKind; id: string };

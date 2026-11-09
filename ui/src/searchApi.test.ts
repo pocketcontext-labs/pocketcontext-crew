@@ -16,7 +16,7 @@ import {
   searchHash,
   searchTextFromHash,
   serverQuery,
-} from "./search";
+} from "./searchApi";
 
 afterEach(() => {
   vi.restoreAllMocks();

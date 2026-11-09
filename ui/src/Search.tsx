@@ -25,7 +25,7 @@ import {
   type SearchRequest,
   type SearchResult,
   searchCrew,
-} from "./search";
+} from "./searchApi";
 
 /** Seam for tests: components call the server only through this object. */
 export const searchApi: {

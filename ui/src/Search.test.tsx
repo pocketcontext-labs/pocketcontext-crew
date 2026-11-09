@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CrewWorkspace from "./CrewWorkspace";
 import { crewApi, type Row } from "./crewApi";
 import { searchApi } from "./Search";
-import type { SearchHit, SearchRequest, SearchResult } from "./search";
+import type { SearchHit, SearchRequest, SearchResult } from "./searchApi";
 
 const agent: Row = {
   id: "agent0000000001",

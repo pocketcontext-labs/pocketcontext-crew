@@ -35,7 +35,7 @@ import Help, {
 import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
 import { GlobalSearch, SearchPage } from "./Search";
-import { searchHash, searchTextFromHash, type SearchHit } from "./search";
+import { searchHash, searchTextFromHash, type SearchHit } from "./searchApi";
 import "./crew.css";
 import type { ServerVersion } from "./crewApi";
 import {
