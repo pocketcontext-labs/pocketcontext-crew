@@ -1,5 +1,12 @@
 # Crew upgrades and rollback
 
+## Crew 0.10.0 to 0.11.0
+
+No data migration, protocol change or operator step. Replace the binary or image with
+the normal procedure (`CREW_REPLACE_VERSION=0.10.0` for the installer) and upgrade
+paired clients with the server. A client and server must report the same release. The
+skill and `capabilities_digest` are unchanged, so no `skill` run or routine reread is needed.
+
 ## Crew 0.9.3 to 0.10.0
 
 No data migration, protocol change or operator step. Replace the binary or image with
