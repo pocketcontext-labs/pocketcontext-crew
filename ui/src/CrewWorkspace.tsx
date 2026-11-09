@@ -20,13 +20,26 @@ import {
   itemShareUrl,
   parseItemHash,
   type ItemKind,
+  type View,
+  viewFromHash,
+  viewHashes,
 } from "./itemLink";
-type View = "board" | "memory" | "reviews" | "agents" | "archive";
+const nav: [View, string, string][] = [
+  ["board", "AI Team", "▦"],
+  ["memory", "Shared memory", "▤"],
+  ["reviews", "Approvals", "✓"],
+  ["agents", "Agents", "◎"],
+  ["archive", "Archive", "↶"],
+];
 type Kind = "task" | "note" | "bucket" | "agent" | "review";
 type Data = Record<string, Row[]>;
 /** Never fires hashchange, so writing the address cannot open a dialog. */
 const setAddress = (hash: string) =>
   history.replaceState(null, "", location.pathname + location.search + hash);
+const pushAddress = (hash: string) => {
+  if (location.hash !== hash)
+    history.pushState(null, "", location.pathname + location.search + hash);
+};
 const when = (raw: unknown) =>
   raw ? new Date(String(raw)).toLocaleString() : "Just now";
 function Prose({ children }: { children: string }) {
@@ -133,7 +146,7 @@ function Modal({
   );
 }
 export default function CrewWorkspace() {
-  const [view, setView] = useState<View>("board"),
+  const [view, setView] = useState<View>(() => viewFromHash(location.hash)),
     [data, setData] = useState<Data>({
       agents: [],
       buckets: [],
@@ -203,10 +216,27 @@ export default function CrewWorkspace() {
     };
   }, [load]);
   useEffect(() => {
-    const receive = () => setPendingLink(parseItemHash(location.hash));
+    const receive = () => {
+      setPendingLink(parseItemHash(location.hash));
+      if (isItemHash(location.hash)) return;
+      setView(viewFromHash(location.hash));
+      setQuery("");
+      setDialog(null);
+    };
     window.addEventListener("hashchange", receive);
     return () => window.removeEventListener("hashchange", receive);
   }, []);
+  const openTitle =
+    dialog?.row && (dialog.kind === "task" || dialog.kind === "note")
+      ? val(dialog.row, "title")
+      : "";
+  const pageTitle = openTitle || nav.find(([key]) => key === view)?.[1];
+  useEffect(() => {
+    document.title = `${pageTitle} · PocketContext Crew`;
+    return () => {
+      document.title = "PocketContext Crew";
+    };
+  }, [pageTitle]);
   useEffect(() => {
     if (!pendingLink || !ready) return;
     setPendingLink(null);
@@ -223,11 +253,11 @@ export default function CrewWorkspace() {
     );
   }, [pendingLink, ready, data, archived]);
   const openItem = (kind: ItemKind, row: Row) => {
-    setAddress(itemPath(kind, row));
+    pushAddress(itemPath(kind, row));
     setDialog({ kind, row });
   };
   const closeDialog = () => {
-    if (isItemHash(location.hash)) setAddress("#/");
+    if (isItemHash(location.hash)) pushAddress(viewHashes[view]);
     setDialog(null);
   };
   const perform = async (work: () => Promise<unknown>, message = "Saved.") => {
@@ -333,13 +363,6 @@ export default function CrewWorkspace() {
     : dialog?.kind === "note" && !archivedRow.archived
       ? "This note is read-only because its bucket is archived. Restore the bucket from the Archive view to make changes."
       : `This ${dialog?.kind} is archived and read-only. Restore it from the Archive view to make changes.`;
-  const nav: [View, string, string][] = [
-    ["board", "AI Team", "▦"],
-    ["memory", "Shared memory", "▤"],
-    ["reviews", "Approvals", "✓"],
-    ["agents", "Agents", "◎"],
-    ["archive", "Archive", "↶"],
-  ];
   const descriptions = {
     board: "Your agents do the groundwork. You decide what goes out.",
     memory:
@@ -353,26 +376,27 @@ export default function CrewWorkspace() {
   return (
     <div className="crew-app">
       <aside className="crew-sidebar">
-        <div className="crew-logo">
+        <a
+          className="crew-logo"
+          href={viewHashes.board}
+          aria-label="PocketContext Crew, go to AI Team"
+        >
           <Brand />
           <strong>Crew</strong>
-        </div>
+        </a>
         <nav aria-label="Workspace">
           {nav.map(([key, label, icon]) => (
-            <button
+            <a
               key={key}
+              href={viewHashes[key]}
               aria-current={view === key ? "page" : undefined}
-              onClick={() => {
-                setView(key);
-                setQuery("");
-              }}
             >
               <span aria-hidden="true">{icon}</span>
               {label}
               {key === "reviews" && pending.length > 0 && (
                 <b>{pending.length}</b>
               )}
-            </button>
+            </a>
           ))}
         </nav>
         <div className="crew-sidebar-bottom">

@@ -68,6 +68,60 @@ afterEach(() => {
   history.replaceState(null, "", "/");
   vi.restoreAllMocks();
 });
+async function openPage(name: string | RegExp) {
+  const link = screen.getByRole("link", { name });
+  fireEvent.click(link);
+  await waitFor(() => expect(link).toHaveAttribute("aria-current", "page"));
+}
+it("opens the page named by the address and titles it", async () => {
+  history.replaceState(null, "", "/#/approvals");
+  render(<CrewWorkspace />);
+  await screen.findAllByText("The submitted draft");
+  expect(screen.getByRole("link", { name: /^Approvals/ })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(document.title).toBe("Approvals · PocketContext Crew");
+});
+it("puts each page in the address", async () => {
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  await openPage("Agents");
+  expect(location.hash).toBe("#/agents");
+  await openPage("AI Team");
+  expect(location.hash).toBe("#/");
+});
+it("returns to the current page when an item closes or Back is used", async () => {
+  history.replaceState(null, "", "/#/approvals");
+  render(<CrewWorkspace />);
+  await screen.findAllByText("The submitted draft");
+  location.hash = "#/tasks/task00000000001";
+  let dialog = within(await screen.findByRole("dialog"));
+  expect(document.title).toBe("Launch post · PocketContext Crew");
+  fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(location.hash).toBe("#/approvals");
+  location.hash = "#/tasks/task00000000001";
+  dialog = within(await screen.findByRole("dialog"));
+  expect(dialog.getByRole("button", { name: "Close dialog" })).toBeTruthy();
+  location.hash = "#/approvals";
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.getByRole("link", { name: /^Approvals/ })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});
+it("takes the brand link home to AI Team", async () => {
+  history.replaceState(null, "", "/#/agents");
+  render(<CrewWorkspace />);
+  await screen.findByRole("link", { name: "Agents" });
+  fireEvent.click(screen.getByRole("link", { name: /go to AI Team/ }));
+  await waitFor(() => expect(location.hash).toBe("#/"));
+  expect(screen.getByRole("link", { name: "AI Team" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});
 it("derives Human from a pending request while preserving the assigned agent", async () => {
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
@@ -82,7 +136,7 @@ it("derives Human from a pending request while preserving the assigned agent", a
 it("approves the exact review snapshot and does not complete or execute the task", async () => {
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: /^Approvals/ }));
+  await openPage(/^Approvals/);
   fireEvent.click(screen.getByRole("button", { name: /Review exact draft/ }));
   const dialog = screen.getByRole("dialog");
   expect(within(dialog).getByText("The submitted draft")).toBeInTheDocument();
@@ -140,7 +194,7 @@ it("requires restoring the owning bucket before an inherited archived note", asy
   );
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+  await openPage("Archive");
   expect(
     screen.getByText(
       "Hidden by its archived bucket. Restore the bucket first.",
@@ -161,7 +215,7 @@ it("renders draft Markdown without loading remote images or executing HTML", asy
   ];
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: /^Approvals/ }));
+  await openPage(/^Approvals/);
   expect(document.querySelector(".crew-review-list img")).toBeNull();
   expect(document.querySelector(".crew-review-list script")).toBeNull();
   expect(
@@ -174,7 +228,7 @@ it("shows an approval conflict without claiming success or closing the draft", a
   );
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: /^Approvals/ }));
+  await openPage(/^Approvals/);
   fireEvent.click(screen.getByRole("button", { name: /Review exact draft/ }));
   fireEvent.click(
     within(screen.getByRole("dialog")).getByRole("button", {
@@ -243,7 +297,7 @@ it("shows bucket responsibility and saves a changed or cleared assignment", asyn
   fixtures.agents.push(design);
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: "Shared memory" }));
+  await openPage("Shared memory");
   expect(screen.getByText("Network · responsible agent")).toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
@@ -295,7 +349,7 @@ it("keeps bucket assignment conflicts visible for reassessment", async () => {
   );
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: "Shared memory" }));
+  await openPage("Shared memory");
   fireEvent.click(
     screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
   );
@@ -474,7 +528,7 @@ it("shows redacted webhook health without exposing credential fields, URL paths 
   ];
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: "Agents" }));
+  await openPage("Agents");
   await screen.findByText(/Credential: configured/);
   const section = screen.getByRole("region", { name: "Grok Bot integration" });
   expect(section).toHaveTextContent("receiver.example");
@@ -711,7 +765,7 @@ it("never opens or reopens a dialog on a data refresh", async () => {
   fixtures.tasks = [linkedTask];
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  fireEvent.click(screen.getByRole("button", { name: "Shared memory" }));
+  await openPage("Shared memory");
   fireEvent.click(
     screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
   );
@@ -778,12 +832,14 @@ it("updates the address on click without a duplicate open, and not for new items
   expect(location.hash).toBe("#/tasks/launch-post-task00000000001");
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
-  fireEvent.click(screen.getByRole("button", { name: "Shared memory" }));
+  expect(listener).not.toHaveBeenCalled();
+  await openPage("Shared memory");
+  listener.mockClear(); // The sidebar link is a real navigation.
   fireEvent.click(screen.getByRole("button", { name: /Voice guide/ }));
   expect(location.hash).toBe("#/notes/voice-guide-note00000000001");
   fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
   fireEvent.click(screen.getByRole("button", { name: /New note/ }));
-  expect(location.hash).toBe("#/");
+  expect(location.hash).toBe("#/memory");
   expect(listener).not.toHaveBeenCalled();
   window.removeEventListener("hashchange", listener);
 });

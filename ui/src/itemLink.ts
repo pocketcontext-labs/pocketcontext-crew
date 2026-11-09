@@ -3,6 +3,21 @@ import type { Row } from "./crewApi";
 export type ItemKind = "task" | "note";
 export type ItemLink = { kind: ItemKind; id: string };
 
+export const viewHashes = {
+  board: "#/",
+  memory: "#/memory",
+  reviews: "#/approvals",
+  agents: "#/agents",
+  archive: "#/archive",
+} as const;
+export type View = keyof typeof viewHashes;
+
+/** Item links and unknown addresses show the board. */
+export function viewFromHash(hash: string): View {
+  const match = Object.entries(viewHashes).find(([, value]) => value === hash);
+  return match ? (match[0] as View) : "board";
+}
+
 /**
  * The record id is whatever follows the final "-", or the whole token. The slug
  * before it is the server's and is never interpreted here.
@@ -38,7 +53,8 @@ export function itemShareUrl(kind: ItemKind, row: Row): string {
 // outlive this one. It lasts as long as the one-time password it accompanies.
 const returnKey = "pocketcontext.crew.login_return";
 const returnLifetimeMs = 15 * 60 * 1000;
-const returnPattern = /^#\/(tasks|notes)\/[a-z0-9]{15}$/;
+const returnPattern =
+  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|memory|approvals|agents|archive)$/;
 
 export function clearLoginReturn() {
   try {
@@ -48,13 +64,19 @@ export function clearLoginReturn() {
   }
 }
 
-/** Stores only the normalized kind and id: no slug and nothing from a login URL. */
-export function rememberLoginReturn(link: ItemLink) {
+/** The normalized place to return to: no slug and nothing from a login URL. */
+export function loginReturnHash(hash: string): string | null {
+  const link = parseItemHash(hash);
+  if (link) return bareHash(link);
+  return viewFromHash(hash) === "board" ? null : hash;
+}
+
+export function rememberLoginReturn(hash: string) {
   try {
     localStorage.setItem(
       returnKey,
       JSON.stringify({
-        hash: bareHash(link),
+        hash,
         expires: Date.now() + returnLifetimeMs,
       }),
     );

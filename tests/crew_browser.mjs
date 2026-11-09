@@ -20,7 +20,8 @@ try {
  await page.getByRole('heading',{name:'AI Team',exact:true}).waitFor();
  await page.getByRole('button',{name:'Set up starter crew'}).click();
  await page.getByText('Your five starter agents and memory buckets are ready.').waitFor();
- await page.getByRole('button',{name:'Shared memory',exact:true}).click();
+ await page.getByRole('link',{name:'Shared memory',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Shared memory'}).waitFor();
  assert.equal(await page.locator('.crew-bucket-card').count(),5);
  await page.getByRole('button',{name:'New note'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch voice');
@@ -40,10 +41,11 @@ try {
  assert.equal(await dialog().getByLabel('Note (Markdown)').inputValue(),'Write plainly for independent founders.');
  await dialog().getByRole('button',{name:'Archive note'}).click();await saved();
  assert.equal(await page.getByRole('button',{name:/Synthetic launch voice/}).count(),0);
- await page.getByRole('button',{name:'Archive',exact:true}).click();
+ await page.getByRole('link',{name:'Archive',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Archive'}).waitFor();
  await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByRole('button',{name:'Restore'}).click();
  await page.getByText('Restored. Prior approvals were not reactivated.').waitFor();
- await page.getByRole('button',{name:'AI Team',exact:true}).click();
+ await page.getByRole('link',{name:'AI Team',exact:true}).click();
  await page.getByRole('button',{name:'New task'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch post');
  await dialog().getByLabel('Description',{exact:true}).fill('Introduce our product in our voice.');
@@ -55,13 +57,15 @@ try {
  await dialog().getByRole('button',{name:/Submit saved draft/}).click();await saved();
  await page.locator('.crew-human').filter({hasText:'Human'}).waitFor();
  await snap('crew-board-desktop');
- await page.getByRole('button',{name:/^Approvals/}).click();
+ await page.getByRole('link',{name:/^Approvals/}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Approvals'}).waitFor();
  await page.getByRole('button',{name:/Review exact draft/}).click();
  assert.equal(await dialog().locator('.crew-draft-snapshot').innerText(),'A synthetic draft for the owner to publish manually.');
  await dialog().getByLabel('Decision note').fill('Ready for manual publishing.');
  await dialog().getByRole('button',{name:'Approve draft',exact:true}).click();await saved();
  await page.getByRole('heading',{name:'Nothing waiting for your review'}).waitFor();
- await page.getByRole('button',{name:'AI Team',exact:true}).click();
+ await page.getByRole('link',{name:'AI Team',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/In progress/})}).locator('.crew-task-card').count(),1);
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
  await dialog().getByRole('tab',{name:'Activity'}).click();
@@ -73,7 +77,8 @@ try {
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('.crew-task-card').count(),1);
  // Bridge setup is configuration only: viewing/selecting never sends a probe.
- await page.getByRole('button',{name:'Agents',exact:true}).click();
+ await page.getByRole('link',{name:'Agents',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Agents'}).waitFor();
  const integration=page.getByRole('region',{name:'Grok Bot integration'});
  await integration.getByRole('combobox',{name:'Crew dispatcher',exact:true}).selectOption({label:'Build'});
  await page.getByText('Dispatcher changed. Connect its routine before enabling delivery.',{exact:true}).waitFor();
@@ -90,12 +95,26 @@ try {
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:900});
   for(const name of ['AI Team','Shared memory','Approvals','Agents','Archive']){
-   await page.getByRole('navigation').getByRole('button',{name:new RegExp('^'+name)}).click();
+   await page.getByRole('navigation').getByRole('link',{name:new RegExp('^'+name)}).click();
+   await page.locator('nav a[aria-current=page]').filter({hasText:name}).waitFor();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
   }
-  await page.getByRole('button',{name:'AI Team',exact:true}).click();await snap('crew-board-'+width);
+  await page.getByRole('link',{name:'AI Team',exact:true}).click();await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();await snap('crew-board-'+width);
  }
- await page.getByRole('button',{name:'Shared memory',exact:true}).click();
+ const currentPage=()=>page.locator('nav a[aria-current=page]').innerText();
+ await page.getByRole('navigation').getByRole('link',{name:'Agents',exact:true}).click();
+ await page.waitForURL('**/#/agents');
+ await page.reload();
+ await page.locator('nav a[aria-current=page]').waitFor();
+ assert.match(await currentPage(),/Agents/,'reload keeps the page');
+ assert.match(await page.title(),/^Agents/);
+ await page.getByRole('navigation').getByRole('link',{name:'Archive',exact:true}).click();
+ await page.waitForURL('**/#/archive');
+ await page.goBack();
+ await page.waitForURL('**/#/agents');
+ assert.match(await currentPage(),/Agents/,'Back returns to the page');
+ await page.getByRole('link',{name:'Shared memory',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Shared memory'}).waitFor();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  assert.equal(await dialog().getByLabel('Note (Markdown)').inputValue(),'Write plainly for independent founders.');await close();
  await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();

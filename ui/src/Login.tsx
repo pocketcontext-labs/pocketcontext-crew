@@ -3,7 +3,7 @@ import Brand from "./Brand";
 import { api, localIdentity, type AuthMode } from "./api";
 import {
   clearLoginReturn,
-  parseItemHash,
+  loginReturnHash,
   rememberLoginReturn,
 } from "./itemLink";
 
@@ -84,7 +84,7 @@ export default function Login({
     const hash = location.hash;
     void run(async () => {
       await api.requestEmailLogin(address);
-      const target = parseItemHash(hash);
+      const target = loginReturnHash(hash);
       if (target) rememberLoginReturn(target);
       // Asking again from a spent link's #/login view keeps the original target.
       else if (!hash.startsWith("#/login")) clearLoginReturn();

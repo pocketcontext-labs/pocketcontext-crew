@@ -228,6 +228,28 @@ it("remembers only the item target when an email link is requested from one", as
   expect(value.expires).toBeLessThanOrEqual(Date.now() + 15 * 60 * 1000);
 });
 
+it("remembers a bookmarked page when an email link is requested from it", async () => {
+  history.replaceState(null, "", "/#/approvals");
+  render(<Login />);
+  fireEvent.change(await screen.findByLabelText("Email"), {
+    target: { value: "owner@example.test" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Email me a login link" }));
+  await screen.findByText(/is the owner's address/);
+  expect(JSON.parse(localStorage.getItem(returnKey)!).hash).toBe("#/approvals");
+});
+
+it("returns to a stored page after email sign-in", async () => {
+  mockWorkspace();
+  stored("#/approvals");
+  await completeEmailLogin();
+  expect(location.hash).toBe("#/approvals");
+  expect(screen.getByRole("link", { name: /^Approvals/ })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});
+
 it("forgets an earlier target when a link is requested away from any item", async () => {
   stored("#/tasks/task00000000001");
   history.replaceState(null, "", "/#/");
@@ -338,6 +360,10 @@ it.each([
       hash: "#/tasks/task00000000001",
       expires: Date.now() + 86_400_000,
     }),
+  ],
+  [
+    "an unknown page",
+    JSON.stringify({ hash: "#/settings", expires: Date.now() + 60_000 }),
   ],
   ["a missing expiry", JSON.stringify({ hash: "#/tasks/task00000000001" })],
   ["invalid JSON", "{not json"],

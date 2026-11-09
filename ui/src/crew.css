@@ -12,6 +12,7 @@
 .crew-app * {
   box-sizing: border-box;
 }
+.crew-sidebar nav a,
 .crew-app button,
 .crew-dialog button {
   font: inherit;
@@ -22,6 +23,7 @@
   color: #2d4538;
   cursor: pointer;
 }
+.crew-sidebar nav a:hover,
 .crew-app button:hover,
 .crew-dialog button:hover {
   background: #edf2e9;
@@ -52,6 +54,7 @@
   min-height: 95px;
   line-height: 1.6;
 }
+.crew-sidebar nav a:focus-visible,
 .crew-app button:focus-visible,
 .crew-dialog button:focus-visible,
 .crew-dialog textarea:focus-visible {
@@ -70,6 +73,14 @@
   top: 0;
   height: 100dvh;
 }
+.crew-logo {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+a.crew-logo:hover .product-brand span {
+  text-decoration: underline;
+}
 .crew-logo .product-brand {
   font-size: 17px;
   gap: 7px;
@@ -86,7 +97,8 @@
   display: grid;
   gap: 6px;
 }
-.crew-sidebar nav button {
+.crew-sidebar nav a {
+  text-decoration: none;
   text-align: left;
   display: flex;
   align-items: center;
@@ -96,12 +108,12 @@
   padding: 11px 13px;
   color: #52654f;
 }
-.crew-sidebar nav button > span {
+.crew-sidebar nav a > span {
   width: 18px;
   font-size: 19px;
   line-height: 1;
 }
-.crew-sidebar nav button[aria-current] {
+.crew-sidebar nav a[aria-current] {
   background: #dfe8d6;
   color: #2b4c32;
   font-weight: 650;
@@ -893,13 +905,13 @@
     margin-top: 16px;
     overflow-x: auto;
   }
-  .crew-sidebar nav button {
+  .crew-sidebar nav a {
     padding: 8px;
     font-size: 11px;
     white-space: nowrap;
     gap: 5px;
   }
-  .crew-sidebar nav button > span {
+  .crew-sidebar nav a > span {
     font-size: 14px;
     width: auto;
   }
