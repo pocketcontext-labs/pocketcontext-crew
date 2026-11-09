@@ -42,6 +42,16 @@ const pushAddress = (hash: string) => {
 };
 const when = (raw: unknown) =>
   raw ? new Date(String(raw)).toLocaleString() : "Just now";
+/** Readable card text: Markdown markers would otherwise show, and could be cut in half. */
+const plainPreview = (markdown: string) =>
+  markdown
+    .replace(/^```.*$/gm, "")
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+)/gm, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*|__|~~|`/g, "")
+    .replace(/\*(\S[^*\n]*)\*/g, "$1")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
 function Prose({ children }: { children: string }) {
   return (
     <div className="crew-prose">
@@ -671,7 +681,7 @@ export default function CrewWorkspace() {
                         {name(val(x, "bucket"), "buckets")}
                       </span>
                       <h3>{val(x, "title")}</h3>
-                      <p>{val(x, "body").slice(0, 180)}</p>
+                      <p>{plainPreview(val(x, "body")).slice(0, 180)}</p>
                       <small>
                         Revision {x.revision} · {when(x.updated)}
                       </small>

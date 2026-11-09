@@ -111,6 +111,23 @@ it("returns to the current page when an item closes or Back is used", async () =
     "page",
   );
 });
+it("shows note previews without Markdown markers", async () => {
+  fixtures.notes = [
+    {
+      id: "note00000000001",
+      revision: 1,
+      title: "Voice guide",
+      body: "## Summary\n\n**Task:** `abc` and snake_case\n- [site](https://x.test)",
+      bucket: bucket.id,
+    },
+  ];
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  await openPage("Shared memory");
+  expect(
+    screen.getByText(/^Summary Task: abc and snake_case site$/),
+  ).toBeInTheDocument();
+});
 it("takes the brand link home to AI Team", async () => {
   history.replaceState(null, "", "/#/agents");
   render(<CrewWorkspace />);
