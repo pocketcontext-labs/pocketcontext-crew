@@ -270,13 +270,21 @@ a.crew-logo:hover .product-brand span {
   font-size: 24px;
   color: #708069;
 }
-.crew-search input {
+.crew-app .crew-search input,
+.crew-app .crew-search input:focus,
+.crew-app .crew-search input:focus-visible {
   border: 0;
   width: 100%;
   background: transparent;
   padding: 10px 3px;
   font-size: 12px;
-  outline-offset: 0;
+  outline: none;
+  box-shadow: none;
+}
+/* The whole box shows focus, so the field never draws a second box inside it. */
+.crew-search:focus-within {
+  border-color: #487d55;
+  box-shadow: 0 0 0 1px #487d55;
 }
 .crew-board {
   display: grid;
@@ -1049,9 +1057,20 @@ a.crew-logo:hover .product-brand span {
   margin-top: 10px;
 }
 .crew-note-bucket {
+  display: block;
+  margin-bottom: 12px;
   font-size: 11px;
   letter-spacing: 0.8px;
   color: #638365;
+}
+.crew-dialog .crew-read-title {
+  margin: 0;
+  padding: 10px 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #293e2c;
+  overflow-wrap: anywhere;
 }
 .crew-note-title {
   font-size: 22px;
@@ -1068,7 +1087,8 @@ a.crew-logo:hover .product-brand span {
   gap: 8px;
   margin-bottom: 7px;
 }
-.crew-md-label label {
+.crew-md-label label,
+.crew-md-label .crew-md-name {
   font-size: 13px;
   font-weight: 650;
 }
@@ -1982,4 +2002,22 @@ a.crew-logo:hover .product-brand span {
     bottom: -21px;
     transform: translateX(-50%);
   }
+}
+.crew-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin: 22px 0 18px;
+  font-size: 12px;
+  color: #71806e;
+}
+.crew-dialog .crew-meta-row > * + *::before {
+  content: "·";
+  display: inline-block;
+  margin: 0 8px;
+  color: #9aa592;
+}
+.crew-dialog .crew-meta-row .crew-quiet {
+  font-size: 12px;
+  padding: 0;
 }

@@ -38,7 +38,9 @@ try {
  await dialog().getByRole('button',{name:'Save note'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  await edit();
+ assert.equal(await dialog().getByRole('button',{name:'Save note'}).isDisabled(),true,'Save waits for a change');
  await noteBody().fill('Use concrete examples and short sentences.');
+ assert.equal(await dialog().getByRole('button',{name:'Save note'}).evaluate(b=>{const r=b.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight}),true,'Save is on screen after an edit');
  await dialog().getByLabel('Reason for change',{exact:true}).fill('Synthetic refinement');
  await dialog().getByRole('button',{name:'Save note'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
@@ -48,7 +50,6 @@ try {
  await original.getByRole('button',{name:'Restore as new revision'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  assert.equal(await dialog().locator('.crew-prose').innerText(),'Write plainly for independent founders.');
- await dialog().locator('summary',{hasText:'More'}).click();
  await dialog().getByRole('button',{name:'Archive note'}).click();await saved();
  assert.equal(await page.getByRole('button',{name:/Synthetic launch voice/}).count(),0);
  await page.getByRole('link',{name:'Archive',exact:true}).click();
@@ -177,7 +178,7 @@ try {
  await dialog().getByRole('tab',{name:'Edit',exact:true}).waitFor();
  await edit();
  const noteField=noteBody();
- assert.equal(await dialog().getByRole('button',{name:'Save note'}).count(),0,'no Save before an edit');
+ assert.equal(await dialog().getByRole('button',{name:'Save note'}).isDisabled(),true,'Save waits for an edit');
  await noteField.fill(Array.from({length:60},(_,i)=>`Synthetic line ${i+1}`).join('\n'));
  const save=await dialog().getByRole('button',{name:'Save note'}).boundingBox();
  assert.ok(save.y+save.height<=844&&save.y>700,'Save stays pinned to the bottom of the sheet');

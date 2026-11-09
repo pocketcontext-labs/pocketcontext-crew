@@ -1348,7 +1348,7 @@ describe("simple dialogs", () => {
     const dialog = await openNote();
     fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     expect(dialog.queryByLabelText("Reason for change")).toBeNull();
-    expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
+    expect(dialog.getByRole("button", { name: "Save note" })).toBeDisabled();
     fireEvent.change(dialog.getByLabelText("Note"), {
       target: { value: "Sharper prose" },
     });
@@ -1374,7 +1374,7 @@ describe("simple dialogs", () => {
     fireEvent.change(field, { target: { value: "Changed" } });
     expect(dialog.getByRole("button", { name: "Save note" })).toBeTruthy();
     fireEvent.change(field, { target: { value: "Voice guide" } });
-    expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
+    expect(dialog.getByRole("button", { name: "Save note" })).toBeDisabled();
     fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
     expect(confirm).toHaveBeenCalledTimes(1);
   });
@@ -1403,7 +1403,7 @@ describe("simple dialogs", () => {
       target: { value: "launch" },
     });
     // Searching alone is not an edit.
-    expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
+    expect(dialog.getByRole("button", { name: "Save note" })).toBeDisabled();
     fireEvent.click(dialog.getByRole("button", { name: "Launch checklist" }));
     fireEvent.click(dialog.getByRole("button", { name: "Remove Pricing" }));
     fireEvent.click(dialog.getByRole("button", { name: "Save note" }));
@@ -1433,11 +1433,12 @@ describe("simple dialogs", () => {
 
   it("keeps Archive and record details out of the main flow", async () => {
     const dialog = await openNote();
-    const more = dialog.getByText("More").closest("details")!;
+    const meta = dialog.getByText("Revision 2").closest("p")!;
     expect(
-      within(more).getByRole("button", { name: "Archive note", hidden: true }),
+      within(meta).getByRole("button", { name: "Archive note" }),
     ).toBeTruthy();
-    expect(more).toHaveTextContent("revision 2");
+    expect(within(meta).getByRole("button", { name: "History" })).toBeTruthy();
+    expect(meta).not.toHaveTextContent("note0");
     fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     fireEvent.change(dialog.getByLabelText("Title"), {
       target: { value: "Changed" },
@@ -1641,7 +1642,7 @@ describe("help and Guide", () => {
       "target",
       "_blank",
     );
-    expect(dialog.queryByRole("button", { name: /^Save task/ })).toBeNull();
+    expect(dialog.getByRole("button", { name: /^Save task/ })).toBeDisabled();
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));

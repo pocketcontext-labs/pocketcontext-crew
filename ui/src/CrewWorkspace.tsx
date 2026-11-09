@@ -476,6 +476,12 @@ export default function CrewWorkspace() {
     [query, setQuery] = useState(""),
     [bucket, setBucket] = useState(""),
     [assignmentFilter, setAssignmentFilter] = useState("all");
+  // "Saved." confirms an action; it should not linger on other pages.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const [serverVersion, setServerVersion] = useState<ServerVersion | null>();
   const [connection, setConnection] = useState<ConnectionState>({
     kind: "checking",
@@ -1648,12 +1654,23 @@ function Editor({
         {action}
       </div>
     ) : null;
+  // One quiet line: these are rarely needed and must not look like next steps.
   const more = row && (
-    <details className="crew-more">
-      <summary>More</summary>
+    <p className="crew-meta-row">
+      <span>Revision {row.revision}</span>
+      {kind === "note" && (
+        <button
+          type="button"
+          className="crew-quiet"
+          onClick={() => setTab("history")}
+        >
+          History
+        </button>
+      )}
       {!readOnly && (
         <button
           type="button"
+          className="crew-quiet"
           disabled={busy}
           onClick={() =>
             void save(`${kind}.update`, { archived: true }, row, reason)
@@ -1662,10 +1679,7 @@ function Editor({
           {kind === "agent" ? "Deactivate agent" : `Archive ${kind}`}
         </button>
       )}
-      <p className="crew-record-id">
-        {kind} {row.id} · revision {row.revision}
-      </p>
-    </details>
+    </p>
   );
   const backToNote = (
     <button
@@ -1753,8 +1767,21 @@ function Editor({
             {buckets && (
               <span className="crew-note-bucket">{val(buckets, "name")}</span>
             )}
-            <h3 className="crew-note-title">{title}</h3>
-            <Prose>{body}</Prose>
+            {/* Same labels and boxes as Edit, so switching views keeps everything in place. */}
+            <div className="crew-field">
+              <span>Title</span>
+              <h3 className="crew-read-title">{title}</h3>
+            </div>
+            <div className="crew-md-field">
+              <div className="crew-md-label">
+                <span className="crew-md-name">Note</span>
+              </div>
+              <div className="crew-md-box">
+                <div className="crew-md-preview">
+                  {body.trim() ? <Prose>{body}</Prose> : <p>Nothing written yet.</p>}
+                </div>
+              </div>
+            </div>
             {list(row, "links").length > 0 && (
               <section className="crew-linked-notes">
                 <h3>Related memory</h3>
@@ -1778,16 +1805,7 @@ function Editor({
               </section>
             )}
           </article>
-          <div className="crew-quiet-row">
-            <button
-              type="button"
-              className="crew-quiet"
-              onClick={() => setTab("history")}
-            >
-              History
-            </button>
-            {more}
-          </div>
+          {more}
           {bar(
             dirty && (
               <button className="crew-primary" onClick={() => setTab("edit")}>
@@ -1799,6 +1817,9 @@ function Editor({
       )}
       {tab === "edit" && (
         <form className="crew-editor-form" onSubmit={submit}>
+          {kind === "note" && row && buckets && (
+            <span className="crew-note-bucket">{val(buckets, "name")}</span>
+          )}
           <fieldset className="crew-form-fields" disabled={readOnly}>
             <Field
               label={kind === "note" || kind === "task" ? "Title" : "Name"}
@@ -1991,12 +2012,16 @@ function Editor({
           </fieldset>
           {kind !== "note" && more}
           {bar(
-            !readOnly &&
-              (!row || dirty) && (
-                <button className="crew-primary" disabled={busy}>
-                  Save {kind}
-                </button>
-              ),
+            !readOnly && (
+              // Always visible in Edit, so there is no guessing how to save.
+              <button
+                className="crew-primary"
+                disabled={busy || (Boolean(row) && !dirty)}
+                title={row && !dirty ? "Change something to save" : undefined}
+              >
+                Save {kind}
+              </button>
+            ),
           )}
         </form>
       )}
