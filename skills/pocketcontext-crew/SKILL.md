@@ -123,7 +123,10 @@ crew_schema, crew_query); task work reads compactly. Reread once and reassess on
 refusals such as `handoff_limited` or `execution_required` are not retried
 unchanged. On replayed/reconcile responses, do not send or resume work; reconcile the
 current record first. Governed tasks require proof even before acquisition; only an explicit
-owner Waiting transition releases them. In native mode inspect messaging tools in
+owner Waiting transition releases them. One exception: you may archive a `done` governed
+task with nothing running by sending a `task.update` whose data is exactly
+`{"archived": true}`, without proof. Everything else needs proof or the owner, and only
+the owner can restore it. An `execution_required` message names any active execution. In native mode inspect messaging tools in
 the actual webhook routine. In parent_bridge mode the routine reserves its wake
 through webhook.bridge.prepare, then calls WakeParent once; only the automatically
 activated parent records webhook.bridge.parent and enters task dispatch. Inspect

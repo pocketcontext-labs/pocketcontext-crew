@@ -511,6 +511,60 @@ function handle(app, b, actor, isAgent) {
   }
   return result;
 }
+// A done task with nothing running may be archived without proof. b.data is
+// already free of the _crew envelope. The marker stays: unarchiving needs the owner.
+function archivesDoneTask(task, b, active) {
+  const d = b.data;
+  return (
+    b.action === "task.update" &&
+    !b.execution &&
+    !!d &&
+    typeof d === "object" &&
+    Object.keys(d).length === 1 &&
+    d.archived === true &&
+    task.getString("status") === "done" &&
+    !task.getBool("archived") &&
+    !task.getBool("handoff_limited") &&
+    !active.length
+  );
+}
+// Refusals carry only code and message through PocketBase, so the holder is in
+// the message. Never name fences or worker ids here.
+function holderSummary(r) {
+  const out = exported(r),
+    state = r.getString("state"),
+    limit = state === "handed_off" ? "handoff_deadline_at" : "lease_until",
+    live = !out.waiting_overdue && !out.lease_expired;
+  return (
+    "execution " +
+    r.id +
+    " (event " +
+    r.getString("event_id") +
+    ", state " +
+    state +
+    ", " +
+    limit +
+    " " +
+    (r.getString(limit) || "none") +
+    ", " +
+    (live ? "live" : "not live") +
+    ")"
+  );
+}
+function executionRequiredMessage(active) {
+  const base = "This task is governed by webhook execution. ";
+  if (!active.length)
+    return (
+      base +
+      "No execution is active. Begin its current event and supply execution proof; otherwise the owner can set Waiting to release the task or archive it directly"
+    );
+  return (
+    base +
+    "Active: " +
+    active.map(holderSummary).join("; ") +
+    ". Begin its current event and supply execution proof, or ask the owner to mark it Waiting to release it"
+  );
+}
 // Called in the same transaction as task writes. Owner edits remain authoritative.
 function guardTaskWrite(app, task, b, isAgent) {
   if (!isAgent) return;
@@ -526,6 +580,7 @@ function guardTaskWrite(app, task, b, isAgent) {
     task.getInt("execution_required_generation") === 0
   )
     return;
+  if (archivesDoneTask(task, b, active)) return;
   const p = b.execution;
   if ((!p || typeof p !== "object") && task.getBool("handoff_limited"))
     fail(
@@ -533,10 +588,7 @@ function guardTaskWrite(app, task, b, isAgent) {
       "handoff_limited",
     );
   if (!p || typeof p !== "object")
-    fail(
-      "This task is governed by webhook execution. Begin its current event and supply execution proof, or ask the owner to mark it Waiting to release it",
-      "execution_required",
-    );
+    fail(executionRequiredMessage(active), "execution_required");
   only(p, ["id", "worker_id", "fence"]);
   const r = wh.get(app, "webhook_executions", p.id);
   if (r.getString("task") !== task.id || r.getString("state") !== "running")

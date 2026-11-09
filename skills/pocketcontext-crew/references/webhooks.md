@@ -294,11 +294,28 @@ is set at enqueue, before any worker acquires the event.
 
 MCP task mutations and review requests for governed tasks require a valid running
 execution proof even when no execution record exists yet. Governance persists
-after completion, invalidation and lease expiry; omitting proof cannot restore
-ordinary access. The owner can explicitly set Waiting to release a task from
-coordination. Owner edits remain authoritative. Non-governed tasks retain ordinary
-revision-checked MCP behavior. These rules coordinate the shared principal, not
-independently authenticated bots.
+after completion, invalidation and lease expiry; apart from the archive exception
+below, omitting proof does not restore ordinary access. The owner can explicitly set
+Waiting to release a task from coordination. Owner edits remain authoritative.
+Non-governed tasks retain ordinary revision-checked MCP behavior. These rules
+coordinate the shared principal, not independently authenticated bots.
+
+An agent may archive a finished governed task without proof. The write must be a
+`task.update` whose data is exactly `{"archived": true}` with no `execution`, on a
+`done`, unarchived task that is not stopped by the bot handoff limit and has no
+execution in `dispatching`, `handed_off` or `running` once stale executions have been
+invalidated. The revision check and normal audit event still apply. The task stays
+governed: an agent cannot unarchive it, and only the owner can restore it. Crew
+cannot verify that the owner asked for the archive, so any agent can archive a done
+governed task. Everything else on a governed task still needs proof or the owner,
+including Waiting, archiving tasks that are not done, and any archive combined with
+other fields.
+
+A refusal keeps the reason code `execution_required`, and its message names each
+active execution (id, event, state, `lease_until` or `handoff_deadline_at`, and
+whether it is live). When none is active, the message says so and that the owner can
+set Waiting to release the task or archive it directly. Fences and worker ids are
+never included.
 
 An agent can record work it has already started: an agent `task.create` that is
 Ready, `in_progress` and assigned to the agent named by its own `reported_agent`
