@@ -6,11 +6,12 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, pb } from "./api";
 import { crewApi, type Row } from "./crewApi";
 import Login, { readEmailLoginLink } from "./Login";
 import App from "./App";
+import { browserNavigation, takeLoginReturn } from "./itemLink";
 
 beforeEach(() => {
   history.replaceState(null, "", "/");
@@ -375,4 +376,128 @@ it.each([
   expect(location.hash).toBe("#/");
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(localStorage.getItem(returnKey)).toBeNull();
+});
+
+describe("OAuth sign-in route", () => {
+  const target = "/oauth/authorize?client_id=abc&state=x";
+  const route = "/#/signin?next=" + encodeURIComponent(target);
+  const signIn = () =>
+    pb.authStore.save(fakeToken(), {
+      id: "synthetic",
+      collectionName: "users",
+    } as never);
+  const fakeToken = () =>
+    `e30.${btoa(JSON.stringify({ exp: 4102444800, type: "auth" }))}.sig`;
+  let replace: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    replace = vi
+      .spyOn(browserNavigation, "replace")
+      .mockImplementation(() => undefined);
+  });
+
+  it("is not mistaken for an email login link", () => {
+    history.replaceState(null, "", route);
+    expect(readEmailLoginLink()).toBeNull();
+  });
+
+  it("shows the normal login and remembers the target for the emailed link", async () => {
+    history.replaceState(null, "", route);
+    render(<App />);
+    fireEvent.change(await screen.findByLabelText("Email"), {
+      target: { value: "owner@example.test" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Email me a login link" }),
+    );
+    await screen.findByRole("heading", { name: "Check your inbox" });
+    expect(replace).not.toHaveBeenCalled();
+    expect(takeLoginReturn()).toBe(
+      "#/signin?next=" + encodeURIComponent(target),
+    );
+  });
+
+  it("goes to the target after password sign-in", async () => {
+    vi.mocked(api.loginMode).mockResolvedValue("password");
+    vi.spyOn(api, "refreshSession").mockResolvedValue(undefined);
+    vi.mocked(api.loginPassword).mockImplementation(async () => signIn());
+    history.replaceState(null, "", route);
+    render(<App />);
+    fireEvent.change(await screen.findByLabelText("Password"), {
+      target: { value: "synthetic-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledExactlyOnceWith(target),
+    );
+  });
+
+  it("goes straight there when the server accepts the session", async () => {
+    const refresh = vi.spyOn(api, "refreshSession").mockResolvedValue(undefined);
+    signIn();
+    history.replaceState(null, "", route);
+    render(<App />);
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledExactlyOnceWith(target),
+    );
+    expect(refresh).toHaveBeenCalledWith(true);
+  });
+
+  it("shows login when the server rejects the session, without navigating", async () => {
+    vi.spyOn(api, "refreshSession").mockImplementation(async () => {
+      pb.authStore.clear();
+      throw Object.assign(new Error("rejected"), { status: 401 });
+    });
+    signIn();
+    history.replaceState(null, "", route);
+    render(<App />);
+    expect(await screen.findByLabelText("Email")).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("offers a retry when the check cannot complete", async () => {
+    const refresh = vi
+      .spyOn(api, "refreshSession")
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(undefined);
+    signIn();
+    history.replaceState(null, "", route);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["other path", "/api/secret?x=1"],
+    ["protocol relative", "//evil.example/oauth/authorize?x=1"],
+    ["backslash", "/\\evil.example/oauth/authorize?x=1"],
+  ])("falls back to Home for %s", async (_name, next) => {
+    mockWorkspace();
+    signIn();
+    history.replaceState(null, "", "/#/signin?next=" + encodeURIComponent(next));
+    render(<App />);
+    await waitFor(() => expect(location.hash).toBe("#/"));
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("returns to the stored target after the emailed link", async () => {
+    stored("#/signin?next=" + encodeURIComponent(target));
+    history.replaceState(null, "", "/#/login?otpId=syntheticid1234&otp=12345678");
+    render(<App />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue to Crew" }),
+    );
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledExactlyOnceWith(target),
+    );
+    expect(localStorage.getItem(returnKey)).toBeNull();
+  });
+
+  it("refuses a tampered stored target after the emailed link", async () => {
+    mockWorkspace();
+    stored("#/signin?next=" + encodeURIComponent("//evil.example/x"));
+    await completeEmailLogin();
+    expect(replace).not.toHaveBeenCalled();
+    expect(location.hash).toBe("#/");
+  });
 });

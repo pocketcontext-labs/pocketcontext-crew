@@ -19,8 +19,10 @@ await context.route('**/*',async route=>{
 });
 try{
  const reader=await context.newPage();reader.on('pageerror',e=>problems.push(e.message));
+ // A signed-out visit to the old page reaches the reader's sign-in, not a dead end.
  await reader.goto(origin+'/oauth/connections');
- await reader.getByText('Sign in to the reader in this browser first, then return here.',{exact:true}).waitFor();
+ await reader.waitForURL(origin+'/#/connect');
+ await reader.getByRole('heading',{name:'Log in to Crew',exact:true}).waitFor();
  const call=async(path,body,token='',form=false)=>reader.evaluate(async({path,body,token,form})=>{
   const response=await fetch(path,{method:'POST',headers:{'Content-Type':form?'application/x-www-form-urlencoded':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:form?new URLSearchParams(body).toString():JSON.stringify(body)});
   return {status:response.status,data:await response.json()};
@@ -35,19 +37,41 @@ try{
  assert.equal(await consent.locator('script').count(),1);
  for(const width of [390,320]){await consent.setViewportSize({width,height:844});assert(await consent.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'consent must fit mobile width')}
  await consent.setViewportSize({width:390,height:844});
- await consent.getByRole('button',{name:'Allow access',exact:true}).click();
- await consent.getByText('Sign in to the reader in this browser first, then return here.',{exact:true}).waitFor();
+ const allow=consent.getByRole('button',{name:'Allow access',exact:true}),login=consent.getByRole('link',{name:'Log in',exact:true});
+ await login.waitFor();assert.equal(await allow.count(),0);
+ assert.equal(await login.getAttribute('href'),'/#/signin?next='+encodeURIComponent('/oauth/authorize?'+params));
+ assert.equal(await consent.getByText('open the reader').count(),0);
+ assert.equal(await consent.getByRole('link',{name:'Manage connected apps',exact:true}).getAttribute('href'),'/#/connect');
+ // A token that looks valid locally but the server rejects: Allow reveals Log in,
+ // and the reader shows its form instead of bouncing back to consent.
+ const part=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
+ const stale=`${part({alg:'HS256'})}.${part({exp:4102444800,type:'auth',id:'synthetic',collectionId:'synthetic'})}.synthetic`;
+ await consent.evaluate(token=>localStorage.setItem('pocketcontext.reader.auth',JSON.stringify({token,record:{id:'synthetic',collectionName:'users'}})),stale);
+ await consent.reload();
+ await allow.click();
+ await consent.getByText('Your sign-in has expired. Log in to continue.',{exact:true}).waitFor();
+ assert.equal(await allow.count(),0);
+ await login.click();
+ await consent.waitForURL(origin+'/#/signin?next=**');
+ await consent.getByRole('heading',{name:'Log in to Crew',exact:true}).waitFor();
+ assert.equal(await consent.evaluate(()=>localStorage.getItem('pocketcontext.reader.auth')||''),'','rejected token cleared');
  // The browser never learns or enters the synthetic account's password.
  await reader.goto(signIn);await reader.waitForURL(origin+'/');
- await consent.getByRole('button',{name:'Allow access',exact:true}).click();
+ // Already signed in: the same route goes straight back to the request.
+ await consent.reload();
+ await consent.waitForURL(origin+'/oauth/authorize?**');
+ assert.equal(consent.url(),origin+'/oauth/authorize?'+params);
+ await allow.click();
  await consent.waitForURL('https://client.example.com/callback?**');
  const callback=new URL(consent.url());assert.equal(callback.searchParams.get('state'),'synthetic-state');
  const tokens=await call('/oauth/token',{grant_type:'authorization_code',client_id:client,code:callback.searchParams.get('code'),redirect_uri:'https://client.example.com/callback',code_verifier:verifier,resource:origin+'/mcp'},'',true);
  assert.equal(tokens.status,200);
  assert.equal((await call('/mcp',{},tokens.data.access_token)).status,200);
  await reader.goto(origin+'/oauth/connections');
- await reader.getByRole('button',{name:'Revoke access',exact:true}).click();
- await reader.getByText('Access revoked.',{exact:true}).waitFor();
+ await reader.waitForURL(origin+'/#/connect');
+ reader.once('dialog',dialog=>dialog.accept());
+ await reader.locator('li',{hasText:'Synthetic'}).getByRole('button',{name:'Disconnect',exact:true}).click();
+ await reader.getByText('No apps connected yet.',{exact:true}).waitFor();
  assert.equal((await call('/mcp',{},tokens.data.access_token)).status,401);
  assert.equal((await call('/oauth/token',{grant_type:'refresh_token',client_id:client,refresh_token:tokens.data.refresh_token,resource:origin+'/mcp'},'',true)).status,400);
  // Capture Chromium's native-scheme navigation request. No OS handler is
@@ -78,5 +102,5 @@ try{
   assert.equal((await call('/mcp',{},nativeTokens.data.access_token)).status,200);
  }
  assert.deepEqual(problems,[]);
- console.log('ok - reader link login without password, consent retry, escaped client name, exact callback, OAuth exchange, authenticated MCP, browser revocation, private-scheme consent navigation');
+ console.log('ok - connections redirect, consent Log in, stale token recovery, reader link login without password, escaped client name, exact callback, OAuth exchange, authenticated MCP, browser revocation, private-scheme consent navigation');
 }finally{await context.close();await browser.close()}

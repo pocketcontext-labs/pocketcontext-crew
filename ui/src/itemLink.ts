@@ -60,6 +60,47 @@ const returnLifetimeMs = 15 * 60 * 1000;
 const returnPattern =
   /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|team|memory|approvals|agents|archive|connect|guide(?:\/[a-z-]+)?)$/;
 
+// OAuth consent sends the browser here to sign in and come back. The path is
+// fixed: only the query (validated by the consent endpoint) can vary.
+const signinPrefix = "#/signin?next=";
+const oauthTargetMaxLength = 16384;
+
+/** Accepts only `/oauth/authorize?<query>` on this origin. */
+export function safeOAuthTarget(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw.length > oauthTargetMaxLength) return null;
+  if (!/^\/oauth\/authorize\?[^\s\\#]+$/.test(raw)) return null;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(raw)) return null;
+  try {
+    const url = new URL(raw, location.origin);
+    return url.origin === location.origin &&
+      url.pathname === "/oauth/authorize" &&
+      url.pathname + url.search === raw
+      ? raw
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export const isSigninHash = (hash: string) => /^#\/signin(?:\?|$)/.test(hash);
+
+/** The validated return target of a `#/signin?next=` address. */
+export function oauthTargetFromHash(hash: string): string | null {
+  const match = /^#\/signin\?(.*)$/.exec(hash);
+  if (!match) return null;
+  const next = new URLSearchParams(match[1]).getAll("next");
+  return next.length === 1 ? safeOAuthTarget(next[0]) : null;
+}
+
+const signinHash = (target: string) =>
+  signinPrefix + encodeURIComponent(target);
+
+/** Seam for tests: jsdom cannot perform this navigation. */
+export const browserNavigation = {
+  replace: (target: string) => location.replace(target),
+};
+
 export function clearLoginReturn() {
   try {
     localStorage.removeItem(returnKey);
@@ -70,6 +111,10 @@ export function clearLoginReturn() {
 
 /** The normalized place to return to: no slug and nothing from a login URL. */
 export function loginReturnHash(hash: string): string | null {
+  if (isSigninHash(hash)) {
+    const target = oauthTargetFromHash(hash);
+    return target ? signinHash(target) : null;
+  }
   const link = parseItemHash(hash);
   if (link) return bareHash(link);
   const view = viewFromHash(hash);
@@ -92,6 +137,12 @@ export function rememberLoginReturn(hash: string) {
   }
 }
 
+/** Only the exact form this module writes; anything else in storage is refused. */
+function isStoredSignin(hash: string): boolean {
+  const target = oauthTargetFromHash(hash);
+  return target !== null && hash === signinHash(target);
+}
+
 /** Returns a validated item hash at most once; the stored value is always cleared. */
 export function takeLoginReturn(): string | null {
   let raw: string | null = null;
@@ -109,7 +160,7 @@ export function takeLoginReturn(): string | null {
     };
     const now = Date.now();
     return typeof hash === "string" &&
-      returnPattern.test(hash) &&
+      (returnPattern.test(hash) || isStoredSignin(hash)) &&
       typeof expires === "number" &&
       expires > now &&
       expires <= now + returnLifetimeMs

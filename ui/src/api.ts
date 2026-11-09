@@ -164,11 +164,16 @@ export async function loginEmail(
 }
 let refreshedAt = 0;
 let refreshedToken = "";
-export async function refreshSession(): Promise<void> {
+/** `force` asks the server even when this token was renewed moments ago. */
+export async function refreshSession(force = false): Promise<void> {
   const initiatingToken = pb.authStore.token;
   if (!initiatingToken) throw new Error("Please sign in to continue");
   const generation = sessionGeneration;
-  if (initiatingToken === refreshedToken && Date.now() - refreshedAt < 300000)
+  if (
+    !force &&
+    initiatingToken === refreshedToken &&
+    Date.now() - refreshedAt < 300000
+  )
     return;
   try {
     // Save explicitly: the SDK authRefresh helper saves even after a user signs out.
