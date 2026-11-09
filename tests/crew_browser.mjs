@@ -13,6 +13,10 @@ const dialog=()=>page.getByRole('dialog');
 const close=()=>dialog().getByRole('button',{name:'Close dialog'}).click();
 const saved=async()=>{await page.getByRole('status').filter({hasText:'Saved.'}).waitFor();await page.getByRole('dialog').waitFor({state:'hidden'});};
 const snap=async name=>{if(process.env.CREW_SCREENSHOTS) await page.screenshot({path:path.join(process.env.CREW_SCREENSHOTS,name+'.png'),fullPage:true});};
+const snapView=async name=>{if(process.env.CREW_SCREENSHOTS) await page.screenshot({path:path.join(process.env.CREW_SCREENSHOTS,name+'.png')});};
+// Exact label matching sees a textarea's own text, so match the label's span.
+const noteBody=()=>dialog().locator('label:has(> span:text-is("Note")) textarea');
+const edit=()=>dialog().getByRole('button',{name:'Edit',exact:true}).click();
 try {
  await page.goto(base);
  await page.getByLabel('Password',{exact:true}).fill(process.env.CREW_TEST_PASSWORD);
@@ -29,20 +33,22 @@ try {
  assert.equal(await page.locator('.crew-bucket-card').count(),5);
  await page.getByRole('button',{name:'New note'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch voice');
- await dialog().getByLabel('Memory bucket').selectOption({label:'NETWORK'});
- await dialog().getByLabel('Note (Markdown)').fill('Write plainly for independent founders.');
+ await dialog().getByLabel('Bucket',{exact:true}).selectOption({label:'NETWORK'});
+ await noteBody().fill('Write plainly for independent founders.');
  await dialog().getByRole('button',{name:'Save note'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
- await dialog().getByLabel('Note (Markdown)').fill('Use concrete examples and short sentences.');
- await dialog().getByLabel('Reason for change').fill('Synthetic refinement');
+ await edit();
+ await noteBody().fill('Use concrete examples and short sentences.');
+ await dialog().getByLabel('Reason for change',{exact:true}).fill('Synthetic refinement');
  await dialog().getByRole('button',{name:'Save note'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
- await dialog().getByRole('tab',{name:'History'}).click();
+ await dialog().getByRole('button',{name:'History'}).click();
  const original=dialog().locator('.crew-version').filter({has:page.locator('summary').filter({hasText:/Revision 1 ·/})});
  await original.locator('summary').first().click();
  await original.getByRole('button',{name:'Restore as new revision'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
- assert.equal(await dialog().getByLabel('Note (Markdown)').inputValue(),'Write plainly for independent founders.');
+ assert.equal(await dialog().locator('.crew-prose').innerText(),'Write plainly for independent founders.');
+ await dialog().locator('summary',{hasText:'More'}).click();
  await dialog().getByRole('button',{name:'Archive note'}).click();await saved();
  assert.equal(await page.getByRole('button',{name:/Synthetic launch voice/}).count(),0);
  await page.getByRole('link',{name:'Archive',exact:true}).click();
@@ -53,12 +59,12 @@ try {
  await page.getByRole('button',{name:'New task'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch post');
  await dialog().getByLabel('Description',{exact:true}).fill('Introduce our product in our voice.');
- await dialog().getByLabel('Assigned agent').selectOption({label:'Network'});
+ await dialog().getByLabel('Assigned agent',{exact:true}).selectOption({label:'Network'});
  await dialog().getByLabel('Labels (comma separated)').fill('Network, Launch');
  await dialog().getByLabel('Draft for review (Markdown)').fill('A synthetic draft for the owner to publish manually.');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
- await dialog().getByRole('button',{name:/Submit saved draft/}).click();await saved();
+ await dialog().getByRole('button',{name:'Send draft for approval'}).click();await saved();
  await page.locator('.crew-human').filter({hasText:'Human'}).waitFor();
  await snap('crew-board-desktop');
  await page.getByRole('link',{name:/^Approvals/}).click();
@@ -83,6 +89,10 @@ try {
  // Bridge setup is configuration only: viewing/selecting never sends a probe.
  await page.getByRole('link',{name:'Connect an agent',exact:true}).click();
  await page.getByRole('heading',{name:'Connect an agent',exact:true,level:1}).waitFor();
+ await page.getByText('./pocketcontext-crew skill',{exact:true}).waitFor();
+ assert.equal(await page.getByText('/mcp').count(),0,'Install without a domain shows an MCP address');
+ assert.equal(await page.getByRole('region',{name:'Connected apps'}).count(),0);
+ await page.getByRole('button',{name:'Set up automatic wake-ups',exact:true}).click();
  const integration=page.getByRole('region',{name:'Grok Bot integration'});
  await integration.getByRole('combobox',{name:'Crew dispatcher',exact:true}).selectOption({label:'Build'});
  await page.getByText('Dispatcher changed. Connect its routine before enabling delivery.',{exact:true}).waitFor();
@@ -104,8 +114,70 @@ try {
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
   }
   await page.getByRole('navigation').getByRole('link',{name:'Home',exact:true}).click();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();await snap('crew-home-'+width);
+  if(width<1440){
+   // Help opens on tap, stays on screen, and the Guide is reachable from Home.
+   await page.getByRole('button',{name:'What is Home?',exact:true}).click();
+   const pop=page.locator('.crew-help-popover');await pop.waitFor();
+   const box=await pop.boundingBox();
+   assert.ok(box.x>=0&&box.x+box.width<=width,`help popover fits at ${width}`);
+   const tap=await page.getByRole('button',{name:'What is Home?',exact:true}).boundingBox();
+   assert.ok(tap.width>=32&&tap.height>=32,'help tap target');
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`help overflow at ${width}`);
+   await snapView('crew-help-popover-'+width);
+   await page.keyboard.press('Escape');await pop.waitFor({state:'hidden'});
+   await page.getByRole('link',{name:'Read how it works'}).click();
+   await page.waitForURL('**/#/guide');
+   await page.getByRole('heading',{name:'How Crew works',exact:true}).waitFor();
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Guide overflow at ${width}`);
+   await snap('crew-guide-'+width);
+   await page.getByRole('navigation').getByRole('link',{name:'Home',exact:true}).click();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
+  }
   await page.getByRole('link',{name:'AI Team',exact:true}).click();await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();await snap('crew-board-'+width);
+  assert.equal(await page.locator('button:visible').filter({hasText:/^Sign out$/}).count(),1,`one Sign out at ${width}`);
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isVisible(),true,`Refresh at ${width}`);
+  assert.equal(await page.locator('.crew-topbar > span').isVisible(),width>680,`top bar at ${width}`);
  }
+ // Phone sheets: reading first, edit second, Save pinned once something changed.
+ await page.setViewportSize({width:390,height:844});
+ await page.getByRole('navigation').getByRole('link',{name:'Shared memory',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Shared memory'}).waitFor();
+ await page.getByRole('button',{name:/Synthetic launch voice/}).click();
+ await dialog().getByRole('heading',{name:'Synthetic launch voice'}).waitFor();
+ const sheet=await dialog().boundingBox();
+ assert.deepEqual([sheet.x,sheet.y,sheet.width,sheet.height],[0,0,390,844],'overlay fills the phone screen');
+ assert.equal(await dialog().getByRole('button',{name:'Copy link'}).evaluate(e=>e===document.activeElement),false,'Copy link is not focused');
+ await snapView('crew-note-read-390');
+ await edit();
+ const noteField=noteBody();
+ assert.equal(await dialog().getByRole('button',{name:'Save note'}).count(),0,'no Save before an edit');
+ await noteField.fill(Array.from({length:60},(_,i)=>`Synthetic line ${i+1}`).join('\n'));
+ const save=await dialog().getByRole('button',{name:'Save note'}).boundingBox();
+ assert.ok(save.y+save.height<=844&&save.y>700,'Save stays pinned to the bottom of the sheet');
+ assert.equal(await noteField.evaluate(e=>e.scrollHeight<=e.clientHeight+1),true,'the note field grows instead of scrolling');
+ await dialog().getByLabel('Reason for change',{exact:true}).waitFor();
+ await snapView('crew-note-edit-390');
+ // Help inside a dialog: no dirty state change, Escape closes only the popover.
+ await dialog().getByRole('button',{name:'Why give a reason for change?',exact:true}).click();
+ await dialog().locator('.crew-help-popover').waitFor();
+ await page.keyboard.press('Escape');
+ await dialog().locator('.crew-help-popover').waitFor({state:'hidden'});
+ assert.equal(await dialog().isVisible(),true,'Escape on help keeps the dialog');
+ page.once('dialog',d=>d.accept());
+ await close();
+ await dialog().waitFor({state:'hidden'});
+ await page.setViewportSize({width:1440,height:900});
+ // A bookmarked deep link lands on its section after reload; unknown topics show the top.
+ await page.evaluate(()=>{location.hash='#/guide/bucket';});
+ await page.reload();
+ await page.locator('#guide-bucket.current').waitFor();
+ await page.waitForFunction(()=>{const r=document.getElementById('guide-bucket').getBoundingClientRect();return r.top>=-1&&r.top<window.innerHeight/2;});
+ assert.ok(await page.evaluate(()=>window.scrollY>200),'deep link scrolled to its section');
+ await page.evaluate(()=>{location.hash='#/guide/not-a-topic';});
+ await page.locator('#guide-bucket.current').waitFor({state:'detached'});
+ await page.getByRole('heading',{name:'How Crew works',exact:true}).waitFor();
+ await page.waitForFunction(()=>window.scrollY<5);
+ await page.getByRole('link',{name:'AI Team',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();
  await page.getByRole('button',{name:/New task/}).click();
  await page.getByRole('dialog').waitFor();
  await page.mouse.click(5,5);
@@ -134,7 +206,7 @@ try {
  await page.getByRole('link',{name:'Shared memory',exact:true}).click();
  await page.locator('nav a[aria-current=page]').filter({hasText:'Shared memory'}).waitFor();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
- assert.equal(await dialog().getByLabel('Note (Markdown)').inputValue(),'Write plainly for independent founders.');await close();
+ assert.equal(await dialog().locator('.crew-prose').innerText(),'Write plainly for independent founders.');await close();
  await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);

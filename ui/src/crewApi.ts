@@ -19,7 +19,55 @@ export function list(row: Row | undefined, key: string): string[] {
   return [];
 }
 export type ServerVersion = { version: string; commit: string };
+export type Connection = { kind: "mcp"; url: string } | { kind: "local" };
+export type ConnectionState =
+  | Connection
+  | { kind: "checking" }
+  | { kind: "unknown" };
+export type ConnectedApp = { id: string; name: string; created: number };
+async function connectionsRequest<T>(body?: { id: string }): Promise<T> {
+  const response = await fetch("/oauth/connections", {
+    method: body ? "POST" : "GET",
+    credentials: "omit",
+    redirect: "error",
+    headers: {
+      Authorization: `Bearer ${pb.authStore.token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) throw new Error("Connected apps are unavailable.");
+  return response.json() as Promise<T>;
+}
 export const crewApi = {
+  // MCP clients discover the endpoint from this same public document. The
+  // server serves it only when MCP is on, and 404s it otherwise, including on a
+  // domain without --mcp. Any other answer proves nothing, so it throws.
+  async connectedApps(): Promise<ConnectedApp[]> {
+    const { connections } = await connectionsRequest<{
+      connections: ConnectedApp[];
+    }>();
+    return connections;
+  },
+  async revokeConnectedApp(id: string): Promise<void> {
+    await connectionsRequest({ id });
+  },
+  async connection(): Promise<Connection> {
+    const response = await fetch("/.well-known/oauth-protected-resource", {
+      cache: "no-store",
+      credentials: "omit",
+    });
+    if (response.status === 404) return { kind: "local" };
+    if (!response.ok) throw new Error("Connection details unavailable");
+    const { resource } = (await response.json()) as { resource?: unknown };
+    if (typeof resource !== "string")
+      throw new Error("Connection details unavailable");
+    const url = new URL(resource);
+    if (url.protocol !== "https:" || url.pathname !== "/mcp")
+      throw new Error("Connection details unavailable");
+    return { kind: "mcp", url: resource };
+  },
   async serverVersion(): Promise<ServerVersion> {
     const result = await pb.send<Partial<ServerVersion>>(
       "/api/bundle/version",

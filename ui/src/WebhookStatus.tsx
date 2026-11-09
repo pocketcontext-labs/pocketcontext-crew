@@ -6,6 +6,8 @@ import {
   type ReactNode,
 } from "react";
 import { crewApi, list, val, type Row } from "./crewApi";
+import Help, { HelpField } from "./Help";
+import type { HelpTopic } from "./helpContent";
 const reasons = [
   "created",
   "assigned",
@@ -78,26 +80,56 @@ function Step({
   number,
   title,
   done,
+  help,
   children,
 }: {
   number: number;
   title: string;
   done?: boolean;
+  help?: HelpTopic;
   children: ReactNode;
 }) {
   return (
     <section className="crew-setup-step" aria-label={title}>
-      <div className="crew-setup-heading">
+      <div className={help ? "crew-setup-heading with-help" : "crew-setup-heading"}>
         <span
           className={done ? "crew-step-number complete" : "crew-step-number"}
         >
           {done ? "✓" : number}
         </span>
         <h3>{title}</h3>
+        {help && <Help topic={help} />}
         {done && <span className="crew-step-complete">Complete</span>}
       </div>
       {children}
     </section>
+  );
+}
+function PromptActions({
+  copyButton,
+  readLabel,
+  prompt,
+}: {
+  copyButton: ReactNode;
+  readLabel: string;
+  prompt: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className="crew-prompt-actions">
+        {copyButton}
+        <button
+          type="button"
+          aria-label={readLabel}
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {open ? "Hide prompt" : "Read prompt"}
+        </button>
+      </div>
+      {open && <pre className="crew-copy-prompt">{prompt}</pre>}
+    </>
   );
 }
 function Blockers({ items }: { items: Blocker[] }) {
@@ -110,7 +142,17 @@ function Blockers({ items }: { items: Blocker[] }) {
   ) : null;
 }
 // Only explicitly named safe fields are rendered; credentials and raw errors are never serialized.
-export default function WebhookStatus({ agents }: { agents: Row[] }) {
+export default function WebhookStatus({
+  agents,
+  collapsible = false,
+  mcpUrl = `${window.location.origin}/mcp`,
+}: {
+  agents: Row[];
+  collapsible?: boolean;
+  /** null when this install has no MCP endpoint to authorize bots against. */
+  mcpUrl?: string | null;
+}) {
+  const [open, setOpen] = useState(!collapsible);
   const [config, setConfig] = useState<Row>();
   const [mappings, setMappings] = useState<Row[]>([]);
   const [routing, setRouting] = useState<Row>();
@@ -158,10 +200,23 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
         setSubscriptions(list(current, "subscriptions"));
         setRoleInstructions(val(current, "role_instructions"));
         setReportingInstructions(val(current, "reporting_instructions"));
+        // Latched, so a later refresh cannot collapse a form in use.
+        if (
+          current?.enabled ||
+          current?.url_configured ||
+          current?.secret_configured ||
+          val(current, "agent") ||
+          ms.some((m) => val(m, "bot_ref")) ||
+          ds.length ||
+          es.length
+        )
+          setOpen(true);
       })
       .catch(() => {
-        if (alive)
-          setError("Could not load the integration. Refresh to try again.");
+        if (!alive) return;
+        setError("Could not load the integration. Refresh to try again.");
+        // Status is unknown, so show the error rather than hide live state.
+        setOpen(true);
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -332,7 +387,7 @@ export default function WebhookStatus({ agents }: { agents: Row[] }) {
 7. Do not enable delivery, test, send bot messages, replay tasks or perform work from this setup request. Report readiness and exact remaining blockers.
 
 Fetch the current canonical managed block from the global configuration's instructions field. Setup uses the full capabilities; wake runs read only crew_read {collection:"capabilities", id:"execution"} and skip it when they already hold the payload's capabilities_digest. The runtime must stop if execution.begin cannot establish authority; never fall back to ordinary task writes.`;
-  const authorizationPrompt = `I authorize this bot to use my Crew instance at ${window.location.origin}/mcp through our shared MCP connection for explicitly tagged setup diagnostics and work assigned to its Crew agent. This authorization is subject to my existing task and human-review rules. It does not authorize other Crew instances, production changes, external actions or unrelated bot messages.
+  const authorizationPrompt = `I authorize this bot to use my Crew instance at ${mcpUrl} through our shared MCP connection for explicitly tagged setup diagnostics and work assigned to its Crew agent. This authorization is subject to my existing task and human-review rules. It does not authorize other Crew instances, production changes, external actions or unrelated bot messages.
 
 For a setup diagnostic, verify the connected instance, use Crew's current capability contract, and record only your own receipt and acknowledgment. Distinguish an automatically started turn from a human follow-up. Do no task work during a diagnostic and do not send acknowledgment loops. If the instance or recipient is ambiguous, stop and report the issue.`;
   async function copy(text: string, success: string) {
@@ -368,6 +423,12 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
   const selfEvidence = routeEvidence.some((ex) => ex.agent === config?.agent);
   const otherEvidence = routeEvidence.some((ex) => ex.agent !== config?.agent);
   const routingPrompt = `Verify Crew routing with two clearly labeled synthetic tasks, one assigned to the selected dispatcher and one to a mapped specialist. First read crew_read collection capabilities and the current integration. Stop unless delivery is enabled. This prompt explicitly authorizes creating these two synthetic Ready tasks. Reuse existing test tasks if present. Each task should comment pong once and complete through execution.begin and the current fenced completion protocol. Verify the configured dispatch path, including the parent wake when parent_bridge is selected and the actual native handoff to the recipient. Do not infer success from HTTP acceptance or a reported send. Do not change credentials, mappings, dispatcher, ordinary tasks or perform backlog catch-up. Report event, execution and task evidence separately. This prompt authorizes only these synthetic routing tests; no external actions.`;
+  if (!open)
+    return loading ? null : (
+      <button type="button" onClick={() => setOpen(true)}>
+        Set up automatic wake-ups
+      </button>
+    );
   return (
     <section className="crew-webhooks" aria-label="Grok Bot integration">
       <div className="crew-section-title">
@@ -384,7 +445,8 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
       </div>
       <p>
         One existing bot receives Crew notifications and routes them to your
-        team. Keep your normal bot roles and one shared MCP connection.
+        team. Keep your normal bot roles
+        {mcpUrl ? " and one shared MCP connection" : ""}.
       </p>
       {loading && <p role="status">Loading integration…</p>}
       {error && <p role="alert">{error}</p>}
@@ -418,8 +480,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 Use an existing bot. It keeps its main job and also routes Crew
                 notifications.
               </p>
-              <label className="crew-field">
-                <span>Crew dispatcher</span>
+              <HelpField label="Crew dispatcher" topic="dispatcher">
                 <select
                   value={val(config, "agent")}
                   disabled={blocked}
@@ -439,7 +500,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     </option>
                   ))}
                 </select>
-              </label>
+              </HelpField>
               <p className="crew-footnote">
                 Changing the dispatcher pauses delivery and clears the previous
                 webhook binding.
@@ -477,28 +538,33 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               title="Prepare Grok"
               done={synced && mapped === activeAgents.length && mapped > 0}
             >
+              <p>Two prompts, in this order. Both are required.</p>
+              <h4 className="crew-prompt-step">
+                First: paste once into{" "}
+                {val(currentAgent, "name") || "your selected bot"}'s Grok chat
+              </h4>
               <p>
-                Paste one setup prompt into{" "}
-                {val(currentAgent, "name") || "your selected bot"}'s Grok chat.
                 It asks Grok to discover your bots, save mappings and apply the
                 current routine instructions where its tools support them.
               </p>
-              <button
-                className="crew-primary"
-                disabled={blocked || !currentAgent}
-                onClick={() =>
-                  void copy(
-                    setupPrompt,
-                    "Setup prompt copied. It contains no credentials.",
-                  )
+              <PromptActions
+                readLabel="Read setup prompt"
+                prompt={setupPrompt}
+                copyButton={
+                  <button
+                    className="crew-primary"
+                    disabled={blocked || !currentAgent}
+                    onClick={() =>
+                      void copy(
+                        setupPrompt,
+                        "Setup prompt copied. It contains no credentials.",
+                      )
+                    }
+                  >
+                    Copy setup prompt
+                  </button>
                 }
-              >
-                Copy setup prompt
-              </button>
-              <details>
-                <summary>Read setup prompt</summary>
-                <pre className="crew-copy-prompt">{setupPrompt}</pre>
-              </details>
+              />
               <p>
                 <strong>{syncLabel}</strong> · Revision{" "}
                 {Number(config.instruction_revision) || 1}
@@ -531,26 +597,38 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                   );
                 })}
               </ul>
-              <details>
-                <summary>Authorize your bots to use Crew</summary>
-                <p>
-                  Give each bot direct authorization in its own Grok chat before
-                  testing. A dispatcher's message does not replace your
-                  authorization.
-                </p>
-                <button
-                  disabled={blocked}
-                  onClick={() =>
-                    void copy(
-                      authorizationPrompt,
-                      "Authorization prompt copied. Paste it into each bot's own conversation.",
-                    )
-                  }
-                >
-                  Copy bot authorization prompt
-                </button>
-                <pre className="crew-copy-prompt">{authorizationPrompt}</pre>
-              </details>
+              {mcpUrl && (
+                <div>
+                  <h4 className="crew-prompt-step">
+                    Then: paste into each bot's own Grok chat
+                    {activeAgents.length > 1
+                      ? ` (${activeAgents.length} chats)`
+                      : ""}
+                  </h4>
+                  <p>
+                    Do this after the first prompt and before testing. Each bot
+                    needs your authorization directly: the first bot can't give
+                    it on your behalf.
+                  </p>
+                  <PromptActions
+                    readLabel="Read bot authorization prompt"
+                    prompt={authorizationPrompt}
+                    copyButton={
+                      <button
+                        disabled={blocked}
+                        onClick={() =>
+                          void copy(
+                            authorizationPrompt,
+                            "Authorization prompt copied. Paste it into each bot's own conversation.",
+                          )
+                        }
+                      >
+                        Copy bot authorization prompt
+                      </button>
+                    }
+                  />
+                </div>
+              )}
               {mapped < activeAgents.length && (
                 <p className="crew-footnote">
                   Unmapped agents cannot receive Ready-task notifications. The
@@ -561,6 +639,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
             <Step
               number={3}
               title="Enter webhook credentials"
+              help="webhook-credentials"
               done={!!config.url_configured && !!config.secret_configured}
             >
               <p>
@@ -813,21 +892,23 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     : "not yet verified"}
                 </li>
               </ul>
-              <button
-                disabled={blocked || !currentAgent || !config.enabled}
-                onClick={() =>
-                  void copy(
-                    routingPrompt,
-                    "Routing test prompt copied. It authorizes only the described synthetic tasks.",
-                  )
+              <PromptActions
+                readLabel="Read routing test prompt"
+                prompt={routingPrompt}
+                copyButton={
+                  <button
+                    disabled={blocked || !currentAgent || !config.enabled}
+                    onClick={() =>
+                      void copy(
+                        routingPrompt,
+                        "Routing test prompt copied. It authorizes only the described synthetic tasks.",
+                      )
+                    }
+                  >
+                    Copy routing test prompt
+                  </button>
                 }
-              >
-                Copy routing test prompt
-              </button>
-              <details>
-                <summary>Read routing test prompt</summary>
-                <pre className="crew-copy-prompt">{routingPrompt}</pre>
-              </details>
+              />
               <p className="crew-footnote">
                 Enable delivery first, then run only the authorized sample
                 tasks. Recorded completion is reported by the worker; check the
@@ -1011,8 +1092,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                   );
                 }}
               >
-                <label className="crew-field">
-                  <span>Bot handoff limit</span>
+                <HelpField label="Bot handoff limit" topic="handoff-limit">
                   <input
                     type="number"
                     min={1}
@@ -1022,7 +1102,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     disabled={blocked}
                     onChange={(e) => setHandoffLimit(e.target.value)}
                   />
-                </label>
+                </HelpField>
                 <p className="crew-footnote">
                   Consecutive agent reassignments allowed before Crew stops the
                   task as Waiting without a wake. Any owner edit or comment

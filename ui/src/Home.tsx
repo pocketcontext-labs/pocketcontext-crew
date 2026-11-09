@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { statuses, val, type Row } from "./crewApi";
+import { ConnectionPending, skillCommand } from "./Connect";
+import Help from "./Help";
+import { statuses, val, type ConnectionState, type Row } from "./crewApi";
 import { viewHashes, type ItemKind } from "./itemLink";
 
 type Data = Record<string, Row[]>;
@@ -33,6 +35,7 @@ export default function Home({
   openItem,
   openReview,
   invalidAssignment,
+  connection,
   copyEndpoint,
 }: {
   data: Data;
@@ -45,6 +48,7 @@ export default function Home({
   openItem: (kind: ItemKind, row: Row) => void;
   openReview: (review: Row) => void;
   invalidAssignment: (task: Row) => boolean;
+  connection: ConnectionState;
   copyEndpoint: ReactNode;
 }) {
   const [connected, setConnected] = useState(() => stored(connectedKey));
@@ -76,23 +80,41 @@ export default function Home({
       done: connected || agentSeen,
       body: (
         <>
-          <p>
-            Crew doesn't run agents itself. Add this address to your agent
-            platform and approve the connection with your account.
-          </p>
-          <div className="crew-home-endpoint">
-            <code>{location.origin}/mcp</code>
-            {copyEndpoint}
-          </div>
-          <button
-            className="crew-primary"
-            onClick={() => {
-              remember(connectedKey);
-              setConnected(true);
-            }}
-          >
-            I've connected it
-          </button>
+          <ConnectionPending connection={connection} />
+          {connection.kind === "mcp" && (
+            <>
+              <p>
+                Crew doesn't run agents itself. Add this address to your agent
+                platform and approve the connection with your account.
+              </p>
+              <div className="crew-home-endpoint">
+                <code>{connection.url}</code>
+                {copyEndpoint}
+              </div>
+            </>
+          )}
+          {connection.kind === "local" && (
+            <>
+              <p>
+                Crew doesn't run agents itself. Your coding agent uses Crew
+                through a skill. Run this once in your Crew folder.
+              </p>
+              <div className="crew-home-endpoint">
+                <code>{skillCommand}</code>
+              </div>
+            </>
+          )}
+          {(connection.kind === "mcp" || connection.kind === "local") && (
+            <button
+              className="crew-primary"
+              onClick={() => {
+                remember(connectedKey);
+                setConnected(true);
+              }}
+            >
+              I've connected it
+            </button>
+          )}
           <a href={viewHashes.connect}>See full setup</a>
         </>
       ),
@@ -149,10 +171,14 @@ export default function Home({
 
   return (
     <div className="crew-home">
+      <p className="crew-home-guide">
+        New to Crew? <a href={viewHashes.guide}>Read how it works</a>
+      </p>
       {current >= 0 && !hidden && (
         <section className="crew-home-start" aria-label="Get started">
           <header>
             <h2>Get started</h2>
+            <Help topic="get-started" />
             <span>
               {steps.filter((step) => step.done).length} of {steps.length} done
             </span>
@@ -186,7 +212,10 @@ export default function Home({
         </section>
       )}
       <section aria-label="Needs you">
-        <h2>Needs you</h2>
+        <div className="crew-title-row">
+          <h2>Needs you</h2>
+          <Help topic="needs-you" />
+        </div>
         {nothingNeeded && <p>Nothing needs you right now.</p>}
         <div className="crew-home-list">
           {pending.map((review) => (

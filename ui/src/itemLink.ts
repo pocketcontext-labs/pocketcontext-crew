@@ -11,11 +11,13 @@ export const viewHashes = {
   agents: "#/agents",
   archive: "#/archive",
   connect: "#/connect",
+  guide: "#/guide",
 } as const;
 export type View = keyof typeof viewHashes;
 
-/** Item links and unknown addresses show Home. */
+/** Item links and unknown addresses show Home; any Guide address shows the Guide. */
 export function viewFromHash(hash: string): View {
+  if (/^#\/guide(?:\/|$)/.test(hash)) return "guide";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
   return match ? (match[0] as View) : "home";
 }
@@ -56,7 +58,7 @@ export function itemShareUrl(kind: ItemKind, row: Row): string {
 const returnKey = "pocketcontext.crew.login_return";
 const returnLifetimeMs = 15 * 60 * 1000;
 const returnPattern =
-  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|team|memory|approvals|agents|archive|connect)$/;
+  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|team|memory|approvals|agents|archive|connect|guide(?:\/[a-z-]+)?)$/;
 
 export function clearLoginReturn() {
   try {
@@ -70,7 +72,10 @@ export function clearLoginReturn() {
 export function loginReturnHash(hash: string): string | null {
   const link = parseItemHash(hash);
   if (link) return bareHash(link);
-  return viewFromHash(hash) === "home" ? null : hash;
+  const view = viewFromHash(hash);
+  if (view === "guide")
+    return returnPattern.test(hash) ? hash : viewHashes.guide;
+  return view === "home" ? null : hash;
 }
 
 export function rememberLoginReturn(hash: string) {

@@ -451,7 +451,6 @@ it("copies parent bridge setup and direct owner authorization separately without
   expect(writeText.mock.calls[0][0]).toContain("WakeParent");
   expect(writeText.mock.calls[0][0]).toContain("priority:true");
   expect(writeText.mock.calls[0][0]).toContain("owner's direct authorization");
-  fireEvent.click(screen.getByText("Authorize your bots to use Crew"));
   fireEvent.click(
     screen.getByRole("button", { name: "Copy bot authorization prompt" }),
   );

@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CrewWorkspace from "./CrewWorkspace";
 import { crewApi, type Row } from "./crewApi";
 const agent: Row = {
@@ -56,6 +56,10 @@ beforeEach(() => {
     events: [],
     note_revisions: [],
   };
+  vi.spyOn(crewApi, "connection").mockResolvedValue({
+    kind: "mcp",
+    url: "https://crew.example/mcp",
+  });
   vi.spyOn(crewApi, "read").mockImplementation(async (c, f = {}) =>
     f.archived ? [] : fixtures[c] || [],
   );
@@ -228,6 +232,28 @@ it("hides Get started once finished or dismissed", async () => {
   await screen.findByRole("heading", { name: "Your crew right now" });
   expect(screen.queryByRole("heading", { name: "Get started" })).toBeNull();
 });
+it("manages connected apps inside Crew and confirms before disconnecting", async () => {
+  vi.spyOn(crewApi, "connection").mockResolvedValue({
+    kind: "mcp",
+    url: "https://crew.example.test/mcp",
+  });
+  const apps = vi
+    .spyOn(crewApi, "connectedApps")
+    .mockResolvedValue([{ id: "grant1", name: "Grok", created: 1700000000 }]);
+  const revoke = vi.spyOn(crewApi, "revokeConnectedApp").mockResolvedValue();
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  history.replaceState(null, "", "/#/connect");
+  render(<CrewWorkspace />);
+  const button = await screen.findByRole("button", { name: "Disconnect" });
+  expect(screen.getByText("Grok")).toBeInTheDocument();
+  fireEvent.click(button);
+  expect(revoke).not.toHaveBeenCalled();
+  confirm.mockReturnValue(true);
+  apps.mockResolvedValue([]);
+  fireEvent.click(button);
+  await screen.findByText("No apps connected yet.");
+  expect(revoke).toHaveBeenCalledWith("grant1");
+});
 it("derives Human from a pending request while preserving the assigned agent", async () => {
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
@@ -269,15 +295,17 @@ it("requires saving a changed draft before submitting it for review", async () =
   await screen.findByRole("heading", { name: "Launch post" });
   fireEvent.click(screen.getByRole("button", { name: /Launch post/ }));
   const dialog = screen.getByRole("dialog");
-  const submit = within(dialog).getByRole("button", {
-    name: /Submit saved draft/,
-  });
-  expect(submit).toBeEnabled();
+  expect(
+    within(dialog).getByRole("button", { name: "Send draft for approval" }),
+  ).toBeEnabled();
   fireEvent.change(
     within(dialog).getByLabelText("Draft for review (Markdown)"),
     { target: { value: "Different draft" } },
   );
-  expect(submit).toBeDisabled();
+  expect(
+    within(dialog).queryByRole("button", { name: "Send draft for approval" }),
+  ).toBeNull();
+  expect(within(dialog).getByText("Save your draft first")).toBeInTheDocument();
   expect(crewApi.write).not.toHaveBeenCalled();
 });
 it("requires restoring the owning bucket before an inherited archived note", async () => {
@@ -655,6 +683,131 @@ it("shows redacted webhook health without exposing credential fields, URL paths 
   expect(crewApi.write).not.toHaveBeenCalled();
 });
 
+const wakeButton = { name: "Set up automatic wake-ups" };
+async function renderConnect() {
+  history.replaceState(null, "", "/#/connect");
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", {
+    name: "Connect an agent",
+    level: 1,
+  });
+}
+
+it("keeps wake-up setup behind one button for a first-time owner", async () => {
+  fixtures.webhook_configs = [
+    { id: "webhook00000001", revision: 1, scope: "global", enabled: false },
+  ];
+  await renderConnect();
+  fireEvent.click(await screen.findByRole("button", wakeButton));
+  expect(
+    await screen.findByRole("region", { name: "Grok Bot integration" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", wakeButton)).toBeNull();
+});
+
+it.each([
+  ["delivery is on", { enabled: true }],
+  ["credentials are saved", { url_configured: true }],
+  ["a dispatcher is chosen", { agent: agent.id }],
+])("opens wake-up setup when %s", async (_name, fields) => {
+  fixtures.webhook_configs = [
+    { id: "webhook00000001", revision: 1, scope: "global", ...fields },
+  ];
+  await renderConnect();
+  expect(
+    await screen.findByRole("region", { name: "Grok Bot integration" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", wakeButton)).toBeNull();
+});
+
+it("shows an existing owner the error when wake-up status cannot load", async () => {
+  vi.mocked(crewApi.read).mockImplementation(async (c, f = {}) => {
+    if (c === "webhook_configs") throw new Error("synthetic");
+    return f.archived ? [] : fixtures[c] || [];
+  });
+  await renderConnect();
+  expect(
+    await screen.findByText(
+      "Could not load the integration. Refresh to try again.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", wakeButton)).toBeNull();
+});
+
+it("shows the MCP address and connected apps when the server has MCP", async () => {
+  await renderConnect();
+  expect(
+    await screen.findByText("https://crew.example/mcp"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("region", { name: "Connected apps" }),
+  ).toBeInTheDocument();
+});
+
+it("gives skill instructions and no MCP details without a domain", async () => {
+  vi.mocked(crewApi.connection).mockResolvedValue({ kind: "local" });
+  await renderConnect();
+  expect(
+    await screen.findByText("./pocketcontext-crew skill"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("./pocketcontext-crew tunnel invite")).toBeInTheDocument();
+  expect(document.body).not.toHaveTextContent("/mcp");
+  expect(screen.queryByRole("region", { name: "Connected apps" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+});
+
+it("shows the skill step on Home without a domain", async () => {
+  fixtures = { ...fixtures, tasks: [], reviews: [] };
+  vi.mocked(crewApi.connection).mockResolvedValue({ kind: "local" });
+  history.replaceState(null, "", "/#/home");
+  render(<CrewWorkspace />);
+  expect(
+    await screen.findByText("./pocketcontext-crew skill"),
+  ).toBeInTheDocument();
+  expect(document.body).not.toHaveTextContent("/mcp");
+  expect(
+    screen.getByRole("button", { name: "I've connected it" }),
+  ).toBeInTheDocument();
+});
+
+it("claims neither setup when the server cannot be checked", async () => {
+  vi.mocked(crewApi.connection).mockRejectedValue(new Error("synthetic"));
+  await renderConnect();
+  expect(
+    await screen.findByText(/Could not check how this Crew is set up/),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("./pocketcontext-crew skill")).toBeNull();
+  expect(document.body).not.toHaveTextContent("/mcp");
+});
+
+describe("crewApi.connection", () => {
+  const answer = (status: number, body = "{}") =>
+    vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(body, { status }));
+  beforeEach(() => vi.mocked(crewApi.connection).mockRestore());
+
+  it("uses the address the server publishes", async () => {
+    answer(200, JSON.stringify({ resource: "https://crew.example/mcp" }));
+    await expect(crewApi.connection()).resolves.toEqual({
+      kind: "mcp",
+      url: "https://crew.example/mcp",
+    });
+  });
+  it("reads a 404 as an install without MCP", async () => {
+    answer(404);
+    await expect(crewApi.connection()).resolves.toEqual({ kind: "local" });
+  });
+  it.each([
+    [503, "{}"],
+    [200, "<html></html>"],
+    [200, JSON.stringify({ resource: "http://127.0.0.1:8099/mcp" })],
+  ])("does not guess from status %i with %s", async (status, body) => {
+    answer(status, body);
+    await expect(crewApi.connection()).rejects.toThrow();
+  });
+});
+
 it("opens webhook task links and clears the route when the editor closes", async () => {
   history.replaceState(null, "", `/#/tasks/${task.id}`);
   render(<CrewWorkspace />);
@@ -796,13 +949,15 @@ it.each([
   ["task", "#/tasks/any-old-slug-task00000000001", "Launch post"],
   ["note", "#/notes/voice-guide-note00000000001", "Voice guide"],
   ["note", "#/notes/note00000000001", "Voice guide"],
-])("opens a %s from %s", async (_kind, hash, title) => {
+])("opens a %s from %s", async (kind, hash, title) => {
   fixtures.tasks = [linkedTask];
   fixtures.notes = [linkedNote];
   history.replaceState(null, "", `/${hash}`);
   render(<CrewWorkspace />);
   const dialog = within(await screen.findByRole("dialog"));
-  expect(dialog.getByLabelText("Title")).toHaveValue(title);
+  if (kind === "note")
+    expect(dialog.getByRole("heading", { name: title })).toBeInTheDocument();
+  else expect(dialog.getByLabelText("Title")).toHaveValue(title);
 });
 
 it.each([
@@ -864,7 +1019,9 @@ it("opens a hashchange navigation on already-loaded data", async () => {
   await screen.findByRole("heading", { name: "Launch post" });
   navigate("#/notes/voice-guide-note00000000001");
   const dialog = within(await screen.findByRole("dialog"));
-  expect(dialog.getByLabelText("Title")).toHaveValue("Voice guide");
+  expect(
+    dialog.getByRole("heading", { name: "Voice guide" }),
+  ).toBeInTheDocument();
 });
 
 it("never opens or reopens a dialog on a data refresh", async () => {
@@ -962,12 +1119,11 @@ it("updates the address when a linked note opens from a note's related memory", 
   history.replaceState(null, "", "/#/notes/source-note00000000002");
   render(<CrewWorkspace />);
   const dialog = within(await screen.findByRole("dialog"));
-  fireEvent.click(dialog.getByRole("tab", { name: "Preview" }));
   fireEvent.click(dialog.getByRole("button", { name: /Voice guide/ }));
   expect(location.hash).toBe("#/notes/voice-guide-note00000000001");
-  expect(dialog.getByRole("tab", { name: "Preview" })).toBeInTheDocument();
-  fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
-  expect(dialog.getByLabelText("Title")).toHaveValue("Voice guide");
+  expect(
+    await dialog.findByRole("heading", { name: "Voice guide" }),
+  ).toBeInTheDocument();
 });
 
 it("shows an archived task read-only and explains how to restore it", async () => {
@@ -987,8 +1143,11 @@ it("shows an archived task read-only and explains how to restore it", async () =
   expect(dialog.queryByRole("button", { name: "Save task" })).toBeNull();
   expect(dialog.queryByRole("button", { name: "Archive task" })).toBeNull();
   expect(
-    dialog.queryByRole("button", { name: /Submit saved draft/ }),
+    dialog.queryByRole("button", { name: "Send draft for approval" }),
   ).toBeNull();
+  expect(dialog.queryByText("Add a draft to request approval")).toBeNull();
+  expect(dialog.queryByText("Save your draft first")).toBeNull();
+  expect(dialog.queryByText(/Waiting for your approval/)).toBeNull();
   fireEvent.click(dialog.getByRole("tab", { name: "Activity" }));
   expect(dialog.queryByRole("button", { name: "Add comment" })).toBeNull();
   expect(crewApi.write).not.toHaveBeenCalled();
@@ -1006,9 +1165,11 @@ it("shows an archived note read-only without restore-revision actions", async ()
   expect(dialog.getByRole("status")).toHaveTextContent(
     "This note is archived and read-only.",
   );
-  expect(dialog.getByLabelText("Note (Markdown)")).toBeDisabled();
+  expect(dialog.queryByRole("button", { name: "Edit" })).toBeNull();
+  expect(dialog.queryByLabelText("Note")).toBeNull();
   expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
-  fireEvent.click(dialog.getByRole("tab", { name: "History" }));
+  expect(dialog.queryByRole("button", { name: "Archive note" })).toBeNull();
+  fireEvent.click(dialog.getByRole("button", { name: "History" }));
   await dialog.findByText(/Revision 1/);
   expect(
     dialog.queryByRole("button", { name: "Restore as new revision" }),
@@ -1028,8 +1189,9 @@ it("treats a note hidden only by its archived bucket as archived", async () => {
   expect(dialog.getByRole("status")).toHaveTextContent(
     "Restore the bucket from the Archive view",
   );
-  expect(dialog.getByLabelText("Title")).toBeDisabled();
-  expect(dialog.getByLabelText("Memory bucket")).toHaveValue(bucket.id);
+  expect(dialog.getByRole("heading", { name: "Voice guide" })).toBeTruthy();
+  expect(dialog.getByText("NETWORK")).toBeInTheDocument();
+  expect(dialog.queryByRole("button", { name: "Edit" })).toBeNull();
   expect(dialog.queryByRole("button", { name: "Archive note" })).toBeNull();
 });
 
@@ -1078,4 +1240,426 @@ it.each([
   expect(alert).toHaveTextContent("Could not copy automatically");
   expect(alert).toHaveTextContent("#/tasks/launch-post-task00000000001");
   expect(dialog.getByLabelText("Title")).toHaveValue("Launch post");
+});
+
+describe("simple dialogs", () => {
+  const openNote = async (note: Row = linkedNote) => {
+    fixtures.notes = fixtures.notes.length ? fixtures.notes : [note];
+    history.replaceState(null, "", `/${note.path}`);
+    render(<CrewWorkspace />);
+    return within(await screen.findByRole("dialog"));
+  };
+
+  it("focuses the dialog rather than Copy link", async () => {
+    fixtures.tasks = [linkedTask];
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+    render(<CrewWorkspace />);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveFocus();
+    expect(
+      within(dialog).getByRole("button", { name: "Copy link" }),
+    ).not.toHaveFocus();
+  });
+
+  it("opens a note for reading with one Edit button and no tabs", async () => {
+    const dialog = await openNote();
+    expect(
+      dialog.getByRole("heading", { name: "Voice guide" }),
+    ).toBeInTheDocument();
+    expect(dialog.getByText("Clear prose")).toBeInTheDocument();
+    expect(dialog.getByText("NETWORK")).toBeInTheDocument();
+    expect(dialog.queryAllByRole("tab")).toHaveLength(0);
+    expect(dialog.queryByLabelText("Title")).toBeNull();
+    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    expect(dialog.getByLabelText("Title")).toHaveValue("Voice guide");
+    expect(dialog.getByLabelText("Note")).toHaveValue("Clear prose");
+    expect(dialog.queryByLabelText("Bucket")).toBeNull();
+  });
+
+  it("returns from edit to reading when nothing changed", async () => {
+    const dialog = await openNote();
+    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.click(dialog.getByRole("button", { name: /Back to note/ }));
+    expect(dialog.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("button", { name: "History" }));
+    expect(
+      dialog.getByText(/Restoring creates a new revision/),
+    ).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("button", { name: /Back to note/ }));
+    expect(dialog.getByText("Clear prose")).toBeInTheDocument();
+  });
+
+  it("opens new notes for editing and always shows their create button", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Launch post" });
+    await openPage("Shared memory");
+    fireEvent.click(screen.getByRole("button", { name: /New note/ }));
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByLabelText("Bucket")).toHaveValue(bucket.id);
+    expect(dialog.getByLabelText("Note")).toBeInTheDocument();
+    expect(dialog.getByRole("button", { name: "Save note" })).toBeTruthy();
+    expect(dialog.queryByLabelText("Reason for change")).toBeNull();
+  });
+
+  it("shows the reason and Save only once something is edited, and submits the reason", async () => {
+    const dialog = await openNote();
+    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    expect(dialog.queryByLabelText("Reason for change")).toBeNull();
+    expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
+    fireEvent.change(dialog.getByLabelText("Note"), {
+      target: { value: "Sharper prose" },
+    });
+    fireEvent.change(dialog.getByLabelText("Reason for change"), {
+      target: { value: "Tighter" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Save note" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "note.update",
+        { title: "Voice guide", body: "Sharper prose", links: [] },
+        linkedNote,
+        "Tighter",
+      ),
+    );
+  });
+
+  it("hides Save again when the edit is undone but still asks before discarding", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const dialog = await openNote();
+    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    const field = dialog.getByLabelText("Title");
+    fireEvent.change(field, { target: { value: "Changed" } });
+    expect(dialog.getByRole("button", { name: "Save note" })).toBeTruthy();
+    fireEvent.change(field, { target: { value: "Voice guide" } });
+    expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
+    fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("links related notes by search, removes them and sends the same links", async () => {
+    const other: Row = {
+      ...linkedNote,
+      id: "note00000000002",
+      title: "Launch checklist",
+      path: "#/notes/launch-checklist-note00000000002",
+    };
+    const third: Row = {
+      ...linkedNote,
+      id: "note00000000003",
+      title: "Pricing",
+      path: "#/notes/pricing-note00000000003",
+    };
+    const source = { ...linkedNote, links: [third.id] };
+    fixtures.notes = [source, other, third];
+    const dialog = await openNote(source);
+    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    expect(dialog.queryByRole("checkbox")).toBeNull();
+    expect(dialog.getByText("Pricing")).toBeInTheDocument();
+    expect(dialog.queryByRole("button", { name: "Launch checklist" })).toBeNull();
+    fireEvent.change(dialog.getByLabelText("Add related note"), {
+      target: { value: "launch" },
+    });
+    // Searching alone is not an edit.
+    expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
+    fireEvent.click(dialog.getByRole("button", { name: "Launch checklist" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Remove Pricing" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Save note" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "note.update",
+        expect.objectContaining({ links: [other.id] }),
+        source,
+        "",
+      ),
+    );
+  });
+
+  it("asks before discarding a related-note change", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const other: Row = { ...linkedNote, id: "note00000000002", title: "Other" };
+    fixtures.notes = [linkedNote, other];
+    const dialog = await openNote();
+    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.change(dialog.getByLabelText("Add related note"), {
+      target: { value: "oth" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Other" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Archive and record details out of the main flow", async () => {
+    const dialog = await openNote();
+    const more = dialog.getByText("More").closest("details")!;
+    expect(
+      within(more).getByRole("button", { name: "Archive note", hidden: true }),
+    ).toBeTruthy();
+    expect(more).toHaveTextContent("revision 2");
+    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.change(dialog.getByLabelText("Title"), {
+      target: { value: "Changed" },
+    });
+    expect(
+      dialog
+        .getByRole("button", { name: "Save note" })
+        .closest(".crew-save-bar"),
+    ).not.toHaveTextContent("Archive");
+  });
+
+  const openTask = async (fields: Partial<Row>) => {
+    fixtures.tasks = [{ ...linkedTask, ...fields }];
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+    render(<CrewWorkspace />);
+    return within(await screen.findByRole("dialog"));
+  };
+
+  it("sends a saved draft for approval through review.request", async () => {
+    fixtures.reviews = [];
+    const dialog = await openTask({});
+    fireEvent.click(
+      dialog.getByRole("button", { name: "Send draft for approval" }),
+    );
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "review.request",
+        {},
+        fixtures.tasks[0],
+        "",
+      ),
+    );
+  });
+
+  it("explains in one line when a draft cannot be sent yet", async () => {
+    fixtures.reviews = [];
+    const dialog = await openTask({ draft: "" });
+    expect(
+      dialog.getByText("Add a draft to request approval"),
+    ).toBeInTheDocument();
+    expect(dialog.queryByRole("button", { name: /^Send draft/ })).toBeNull();
+  });
+
+  it("points to Approvals while a review is pending", async () => {
+    const dialog = await openTask({});
+    expect(dialog.getByText(/Waiting for your approval/)).toBeInTheDocument();
+    expect(dialog.getByRole("link", { name: "Approvals" })).toHaveAttribute(
+      "href",
+      "#/approvals",
+    );
+    expect(
+      dialog.queryByRole("button", { name: "Send draft for approval" }),
+    ).toBeNull();
+  });
+});
+
+describe("automatic refresh", () => {
+  const becomeVisible = () => fireEvent(document, new Event("visibilitychange"));
+  const settled = async () => {
+    await screen.findByRole("heading", { name: "Launch post" });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled(),
+    );
+  };
+
+  it("reloads silently when the tab becomes visible", async () => {
+    render(<CrewWorkspace />);
+    await settled();
+    fixtures.tasks = [{ ...task, title: "Fresh from server" }];
+    becomeVisible();
+    await screen.findByRole("heading", { name: "Fresh from server" });
+    expect(screen.queryByText("Saved.")).toBeNull();
+    expect(screen.queryByText("Loading your workspace…")).toBeNull();
+    expect(
+      screen.getByRole("contentinfo", { name: "Running server" }),
+    ).toHaveTextContent("Server 0.3.1");
+  });
+
+  it("reloads about every 30 seconds while visible", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<CrewWorkspace />);
+      await settled();
+      const reads = vi.mocked(crewApi.read).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(vi.mocked(crewApi.read).mock.calls.length).toBeGreaterThan(reads);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stays quiet about background failures and keeps the version", async () => {
+    render(<CrewWorkspace />);
+    await settled();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("contentinfo", { name: "Running server" }),
+      ).toHaveTextContent("Server 0.3.1"),
+    );
+    vi.mocked(crewApi.read).mockRejectedValue(new Error("Synthetic outage"));
+    vi.mocked(crewApi.serverVersion).mockRejectedValue(new Error("Synthetic"));
+    const reads = vi.mocked(crewApi.read).mock.calls.length;
+    becomeVisible();
+    await waitFor(() =>
+      expect(vi.mocked(crewApi.read).mock.calls.length).toBeGreaterThan(reads),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      screen.getByRole("contentinfo", { name: "Running server" }),
+    ).toHaveTextContent("Server 0.3.1");
+  });
+
+  it("keeps a failed save's error and in-progress edits", async () => {
+    vi.mocked(crewApi.write).mockRejectedValue(new Error("Revision conflict"));
+    fixtures.tasks = [linkedTask];
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    fireEvent.change(dialog.getByLabelText("Title"), {
+      target: { value: "Unsaved title" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+    await dialog.findByRole("alert");
+    const reads = vi.mocked(crewApi.read).mock.calls.length;
+    becomeVisible();
+    await waitFor(() =>
+      expect(vi.mocked(crewApi.read).mock.calls.length).toBeGreaterThan(reads),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled(),
+    );
+    expect(dialog.getByRole("alert")).toHaveTextContent("Revision conflict");
+    expect(dialog.getByLabelText("Title")).toHaveValue("Unsaved title");
+  });
+
+  it("skips while a save is busy", async () => {
+    let finish = () => {};
+    vi.mocked(crewApi.write).mockImplementation(
+      () =>
+        new Promise<Row>((resolve) => {
+          finish = () => resolve(task);
+        }),
+    );
+    fixtures.tasks = [linkedTask];
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled(),
+    );
+    fireEvent.change(dialog.getByLabelText("Title"), {
+      target: { value: "Changed" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+    await waitFor(() => expect(crewApi.write).toHaveBeenCalled());
+    const reads = vi.mocked(crewApi.read).mock.calls.length;
+    becomeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(vi.mocked(crewApi.read).mock.calls.length).toBe(reads);
+    finish();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+});
+describe("help and Guide", () => {
+  it("opens help on click and closes it with Escape or a click outside", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Launch post" });
+    const button = screen.getByRole("button", {
+      name: "What is the AI Team board?",
+    });
+    expect(button).toHaveAttribute("type", "button");
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(button);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Learn more" })).toHaveAttribute(
+      "href",
+      "#/guide/board",
+    );
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(button);
+    fireEvent.pointerDown(document.body);
+    await waitFor(() =>
+      expect(button).toHaveAttribute("aria-expanded", "false"),
+    );
+  });
+  it("keeps help inside a dialog from closing or dirtying it", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    fixtures.notes = [
+      { id: "note00000000001", revision: 1, title: "Voice", body: "Plain", bucket: bucket.id, links: [] },
+    ];
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Launch post" });
+    fireEvent.click(screen.getByRole("button", { name: /Launch post/ }));
+    const dialog = within(await screen.findByRole("dialog"));
+    const button = dialog.getByRole("button", { name: "What is readiness?" });
+    fireEvent.click(button);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(dialog.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+    expect(dialog.queryByRole("button", { name: /^Save task/ })).toBeNull();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(confirm).not.toHaveBeenCalled();
+  });
+  it("opens a Guide deep link at its section", async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    history.replaceState(null, "", "/#/guide/bucket");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Guide", level: 1 });
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.contexts[0]).toBe(
+      document.getElementById("guide-bucket"),
+    );
+    expect(document.getElementById("guide-bucket")).toHaveClass("current");
+    expect(
+      screen.getByText("Approving never sends or publishes anything."),
+    ).toBeInTheDocument();
+  });
+  it("falls back to the top of the Guide for an unknown topic", async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    history.replaceState(null, "", "/#/guide/constructor");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Guide", level: 1 });
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.contexts[0]).toBe(
+      document.querySelector(".crew-app"),
+    );
+    expect(document.querySelector(".crew-guide-entry.current")).toBeNull();
+  });
+  it("does not point installs without a domain to an MCP address", async () => {
+    vi.mocked(crewApi.connection).mockResolvedValue({ kind: "local" });
+    history.replaceState(null, "", "/#/guide/mcp");
+    render(<CrewWorkspace />);
+    const entry = await waitFor(() => {
+      const el = document.getElementById("guide-mcp");
+      expect(el).toHaveTextContent("has no MCP address");
+      return el as HTMLElement;
+    });
+    expect(entry).toHaveTextContent("Use the skill");
+    const connect = document.getElementById("guide-connect") as HTMLElement;
+    expect(connect).toHaveTextContent("installed skill");
+    expect(connect).not.toHaveTextContent("address to your platform");
+    expect(
+      screen.getByText(/there is no address to add/),
+    ).toBeInTheDocument();
+  });
+  it("shows the MCP help only where an address exists", async () => {
+    vi.mocked(crewApi.connection).mockResolvedValue({ kind: "local" });
+    history.replaceState(null, "", "/#/connect");
+    render(<CrewWorkspace />);
+    await screen.findByText("./pocketcontext-crew skill");
+    expect(screen.queryByRole("button", { name: "What is MCP?" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "What are automatic wake-ups?" }),
+    );
+    expect(document.querySelector(".crew-help-popover")).toHaveTextContent(
+      "a woken cloud bot can't answer",
+    );
+  });
 });

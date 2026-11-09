@@ -1,18 +1,37 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
+  type ComponentProps,
   type FormEvent,
   type MouseEvent,
+  type ReactElement,
   type ReactNode,
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Brand from "./Brand";
 import { api } from "./api";
-import { crewApi, val, list, statuses, lineDiff, type Row } from "./crewApi";
+import {
+  crewApi,
+  val,
+  list,
+  statuses,
+  lineDiff,
+  type ConnectionState,
+  type Row,
+} from "./crewApi";
 import Connect from "./Connect";
+import Guide from "./Guide";
+import Help, {
+  HelpField,
+  HelpModeContext,
+  helpIsOpenIn,
+  helpMode,
+} from "./Help";
+import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
 import "./crew.css";
 import type { ServerVersion } from "./crewApi";
@@ -37,7 +56,23 @@ const nav: [View, string, string][] = [
 const pages: [View, string, string][] = [
   ...nav,
   ["connect", "Connect an agent", "⇄"],
+  ["guide", "Guide", "?"],
 ];
+const viewHelp: Partial<Record<View, HelpTopic>> = {
+  home: "home",
+  board: "board",
+  memory: "memory",
+  reviews: "approvals",
+  agents: "agents",
+  archive: "archive",
+  connect: "connect",
+};
+const statusHelp: Record<(typeof statuses)[number][0], HelpTopic> = {
+  todo: "todo",
+  in_progress: "in-progress",
+  needs_review: "needs-review",
+  done: "done",
+};
 type Kind = "task" | "note" | "bucket" | "agent" | "review";
 type Data = Record<string, Row[]>;
 /** Never fires hashchange, so writing the address cannot open a dialog. */
@@ -78,7 +113,21 @@ function Prose({ children }: { children: string }) {
     </div>
   );
 }
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  help,
+  children,
+}: {
+  label: string;
+  help?: HelpTopic;
+  children: ReactNode;
+}) {
+  if (help)
+    return (
+      <HelpField label={label} topic={help}>
+        {children as ReactElement<{ id?: string }>}
+      </HelpField>
+    );
   return (
     <label className="crew-field">
       <span>{label}</span>
@@ -86,12 +135,21 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     </label>
   );
 }
-function Empty({ title, children }: { title: string; children: ReactNode }) {
+function Empty({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className="crew-empty">
       <span aria-hidden="true">↗</span>
       <h3>{title}</h3>
       <p>{children}</p>
+      {action && <div className="crew-empty-action">{action}</div>}
     </div>
   );
 }
@@ -118,6 +176,123 @@ function CopyLink({ target }: { target: string }) {
     </span>
   );
 }
+/** Grows with its content, so a long note scrolls with the dialog, not inside it. */
+function GrowingTextarea({ value, ...props }: ComponentProps<"textarea">) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const scroller = el.closest("dialog");
+    const top = scroller?.scrollTop;
+    el.style.height = "auto";
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight + 2}px`;
+    if (scroller && top !== undefined) scroller.scrollTop = top;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      {...props}
+      className={`crew-grow ${props.className || ""}`}
+    />
+  );
+}
+function RelatedNotes({
+  notes,
+  currentId,
+  links,
+  setLinks,
+  readOnly,
+}: {
+  notes: Row[];
+  currentId?: string;
+  links: string;
+  setLinks: (next: string) => void;
+  readOnly: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const linked = links.split("\n").filter(Boolean);
+  const others = notes.filter((note) => note.id !== currentId);
+  const needle = query.trim().toLowerCase();
+  const results = needle
+    ? others
+        .filter(
+          (note) =>
+            !linked.includes(note.id) &&
+            val(note, "title").toLowerCase().includes(needle),
+        )
+        .slice(0, 8)
+    : [];
+  const label = (note: Row) =>
+    `${val(note, "title")}${note.archived ? " (archived)" : ""}`;
+  return (
+    <fieldset className="crew-related" aria-label="Related memory">
+      <legend>
+        <span>Related memory</span>
+        {!readOnly && <Help topic="related-memory" />}
+      </legend>
+      {linked.length > 0 && (
+        <ul className="crew-related-linked">
+          {linked.map((id) => {
+            const note = notes.find((x) => x.id === id);
+            const text = note ? label(note) : "Unavailable note";
+            return (
+              <li key={id}>
+                <span>{text}</span>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    className="crew-quiet"
+                    aria-label={`Remove ${text}`}
+                    onClick={() =>
+                      setLinks(linked.filter((x) => x !== id).join("\n"))
+                    }
+                  >
+                    Remove
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {!readOnly && others.length > 0 && (
+        <label className="crew-field crew-related-search">
+          <span>Add related note</span>
+          <input
+            type="search"
+            placeholder="Search your notes"
+            value={query}
+            // Searching is not an edit to the record.
+            onChange={(e) => {
+              e.stopPropagation();
+              setQuery(e.target.value);
+            }}
+          />
+        </label>
+      )}
+      {results.length > 0 && (
+        <ul className="crew-related-results">
+          {results.map((note) => (
+            <li key={note.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  setLinks([...linked, note.id].join("\n"));
+                  setQuery("");
+                }}
+              >
+                {label(note)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {needle && !results.length && <p>No matching notes.</p>}
+      {!others.length && !linked.length && <p>No other notes yet.</p>}
+    </fieldset>
+  );
+}
 function Modal({
   title,
   actions,
@@ -133,6 +308,7 @@ function Modal({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const pressedBackdrop = useRef(false);
+  const helpWasOpen = useRef(false);
   // Backdrop clicks target the dialog itself, as do its scrollbars, so use position.
   const onBackdrop = (e: MouseEvent<HTMLDialogElement>) => {
     if (e.target !== ref.current) return false;
@@ -147,7 +323,9 @@ function Modal({
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
     ref.current?.showModal?.();
-    ref.current?.querySelector<HTMLElement>("button,input")?.focus();
+    // showModal focuses the first control; the dialog itself takes focus so
+    // nothing is highlighted on open and Tab still starts at the first control.
+    ref.current?.focus({ preventScroll: true });
     return () => previous?.focus();
   }, []);
   return (
@@ -159,9 +337,15 @@ function Modal({
           : undefined
       }
       className="crew-dialog"
+      tabIndex={-1}
       onChange={onEdit}
+      // Runs before Help's own listener, so it still sees the popover. The first
+      // click outside an open popover only dismisses the popover.
+      onPointerDown={() => {
+        helpWasOpen.current = helpIsOpenIn(ref.current);
+      }}
       onMouseDown={(e) => {
-        pressedBackdrop.current = onBackdrop(e);
+        pressedBackdrop.current = onBackdrop(e) && !helpWasOpen.current;
       }}
       onClick={(e) => {
         // A drag that starts inside, such as selecting text, must not close it.
@@ -208,6 +392,23 @@ export default function CrewWorkspace() {
     [bucket, setBucket] = useState(""),
     [assignmentFilter, setAssignmentFilter] = useState("all");
   const [serverVersion, setServerVersion] = useState<ServerVersion | null>();
+  const [connection, setConnection] = useState<ConnectionState>({
+    kind: "checking",
+  });
+  useEffect(() => {
+    let alive = true;
+    void crewApi
+      .connection()
+      .catch((): ConnectionState => ({ kind: "unknown" }))
+      .then((next) => {
+        if (alive) setConnection(next);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const copyEndpoint =
+    connection.kind === "mcp" ? <CopyLink target={connection.url} /> : null;
   const [dialog, setDialog] = useState<{ kind: Kind; row?: Row } | null>(null),
     // Set per hash navigation and consumed once, so data refreshes never open a dialog.
     [pendingLink, setPendingLink] = useState(() =>
@@ -215,22 +416,27 @@ export default function CrewWorkspace() {
     ),
     [ready, setReady] = useState(false),
     generation = useRef(0),
-    edited = useRef(false);
+    edited = useRef(false),
+    busyRef = useRef(false),
+    loadsInFlight = useRef(0),
+    loadFailed = useRef(false);
   const discardOk = () =>
     !edited.current || window.confirm("Discard your unsaved changes?");
   useEffect(() => {
     edited.current = false;
   }, [dialog?.kind, dialog?.row?.id]);
-  const load = useCallback(async () => {
+  // A silent load is the background refresh: it changes data only when the data
+  // changed, and a failure leaves the page as it is until the next attempt.
+  const load = useCallback(async ({ silent = false } = {}) => {
     const ticket = ++generation.current;
-    setServerVersion(undefined);
+    loadsInFlight.current++;
     void crewApi
       .serverVersion()
       .then((version) => {
         if (ticket === generation.current) setServerVersion(version);
       })
       .catch(() => {
-        if (ticket === generation.current) setServerVersion(null);
+        if (!silent && ticket === generation.current) setServerVersion(null);
       });
     try {
       const result = await Promise.all(
@@ -244,14 +450,23 @@ export default function CrewWorkspace() {
         ),
       );
       if (ticket !== generation.current) return;
-      setData(Object.fromEntries(result));
-      setArchived(Object.fromEntries(old));
+      const keep = (next: Data) => (current: Data) =>
+        JSON.stringify(current) === JSON.stringify(next) ? current : next;
+      setData(keep(Object.fromEntries(result)));
+      setArchived(keep(Object.fromEntries(old)));
       setReady(true);
-      setError("");
+      // A background success only clears a failed load, never a save error.
+      if (!silent || loadFailed.current) {
+        setError("");
+        loadFailed.current = false;
+      }
     } catch (e) {
-      if (ticket === generation.current)
+      if (!silent && ticket === generation.current) {
+        loadFailed.current = true;
         setError(e instanceof Error ? e.message : "Could not load workspace.");
+      }
     } finally {
+      loadsInFlight.current--;
       if (ticket === generation.current) setLoading(false);
     }
   }, []);
@@ -259,6 +474,18 @@ export default function CrewWorkspace() {
     void load();
     return () => {
       generation.current++;
+    };
+  }, [load]);
+  useEffect(() => {
+    const refresh = () => {
+      if (document.hidden || busyRef.current || loadsInFlight.current) return;
+      void load({ silent: true });
+    };
+    const timer = setInterval(refresh, 30_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, [load]);
   useEffect(() => {
@@ -312,6 +539,8 @@ export default function CrewWorkspace() {
   };
   const perform = async (work: () => Promise<unknown>, message = "Saved.") => {
     setBusy(true);
+    busyRef.current = true;
+    loadFailed.current = false;
     setError("");
     setNotice("");
     try {
@@ -328,6 +557,7 @@ export default function CrewWorkspace() {
       return false;
     } finally {
       setBusy(false);
+      busyRef.current = false;
     }
   };
   const save = async (
@@ -415,17 +645,20 @@ export default function CrewWorkspace() {
       : `This ${dialog?.kind} is archived and read-only. Restore it from the Archive view to make changes.`;
   const descriptions = {
     home: "Where you and your AI agents share tasks and memory. Agents do the work; you decide what's approved.",
-    board: "Your agents do the groundwork. You decide what goes out.",
+    board: "Follow each task from request to finished work. Agents draft; you decide what's approved.",
     memory:
       "Keep decisions, preferences and useful findings where every agent can find them.",
     reviews:
       "Review the exact draft. Approval never sends or publishes anything.",
     agents:
-      "Define responsibilities and decide what belongs in lasting memory.",
+      "Give each agent a name and a brief that says what it works on and what to remember.",
     archive: "Restore notes, tasks and buckets without losing their history.",
     connect: "Crew needs one connection to your agent platform before agents can work here.",
+    guide: "What Crew does, what each page is for, and the words it uses.",
   };
+  const titleHelp = viewHelp[view];
   return (
+    <HelpModeContext.Provider value={helpMode(connection)}>
     <div className="crew-app">
       <aside className="crew-sidebar">
         <a
@@ -459,6 +692,13 @@ export default function CrewWorkspace() {
           >
             Connect an agent
           </a>
+          <a
+            className="crew-sidebar-link"
+            href={viewHashes.guide}
+            aria-current={view === "guide" ? "page" : undefined}
+          >
+            Guide
+          </a>
           <span />
           One owner. One shared context.
           <button onClick={() => api.logout()}>Sign out</button>
@@ -468,14 +708,14 @@ export default function CrewWorkspace() {
         <header className="crew-topbar">
           <span>POCKETCONTEXT / CREW</span>
           <div>
-            <button disabled={busy || loading} onClick={() => void load()}>
-              Refresh
-            </button>
             <button
-              className="crew-mobile-signout"
-              onClick={() => api.logout()}
+              className="crew-refresh"
+              aria-label="Refresh"
+              title="Refresh"
+              disabled={busy || loading}
+              onClick={() => void load()}
             >
-              Sign out
+              <span aria-hidden="true">↻</span>
             </button>
           </div>
         </header>
@@ -483,7 +723,9 @@ export default function CrewWorkspace() {
           <div className="crew-heading">
             <div>
               <p className="crew-eyebrow">
-                {view === "connect"
+                {view === "guide"
+                  ? "HOW IT WORKS"
+                  : view === "connect"
                   ? "ONE CONNECTION FOR ALL YOUR AGENTS"
                   : view === "home"
                   ? "START HERE"
@@ -493,7 +735,10 @@ export default function CrewWorkspace() {
                     ? "CONTEXT THAT CARRIES FORWARD"
                     : "FROM SHARED CONTEXT TO FINISHED WORK"}
               </p>
-              <h1>{pages.find((x) => x[0] === view)?.[1]}</h1>
+              <div className="crew-title-row">
+                <h1>{pages.find((x) => x[0] === view)?.[1]}</h1>
+                {titleHelp && <Help topic={titleHelp} />}
+              </div>
               <p>{descriptions[view]}</p>
             </div>
             {view === "board" && (
@@ -538,12 +783,15 @@ export default function CrewWorkspace() {
               {notice}
             </p>
           )}
-          {loading && <p role="status">Loading your workspace…</p>}
+          {loading && view !== "guide" && (
+            <p role="status">Loading your workspace…</p>
+          )}
           {!loading &&
             !data.agents.length &&
             !data.buckets.length &&
             view !== "archive" &&
-            view !== "home" && (
+            view !== "home" &&
+            view !== "guide" && (
               <div className="crew-welcome">
                 <div>
                   <span className="crew-eyebrow">START WITH A SMALL CREW</span>
@@ -623,13 +871,16 @@ export default function CrewWorkspace() {
               openItem={openItem}
               openReview={(row) => setDialog({ kind: "review", row })}
               invalidAssignment={invalidAssignment}
-              copyEndpoint={<CopyLink target={`${location.origin}/mcp`} />}
+              connection={connection}
+              copyEndpoint={copyEndpoint}
             />
           )}
+          {view === "guide" && <Guide />}
           {view === "connect" && (
             <Connect
               agents={[...data.agents, ...archived.agents]}
-              copyEndpoint={<CopyLink target={`${location.origin}/mcp`} />}
+              connection={connection}
+              copyEndpoint={copyEndpoint}
             />
           )}
           {view === "board" && (
@@ -647,11 +898,14 @@ export default function CrewWorkspace() {
                 );
                 return (
                   <section className="crew-column" key={status}>
-                    <h2>
-                      <i className={status} />
-                      {label}
-                      <span>{tasks.length}</span>
-                    </h2>
+                    <div className="crew-column-head">
+                      <h2>
+                        <i className={status} />
+                        {label}
+                        <span>{tasks.length}</span>
+                      </h2>
+                      <Help topic={statusHelp[status]} />
+                    </div>
                     {tasks.map((x) => (
                       <button
                         className="crew-task-card"
@@ -707,9 +961,24 @@ export default function CrewWorkspace() {
                       </button>
                     ))}
                     {!tasks.length && (
-                      <p className="crew-column-empty">
-                        {query ? "No matching tasks" : "No tasks here yet"}
-                      </p>
+                      <div className="crew-column-empty">
+                        {query || assignmentFilter !== "all" ? (
+                          "No matching tasks"
+                        ) : status === "todo" ? (
+                          <>
+                            <p>New tasks start here.</p>
+                            <button onClick={() => setDialog({ kind: "task" })}>
+                              ＋ Add a task
+                            </button>
+                          </>
+                        ) : status === "in_progress" ? (
+                          "Tasks being worked on appear here."
+                        ) : status === "needs_review" ? (
+                          "Drafts sent for your approval appear here."
+                        ) : (
+                          "Finished tasks appear here."
+                        )}
+                      </div>
                     )}
                   </section>
                 );
@@ -718,6 +987,11 @@ export default function CrewWorkspace() {
           )}
           {view === "memory" && (
             <>
+              <div className="crew-section-title crew-section-title-first">
+                <h2>Buckets</h2>
+                <Help topic="bucket" />
+                <span>Groups of notes</span>
+              </div>
               <div className="crew-buckets">
                 {data.buckets
                   .filter((x) => !bucket || x.id === bucket)
@@ -738,6 +1012,7 @@ export default function CrewWorkspace() {
               </div>
               <div className="crew-section-title">
                 <h2>Notes</h2>
+                <Help topic="note" />
                 <span>Useful context, with a history</span>
               </div>
               <div className="crew-notes">
@@ -766,9 +1041,28 @@ export default function CrewWorkspace() {
               {!data.notes.filter(
                 (x) => (!bucket || val(x, "bucket") === bucket) && matches(x),
               ).length && (
-                <Empty title="Make your context useful">
-                  Add a decision, preference or example your agents should
-                  remember.
+                <Empty
+                  title={query ? "No matching notes" : "No notes yet"}
+                  action={
+                    query ? undefined : data.buckets.length ? (
+                      <button
+                        className="crew-primary"
+                        onClick={() => setDialog({ kind: "note" })}
+                      >
+                        Add your first note
+                      </button>
+                    ) : (
+                      <button onClick={() => setDialog({ kind: "bucket" })}>
+                        New bucket
+                      </button>
+                    )
+                  }
+                >
+                  {query
+                    ? "Try different words, or clear the search."
+                    : data.buckets.length
+                      ? "Notes hold decisions, preferences and findings your agents should remember."
+                      : "Notes live in buckets. Create a bucket first, then add notes to it."}
                 </Empty>
               )}
             </>
@@ -799,9 +1093,12 @@ export default function CrewWorkspace() {
                 ))}
               </div>
               {!pending.length && (
-                <Empty title="Nothing waiting for your review">
-                  Submitted drafts will appear here. Your approval does not
-                  perform the external action.
+                <Empty
+                  title="Nothing waiting for your review"
+                  action={<a href={viewHashes.board}>Go to the AI Team board</a>}
+                >
+                  Drafts sent for approval will appear here. Your approval does
+                  not perform the external action.
                 </Empty>
               )}
               <details className="crew-history-list">
@@ -830,10 +1127,25 @@ export default function CrewWorkspace() {
           {view === "agents" && (
             <>
               <div className="crew-callout">
-                Bucket responsibility is a working agreement. All connected
-                agents can read and write memory; their briefs tell them where
-                to contribute.
+                All connected agents can read and write all shared memory. A
+                bucket's responsible agent is a convention, not a permission;
+                each agent's brief says where it should contribute.
               </div>
+              {!data.agents.length && !!data.buckets.length && (
+                <Empty
+                  title="No agents yet"
+                  action={
+                    <button
+                      className="crew-primary"
+                      onClick={() => setDialog({ kind: "agent" })}
+                    >
+                      Add your first agent
+                    </button>
+                  }
+                >
+                  An agent is a role with a brief that tells it what to work on.
+                </Empty>
+              )}
               <div className="crew-agents">
                 {data.agents.map((x) => (
                   <button
@@ -862,7 +1174,13 @@ export default function CrewWorkspace() {
                   <h2>
                     {c === "agents" ? "Inactive agents" : `Archived ${c}`}
                   </h2>
-                  {!archived[c].length && <p>No archived {c}.</p>}
+                  {!archived[c].length && (
+                    <p>
+                      {c === "agents"
+                        ? "No inactive agents. Deactivated agents appear here."
+                        : `No archived ${c}. Anything you archive appears here and can be restored.`}
+                    </p>
+                  )}
                   {archived[c].map((x) => (
                     <div className="crew-archive-row" key={x.id}>
                       <div>
@@ -905,27 +1223,32 @@ export default function CrewWorkspace() {
           role="contentinfo"
           aria-label="Running server"
         >
-          {serverVersion === undefined ? (
-            "Checking server version…"
-          ) : serverVersion === null ? (
-            "Server version unavailable"
-          ) : (
-            <>
-              Server {serverVersion.version}
-              {serverVersion.commit && (
-                <>
-                  {" · Build "}
-                  <span
-                    title={serverVersion.commit}
-                    role="note"
-                    aria-label={`Build ${serverVersion.commit}`}
-                  >
-                    {serverVersion.commit.slice(0, 12)}
-                  </span>
-                </>
-              )}
-            </>
-          )}
+          <span>
+            {serverVersion === undefined ? (
+              "Checking server version…"
+            ) : serverVersion === null ? (
+              "Server version unavailable"
+            ) : (
+              <>
+                Server {serverVersion.version}
+                {serverVersion.commit && (
+                  <>
+                    {" · Build "}
+                    <span
+                      title={serverVersion.commit}
+                      role="note"
+                      aria-label={`Build ${serverVersion.commit}`}
+                    >
+                      {serverVersion.commit.slice(0, 12)}
+                    </span>
+                  </>
+                )}
+              </>
+            )}
+          </span>
+          <button className="crew-footer-signout" onClick={() => api.logout()}>
+            Sign out
+          </button>
         </footer>
       </main>
       {dialog && (
@@ -935,7 +1258,9 @@ export default function CrewWorkspace() {
               ? "Review draft"
               : archiveNotice
                 ? `Archived ${dialog.kind}`
-                : `${dialog.row ? "Edit" : "New"} ${dialog.kind}`
+                : dialog.row && dialog.kind === "note"
+                  ? "Note"
+                  : `${dialog.row ? "Edit" : "New"} ${dialog.kind}`
           }
           actions={
             dialog.row &&
@@ -963,6 +1288,9 @@ export default function CrewWorkspace() {
               notes: [...data.notes, ...archived.notes],
             }}
             archiveNotice={archiveNotice}
+            onEdit={() => {
+              edited.current = true;
+            }}
             openNote={(note) => openItem("note", note)}
             busy={busy}
             error={error}
@@ -973,6 +1301,7 @@ export default function CrewWorkspace() {
         </Modal>
       )}
     </div>
+    </HelpModeContext.Provider>
   );
 }
 type EditorProps = {
@@ -980,6 +1309,7 @@ type EditorProps = {
   row?: Row;
   data: Data;
   archiveNotice?: string;
+  onEdit: () => void;
   openNote: (note: Row) => void;
   busy: boolean;
   error: string;
@@ -997,6 +1327,7 @@ function Editor({
   row,
   data,
   archiveNotice = "",
+  onEdit,
   openNote,
   busy,
   error,
@@ -1005,7 +1336,8 @@ function Editor({
   close,
 }: EditorProps) {
   const readOnly = !!archiveNotice;
-  const [tab, setTab] = useState("edit"),
+  const root = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState(kind === "note" && row ? "read" : "edit"),
     [history, setHistory] = useState<Row[]>([]),
     [events, setEvents] = useState<Row[]>([]),
     [relatedError, setRelatedError] = useState("");
@@ -1065,6 +1397,28 @@ function Editor({
       alive = false;
     };
   }, [row?.id, kind]);
+  useEffect(() => {
+    // A new view starts at its top; focus stays in the dialog when its control goes.
+    const dialog = root.current?.closest("dialog");
+    dialog?.scrollTo?.(0, 0);
+    if (dialog && !dialog.contains(document.activeElement))
+      dialog.focus({ preventScroll: true });
+  }, [tab]);
+  const current = {
+    title,
+    body,
+    draft,
+    links,
+    selection,
+    status,
+    readiness,
+    waitingReason,
+    labels,
+  };
+  const initial = useRef(current).current;
+  const dirty = (Object.keys(current) as (keyof typeof current)[]).some(
+    (key) => current[key] !== initial[key],
+  );
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (readOnly) return;
@@ -1191,20 +1545,80 @@ function Editor({
         )}
       </div>
     );
+  const bar = (action?: ReactNode) =>
+    action || error ? (
+      <div className="crew-save-bar">
+        {error && (
+          <p className="crew-alert" role="alert">
+            {error}
+          </p>
+        )}
+        {action}
+      </div>
+    ) : null;
+  const more = row && (
+    <details className="crew-more">
+      <summary>More</summary>
+      {!readOnly && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            void save(`${kind}.update`, { archived: true }, row, reason)
+          }
+        >
+          {kind === "agent" ? "Deactivate agent" : `Archive ${kind}`}
+        </button>
+      )}
+      <p className="crew-record-id">
+        {kind} {row.id} · revision {row.revision}
+      </p>
+    </details>
+  );
+  const backToNote = (
+    <button
+      type="button"
+      className="crew-quiet crew-back"
+      onClick={() => setTab("read")}
+    >
+      ← Back to note
+    </button>
+  );
+  const savedDraft = val(row, "draft");
+  const reviewPending = data.reviews.some(
+    (x) => val(x, "task") === row?.id && val(x, "status") === "pending",
+  );
+  const reviewState = reviewPending ? (
+    <p className="crew-review-state">
+      Waiting for your approval. <a href={viewHashes.reviews}>Approvals</a>
+    </p>
+  ) : draft !== savedDraft ? (
+    <p className="crew-review-state">Save your draft first</p>
+  ) : !savedDraft.trim() ? (
+    <p className="crew-review-state">Add a draft to request approval</p>
+  ) : (
+    <button
+      type="button"
+      className="crew-review-submit"
+      disabled={busy}
+      onClick={() => void save("review.request", {}, row)}
+    >
+      Send draft for approval
+    </button>
+  );
+  const buckets = data.buckets.find((x) => x.id === val(row, "bucket"));
+  // Controls inside a disabled fieldset can't open, so read-only forms have no help.
+  const help = (topic: HelpTopic) => (readOnly ? undefined : topic);
   return (
-    <div className="crew-dialog-body">
+    <div className="crew-dialog-body" ref={root}>
       {readOnly && (
         <p className="crew-notice" role="status">
           {archiveNotice}
         </p>
       )}
-      {row && (
+      {row && kind === "task" && (
         <div className="crew-tabs" role="tablist" aria-label="Record views">
-          {[
-            "edit",
-            ...(kind === "note" ? ["preview", "history"] : []),
-            ...(kind === "task" ? ["activity", "reviews"] : []),
-          ].map((key) => (
+          {["edit", "activity", "reviews"].map((key) => (
             <button
               key={key}
               role="tab"
@@ -1219,8 +1633,59 @@ function Editor({
         </div>
       )}
       {relatedError && <p className="crew-alert">{relatedError}</p>}
+      {tab === "read" && row && (
+        <div className="crew-read">
+          <article>
+            {buckets && (
+              <span className="crew-note-bucket">{val(buckets, "name")}</span>
+            )}
+            <h3 className="crew-note-title">{val(row, "title")}</h3>
+            <Prose>{val(row, "body")}</Prose>
+            {list(row, "links").length > 0 && (
+              <section className="crew-linked-notes">
+                <h3>Related memory</h3>
+                {list(row, "links").map((id) => {
+                  const target = data.notes.find((note) => note.id === id);
+                  return (
+                    <div key={id}>
+                      {target && !target.archived ? (
+                        <button onClick={() => openNote(target)}>
+                          {val(target, "title")} →
+                        </button>
+                      ) : (
+                        <span>
+                          {target ? val(target, "title") : "Unavailable note"}{" "}
+                          (archived or unavailable)
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+            )}
+          </article>
+          <div className="crew-quiet-row">
+            <button
+              type="button"
+              className="crew-quiet"
+              onClick={() => setTab("history")}
+            >
+              History
+            </button>
+            {more}
+          </div>
+          {bar(
+            !readOnly && (
+              <button className="crew-primary" onClick={() => setTab("edit")}>
+                Edit
+              </button>
+            ),
+          )}
+        </div>
+      )}
       {tab === "edit" && (
-        <form onSubmit={submit}>
+        <form className="crew-editor-form" onSubmit={submit}>
+          {kind === "note" && row && !dirty && backToNote}
           <fieldset className="crew-form-fields" disabled={readOnly}>
             <Field
               label={kind === "note" || kind === "task" ? "Title" : "Name"}
@@ -1232,19 +1697,26 @@ function Editor({
                 onChange={(e) => setTitle(e.target.value)}
               />
             </Field>
-            {(kind === "note" || kind === "bucket" || kind === "task") && (
+            {!(kind === "note" && row) &&
+              (kind === "note" || kind === "bucket" || kind === "task") && (
               <Field
                 label={
                   kind === "note"
-                    ? "Memory bucket"
+                    ? "Bucket"
                     : kind === "bucket"
                       ? "Responsible agent"
                       : "Assigned agent"
                 }
+                help={help(
+                  kind === "note"
+                    ? "bucket"
+                    : kind === "bucket"
+                      ? "responsible-agent"
+                      : "assigned-agent",
+                )}
               >
                 <select
                   value={selection}
-                  disabled={kind === "note" && !!row}
                   required={kind === "note"}
                   onChange={(e) => setSelection(e.target.value)}
                 >
@@ -1284,23 +1756,34 @@ function Editor({
             <Field
               label={
                 kind === "note"
-                  ? "Note (Markdown)"
+                  ? "Note"
                   : kind === "task"
                     ? "Description"
                     : kind === "agent"
                       ? "Agent brief"
                       : "Purpose"
               }
+              help={kind === "agent" ? help("brief") : undefined}
             >
-              <textarea
+              <GrowingTextarea
                 required={kind === "note"}
                 className={
-                  kind === "note" || kind === "agent" ? "crew-long-text" : ""
+                  kind === "note"
+                    ? "crew-note-text"
+                    : kind === "agent"
+                      ? "crew-long-text"
+                      : ""
                 }
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
               />
             </Field>
+            {kind === "note" && body.trim() && (
+              <details className="crew-preview">
+                <summary>Preview</summary>
+                <Prose>{body}</Prose>
+              </details>
+            )}
             {kind === "task" && (
               <>
                 <div className="crew-form-grid">
@@ -1329,7 +1812,7 @@ function Editor({
                   </Field>
                 </div>
                 <div className="crew-form-grid">
-                  <Field label="Readiness">
+                  <Field label="Readiness" help={help("readiness")}>
                     <select
                       value={readiness}
                       onChange={(e) => setReadiness(e.target.value)}
@@ -1354,55 +1837,39 @@ function Editor({
                   does not make a waiting task ready. Pending human review still
                   blocks work.
                 </p>
-                <Field label="Draft for review (Markdown)">
-                  <textarea
+                <Field label="Draft for review (Markdown)" help={help("draft")}>
+                  <GrowingTextarea
                     className="crew-long-text"
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                   />
                 </Field>
-                <p className="crew-footnote">
-                  Save the draft before submitting it. Changed drafts need fresh
-                  review. Human is added automatically when review is pending.
-                </p>
+                {row && !readOnly && (
+                  <div className="crew-review-row">
+                    {reviewState}
+                    <Help topic="send-for-approval" />
+                  </div>
+                )}
               </>
             )}
             {(kind === "note" || kind === "task") && (
-              <fieldset className="crew-related">
-                <legend>Related memory</legend>
-                {data.notes
-                  .filter((note) => note.id !== row?.id)
-                  .map((note) => (
-                    <label key={note.id}>
-                      <input
-                        type="checkbox"
-                        checked={links.split("\n").includes(note.id)}
-                        onChange={(e) =>
-                          setLinks(
-                            (e.target.checked
-                              ? [...links.split("\n").filter(Boolean), note.id]
-                              : links.split("\n").filter((id) => id !== note.id)
-                            ).join("\n"),
-                          )
-                        }
-                      />
-                      <span>
-                        {val(note, "title")}
-                        {note.archived ? " (archived)" : ""}
-                      </span>
-                    </label>
-                  ))}
-                {!data.notes.filter((note) => note.id !== row?.id).length && (
-                  <p>No other notes yet.</p>
-                )}
-              </fieldset>
+              <RelatedNotes
+                notes={data.notes}
+                currentId={row?.id}
+                links={links}
+                readOnly={readOnly}
+                setLinks={(next) => {
+                  setLinks(next);
+                  onEdit();
+                }}
+              />
             )}
-            {row && !readOnly && (
-              <Field label="Reason for change">
+            {row && !readOnly && dirty && (
+              <Field label="Reason for change" help="reason">
                 <input
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="What changed and why?"
+                  placeholder="Optional: what changed and why?"
                 />
               </Field>
             )}
@@ -1414,75 +1881,25 @@ function Editor({
             )}
             {kind === "bucket" && (
               <p className="crew-footnote">
-                Responsibility is a working agreement. Archiving this bucket
-                hides its notes and stops writes until restored.
+                Responsibility is a convention, not a permission. Archiving this
+                bucket hides its notes and stops writes until restored.
               </p>
             )}
           </fieldset>
-          {!readOnly && (
-            <div className="crew-form-footer">
-              <button className="crew-primary" disabled={busy}>
-                Save {kind}
-              </button>
-              {row && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    void save(`${kind}.update`, { archived: true }, row, reason)
-                  }
-                >
-                  {kind === "agent" ? "Deactivate agent" : `Archive ${kind}`}
+          {kind !== "note" && more}
+          {bar(
+            !readOnly &&
+              (!row || dirty) && (
+                <button className="crew-primary" disabled={busy}>
+                  Save {kind}
                 </button>
-              )}
-            </div>
-          )}
-          {row && kind === "task" && !readOnly && (
-            <button
-              type="button"
-              className="crew-review-submit"
-              disabled={
-                busy ||
-                !val(row, "draft").trim() ||
-                draft !== val(row, "draft") ||
-                history.some((x) => val(x, "status") === "pending")
-              }
-              onClick={() => void save("review.request", {}, row)}
-            >
-              Submit saved draft for human review →
-            </button>
+              ),
           )}
         </form>
       )}
-      {tab === "preview" && (
-        <>
-          <Prose>{body}</Prose>
-          {list(row, "links").length > 0 && (
-            <section className="crew-linked-notes">
-              <h3>Related memory</h3>
-              {list(row, "links").map((id) => {
-                const target = data.notes.find((note) => note.id === id);
-                return (
-                  <div key={id}>
-                    {target && !target.archived ? (
-                      <button onClick={() => openNote(target)}>
-                        {val(target, "title")} →
-                      </button>
-                    ) : (
-                      <span>
-                        {target ? val(target, "title") : "Unavailable note"}{" "}
-                        (archived or unavailable)
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </section>
-          )}
-        </>
-      )}
       {tab === "history" && (
         <>
+          {backToNote}
           <p>
             Restoring creates a new revision and keeps every previous version.
           </p>
@@ -1624,12 +2041,7 @@ function Editor({
           ))}
         </>
       )}
-      {row && (
-        <p className="crew-record-id">
-          {kind} {row.id} · revision {row.revision}
-        </p>
-      )}
-      {error && (
+      {tab !== "read" && tab !== "edit" && error && (
         <p className="crew-alert" role="alert">
           {error}
         </p>
