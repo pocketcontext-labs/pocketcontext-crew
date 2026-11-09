@@ -12,9 +12,9 @@ import remarkGfm from "remark-gfm";
 import Brand from "./Brand";
 import { api } from "./api";
 import { crewApi, val, list, statuses, lineDiff, type Row } from "./crewApi";
+import Connect from "./Connect";
 import Home from "./Home";
 import "./crew.css";
-import WebhookStatus from "./WebhookStatus";
 import type { ServerVersion } from "./crewApi";
 import {
   isItemHash,
@@ -33,6 +33,10 @@ const nav: [View, string, string][] = [
   ["reviews", "Approvals", "✓"],
   ["agents", "Agents", "◎"],
   ["archive", "Archive", "↶"],
+];
+const pages: [View, string, string][] = [
+  ...nav,
+  ["connect", "Connect an agent", "⇄"],
 ];
 type Kind = "task" | "note" | "bucket" | "agent" | "review";
 type Data = Record<string, Row[]>;
@@ -276,7 +280,7 @@ export default function CrewWorkspace() {
     dialog?.row && (dialog.kind === "task" || dialog.kind === "note")
       ? val(dialog.row, "title")
       : "";
-  const pageTitle = openTitle || nav.find(([key]) => key === view)?.[1];
+  const pageTitle = openTitle || pages.find(([key]) => key === view)?.[1];
   useEffect(() => {
     document.title = `${pageTitle} · PocketContext Crew`;
     return () => {
@@ -419,6 +423,7 @@ export default function CrewWorkspace() {
     agents:
       "Define responsibilities and decide what belongs in lasting memory.",
     archive: "Restore notes, tasks and buckets without losing their history.",
+    connect: "Crew needs one connection to your agent platform before agents can work here.",
   };
   return (
     <div className="crew-app">
@@ -447,6 +452,13 @@ export default function CrewWorkspace() {
           ))}
         </nav>
         <div className="crew-sidebar-bottom">
+          <a
+            className="crew-sidebar-link"
+            href={viewHashes.connect}
+            aria-current={view === "connect" ? "page" : undefined}
+          >
+            Connect an agent
+          </a>
           <span />
           One owner. One shared context.
           <button onClick={() => api.logout()}>Sign out</button>
@@ -471,7 +483,9 @@ export default function CrewWorkspace() {
           <div className="crew-heading">
             <div>
               <p className="crew-eyebrow">
-                {view === "home"
+                {view === "connect"
+                  ? "ONE CONNECTION FOR ALL YOUR AGENTS"
+                  : view === "home"
                   ? "START HERE"
                   : view === "reviews"
                   ? "YOUR FINAL SAY"
@@ -479,7 +493,7 @@ export default function CrewWorkspace() {
                     ? "CONTEXT THAT CARRIES FORWARD"
                     : "FROM SHARED CONTEXT TO FINISHED WORK"}
               </p>
-              <h1>{nav.find((x) => x[0] === view)?.[1]}</h1>
+              <h1>{pages.find((x) => x[0] === view)?.[1]}</h1>
               <p>{descriptions[view]}</p>
             </div>
             {view === "board" && (
@@ -609,6 +623,12 @@ export default function CrewWorkspace() {
               openItem={openItem}
               openReview={(row) => setDialog({ kind: "review", row })}
               invalidAssignment={invalidAssignment}
+              copyEndpoint={<CopyLink target={`${location.origin}/mcp`} />}
+            />
+          )}
+          {view === "connect" && (
+            <Connect
+              agents={[...data.agents, ...archived.agents]}
               copyEndpoint={<CopyLink target={`${location.origin}/mcp`} />}
             />
           )}
@@ -830,20 +850,9 @@ export default function CrewWorkspace() {
                   </button>
                 ))}
               </div>
-              <WebhookStatus agents={[...data.agents, ...archived.agents]} />
-              <section className="crew-connect">
-                <h2>One connection for your agents</h2>
-                <p>
-                  Add this MCP endpoint in your agent platform, then authorize
-                  it with your owner account.
-                </p>
-                <code>{location.origin}/mcp</code>
-                <p>
-                  Give each agent its brief above. Scheduling and execution stay
-                  in your agent platform.
-                </p>
-                <a href="/oauth/connections">Manage connected apps →</a>
-              </section>
+              <a className="crew-agents-connect" href={viewHashes.connect}>
+                Connect these agents to your platform →
+              </a>
             </>
           )}
           {view === "archive" && (

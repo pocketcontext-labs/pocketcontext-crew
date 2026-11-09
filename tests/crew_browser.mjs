@@ -81,8 +81,8 @@ try {
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('.crew-task-card').count(),1);
  // Bridge setup is configuration only: viewing/selecting never sends a probe.
- await page.getByRole('link',{name:'Agents',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Agents'}).waitFor();
+ await page.getByRole('link',{name:'Connect an agent',exact:true}).click();
+ await page.getByRole('heading',{name:'Connect an agent',exact:true,level:1}).waitFor();
  const integration=page.getByRole('region',{name:'Grok Bot integration'});
  await integration.getByRole('combobox',{name:'Crew dispatcher',exact:true}).selectOption({label:'Build'});
  await page.getByText('Dispatcher changed. Connect its routine before enabling delivery.',{exact:true}).waitFor();

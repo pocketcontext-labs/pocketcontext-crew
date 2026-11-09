@@ -740,6 +740,39 @@ a.crew-logo:hover .product-brand span {
   border: 1px dashed #c8d2bc;
   border-radius: 9px;
 }
+.crew-connect ol {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  display: grid;
+  gap: 20px;
+}
+.crew-connect code {
+  margin-bottom: 8px;
+}
+.crew-connect-optional {
+  margin: 32px 0 4px;
+  font-size: 18px;
+  font-weight: 500;
+}
+.crew-connect-optional-text {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #708065;
+}
+.crew-agents-connect {
+  display: inline-block;
+  margin-top: 24px;
+}
+.crew-sidebar-link {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #52654f;
+}
+.crew-sidebar-link[aria-current] {
+  font-weight: 650;
+  color: #2b4c32;
+}
 .crew-connect h2 {
   font-size: 18px;
   font-weight: 500;
@@ -1061,20 +1094,37 @@ a.crew-logo:hover .product-brand span {
     display: none;
   }
   .crew-sidebar nav {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
-    margin-top: 16px;
-    overflow-x: auto;
+    margin-top: 12px;
   }
   .crew-sidebar nav a {
-    padding: 8px;
-    font-size: 11px;
-    white-space: nowrap;
-    gap: 5px;
+    position: relative;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    min-height: 48px;
+    padding: 6px 2px;
+    font-size: 12px;
+    line-height: 1.2;
+    text-align: center;
   }
   .crew-sidebar nav a > span {
-    font-size: 14px;
+    font-size: 15px;
     width: auto;
+  }
+  .crew-sidebar nav b {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    margin: 0;
+  }
+  .crew-topbar > span {
+    display: none;
+  }
+  .crew-topbar > div {
+    margin-left: auto;
   }
   .crew-topbar {
     height: 48px;

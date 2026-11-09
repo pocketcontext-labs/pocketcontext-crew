@@ -634,7 +634,7 @@ it("shows redacted webhook health without exposing credential fields, URL paths 
   ];
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  await openPage("Agents");
+  await openPage("Connect an agent");
   await screen.findByText(/Credential: configured/);
   const section = screen.getByRole("region", { name: "Grok Bot integration" });
   expect(section).toHaveTextContent("receiver.example");

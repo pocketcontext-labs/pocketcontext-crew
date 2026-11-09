@@ -10,6 +10,7 @@ export const viewHashes = {
   reviews: "#/approvals",
   agents: "#/agents",
   archive: "#/archive",
+  connect: "#/connect",
 } as const;
 export type View = keyof typeof viewHashes;
 
@@ -55,7 +56,7 @@ export function itemShareUrl(kind: ItemKind, row: Row): string {
 const returnKey = "pocketcontext.crew.login_return";
 const returnLifetimeMs = 15 * 60 * 1000;
 const returnPattern =
-  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|team|memory|approvals|agents|archive)$/;
+  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|team|memory|approvals|agents|archive|connect)$/;
 
 export function clearLoginReturn() {
   try {

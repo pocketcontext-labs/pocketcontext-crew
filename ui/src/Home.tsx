@@ -93,7 +93,7 @@ export default function Home({
           >
             I've connected it
           </button>
-          <a href={viewHashes.agents}>Go to agents</a>
+          <a href={viewHashes.connect}>See full setup</a>
         </>
       ),
     },
