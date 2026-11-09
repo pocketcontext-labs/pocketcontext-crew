@@ -5,13 +5,15 @@ The CLI commands `search`, `read`, `schema` and `query` take the same JSON as
 the MCP tools crew_search, crew_read, crew_schema and crew_query.
 
 1. Find by topic with `search` / `crew_search` (query, optional collections notes/tasks,
-   limit default 10). Hits carry id, title, a short excerpt, revision, updated,
-   score and bucket or status/assignment, never full bodies. All terms must
+   limit default 10). Hits carry id, title, `path`, `url` (only when the install has
+   a domain), a short excerpt, revision, updated, score and bucket or
+   status/assignment, never full bodies. All terms must
    match; append `*` for a prefix. Follow next_offset with the returned
    generation; on a conflict restart the search.
 2. Read the chosen record with `read` / `crew_read` by `id` and `fields`, for example
    `["title","body"]` for a note or `["title","description","draft","status"]`
-   for a task. id and revision are always included.
+   for a task. id and revision are always included. Add `url` when you will cite
+   the item to a human.
 3. Read full records or whole pages only when you need every field.
 
 For work lists, filter tasks instead of paging the board: `assigned_agent` (ID or

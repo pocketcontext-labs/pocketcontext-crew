@@ -163,7 +163,7 @@ function handle(app, b, actor, isAgent) {
     const info = current(app, delivery, d);
     return {
       valid: true,
-      task: info.task.publicExport(),
+      task: wh.linkedExport(app, "tasks", info.task),
       recipient_agent_id: info.target.agent,
       recipient_bot_ref: info.payload.recipient_bot_ref,
       dispatcher_agent_id: info.target.config.getString("agent"),
@@ -509,6 +509,14 @@ function handle(app, b, actor, isAgent) {
       next_step: "reconcile",
     });
   }
+  // Added after the idempotent step so the stored result stays free of links.
+  if (b.action === "execution.begin" && result.task_context)
+    wh.withLinks(
+      app,
+      "tasks",
+      result.task_context,
+      result.task_context.title,
+    );
   return result;
 }
 // A done task with nothing running may be archived without proof. b.data is

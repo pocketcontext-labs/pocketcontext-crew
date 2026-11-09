@@ -30,14 +30,16 @@ name, empty string for unassigned), `status` (one value or a list), `readiness`
 and `label` (exact element of labels). `changed_since` (RFC3339) selects records
 updated at or after that time in any collection. Archive semantics are unchanged.
 Task create, update and claim also accept an ID or unique exact name for
-`assigned_agent`, and store the agent ID.
+`assigned_agent`, and store the agent ID. Task and note responses (reads, lists and
+write results) include `path`, and `url` when the install has a domain; see
+[item links](#item-links). Both can be requested in `fields`.
 
 `POST /api/crew/search` ranks notes (title, body) and tasks (title, description,
 draft) with SQLite FTS5 BM25. It takes query (all terms must match; a trailing
 `*` is a prefix), optional collections (notes, tasks), limit (default 10, at most
 50), offset and archived with crew_read's archive semantics. Hits are compact:
-collection, id, title, a short highlighted excerpt, revision, updated, score and
-the note bucket or the task status, readiness and assignment. A `generation`
+collection, id, title, path, url (with a domain), a short highlighted excerpt,
+revision, updated, score and the note bucket or the task status, readiness and assignment. A `generation`
 token identifies the indexed content; pass it when following next_offset, and
 restart on 409 when content changed. The index is in memory, rebuilt from the
 application's own database connection whenever a change fingerprint (id,
@@ -45,6 +47,21 @@ revision, updated and effective archive state of every note and task) changes,
 so edits, restores and archive changes, including bucket archival, are visible
 immediately. Indexed text is bounded (64 MiB). Webhook, event, review and
 revision records are never indexed or returned.
+
+## Item links
+
+Tasks and notes open in the reader at `#/tasks/<slug>-<id>` and
+`#/notes/<slug>-<id>`. The id decides what opens and the slug is cosmetic, so links
+survive renames. Older bare `#/tasks/<id>` links still work. Archived items open
+read-only.
+
+Responses always include `path`, for example `#/tasks/launch-post-vicfcuk53eds6yt`.
+`url` is the absolute link and is present only when the install has a domain; without
+one, agents cite the title plus the id instead of a link. Agents cite items to humans
+as `[title](url)`, escaping `]` and replacing newlines because titles are untrusted.
+
+Webhook wakes are unchanged and title-free: they carry IDs, revisions and reasons,
+never task prose, and their `task_url` stays in the bare-id form.
 
 ## Bounded read-only SQL
 

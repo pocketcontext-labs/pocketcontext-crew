@@ -76,6 +76,23 @@ function exported(record, app) {
   }
   return result;
 }
+// Permanent links are derived on the way out of an API response. They never go
+// into webhook payloads, events or stored idempotency results; the slug itself
+// lives in Go behind the binding.
+function withLinks(app, collection, out, title) {
+  const link = $pocketcontext.crewRecordLink(app, collection, out.id, title);
+  out.path = link.path;
+  if (link.url) out.url = link.url;
+  return out;
+}
+function linkedExport(app, collection, record) {
+  return withLinks(
+    app,
+    collection,
+    record.publicExport(),
+    record.getString("title"),
+  );
+}
 // Old release idempotency results may contain receiver URLs. Redact on replay,
 // including nested results, without rewriting historical operation records.
 function redactReplay(value) {
@@ -1235,6 +1252,8 @@ module.exports = {
   globalConfig,
   collections,
   exported,
+  withLinks,
+  linkedExport,
   handle,
   state,
   eligible,

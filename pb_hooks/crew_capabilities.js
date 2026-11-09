@@ -414,15 +414,28 @@ function document() {
   }))
     collections[name].parent = parent;
 
+  const permanentLink = {
+    path: {
+      type: "string",
+      description:
+        "Derived permanent link, #/tasks/<slug>-<id> or #/notes/<slug>-<id>. The id is authoritative; the slug follows the current title.",
+    },
+    url: {
+      type: "string",
+      description:
+        "Absolute permanent link. Present only when the install has a public base URL.",
+    },
+  };
   const fields = {
     agents: { ...agent },
     buckets: {
       ...bucket,
       responsible_agent_details: { type: ["object", "null"] },
     },
-    notes: { ...note },
+    notes: { ...note, ...permanentLink },
     tasks: {
       ...task,
+      ...permanentLink,
       wake_generation: num,
       execution_required_generation: num,
       bot_handoffs: num,
@@ -845,6 +858,8 @@ function searchDiscovery() {
       "collection",
       "id",
       "title",
+      "path",
+      "url",
       "excerpt",
       "revision",
       "updated",

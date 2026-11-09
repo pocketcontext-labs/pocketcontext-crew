@@ -14,6 +14,11 @@ Find memory by topic, then read one hit:
 `CREW search '{"query":"release checklist","collections":["notes"],"limit":5}'`, then
 `CREW read '{"collection":"notes","id":"NOTE_ID","fields":["title","body"]}'`.
 
+Cite a task to a human:
+`CREW read '{"collection":"tasks","id":"TASK_ID","fields":["title","url"]}'`, then write
+`[Launch post](https://crew.example.com/#/tasks/launch-post-vicfcuk53eds6yt)`; with no
+`url` in the response, write `Launch post (vicfcuk53eds6yt)`.
+
 Report open work by status (`CREW schema` lists the views once):
 `CREW query '{"sql":"SELECT status, count(*) FROM tasks WHERE archived = 0 GROUP BY status"}'`.
 

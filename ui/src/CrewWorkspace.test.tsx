@@ -595,3 +595,325 @@ it("marks a hop-limit stop and a pending owner comment wake on task cards", asyn
   expect(screen.getAllByText("Comment wake pending")).toHaveLength(1);
   expect(crewApi.write).not.toHaveBeenCalled();
 });
+
+const linkedNote: Row = {
+  id: "note00000000001",
+  revision: 2,
+  title: "Voice guide",
+  bucket: bucket.id,
+  body: "Clear prose",
+  links: [],
+  path: "#/notes/voice-guide-note00000000001",
+};
+const linkedTask: Row = {
+  ...task,
+  status: "in_progress",
+  path: "#/tasks/launch-post-task00000000001",
+};
+function serveArchived(rows: Record<string, Row[]>) {
+  vi.mocked(crewApi.read).mockImplementation(async (c, f = {}) =>
+    f.archived ? rows[c] || [] : fixtures[c] || [],
+  );
+}
+function mockClipboard(writeText: (text: string) => Promise<void>) {
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn(writeText) },
+  });
+  return navigator.clipboard.writeText;
+}
+afterEach(() => {
+  Reflect.deleteProperty(navigator, "clipboard");
+});
+function navigate(hash: string) {
+  history.replaceState(null, "", `/${hash}`);
+  fireEvent(window, new HashChangeEvent("hashchange"));
+}
+
+it.each([
+  ["task", "#/tasks/launch-post-task00000000001", "Launch post"],
+  ["task", "#/tasks/task00000000001", "Launch post"],
+  ["task", "#/tasks/any-old-slug-task00000000001", "Launch post"],
+  ["note", "#/notes/voice-guide-note00000000001", "Voice guide"],
+  ["note", "#/notes/note00000000001", "Voice guide"],
+])("opens a %s from %s", async (_kind, hash, title) => {
+  fixtures.tasks = [linkedTask];
+  fixtures.notes = [linkedNote];
+  history.replaceState(null, "", `/${hash}`);
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  expect(dialog.getByLabelText("Title")).toHaveValue(title);
+});
+
+it.each([
+  "#/tasks/short",
+  "#/tasks/launch-post-TASK00000000001",
+  "#/tasks/task00000000001/extra",
+  "#/tasks/task00000000001?otp=123456",
+  "#/agents/task00000000001",
+])("ignores the malformed item link %s", async (hash) => {
+  history.replaceState(null, "", `/${hash}`);
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("rewrites a stale slug to the current path after a title change", async () => {
+  fixtures.tasks = [
+    {
+      ...linkedTask,
+      title: "Renamed",
+      path: "#/tasks/renamed-task00000000001",
+    },
+  ];
+  history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+  render(<CrewWorkspace />);
+  await screen.findByRole("dialog");
+  expect(location.hash).toBe("#/tasks/renamed-task00000000001");
+});
+
+it("falls back to the bare form for a row without a usable path", async () => {
+  fixtures.tasks = [
+    { ...task, status: "todo", path: "#/notes/x-otherid00000001" },
+  ];
+  render(<CrewWorkspace />);
+  fireEvent.click(await screen.findByRole("button", { name: /Launch post/ }));
+  expect(location.hash).toBe(`#/tasks/${task.id}`);
+});
+
+it("opens a link that arrives before the data has loaded, only once", async () => {
+  fixtures.tasks = [linkedTask];
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const serve = vi.mocked(crewApi.read).getMockImplementation()!;
+  vi.mocked(crewApi.read).mockImplementation(async (c, f) => {
+    await gate;
+    return serve(c, f);
+  });
+  render(<CrewWorkspace />);
+  navigate("#/tasks/launch-post-task00000000001");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  release();
+  await screen.findByRole("dialog");
+});
+
+it("opens a hashchange navigation on already-loaded data", async () => {
+  fixtures.tasks = [linkedTask];
+  fixtures.notes = [linkedNote];
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  navigate("#/notes/voice-guide-note00000000001");
+  const dialog = within(await screen.findByRole("dialog"));
+  expect(dialog.getByLabelText("Title")).toHaveValue("Voice guide");
+});
+
+it("never opens or reopens a dialog on a data refresh", async () => {
+  fixtures.tasks = [linkedTask];
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  fireEvent.click(screen.getByRole("button", { name: "Shared memory" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
+  );
+  expect(screen.getByRole("dialog", { name: "Edit bucket" })).toBeVisible();
+  // An item hash left in place by a replaceState must not act on refresh.
+  history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+  const reads = vi.mocked(crewApi.read).mock.calls.length;
+  fixtures.tasks = [{ ...linkedTask }];
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await waitFor(() =>
+    expect(vi.mocked(crewApi.read).mock.calls.length).toBeGreaterThan(reads),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled(),
+  );
+  expect(screen.getByRole("dialog", { name: "Edit bucket" })).toBeVisible();
+});
+
+it("keeps in-progress edits and the opened row across a refresh of a linked dialog", async () => {
+  fixtures.tasks = [linkedTask];
+  history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.change(dialog.getByLabelText("Title"), {
+    target: { value: "Unsaved title" },
+  });
+  fixtures.tasks = [{ ...linkedTask, revision: 9, title: "Server title" }];
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await screen.findByRole("heading", { name: "Server title" });
+  expect(dialog.getByLabelText("Title")).toHaveValue("Unsaved title");
+  fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "task.update",
+      expect.objectContaining({ title: "Unsaved title" }),
+      linkedTask,
+      "",
+    ),
+  );
+});
+
+it.each([
+  ["task", "#/tasks/launch-post-task00000000001"],
+  ["note", "#/notes/voice-guide-note00000000001"],
+])("clears the %s hash when its dialog closes", async (_kind, hash) => {
+  fixtures.tasks = [linkedTask];
+  fixtures.notes = [linkedNote];
+  history.replaceState(null, "", `/${hash}`);
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  expect(location.hash).toBe(hash);
+  fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(location.hash).toBe("#/");
+});
+
+it("updates the address on click without a duplicate open, and not for new items", async () => {
+  fixtures.tasks = [linkedTask];
+  fixtures.notes = [linkedNote];
+  const listener = vi.fn();
+  window.addEventListener("hashchange", listener);
+  render(<CrewWorkspace />);
+  fireEvent.click(await screen.findByRole("button", { name: /Launch post/ }));
+  expect(location.hash).toBe("#/tasks/launch-post-task00000000001");
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+  fireEvent.click(screen.getByRole("button", { name: "Shared memory" }));
+  fireEvent.click(screen.getByRole("button", { name: /Voice guide/ }));
+  expect(location.hash).toBe("#/notes/voice-guide-note00000000001");
+  fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+  fireEvent.click(screen.getByRole("button", { name: /New note/ }));
+  expect(location.hash).toBe("#/");
+  expect(listener).not.toHaveBeenCalled();
+  window.removeEventListener("hashchange", listener);
+});
+
+it("updates the address when a linked note opens from a note's related memory", async () => {
+  const source: Row = {
+    ...linkedNote,
+    id: "note00000000002",
+    title: "Source",
+    links: [linkedNote.id],
+    path: "#/notes/source-note00000000002",
+  };
+  fixtures.notes = [source, linkedNote];
+  history.replaceState(null, "", "/#/notes/source-note00000000002");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.click(dialog.getByRole("tab", { name: "Preview" }));
+  fireEvent.click(dialog.getByRole("button", { name: /Voice guide/ }));
+  expect(location.hash).toBe("#/notes/voice-guide-note00000000001");
+  expect(dialog.getByRole("tab", { name: "Preview" })).toBeInTheDocument();
+  fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
+  expect(dialog.getByLabelText("Title")).toHaveValue("Voice guide");
+});
+
+it("shows an archived task read-only and explains how to restore it", async () => {
+  fixtures.tasks = [];
+  fixtures.reviews = [];
+  serveArchived({ tasks: [{ ...linkedTask, archived: true }] });
+  history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+  render(<CrewWorkspace />);
+  const element = await screen.findByRole("dialog", { name: "Archived task" });
+  const dialog = within(element);
+  expect(dialog.getByRole("status")).toHaveTextContent(
+    "This task is archived and read-only. Restore it from the Archive view",
+  );
+  expect(dialog.getByLabelText("Title")).toBeDisabled();
+  expect(dialog.getByLabelText("Description")).toBeDisabled();
+  expect(dialog.getByLabelText("Assigned agent")).toBeDisabled();
+  expect(dialog.queryByRole("button", { name: "Save task" })).toBeNull();
+  expect(dialog.queryByRole("button", { name: "Archive task" })).toBeNull();
+  expect(
+    dialog.queryByRole("button", { name: /Submit saved draft/ }),
+  ).toBeNull();
+  fireEvent.click(dialog.getByRole("tab", { name: "Activity" }));
+  expect(dialog.queryByRole("button", { name: "Add comment" })).toBeNull();
+  expect(crewApi.write).not.toHaveBeenCalled();
+});
+
+it("shows an archived note read-only without restore-revision actions", async () => {
+  fixtures.note_revisions = [
+    { id: "revision0000001", revision: 1, title: "Old", body: "Old body" },
+  ];
+  serveArchived({ notes: [{ ...linkedNote, archived: true }] });
+  history.replaceState(null, "", "/#/notes/voice-guide-note00000000001");
+  render(<CrewWorkspace />);
+  const element = await screen.findByRole("dialog", { name: "Archived note" });
+  const dialog = within(element);
+  expect(dialog.getByRole("status")).toHaveTextContent(
+    "This note is archived and read-only.",
+  );
+  expect(dialog.getByLabelText("Note (Markdown)")).toBeDisabled();
+  expect(dialog.queryByRole("button", { name: "Save note" })).toBeNull();
+  fireEvent.click(dialog.getByRole("tab", { name: "History" }));
+  await dialog.findByText(/Revision 1/);
+  expect(
+    dialog.queryByRole("button", { name: "Restore as new revision" }),
+  ).toBeNull();
+});
+
+it("treats a note hidden only by its archived bucket as archived", async () => {
+  serveArchived({
+    notes: [{ ...linkedNote, archived: false }],
+    buckets: [{ ...bucket, archived: true }],
+  });
+  fixtures.buckets = [];
+  history.replaceState(null, "", "/#/notes/voice-guide-note00000000001");
+  render(<CrewWorkspace />);
+  const element = await screen.findByRole("dialog", { name: "Archived note" });
+  const dialog = within(element);
+  expect(dialog.getByRole("status")).toHaveTextContent(
+    "Restore the bucket from the Archive view",
+  );
+  expect(dialog.getByLabelText("Title")).toBeDisabled();
+  expect(dialog.getByLabelText("Memory bucket")).toHaveValue(bucket.id);
+  expect(dialog.queryByRole("button", { name: "Archive note" })).toBeNull();
+});
+
+it("copies the server's absolute url when present", async () => {
+  const writeText = mockClipboard(async () => {});
+  fixtures.tasks = [
+    {
+      ...linkedTask,
+      url: "https://crew.example.test/#/tasks/launch-post-task00000000001",
+    },
+  ];
+  history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.click(dialog.getByRole("button", { name: "Copy link" }));
+  await dialog.findByRole("button", { name: "Link copied" });
+  expect(writeText).toHaveBeenCalledExactlyOnceWith(
+    "https://crew.example.test/#/tasks/launch-post-task00000000001",
+  );
+});
+
+it("builds the link from the current origin and path without a url", async () => {
+  const writeText = mockClipboard(async () => {});
+  fixtures.notes = [linkedNote];
+  history.replaceState(null, "", "/app/#/notes/voice-guide-note00000000001");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.click(dialog.getByRole("button", { name: "Copy link" }));
+  await dialog.findByRole("button", { name: "Link copied" });
+  expect(writeText).toHaveBeenCalledExactlyOnceWith(
+    `${location.origin}/app/#/notes/voice-guide-note00000000001`,
+  );
+});
+
+it.each([
+  ["rejects", () => mockClipboard(() => Promise.reject(new Error("denied")))],
+  ["is unavailable", () => undefined],
+])("shows the link when the clipboard %s", async (_name, setup) => {
+  setup();
+  fixtures.tasks = [linkedTask];
+  history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.click(dialog.getByRole("button", { name: "Copy link" }));
+  const alert = await dialog.findByRole("alert");
+  expect(alert).toHaveTextContent("Could not copy automatically");
+  expect(alert).toHaveTextContent("#/tasks/launch-post-task00000000001");
+  expect(dialog.getByLabelText("Title")).toHaveValue("Launch post");
+});

@@ -129,6 +129,10 @@ counts, joins, aggregates and history; SQL includes archived records, so filter
 `archived` explicitly. All four are read-only routes; none returns webhook URLs,
 credentials or redacted fields.
 
+Task and note responses carry `path` and, on an install with a domain, an absolute
+`url`; see [item links](crew.md#item-links). Agents cite items to humans as
+`[title](url)`, or the title plus the id when there is no `url`.
+
 Agents on an install without a domain use the binary's `read`, `search`,
 `schema`, `query` and `write` commands instead, with the same JSON and routes;
 see [local use](local.md) and [the contract](crew.md#command-line-work-commands).

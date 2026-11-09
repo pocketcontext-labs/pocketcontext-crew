@@ -179,6 +179,8 @@ const derivedFields = {
   ],
   webhook_executions: ["waiting_overdue", "lease_expired"],
   webhook_bridges: ["overdue"],
+  tasks: ["path", "url"],
+  notes: ["path", "url"],
 };
 const redactedFields = ["url", "secret", "secret_ciphertext"];
 const taskStatuses = ["todo", "in_progress", "needs_review", "done"];
@@ -411,9 +413,11 @@ function read(e) {
             ? webhooks.exported(r, e.app)
             : execution.collections.includes(col)
               ? execution.exported(r)
-              : keep
-                ? r.publicExport()
-                : r;
+              : col === "tasks" || col === "notes"
+                ? webhooks.linkedExport(e.app, col, r)
+                : keep
+                  ? r.publicExport()
+                  : r;
       return keep ? pick(value, keep) : value;
     }),
     has_more: rows.length > limit,
@@ -511,14 +515,21 @@ function write(e, isAgent) {
         )
           bad("Comment required");
         if (b.execution) {
-          result = webhooks.idempotent(
+          // Links are added after the idempotent step so the stored result
+          // stays free of them and a replay reflects the current title.
+          result = webhooks.withLinks(
             app,
-            b,
-            () => {
-              event(app, r, b.action, b, actor);
-              return r.publicExport();
-            },
-            true,
+            "tasks",
+            webhooks.idempotent(
+              app,
+              b,
+              () => {
+                event(app, r, b.action, b, actor);
+                return r.publicExport();
+              },
+              true,
+            ),
+            r.getString("title"),
           );
         } else {
           const comment = event(app, r, b.action, b, actor);
@@ -530,7 +541,7 @@ function write(e, isAgent) {
             webhooks.ownerComment(app, r, comment.id);
             execution.invalidateStale(app, r, b, actor);
           }
-          result = r;
+          result = webhooks.linkedExport(app, "tasks", r);
         }
         return;
       }
@@ -708,7 +719,12 @@ function write(e, isAgent) {
           actor,
           { ...hopStop, readiness: "waiting" },
         );
-      result = kind === "bucket" ? bucketExport(app, r) : r;
+      result =
+        kind === "bucket"
+          ? bucketExport(app, r)
+          : kind === "task" || kind === "note"
+            ? webhooks.linkedExport(app, col, r)
+            : r;
       return;
     }
     if (kind === "review" && op === "request") {

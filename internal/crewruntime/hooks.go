@@ -73,6 +73,7 @@ func hookBindings() map[string]any {
 		"webhookBaseURL":          webhookInstanceURL,
 		"webhookCredentialReady":  webhookCredentialReady,
 		"webhookUUID":             webhookUUID,
+		"crewRecordLink":          crewRecordLink,
 	}
 }
 

@@ -7,6 +7,9 @@ labels, status, draft, links, archived, readiness, waiting_reason and server-man
 wake_generation, bot_handoffs, handoff_limited and comment wake markers. Reviews preserve exact draft snapshots and
 owner decisions. Events preserve action, actor, reported_agent, reason and changes.
 All records have id, revision, created and updated. There is no space field.
+Task and note responses also have `path` (for example
+`#/tasks/launch-post-vicfcuk53eds6yt`) and, only when the install has a domain, an
+absolute `url`; both can be requested in `fields`.
 
 Read with `read` (crew_read), find by topic with `search` (crew_search), and
 report with read-only SQL (`schema`/`query`, crew_schema/crew_query). Write

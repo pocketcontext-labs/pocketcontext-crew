@@ -14,9 +14,19 @@ import { crewApi, val, list, statuses, lineDiff, type Row } from "./crewApi";
 import "./crew.css";
 import WebhookStatus from "./WebhookStatus";
 import type { ServerVersion } from "./crewApi";
+import {
+  isItemHash,
+  itemPath,
+  itemShareUrl,
+  parseItemHash,
+  type ItemKind,
+} from "./itemLink";
 type View = "board" | "memory" | "reviews" | "agents" | "archive";
 type Kind = "task" | "note" | "bucket" | "agent" | "review";
 type Data = Record<string, Row[]>;
+/** Never fires hashchange, so writing the address cannot open a dialog. */
+const setAddress = (hash: string) =>
+  history.replaceState(null, "", location.pathname + location.search + hash);
 const when = (raw: unknown) =>
   raw ? new Date(String(raw)).toLocaleString() : "Just now";
 function Prose({ children }: { children: string }) {
@@ -55,12 +65,37 @@ function Empty({ title, children }: { title: string; children: ReactNode }) {
     </div>
   );
 }
+function CopyLink({ target }: { target: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(target);
+      setState("copied");
+    } catch {
+      setState("failed");
+    }
+  };
+  return (
+    <span className="crew-copy-link">
+      <button type="button" onClick={() => void copy()}>
+        {state === "copied" ? "Link copied" : "Copy link"}
+      </button>
+      {state === "failed" && (
+        <span role="alert" className="crew-copy-error">
+          Could not copy automatically. Copy this link: <code>{target}</code>
+        </span>
+      )}
+    </span>
+  );
+}
 function Modal({
   title,
+  actions,
   children,
   close,
 }: {
   title: string;
+  actions?: ReactNode;
   children: ReactNode;
   close: () => void;
 }) {
@@ -88,6 +123,7 @@ function Modal({
     >
       <header>
         <h2>{title}</h2>
+        {actions}
         <button onClick={close} aria-label="Close dialog">
           ×
         </button>
@@ -120,6 +156,11 @@ export default function CrewWorkspace() {
     [assignmentFilter, setAssignmentFilter] = useState("all");
   const [serverVersion, setServerVersion] = useState<ServerVersion | null>();
   const [dialog, setDialog] = useState<{ kind: Kind; row?: Row } | null>(null),
+    // Set per hash navigation and consumed once, so data refreshes never open a dialog.
+    [pendingLink, setPendingLink] = useState(() =>
+      parseItemHash(location.hash),
+    ),
+    [ready, setReady] = useState(false),
     generation = useRef(0);
   const load = useCallback(async () => {
     const ticket = ++generation.current;
@@ -146,6 +187,7 @@ export default function CrewWorkspace() {
       if (ticket !== generation.current) return;
       setData(Object.fromEntries(result));
       setArchived(Object.fromEntries(old));
+      setReady(true);
       setError("");
     } catch (e) {
       if (ticket === generation.current)
@@ -161,23 +203,31 @@ export default function CrewWorkspace() {
     };
   }, [load]);
   useEffect(() => {
-    const openLinkedTask = () => {
-      const match = /^#\/tasks\/([a-zA-Z0-9]+)$/.exec(location.hash);
-      if (!match) return;
-      const task = data.tasks.find((row) => row.id === match[1]);
-      if (task) setDialog({ kind: "task", row: task });
-    };
-    openLinkedTask();
-    window.addEventListener("hashchange", openLinkedTask);
-    return () => window.removeEventListener("hashchange", openLinkedTask);
-  }, [data.tasks]);
+    const receive = () => setPendingLink(parseItemHash(location.hash));
+    window.addEventListener("hashchange", receive);
+    return () => window.removeEventListener("hashchange", receive);
+  }, []);
+  useEffect(() => {
+    if (!pendingLink || !ready) return;
+    setPendingLink(null);
+    const { kind, id } = pendingLink;
+    const collection = kind === "task" ? "tasks" : "notes";
+    const row = [...data[collection], ...archived[collection]].find(
+      (x) => x.id === id,
+    );
+    if (!row) return;
+    setAddress(itemPath(kind, row));
+    // Navigating to the open item must not disturb its in-progress edits.
+    setDialog((open) =>
+      open?.kind === kind && open.row?.id === id ? open : { kind, row },
+    );
+  }, [pendingLink, ready, data, archived]);
+  const openItem = (kind: ItemKind, row: Row) => {
+    setAddress(itemPath(kind, row));
+    setDialog({ kind, row });
+  };
   const closeDialog = () => {
-    if (location.hash.startsWith("#/tasks/"))
-      history.replaceState(
-        null,
-        "",
-        location.pathname + location.search + "#/",
-      );
+    if (isItemHash(location.hash)) setAddress("#/");
     setDialog(null);
   };
   const perform = async (work: () => Promise<unknown>, message = "Saved.") => {
@@ -274,6 +324,15 @@ export default function CrewWorkspace() {
           });
       }
     }, "Your five starter agents and memory buckets are ready.");
+  const archivedRow =
+    dialog?.row && (dialog.kind === "task" || dialog.kind === "note")
+      ? archived[`${dialog.kind}s`].find((x) => x.id === dialog.row?.id)
+      : undefined;
+  const archiveNotice = !archivedRow
+    ? ""
+    : dialog?.kind === "note" && !archivedRow.archived
+      ? "This note is read-only because its bucket is archived. Restore the bucket from the Archive view to make changes."
+      : `This ${dialog?.kind} is archived and read-only. Restore it from the Archive view to make changes.`;
   const nav: [View, string, string][] = [
     ["board", "AI Team", "▦"],
     ["memory", "Shared memory", "▤"],
@@ -489,7 +548,7 @@ export default function CrewWorkspace() {
                       <button
                         className="crew-task-card"
                         key={x.id}
-                        onClick={() => setDialog({ kind: "task", row: x })}
+                        onClick={() => openItem("task", x)}
                       >
                         <div className="crew-tags">
                           {pending.some((r) => val(r, "task") === x.id) && (
@@ -583,7 +642,7 @@ export default function CrewWorkspace() {
                     <button
                       className="crew-note-card"
                       key={x.id}
-                      onClick={() => setDialog({ kind: "note", row: x })}
+                      onClick={() => openItem("note", x)}
                     >
                       <span className="crew-eyebrow">
                         {name(val(x, "bucket"), "buckets")}
@@ -777,7 +836,18 @@ export default function CrewWorkspace() {
           title={
             dialog.kind === "review"
               ? "Review draft"
-              : `${dialog.row ? "Edit" : "New"} ${dialog.kind}`
+              : archiveNotice
+                ? `Archived ${dialog.kind}`
+                : `${dialog.row ? "Edit" : "New"} ${dialog.kind}`
+          }
+          actions={
+            dialog.row &&
+            (dialog.kind === "task" || dialog.kind === "note") && (
+              <CopyLink
+                key={dialog.row.id}
+                target={itemShareUrl(dialog.kind, dialog.row)}
+              />
+            )
           }
           close={() => {
             if (!busy) closeDialog();
@@ -789,9 +859,11 @@ export default function CrewWorkspace() {
             data={{
               ...data,
               agents: [...data.agents, ...archived.agents],
+              buckets: [...data.buckets, ...archived.buckets],
               notes: [...data.notes, ...archived.notes],
             }}
-            openNote={(note) => setDialog({ kind: "note", row: note })}
+            archiveNotice={archiveNotice}
+            openNote={(note) => openItem("note", note)}
             busy={busy}
             error={error}
             save={save}
@@ -807,6 +879,7 @@ type EditorProps = {
   kind: Kind;
   row?: Row;
   data: Data;
+  archiveNotice?: string;
   openNote: (note: Row) => void;
   busy: boolean;
   error: string;
@@ -823,6 +896,7 @@ function Editor({
   kind,
   row,
   data,
+  archiveNotice = "",
   openNote,
   busy,
   error,
@@ -830,6 +904,7 @@ function Editor({
   perform,
   close,
 }: EditorProps) {
+  const readOnly = !!archiveNotice;
   const [tab, setTab] = useState("edit"),
     [history, setHistory] = useState<Row[]>([]),
     [events, setEvents] = useState<Row[]>([]),
@@ -892,6 +967,7 @@ function Editor({
   }, [row?.id, kind]);
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (readOnly) return;
     const fields =
       kind === "note"
         ? {
@@ -1017,6 +1093,11 @@ function Editor({
     );
   return (
     <div className="crew-dialog-body">
+      {readOnly && (
+        <p className="crew-notice" role="status">
+          {archiveNotice}
+        </p>
+      )}
       {row && (
         <div className="crew-tabs" role="tablist" aria-label="Record views">
           {[
@@ -1030,7 +1111,9 @@ function Editor({
               aria-selected={tab === key}
               onClick={() => setTab(key)}
             >
-              {key[0].toUpperCase() + key.slice(1)}
+              {readOnly && key === "edit"
+                ? "Details"
+                : key[0].toUpperCase() + key.slice(1)}
             </button>
           ))}
         </div>
@@ -1038,215 +1121,223 @@ function Editor({
       {relatedError && <p className="crew-alert">{relatedError}</p>}
       {tab === "edit" && (
         <form onSubmit={submit}>
-          <Field label={kind === "note" || kind === "task" ? "Title" : "Name"}>
-            <input
-              required
-              maxLength={200}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </Field>
-          {(kind === "note" || kind === "bucket" || kind === "task") && (
+          <fieldset className="crew-form-fields" disabled={readOnly}>
+            <Field
+              label={kind === "note" || kind === "task" ? "Title" : "Name"}
+            >
+              <input
+                required
+                maxLength={200}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </Field>
+            {(kind === "note" || kind === "bucket" || kind === "task") && (
+              <Field
+                label={
+                  kind === "note"
+                    ? "Memory bucket"
+                    : kind === "bucket"
+                      ? "Responsible agent"
+                      : "Assigned agent"
+                }
+              >
+                <select
+                  value={selection}
+                  disabled={kind === "note" && !!row}
+                  required={kind === "note"}
+                  onChange={(e) => setSelection(e.target.value)}
+                >
+                  <option value="">
+                    {kind === "note" ? "Choose a bucket" : "Unassigned"}
+                  </option>
+                  {kind === "task" &&
+                    selection &&
+                    !data.agents.some((x) => x.id === selection) && (
+                      <option value={selection} disabled>
+                        Unavailable agent
+                      </option>
+                    )}
+                  {data[kind === "note" ? "buckets" : "agents"]
+                    .filter(
+                      (x) =>
+                        !x.archived ||
+                        x.id ===
+                          val(
+                            row,
+                            kind === "note"
+                              ? "bucket"
+                              : kind === "bucket"
+                                ? "responsible_agent"
+                                : "assigned_agent",
+                          ),
+                    )
+                    .map((x) => (
+                      <option key={x.id} value={x.id} disabled={!!x.archived}>
+                        {val(x, "name")}
+                        {x.archived ? " (inactive)" : ""}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+            )}
             <Field
               label={
                 kind === "note"
-                  ? "Memory bucket"
-                  : kind === "bucket"
-                    ? "Responsible agent"
-                    : "Assigned agent"
+                  ? "Note (Markdown)"
+                  : kind === "task"
+                    ? "Description"
+                    : kind === "agent"
+                      ? "Agent brief"
+                      : "Purpose"
               }
             >
-              <select
-                value={selection}
-                disabled={kind === "note" && !!row}
+              <textarea
                 required={kind === "note"}
-                onChange={(e) => setSelection(e.target.value)}
-              >
-                <option value="">
-                  {kind === "note" ? "Choose a bucket" : "Unassigned"}
-                </option>
-                {kind === "task" &&
-                  selection &&
-                  !data.agents.some((x) => x.id === selection) && (
-                    <option value={selection} disabled>
-                      Unavailable agent
-                    </option>
-                  )}
-                {data[kind === "note" ? "buckets" : "agents"]
-                  .filter(
-                    (x) =>
-                      !x.archived ||
-                      x.id ===
-                        val(
-                          row,
-                          kind === "bucket"
-                            ? "responsible_agent"
-                            : "assigned_agent",
-                        ),
-                  )
-                  .map((x) => (
-                    <option key={x.id} value={x.id} disabled={!!x.archived}>
-                      {val(x, "name")}
-                      {x.archived ? " (inactive)" : ""}
-                    </option>
-                  ))}
-              </select>
-            </Field>
-          )}
-          <Field
-            label={
-              kind === "note"
-                ? "Note (Markdown)"
-                : kind === "task"
-                  ? "Description"
-                  : kind === "agent"
-                    ? "Agent brief"
-                    : "Purpose"
-            }
-          >
-            <textarea
-              required={kind === "note"}
-              className={
-                kind === "note" || kind === "agent" ? "crew-long-text" : ""
-              }
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-            />
-          </Field>
-          {kind === "task" && (
-            <>
-              <div className="crew-form-grid">
-                <Field label="Status">
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                  >
-                    {statuses.map(([key, label]) => (
-                      <option
-                        key={key}
-                        value={key}
-                        disabled={key === "needs_review"}
-                      >
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Labels (comma separated)">
-                  <input
-                    value={labels}
-                    onChange={(e) => setLabels(e.target.value)}
-                    placeholder="Network, Launch"
-                  />
-                </Field>
-              </div>
-              <div className="crew-form-grid">
-                <Field label="Readiness">
-                  <select
-                    value={readiness}
-                    onChange={(e) => setReadiness(e.target.value)}
-                  >
-                    <option value="waiting">Waiting</option>
-                    <option value="ready">Ready</option>
-                  </select>
-                </Field>
-                {readiness === "waiting" && (
-                  <Field label="Waiting reason">
-                    <input
-                      value={waitingReason}
-                      onChange={(e) => setWaitingReason(e.target.value)}
-                      placeholder="What needs to happen first?"
-                      maxLength={2000}
-                    />
-                  </Field>
-                )}
-              </div>
-              <p className="crew-footnote">
-                Ready tasks can wake their assigned agent. Assignment alone does
-                not make a waiting task ready. Pending human review still blocks
-                work.
-              </p>
-              <Field label="Draft for review (Markdown)">
-                <textarea
-                  className="crew-long-text"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                />
-              </Field>
-              <p className="crew-footnote">
-                Save the draft before submitting it. Changed drafts need fresh
-                review. Human is added automatically when review is pending.
-              </p>
-            </>
-          )}
-          {(kind === "note" || kind === "task") && (
-            <fieldset className="crew-related">
-              <legend>Related memory</legend>
-              {data.notes
-                .filter((note) => note.id !== row?.id)
-                .map((note) => (
-                  <label key={note.id}>
-                    <input
-                      type="checkbox"
-                      checked={links.split("\n").includes(note.id)}
-                      onChange={(e) =>
-                        setLinks(
-                          (e.target.checked
-                            ? [...links.split("\n").filter(Boolean), note.id]
-                            : links.split("\n").filter((id) => id !== note.id)
-                          ).join("\n"),
-                        )
-                      }
-                    />
-                    <span>
-                      {val(note, "title")}
-                      {note.archived ? " (archived)" : ""}
-                    </span>
-                  </label>
-                ))}
-              {!data.notes.filter((note) => note.id !== row?.id).length && (
-                <p>No other notes yet.</p>
-              )}
-            </fieldset>
-          )}
-          {row && (
-            <Field label="Reason for change">
-              <input
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="What changed and why?"
+                className={
+                  kind === "note" || kind === "agent" ? "crew-long-text" : ""
+                }
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
               />
             </Field>
-          )}
-          {kind === "agent" && (
-            <p className="crew-footnote">
-              Include its bucket, handoff rules and when to update memory. Agent
-              names are reported attribution, not verified identities.
-            </p>
-          )}
-          {kind === "bucket" && (
-            <p className="crew-footnote">
-              Responsibility is a working agreement. Archiving this bucket hides
-              its notes and stops writes until restored.
-            </p>
-          )}
-          <div className="crew-form-footer">
-            <button className="crew-primary" disabled={busy}>
-              Save {kind}
-            </button>
-            {row && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void save(`${kind}.update`, { archived: true }, row, reason)
-                }
-              >
-                {kind === "agent" ? "Deactivate agent" : `Archive ${kind}`}
-              </button>
+            {kind === "task" && (
+              <>
+                <div className="crew-form-grid">
+                  <Field label="Status">
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value)}
+                    >
+                      {statuses.map(([key, label]) => (
+                        <option
+                          key={key}
+                          value={key}
+                          disabled={key === "needs_review"}
+                        >
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Labels (comma separated)">
+                    <input
+                      value={labels}
+                      onChange={(e) => setLabels(e.target.value)}
+                      placeholder="Network, Launch"
+                    />
+                  </Field>
+                </div>
+                <div className="crew-form-grid">
+                  <Field label="Readiness">
+                    <select
+                      value={readiness}
+                      onChange={(e) => setReadiness(e.target.value)}
+                    >
+                      <option value="waiting">Waiting</option>
+                      <option value="ready">Ready</option>
+                    </select>
+                  </Field>
+                  {readiness === "waiting" && (
+                    <Field label="Waiting reason">
+                      <input
+                        value={waitingReason}
+                        onChange={(e) => setWaitingReason(e.target.value)}
+                        placeholder="What needs to happen first?"
+                        maxLength={2000}
+                      />
+                    </Field>
+                  )}
+                </div>
+                <p className="crew-footnote">
+                  Ready tasks can wake their assigned agent. Assignment alone
+                  does not make a waiting task ready. Pending human review still
+                  blocks work.
+                </p>
+                <Field label="Draft for review (Markdown)">
+                  <textarea
+                    className="crew-long-text"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                  />
+                </Field>
+                <p className="crew-footnote">
+                  Save the draft before submitting it. Changed drafts need fresh
+                  review. Human is added automatically when review is pending.
+                </p>
+              </>
             )}
-          </div>
-          {row && kind === "task" && (
+            {(kind === "note" || kind === "task") && (
+              <fieldset className="crew-related">
+                <legend>Related memory</legend>
+                {data.notes
+                  .filter((note) => note.id !== row?.id)
+                  .map((note) => (
+                    <label key={note.id}>
+                      <input
+                        type="checkbox"
+                        checked={links.split("\n").includes(note.id)}
+                        onChange={(e) =>
+                          setLinks(
+                            (e.target.checked
+                              ? [...links.split("\n").filter(Boolean), note.id]
+                              : links.split("\n").filter((id) => id !== note.id)
+                            ).join("\n"),
+                          )
+                        }
+                      />
+                      <span>
+                        {val(note, "title")}
+                        {note.archived ? " (archived)" : ""}
+                      </span>
+                    </label>
+                  ))}
+                {!data.notes.filter((note) => note.id !== row?.id).length && (
+                  <p>No other notes yet.</p>
+                )}
+              </fieldset>
+            )}
+            {row && !readOnly && (
+              <Field label="Reason for change">
+                <input
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="What changed and why?"
+                />
+              </Field>
+            )}
+            {kind === "agent" && (
+              <p className="crew-footnote">
+                Include its bucket, handoff rules and when to update memory.
+                Agent names are reported attribution, not verified identities.
+              </p>
+            )}
+            {kind === "bucket" && (
+              <p className="crew-footnote">
+                Responsibility is a working agreement. Archiving this bucket
+                hides its notes and stops writes until restored.
+              </p>
+            )}
+          </fieldset>
+          {!readOnly && (
+            <div className="crew-form-footer">
+              <button className="crew-primary" disabled={busy}>
+                Save {kind}
+              </button>
+              {row && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void save(`${kind}.update`, { archived: true }, row, reason)
+                  }
+                >
+                  {kind === "agent" ? "Deactivate agent" : `Archive ${kind}`}
+                </button>
+              )}
+            </div>
+          )}
+          {row && kind === "task" && !readOnly && (
             <button
               type="button"
               className="crew-review-submit"
@@ -1334,19 +1425,21 @@ function Editor({
                       ))}
                     </pre>
                   </details>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      void save(
-                        "note.restore",
-                        { revision_id: x.id },
-                        row,
-                        `Restore revision ${x.revision}`,
-                      )
-                    }
-                  >
-                    Restore as new revision
-                  </button>
+                  {!readOnly && (
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        void save(
+                          "note.restore",
+                          { revision_id: x.id },
+                          row,
+                          `Restore revision ${x.revision}`,
+                        )
+                      }
+                    >
+                      Restore as new revision
+                    </button>
+                  )}
                 </details>
               );
             })}
@@ -1354,31 +1447,35 @@ function Editor({
       )}
       {tab === "activity" && (
         <>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (row)
-                void perform(() =>
-                  crewApi.write("task.comment", { body: comment }, row),
-                ).then(async (ok) => {
-                  if (ok) {
-                    setComment("");
-                    setEvents(await crewApi.read("events", { parent: row.id }));
-                  }
-                });
-            }}
-          >
-            <Field label="Add a comment">
-              <textarea
-                required
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-              />
-            </Field>
-            <button className="crew-primary" disabled={busy}>
-              Add comment
-            </button>
-          </form>
+          {!readOnly && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (row)
+                  void perform(() =>
+                    crewApi.write("task.comment", { body: comment }, row),
+                  ).then(async (ok) => {
+                    if (ok) {
+                      setComment("");
+                      setEvents(
+                        await crewApi.read("events", { parent: row.id }),
+                      );
+                    }
+                  });
+              }}
+            >
+              <Field label="Add a comment">
+                <textarea
+                  required
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+              </Field>
+              <button className="crew-primary" disabled={busy}>
+                Add comment
+              </button>
+            </form>
+          )}
           <ol className="crew-timeline">
             {events.map((x) => (
               <li key={x.id}>
@@ -1408,7 +1505,7 @@ function Editor({
               <small>{when(x.created)}</small>
               <Prose>{val(x, "draft")}</Prose>
               {val(x, "decision_note") && <p>{val(x, "decision_note")}</p>}
-              {val(x, "status") === "pending" && (
+              {val(x, "status") === "pending" && !readOnly && (
                 <button
                   disabled={busy}
                   onClick={() =>

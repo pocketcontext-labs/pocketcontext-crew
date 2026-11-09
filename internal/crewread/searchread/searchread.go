@@ -73,6 +73,8 @@ type Hit struct {
 	Collection        string  `json:"collection"`
 	ID                string  `json:"id"`
 	Title             string  `json:"title"`
+	Path              string  `json:"path"`
+	URL               string  `json:"url,omitempty"`
 	Excerpt           string  `json:"excerpt"`
 	Revision          int64   `json:"revision"`
 	Updated           string  `json:"updated"`

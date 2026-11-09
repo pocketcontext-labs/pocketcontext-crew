@@ -676,6 +676,34 @@
   font-size: 25px;
   padding: 0 9px;
 }
+.crew-dialog > header {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.crew-dialog > header h2 {
+  flex: 1 1 auto;
+}
+.crew-copy-link {
+  display: contents;
+}
+.crew-dialog > header .crew-copy-link button {
+  border: 1px solid #dce2d8;
+  font-size: 13px;
+  padding: 5px 11px;
+}
+.crew-copy-error {
+  flex: 1 0 100%;
+  order: 1;
+  font-size: 13px;
+  color: #914939;
+  overflow-wrap: anywhere;
+}
+.crew-form-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
 .crew-dialog-body {
   padding: 24px;
 }

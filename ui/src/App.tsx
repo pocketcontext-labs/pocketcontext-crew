@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Login, { readEmailLoginLink } from "./Login";
 import { pb, sessionGeneration } from "./api";
 import CrewWorkspace from "./CrewWorkspace";
+import { takeLoginReturn } from "./itemLink";
 export default function App() {
   const [emailLink, setEmailLink] = useState(readEmailLoginLink),
     [session, setSession] = useState(sessionGeneration),
@@ -36,7 +37,11 @@ export default function App() {
         key={emailLink.otpId}
         emailLink={emailLink}
         onEmailComplete={() => {
-          history.replaceState(null, "", location.pathname + "#/");
+          history.replaceState(
+            null,
+            "",
+            location.pathname + (takeLoginReturn() ?? "#/"),
+          );
           setEmailLink(null);
         }}
       />

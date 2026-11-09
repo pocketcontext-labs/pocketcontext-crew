@@ -1,5 +1,13 @@
 # Crew upgrades and rollback
 
+## Crew 0.9.3 to 0.10.0
+
+No data migration, protocol change or operator step. Replace the binary or image with
+the normal procedure (`CREW_REPLACE_VERSION=0.9.3` for the installer) and upgrade
+paired clients with the server, then run `skill` to install the updated guidance. A
+client and server must report the same release. `capabilities_digest` changes, so webhook
+routines reread capabilities once.
+
 ## Crew 0.9.2 to 0.9.3
 
 No data migration, protocol change or operator step. Replace the binary or image with

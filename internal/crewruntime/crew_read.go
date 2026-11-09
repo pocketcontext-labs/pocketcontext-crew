@@ -148,6 +148,14 @@ func crewSearch(re *core.RequestEvent, search *searchread.Engine) error {
 	result, err := search.Search(re.Request.Context(), searchread.Request{Query: body.Query, Collections: body.Collections, Limit: body.Limit, Offset: body.Offset, Archived: body.Archived, Generation: body.Generation})
 	switch {
 	case err == nil:
+		for i := range result.Items {
+			hit := &result.Items[i]
+			link, err := crewRecordLink(re.App, hit.Collection, hit.ID, hit.Title)
+			if err != nil {
+				return re.InternalServerError("Search failed", nil)
+			}
+			hit.Path, hit.URL = link["path"], link["url"]
+		}
 		return re.JSON(http.StatusOK, result)
 	case errors.Is(err, searchread.ErrInvalidQuery):
 		return re.BadRequestError(err.Error(), nil)
