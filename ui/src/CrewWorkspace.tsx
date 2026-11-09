@@ -1247,17 +1247,16 @@ export default function CrewWorkspace() {
               <div className="crew-review-list">
                 {pending.map((x) => (
                   <article className="crew-review-card" key={x.id}>
-                    <div>
-                      <span className="crew-human">Human</span>
-                      <small>{when(x.created)}</small>
-                    </div>
+                    <small className="crew-review-date">{when(x.created)}</small>
                     <h2>
                       {val(
                         data.tasks.find((t) => t.id === val(x, "task")),
                         "title",
                       ) || "Task draft"}
                     </h2>
-                    <Prose>{val(x, "draft").slice(0, 700)}</Prose>
+                    <p className="crew-review-preview">
+                      {plainPreview(val(x, "draft")).slice(0, 600)}
+                    </p>
                     <button
                       className="crew-primary"
                       onClick={() => setDialog({ kind: "review", row: x })}
