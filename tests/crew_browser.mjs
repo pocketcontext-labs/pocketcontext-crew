@@ -17,6 +17,10 @@ try {
  await page.goto(base);
  await page.getByLabel('Password',{exact:true}).fill(process.env.CREW_TEST_PASSWORD);
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ await page.getByRole('heading',{name:'Get started',exact:true}).waitFor();
+ await snap('crew-home-new');
+ await page.getByRole('navigation').getByRole('link',{name:'AI Team',exact:true}).click();
+ await page.waitForURL('**/#/team');
  await page.getByRole('heading',{name:'AI Team',exact:true}).waitFor();
  await page.getByRole('button',{name:'Set up starter crew'}).click();
  await page.getByText('Your five starter agents and memory buckets are ready.').waitFor();
@@ -94,11 +98,12 @@ try {
  await snap('crew-parent-bridge-setup');
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:900});
-  for(const name of ['AI Team','Shared memory','Approvals','Agents','Archive']){
+  for(const name of ['Home','AI Team','Shared memory','Approvals','Agents','Archive']){
    await page.getByRole('navigation').getByRole('link',{name:new RegExp('^'+name)}).click();
    await page.locator('nav a[aria-current=page]').filter({hasText:name}).waitFor();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
   }
+  await page.getByRole('navigation').getByRole('link',{name:'Home',exact:true}).click();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();await snap('crew-home-'+width);
   await page.getByRole('link',{name:'AI Team',exact:true}).click();await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();await snap('crew-board-'+width);
  }
  await page.getByRole('button',{name:/New task/}).click();

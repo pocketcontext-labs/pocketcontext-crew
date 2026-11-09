@@ -42,6 +42,7 @@ const review: Row = {
 };
 let fixtures: Record<string, Row[]>;
 beforeEach(() => {
+  history.replaceState(null, "", "/#/team");
   vi.spyOn(crewApi, "serverVersion").mockResolvedValue({
     version: "0.3.1",
     commit: "synthetic-build",
@@ -89,6 +90,8 @@ it("puts each page in the address", async () => {
   await openPage("Agents");
   expect(location.hash).toBe("#/agents");
   await openPage("AI Team");
+  expect(location.hash).toBe("#/team");
+  await openPage("Home");
   expect(location.hash).toBe("#/");
 });
 it("returns to the current page when an item closes or Back is used", async () => {
@@ -174,16 +177,56 @@ it("does not ask when nothing was edited", async () => {
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(confirm).not.toHaveBeenCalled();
 });
-it("takes the brand link home to AI Team", async () => {
+it("takes the brand link to Home", async () => {
   history.replaceState(null, "", "/#/agents");
   render(<CrewWorkspace />);
   await screen.findByRole("link", { name: "Agents" });
-  fireEvent.click(screen.getByRole("link", { name: /go to AI Team/ }));
+  fireEvent.click(screen.getByRole("link", { name: /go to Home/ }));
   await waitFor(() => expect(location.hash).toBe("#/"));
-  expect(screen.getByRole("link", { name: "AI Team" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute(
     "aria-current",
     "page",
   );
+});
+it("guides a new owner one step at a time", async () => {
+  fixtures = { agents: [], buckets: [], tasks: [], reviews: [], notes: [] };
+  localStorage.clear();
+  history.replaceState(null, "", "/");
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Get started" });
+  expect(screen.getByText("0 of 4 done")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Set up starter crew" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "I've connected it" })).toBeNull();
+  expect(screen.getByText("Nothing needs you right now.")).toBeInTheDocument();
+});
+it("advances past a manually confirmed connection and remembers it", async () => {
+  fixtures.tasks = [];
+  fixtures.reviews = [];
+  localStorage.clear();
+  history.replaceState(null, "", "/");
+  render(<CrewWorkspace />);
+  fireEvent.click(await screen.findByRole("button", { name: "I've connected it" }));
+  expect(await screen.findByRole("button", { name: "＋ New task" })).toBeTruthy();
+  expect(localStorage.getItem("pocketcontext.crew.agent_connected")).toBe("1");
+  localStorage.clear();
+});
+it("counts agent activity as connected and lists what needs the owner", async () => {
+  localStorage.clear();
+  history.replaceState(null, "", "/");
+  render(<CrewWorkspace />);
+  await screen.findByText("Draft waiting for your approval");
+  expect(screen.getByText("3 of 4 done")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Open Approvals" })).toBeTruthy();
+  fireEvent.click(screen.getByText("Draft waiting for your approval"));
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+});
+it("hides Get started once finished or dismissed", async () => {
+  localStorage.clear();
+  fixtures.reviews = [{ ...review, status: "approved" }];
+  history.replaceState(null, "", "/");
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Your crew right now" });
+  expect(screen.queryByRole("heading", { name: "Get started" })).toBeNull();
 });
 it("derives Human from a pending request while preserving the assigned agent", async () => {
   render(<CrewWorkspace />);
@@ -771,7 +814,7 @@ it.each([
 ])("ignores the malformed item link %s", async (hash) => {
   history.replaceState(null, "", `/${hash}`);
   render(<CrewWorkspace />);
-  await screen.findByRole("heading", { name: "Launch post" });
+  await screen.findByRole("heading", { name: "Your crew right now" });
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
@@ -857,7 +900,7 @@ it("keeps in-progress edits and the opened row across a refresh of a linked dial
   });
   fixtures.tasks = [{ ...linkedTask, revision: 9, title: "Server title" }];
   fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-  await screen.findByRole("heading", { name: "Server title" });
+  await screen.findAllByText("Server title");
   expect(dialog.getByLabelText("Title")).toHaveValue("Unsaved title");
   fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
   await waitFor(() =>

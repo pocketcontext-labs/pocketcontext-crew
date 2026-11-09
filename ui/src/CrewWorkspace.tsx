@@ -12,6 +12,7 @@ import remarkGfm from "remark-gfm";
 import Brand from "./Brand";
 import { api } from "./api";
 import { crewApi, val, list, statuses, lineDiff, type Row } from "./crewApi";
+import Home from "./Home";
 import "./crew.css";
 import WebhookStatus from "./WebhookStatus";
 import type { ServerVersion } from "./crewApi";
@@ -26,6 +27,7 @@ import {
   viewHashes,
 } from "./itemLink";
 const nav: [View, string, string][] = [
+  ["home", "Home", "⌂"],
   ["board", "AI Team", "▦"],
   ["memory", "Shared memory", "▤"],
   ["reviews", "Approvals", "✓"],
@@ -408,6 +410,7 @@ export default function CrewWorkspace() {
       ? "This note is read-only because its bucket is archived. Restore the bucket from the Archive view to make changes."
       : `This ${dialog?.kind} is archived and read-only. Restore it from the Archive view to make changes.`;
   const descriptions = {
+    home: "Where you and your AI agents share tasks and memory. Agents do the work; you decide what's approved.",
     board: "Your agents do the groundwork. You decide what goes out.",
     memory:
       "Keep decisions, preferences and useful findings where every agent can find them.",
@@ -422,8 +425,8 @@ export default function CrewWorkspace() {
       <aside className="crew-sidebar">
         <a
           className="crew-logo"
-          href={viewHashes.board}
-          aria-label="PocketContext Crew, go to AI Team"
+          href={viewHashes.home}
+          aria-label="PocketContext Crew, go to Home"
         >
           <Brand />
           <strong>Crew</strong>
@@ -468,7 +471,9 @@ export default function CrewWorkspace() {
           <div className="crew-heading">
             <div>
               <p className="crew-eyebrow">
-                {view === "reviews"
+                {view === "home"
+                  ? "START HERE"
+                  : view === "reviews"
                   ? "YOUR FINAL SAY"
                   : view === "memory"
                     ? "CONTEXT THAT CARRIES FORWARD"
@@ -523,7 +528,8 @@ export default function CrewWorkspace() {
           {!loading &&
             !data.agents.length &&
             !data.buckets.length &&
-            view !== "archive" && (
+            view !== "archive" &&
+            view !== "home" && (
               <div className="crew-welcome">
                 <div>
                   <span className="crew-eyebrow">START WITH A SMALL CREW</span>
@@ -590,6 +596,21 @@ export default function CrewWorkspace() {
                 </select>
               )}
             </div>
+          )}
+          {view === "home" && (
+            <Home
+              data={data}
+              archived={archived}
+              pending={pending}
+              ready={ready}
+              busy={busy}
+              seed={() => void seed()}
+              newTask={() => setDialog({ kind: "task" })}
+              openItem={openItem}
+              openReview={(row) => setDialog({ kind: "review", row })}
+              invalidAssignment={invalidAssignment}
+              copyEndpoint={<CopyLink target={`${location.origin}/mcp`} />}
+            />
           )}
           {view === "board" && (
             <div className="crew-board">

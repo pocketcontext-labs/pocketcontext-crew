@@ -542,6 +542,161 @@ a.crew-logo:hover .product-brand span {
   margin-top: 12px;
   text-align: left;
 }
+.crew-home {
+  display: grid;
+  gap: 32px;
+  max-width: 760px;
+}
+.crew-home h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.crew-home-start {
+  border: 1px solid #dbe2cf;
+  background: #f0f3e7;
+  border-radius: 10px;
+  padding: 22px 24px;
+}
+.crew-home-start header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.crew-home-start header h2 {
+  margin: 0;
+}
+.crew-home-start header span {
+  flex: 1;
+  font-size: 12px;
+  color: #71806e;
+}
+.crew-app .crew-home-start header button {
+  background: none;
+  border: 0;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: #61724f;
+  text-decoration: underline;
+}
+.crew-home-start ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.crew-home-start li {
+  display: flex;
+  gap: 12px;
+}
+.crew-home-start i {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #c6d1b9;
+  color: #52654f;
+}
+.crew-home-start li[aria-current] i {
+  background: #2e493e;
+  border-color: #2e493e;
+  color: #fff;
+}
+.crew-home-start li.done i {
+  background: #dfe8d6;
+  border-color: #dfe8d6;
+}
+.crew-home-start li > div {
+  min-width: 0;
+  flex: 1;
+}
+.crew-home-start h3 {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.crew-home-start li.done h3 {
+  font-weight: 500;
+  color: #71806e;
+}
+.crew-home-start p {
+  margin: 6px 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #52654f;
+}
+.crew-home-start li a {
+  margin-left: 12px;
+  font-size: 13px;
+}
+.crew-home-start li a.crew-home-action {
+  margin-left: 0;
+  font-weight: 600;
+}
+.crew-home-endpoint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.crew-home-endpoint code {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.crew-home-list {
+  display: grid;
+  gap: 8px;
+}
+.crew-app .crew-home-list button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  min-width: 0;
+}
+.crew-home-list strong {
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.crew-home-list small {
+  font-size: 12px;
+  color: #71806e;
+}
+.crew-home-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.crew-home-counts a {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid #dce2d8;
+  border-radius: 8px;
+  color: #52654f;
+  font-size: 12px;
+  text-decoration: none;
+}
+.crew-home-counts b {
+  font-size: 22px;
+  font-weight: 600;
+  color: #293e2c;
+}
+@media (max-width: 520px) {
+  .crew-home-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .crew-callout {
   padding: 15px 18px;
   background: #eef1e7;

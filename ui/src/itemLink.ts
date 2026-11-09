@@ -4,7 +4,8 @@ export type ItemKind = "task" | "note";
 export type ItemLink = { kind: ItemKind; id: string };
 
 export const viewHashes = {
-  board: "#/",
+  home: "#/",
+  board: "#/team",
   memory: "#/memory",
   reviews: "#/approvals",
   agents: "#/agents",
@@ -12,10 +13,10 @@ export const viewHashes = {
 } as const;
 export type View = keyof typeof viewHashes;
 
-/** Item links and unknown addresses show the board. */
+/** Item links and unknown addresses show Home. */
 export function viewFromHash(hash: string): View {
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
-  return match ? (match[0] as View) : "board";
+  return match ? (match[0] as View) : "home";
 }
 
 /**
@@ -54,7 +55,7 @@ export function itemShareUrl(kind: ItemKind, row: Row): string {
 const returnKey = "pocketcontext.crew.login_return";
 const returnLifetimeMs = 15 * 60 * 1000;
 const returnPattern =
-  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|memory|approvals|agents|archive)$/;
+  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|team|memory|approvals|agents|archive)$/;
 
 export function clearLoginReturn() {
   try {
@@ -68,7 +69,7 @@ export function clearLoginReturn() {
 export function loginReturnHash(hash: string): string | null {
   const link = parseItemHash(hash);
   if (link) return bareHash(link);
-  return viewFromHash(hash) === "board" ? null : hash;
+  return viewFromHash(hash) === "home" ? null : hash;
 }
 
 export function rememberLoginReturn(hash: string) {
