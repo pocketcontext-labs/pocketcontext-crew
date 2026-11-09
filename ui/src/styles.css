@@ -104,10 +104,23 @@ select {
 .login-card h1 {
   font-family: Georgia, serif;
   font-weight: 400;
-  font-size: 49px;
+  font-size: 34px;
   line-height: 1.15;
-  letter-spacing: -1.5px;
-  margin: 20px 0;
+  letter-spacing: -1px;
+  margin: 0 0 20px;
+}
+.login-card .primary-button {
+  width: 100%;
+}
+.login-card .login-link {
+  display: block;
+  margin: 20px auto 0;
+  padding: 4px;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
 }
 .login-card > p {
   font-size: 14px;
@@ -123,7 +136,6 @@ select {
 .login-card form {
   display: grid;
   gap: 14px;
-  margin-top: 28px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -133,16 +145,6 @@ select {
 }
 .login-card input {
   padding: 10px;
-}
-.login-footer {
-  border-top: 1px solid var(--border);
-  padding-top: 22px;
-  margin-top: 35px;
-  display: flex;
-  gap: 9px;
-  align-items: center;
-  color: var(--quiet);
-  font-size: 11px;
 }
 .login-card .login-error {
   color: var(--danger);
@@ -157,17 +159,6 @@ select {
   white-space: nowrap;
 }
 
-.live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-@media (max-width: 700px) {
-  .login-card h1 {
-    font-size: 43px;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;

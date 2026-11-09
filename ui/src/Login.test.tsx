@@ -32,11 +32,29 @@ it("requests a link without revealing whether the email is registered", async ()
   fireEvent.change(await screen.findByLabelText("Email"), {
     target: { value: "owner@example.test" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Send login link" }));
-  await screen.findByText(/If this email matches this knowledge base/);
+  fireEvent.click(screen.getByRole("button", { name: "Email me a login link" }));
+  await screen.findByText(/is the owner's address/);
   expect(api.requestEmailLogin).toHaveBeenCalledWith("owner@example.test");
   expect(screen.queryByLabelText("Password")).toBeNull();
   expect(api.loginEmail).not.toHaveBeenCalled();
+});
+
+it("replaces the form once sent and can return to it", async () => {
+  render(<Login />);
+  fireEvent.change(await screen.findByLabelText("Email"), {
+    target: { value: "owner@example.test" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Email me a login link" }));
+  await screen.findByRole("heading", { name: "Check your inbox" });
+  expect(screen.queryByLabelText("Email")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Use a different email" }));
+  expect(screen.getByLabelText("Email")).toBeInTheDocument();
+});
+
+it("shows only the failure action for a malformed link", async () => {
+  render(<Login emailLink={{ otpId: "", password: "" }} />);
+  await screen.findByRole("heading", { name: "This link no longer works" });
+  expect(screen.getAllByRole("button")).toHaveLength(1);
 });
 
 it("never redeems a link on mount, including React strict effects", async () => {
@@ -48,7 +66,7 @@ it("never redeems a link on mount, including React strict effects", async () => 
       <Login emailLink={link} onEmailComplete={done} />
     </StrictMode>,
   );
-  const confirm = await screen.findByRole("button", { name: "Log in" });
+  const confirm = await screen.findByRole("button", { name: "Continue to Crew" });
   expect(api.loginEmail).not.toHaveBeenCalled();
   expect(api.requestEmailLogin).not.toHaveBeenCalled();
   fireEvent.click(confirm);
@@ -64,12 +82,11 @@ it("lets an expired link request another without exposing the token", async () =
   render(
     <Login emailLink={{ otpId: "syntheticid1234", password: "12345678" }} />,
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Log in" }));
-  await screen.findByText(
-    "This login link is invalid or expired. Request a new one below.",
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Continue to Crew" }));
+  await screen.findByRole("heading", { name: "This link no longer works" });
   expect(document.body.textContent).not.toContain("12345678");
-  fireEvent.click(screen.getByRole("button", { name: "Request a new link" }));
+  expect(screen.queryByRole("button", { name: "Continue to Crew" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Send a new link" }));
   expect(screen.getByLabelText("Email")).toBeInTheDocument();
 });
 
@@ -119,7 +136,7 @@ it("scrubs the email secret from browser history while retaining explicit confir
       <App />
     </StrictMode>,
   );
-  await screen.findByRole("button", { name: "Log in" });
+  await screen.findByRole("button", { name: "Continue to Crew" });
   expect(location.hash).toBe("#/login");
   expect(location.href).not.toContain("12345678");
   expect(api.loginEmail).not.toHaveBeenCalled();
@@ -128,15 +145,15 @@ it("scrubs the email secret from browser history while retaining explicit confir
 it("accepts a replacement email link in an already-open tab without redeeming it", async () => {
   history.replaceState(null, "", "/#/login?otpId=firstid12345678&otp=12345678");
   render(<App />);
-  await screen.findByRole("button", { name: "Log in" });
+  await screen.findByRole("button", { name: "Continue to Crew" });
   history.replaceState(null, "", "/#/login?otpId=secondid1234567&otp=87654321");
   fireEvent(window, new HashChangeEvent("hashchange"));
-  await screen.findByRole("button", { name: "Log in" });
+  await screen.findByRole("button", { name: "Continue to Crew" });
   expect(location.hash).toBe("#/login");
   expect(api.loginEmail).not.toHaveBeenCalled();
   // Leave the request pending so this test does not mount the private reader.
   vi.mocked(api.loginEmail).mockReturnValue(new Promise(() => {}));
-  fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue to Crew" }));
   expect(api.loginEmail).toHaveBeenCalledExactlyOnceWith(
     "secondid1234567",
     "87654321",
@@ -178,7 +195,7 @@ function mockWorkspace() {
 async function completeEmailLogin() {
   history.replaceState(null, "", emailLink);
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "Log in" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Continue to Crew" }));
   await screen.findByRole("button", { name: "Refresh" });
 }
 const stored = (hash: unknown, expires: unknown = Date.now() + 60_000) =>
@@ -203,8 +220,8 @@ it("remembers only the item target when an email link is requested from one", as
   fireEvent.change(await screen.findByLabelText("Email"), {
     target: { value: "owner@example.test" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Send login link" }));
-  await screen.findByText(/If this email matches/);
+  fireEvent.click(screen.getByRole("button", { name: "Email me a login link" }));
+  await screen.findByText(/is the owner's address/);
   const value = JSON.parse(localStorage.getItem(returnKey)!);
   expect(value.hash).toBe("#/tasks/task00000000001");
   expect(value.expires).toBeGreaterThan(Date.now() + 14 * 60 * 1000);
@@ -218,8 +235,8 @@ it("forgets an earlier target when a link is requested away from any item", asyn
   fireEvent.change(await screen.findByLabelText("Email"), {
     target: { value: "owner@example.test" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Send login link" }));
-  await screen.findByText(/If this email matches/);
+  fireEvent.click(screen.getByRole("button", { name: "Email me a login link" }));
+  await screen.findByText(/is the owner's address/);
   expect(localStorage.getItem(returnKey)).toBeNull();
 });
 
@@ -230,7 +247,7 @@ it("does not remember a target when the email request fails", async () => {
   fireEvent.change(await screen.findByLabelText("Email"), {
     target: { value: "owner@example.test" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Send login link" }));
+  fireEvent.click(screen.getByRole("button", { name: "Email me a login link" }));
   await screen.findByRole("alert");
   expect(localStorage.getItem(returnKey)).toBeNull();
 });

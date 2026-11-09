@@ -23,7 +23,7 @@ await context.route('**/*',async route=>{
 try{
  const page=await context.newPage();page.on('pageerror',e=>problems.push(e.message));
  await page.goto(origin);
- await page.getByRole('heading',{name:'Log in with email',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'Log in to Crew',exact:true}).waitFor();
  assert.equal(await page.locator('input[type=password]').count(),0);
  const call=async(path,body,token='',form=false)=>page.evaluate(async({path,body,token,form})=>{
   const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':form?'application/x-www-form-urlencoded':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:body===undefined?undefined:form?new URLSearchParams(body).toString():JSON.stringify(body)});
@@ -32,11 +32,12 @@ try{
  const mode=await call('/api/bundle/auth-mode');
  assert.deepEqual(mode.data,{mode:'email'});
  await page.getByLabel('Email',{exact:true}).fill('unknown@example.com');
- await page.getByRole('button',{name:'Send login link',exact:true}).click();
- await page.getByRole('status').filter({hasText:'If this email matches this knowledge base'}).waitFor();
+ await page.getByRole('button',{name:'Email me a login link',exact:true}).click();
+ await page.getByRole('status').filter({hasText:"is the owner's address"}).waitFor();
  const before=await call('/__test/mailbox');assert.equal(before.data.count,0);
+ await page.getByRole('button',{name:'Use a different email',exact:true}).click();
  await page.getByLabel('Email',{exact:true}).fill(email);
- await page.getByRole('button',{name:'Send login link',exact:true}).click();
+ await page.getByRole('button',{name:'Email me a login link',exact:true}).click();
  let mailbox;
  for(let n=0;n<100;n++){
   mailbox=(await call('/__test/mailbox')).data;
@@ -54,14 +55,14 @@ try{
  await consent.goto(origin+'/oauth/authorize?'+params);
  assert(!await consent.locator('body').innerText().then(t=>t.includes('open --public')),'hosted consent should explain email login');
  await page.goto(link);
- await page.getByRole('button',{name:'Log in',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Continue to Crew',exact:true}).waitFor();
  assert.equal(redeemed,0,'opening a link never consumes OTP');
  assert(!page.url().includes('otp='),'credential removed from address/history');
  for(const width of [320,390,1280]){
   await page.setViewportSize({width,height:844});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'login fits viewport');
  }
- await page.getByRole('button',{name:'Log in',exact:true}).click();
+ await page.getByRole('button',{name:'Continue to Crew',exact:true}).click();
  await page.waitForFunction(()=>!!JSON.parse(localStorage.getItem('pocketcontext.reader.auth')||'{}').token);
  assert.equal(redeemed,1);
  await consent.getByRole('button',{name:'Allow access',exact:true}).click();

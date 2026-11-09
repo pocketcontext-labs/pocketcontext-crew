@@ -37,8 +37,9 @@ export default function Login({
   const [retry, setRetry] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [sent, setSent] = useState(false);
+  const [sentTo, setSentTo] = useState("");
   const [link, setLink] = useState(emailLink);
+  const [linkFailed, setLinkFailed] = useState(false);
   useEffect(() => {
     let active = true;
     setError("");
@@ -79,28 +80,25 @@ export default function Login({
   const email = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const address = String(form.get("email"));
     const hash = location.hash;
     void run(async () => {
-      await api.requestEmailLogin(String(form.get("email")));
+      await api.requestEmailLogin(address);
       const target = parseItemHash(hash);
       if (target) rememberLoginReturn(target);
       // Asking again from a spent link's #/login view keeps the original target.
       else if (!hash.startsWith("#/login")) clearLoginReturn();
-      setSent(true);
+      setSentTo(address);
     });
   };
   const confirm = () =>
     void run(async () => {
-      if (!link?.otpId || !link.password)
-        throw new Error(
-          "This login link is incomplete. Request a new one below.",
-        );
+      if (!link) return;
       try {
         await api.loginEmail(link.otpId, link.password);
       } catch {
-        throw new Error(
-          "This login link is invalid or expired. Request a new one below.",
-        );
+        setLinkFailed(true);
+        return;
       }
       setLink(undefined);
       onEmailComplete?.();
@@ -108,15 +106,7 @@ export default function Login({
   return (
     <main className="login-shell">
       <section className="login-card">
-        <Brand />
-        <h1>
-          Your crew.
-          <br />
-          One shared context.
-        </h1>
-        <p>
-          Shared memory, tasks and approvals for your GTM agents. You keep the final say.
-        </p>
+        <Brand name="PocketContext Crew" />
         {mode === null && !error && (
           <p role="status">Loading sign-in options…</p>
         )}
@@ -130,7 +120,8 @@ export default function Login({
         )}
         {mode === "password" && (
           <>
-            <form className="login-form" onSubmit={password}>
+            <h1>Log in to Crew</h1>
+            <form onSubmit={password}>
               <input
                 type="hidden"
                 name="username"
@@ -158,40 +149,50 @@ export default function Login({
             </p>
           </>
         )}
-        {mode === "email" && (
-          <>
-            {link ? (
-              <div className="login-form">
-                <h2>Log in with email</h2>
-                {link.otpId ? (
-                  <>
-                    <p>Confirm to open your knowledge base in this browser.</p>
-                    <button
-                      className="primary-button"
-                      disabled={busy}
-                      onClick={confirm}
-                    >
-                      Log in
-                    </button>
-                  </>
-                ) : (
-                  <p role="status">
-                    This login link is incomplete. Request a new one.
-                  </p>
-                )}
+        {mode === "email" &&
+          (link ? (
+            link.otpId && !linkFailed ? (
+              <>
+                <h1 className="sr-only">Log in to Crew</h1>
                 <button
+                  className="primary-button"
+                  autoFocus
                   disabled={busy}
+                  onClick={confirm}
+                >
+                  Continue to Crew
+                </button>
+              </>
+            ) : (
+              <>
+                <h1>This link no longer works</h1>
+                <button
+                  className="primary-button"
+                  autoFocus
                   onClick={() => {
                     setLink(undefined);
-                    setError("");
+                    setLinkFailed(false);
                   }}
                 >
-                  Request a new link
+                  Send a new link
                 </button>
-              </div>
-            ) : (
-              <form className="login-form" onSubmit={email}>
-                <h2>Log in with email</h2>
+              </>
+            )
+          ) : sentTo ? (
+            <>
+              <h1>Check your inbox</h1>
+              <p role="status">
+                If {sentTo} is the owner's address, a login link is on its way.
+                It works for 15 minutes.
+              </p>
+              <button className="login-link" onClick={() => setSentTo("")}>
+                Use a different email
+              </button>
+            </>
+          ) : (
+            <>
+              <h1>Log in to Crew</h1>
+              <form onSubmit={email}>
                 <label>
                   Email
                   <input
@@ -204,32 +205,16 @@ export default function Login({
                   />
                 </label>
                 <button className="primary-button" disabled={busy}>
-                  Send login link
+                  Email me a login link
                 </button>
               </form>
-            )}
-            {sent && (
-              <p role="status">
-                If this email matches this knowledge base, a login link is on
-                its way. Check your inbox and spam folder.
-              </p>
-            )}
-            {!link && (
-              <p className="login-hint">
-                Use the email address registered for this knowledge base. No
-                password needed.
-              </p>
-            )}
-          </>
-        )}
+            </>
+          ))}
         {error && (
           <p role="alert" className="login-error">
             {error}
           </p>
         )}
-        <div className="login-footer">
-          <span className="live-dot" /> Shared memory. Your final say.
-        </div>
       </section>
     </main>
   );
