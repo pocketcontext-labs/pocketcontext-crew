@@ -1,5 +1,29 @@
 # Crew upgrades and rollback
 
+## Crew 0.11.1 to 0.12.0
+
+No schema or data format change and no protocol version change. One migration installs a
+managed dispatcher instruction revision. It keeps the dispatcher, dispatch mode, mappings,
+encrypted credentials and history, saves the previous instruction text, moves Ready tasks
+to a new wake generation and pauses delivery. Take a complete stopped backup, including
+the private webhook key, then replace the binary or image with the normal procedure
+(`CREW_REPLACE_VERSION=0.11.1` for the installer). Upgrade paired clients with the server.
+A client and server must report the same release.
+
+After starting 0.12.0:
+
+1. Run `skill` to install the updated guidance, including the new Authorization rules.
+   Refresh MCP connector tool schemas, and have agents read `capabilities` again:
+   `capabilities_digest` changes because `review.decide` and `execution.recover` are now
+   available to work clients.
+2. If webhooks are configured, apply the new managed block to the dispatcher routine,
+   keeping role and reporting text, and report synchronization once. Then run the
+   connection test and re-enable delivery. Enabling sends no backlog, so set a task
+   Waiting and then Ready to wake it again.
+
+Rollback requires the complete pre-upgrade backup with the 0.11.1 binary or image,
+because an older binary must not open the migrated database.
+
 ## Crew 0.11.0 to 0.11.1
 
 No data migration, protocol change or operator step. Replace the binary or image with
