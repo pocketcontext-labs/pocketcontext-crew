@@ -16,6 +16,8 @@ const snap=async name=>{if(process.env.CREW_SCREENSHOTS) await page.screenshot({
 const snapView=async name=>{if(process.env.CREW_SCREENSHOTS) await page.screenshot({path:path.join(process.env.CREW_SCREENSHOTS,name+'.png')});};
 // Exact label matching sees a textarea's own text, so match the label's span.
 const noteBody=()=>dialog().getByLabel('Note',{exact:true});
+// Growing fields open at full height up to 70% of the viewport, then scroll inside.
+const grownToCap=e=>{const cap=Math.floor(innerHeight*0.7);return e.clientHeight>300&&(e.scrollHeight<=e.clientHeight+2||(e.offsetHeight>=cap-2&&getComputedStyle(e).overflowY==='auto'));};
 const edit=()=>dialog().getByRole('tab',{name:'Edit',exact:true}).click();
 try {
  await page.goto(base);
@@ -70,7 +72,11 @@ try {
  await snap('crew-board-desktop');
  await page.getByRole('link',{name:/^Approvals/}).click();
  await page.locator('nav a[aria-current=page]').filter({hasText:'Approvals'}).waitFor();
- await page.getByRole('button',{name:/Review exact draft/}).click();
+ const reviewCard=page.getByRole('button',{name:'Review draft: Synthetic launch post'});
+ assert.equal(await reviewCard.locator('a, button, input, select, textarea').count(),0,'the Approvals card holds no other controls');
+ await reviewCard.focus();await page.keyboard.press('Shift+Tab');await page.keyboard.press('Tab');
+ assert.equal(await reviewCard.evaluate(e=>e===document.activeElement&&e.matches(':focus-visible')&&getComputedStyle(e).outlineStyle!=='none'),true,'the Approvals card shows keyboard focus');
+ await snapView('crew-approvals-focus-1440');await page.keyboard.press('Enter');
  assert.equal(await dialog().locator('.crew-draft-snapshot').innerText(),'A synthetic draft for the owner to publish manually.');
  await dialog().getByLabel('Decision note').fill('Ready for manual publishing.');
  await dialog().getByRole('button',{name:'Approve draft',exact:true}).click();await saved();
@@ -253,7 +259,7 @@ try {
  await noteField.fill(Array.from({length:60},(_,i)=>`Synthetic line ${i+1}`).join('\n'));
  const save=await dialog().getByRole('button',{name:'Save note'}).boundingBox();
  assert.ok(save.y+save.height<=844&&save.y>700,'Save stays pinned to the bottom of the sheet');
- assert.equal(await noteField.evaluate(e=>e.scrollHeight<=e.clientHeight+1),true,'the note field grows instead of scrolling');
+ assert.equal(await noteField.evaluate(grownToCap),true,'the note field grows to the cap, then scrolls');
  await dialog().getByLabel('Reason for change',{exact:true}).waitFor();
  await snapView('crew-note-edit-390');
  // Help inside a dialog: no dirty state change, Escape closes only the popover.
@@ -315,9 +321,36 @@ try {
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic long description/}).click();
  await dialog().getByRole('tablist',{name:'Description view'}).getByRole('tab',{name:'Edit',exact:true}).click();
- assert.equal(await dialog().getByLabel('Description',{exact:true}).evaluate(e=>e.scrollHeight<=e.clientHeight+2&&e.clientHeight>300),true,'a saved description opens at full height in Edit');
+ assert.equal(await dialog().getByLabel('Description',{exact:true}).evaluate(grownToCap),true,'a saved description opens at full height in Edit');
  await page.keyboard.press('Escape');
  await dialog().waitFor({state:'hidden'});
+ // A long agent brief opens at full height (capped, with a scrollbar), and its card clamps to whole lines.
+ await page.getByRole('navigation').getByRole('link',{name:'Agents',exact:true}).click();
+ await page.waitForURL('**/#/agents');
+ await page.locator('.crew-agent-card').filter({hasText:'Network'}).click();
+ const longBrief=Array.from({length:45},(_,i)=>`Synthetic brief line ${i+1}`).join('\n');
+ await dialog().getByLabel('Agent brief',{exact:true}).fill(longBrief);
+ await dialog().getByRole('button',{name:'Save agent'}).click();await saved();
+ const networkCard=page.locator('.crew-agent-card').filter({hasText:'Network'});
+ assert.equal(await networkCard.locator('p').evaluate(p=>{const s=getComputedStyle(p),line=parseFloat(s.lineHeight);return s.whiteSpace==='normal'&&p.clientHeight<=line*7+1&&Math.abs(p.clientHeight/line-Math.round(p.clientHeight/line))<0.05&&p.scrollHeight>p.clientHeight;}),true,'the agent card clamps its brief to whole lines');
+ assert.equal(await networkCard.locator('p').getAttribute('title'),longBrief,'the card keeps the full brief on hover');
+ await snapView('crew-agents-1280');
+ await networkCard.click();
+ const briefField=dialog().getByLabel('Agent brief',{exact:true});
+ assert.equal(await briefField.inputValue(),longBrief);
+ assert.equal(await briefField.evaluate(e=>e.scrollHeight>e.clientHeight&&getComputedStyle(e).overflowY==='auto'&&e.offsetHeight>=Math.floor(innerHeight*0.7)-2),true,'a long agent brief opens at the cap with a scrollbar');
+ await snapView('crew-agent-brief-1280');
+ await close();await dialog().waitFor({state:'hidden'});
+ // Search boxes draw one focus ring, on the box, never a second one on the field inside.
+ await page.getByRole('link',{name:'AI Team',exact:true}).click();
+ await page.waitForURL('**/#/team');
+ for(const [box,field] of [['.crew-global-field','.crew-global-field input'],['.crew-search','.crew-search input']]){
+  await page.locator(field).first().focus();
+  assert.equal(await page.locator(field).first().evaluate(e=>getComputedStyle(e).boxShadow),'none',`${field} draws no ring of its own`);
+  assert.notEqual(await page.locator(box).first().evaluate(e=>getComputedStyle(e).boxShadow),'none',`${box} shows focus`);
+ }
+ await snapView('crew-search-focus-1280');
+ await page.locator('.crew-search input').first().blur();
  await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);

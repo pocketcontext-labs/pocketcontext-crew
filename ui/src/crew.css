@@ -63,11 +63,12 @@
   outline-offset: 3px;
 }
 /* One focus look for every field, matching the search box. Fields inside a
-   bordered box (search, Write/Edit) show it on the box instead. */
-.crew-app input:not([type="checkbox"]):not([type="radio"]):focus,
+   bordered box (search, Write/Edit) show it on the box instead. :where()
+   keeps the type exclusions from adding specificity, so those box rules win. */
+.crew-app input:where(:not([type="checkbox"], [type="radio"])):focus,
 .crew-app textarea:focus,
 .crew-app select:focus,
-.crew-dialog input:not([type="checkbox"]):not([type="radio"]):focus,
+.crew-dialog input:where(:not([type="checkbox"], [type="radio"])):focus,
 .crew-dialog textarea:focus,
 .crew-dialog select:focus {
   outline: none;
@@ -511,15 +512,23 @@ a.crew-logo:hover .product-brand span {
   grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
   gap: 20px;
 }
-.crew-review-card {
+/* Each card is one button that opens the review. */
+.crew-app .crew-review-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  color: inherit;
   background: #fffefb;
   padding: 24px;
   border: 1px solid #e0e5d7;
   border-radius: 10px;
   min-width: 0;
+}
+.crew-app .crew-review-card:hover {
+  background: #f6f8f1;
+  border-color: #c9d6c0;
 }
 .crew-review-card > div:first-child {
   display: flex;
@@ -545,14 +554,10 @@ a.crew-logo:hover .product-brand span {
   overflow: hidden;
   white-space: pre-line;
   overflow-wrap: anywhere;
-  margin: 0 0 23px;
+  margin: 0;
   font-size: 13px;
   line-height: 1.6;
   color: #4d6048;
-}
-/* Buttons sit on the same line across a row, whatever the title length. */
-.crew-review-card > button {
-  margin-top: auto;
 }
 .crew-review-card .crew-prose {
   max-height: 230px;
@@ -786,11 +791,17 @@ a.crew-logo:hover .product-brand span {
   font-size: 19px;
   font-weight: 500;
 }
+/* A preview of the brief: whole lines only, ending in an ellipsis. */
 .crew-agent-card p {
   font-size: 12px;
-  white-space: pre-line;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
   color: #6c7a61;
-  max-height: 160px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 7;
+  line-clamp: 7;
   overflow: hidden;
 }
 .crew-agent-card small {
@@ -1230,9 +1241,11 @@ a.crew-logo:hover .product-brand span {
 .crew-dialog .crew-note-text {
   min-height: 240px;
 }
+/* Grows with its text up to a cap, then scrolls inside with a scrollbar. */
 .crew-dialog textarea.crew-grow {
   resize: none;
-  overflow: hidden;
+  max-height: 70vh;
+  overflow-y: auto;
 }
 .crew-form-grid {
   display: grid;

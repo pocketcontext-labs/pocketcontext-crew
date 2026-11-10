@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -294,6 +295,83 @@ it("gives agents with the same first letter distinct initials", async () => {
   expect((await card("Network")).querySelector(".crew-avatar")).toHaveTextContent(/^N$/);
   expect(screen.queryByText(/Edit brief and responsibilities/)).toBeNull();
 });
+it("previews a multi-line brief as one clamped paragraph with the full brief on hover", async () => {
+  const brief = "Save decisions.\n\n- Not every activity\n  - Ask first";
+  fixtures.agents = [{ ...agent, brief }];
+  history.replaceState(null, "", "/#/agents");
+  render(<CrewWorkspace />);
+  const card = (await screen.findByRole("heading", { name: "Network" })).closest(
+    "button",
+  )!;
+  const preview = card.querySelector("p")!;
+  expect(preview.textContent).toBe(
+    "Save decisions. - Not every activity - Ask first",
+  );
+  expect(preview).toHaveAttribute("title", brief);
+});
+it("sizes a long agent brief once its dialog is shown, and on rewrap", async () => {
+  const observers: ResizeObserverCallback[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(cb: ResizeObserverCallback) {
+        observers.push(cb);
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  // A field in a dialog not yet shown measures zero, as in a browser.
+  let shown = false;
+  let width = 0;
+  vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockImplementation(
+    () => (shown ? (width < 400 ? 900 : 600) : 0),
+  );
+  vi.spyOn(HTMLTextAreaElement.prototype, "clientWidth", "get").mockImplementation(
+    () => width,
+  );
+  try {
+    fixtures.agents = [{ ...agent, brief: "A long brief.\n".repeat(60) }];
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      (await screen.findByRole("heading", { name: "Network" })).closest("button")!,
+    );
+    const field = within(await screen.findByRole("dialog")).getByLabelText(
+      "Agent brief",
+    ) as HTMLTextAreaElement;
+    expect(field.style.height).toBe("auto");
+    shown = true;
+    width = 480;
+    act(() => observers.forEach((cb) => cb([], {} as ResizeObserver)));
+    expect(field.style.height).toBe("602px");
+    width = 320;
+    act(() => observers.forEach((cb) => cb([], {} as ResizeObserver)));
+    expect(field.style.height).toBe("902px");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+it("opens a review from anywhere on its Approvals card, which holds no other controls", async () => {
+  history.replaceState(null, "", "/#/approvals");
+  render(<CrewWorkspace />);
+  const card = await screen.findByRole("button", {
+    name: "Review draft: Launch post",
+  });
+  expect(card.tagName).toBe("BUTTON");
+  expect(card).toHaveAttribute("type", "button");
+  expect(card).toHaveAccessibleDescription("The submitted draft");
+  expect(
+    card.querySelectorAll("a, button, input, select, textarea, [tabindex]"),
+  ).toHaveLength(0);
+  expect(screen.queryByText(/Review exact draft/)).toBeNull();
+  // Clicking the preview text, not a button, opens the same review.
+  fireEvent.click(within(card).getByText("The submitted draft"));
+  const dialog = await screen.findByRole("dialog");
+  expect(
+    within(dialog).getByRole("button", { name: "Approve draft" }),
+  ).toBeInTheDocument();
+});
 it("derives Human from a pending request while preserving the assigned agent", async () => {
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
@@ -309,7 +387,9 @@ it("approves the exact review snapshot and does not complete or execute the task
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
   await openPage(/^Approvals/);
-  fireEvent.click(screen.getByRole("button", { name: /Review exact draft/ }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Review draft: Launch post" }),
+  );
   const dialog = screen.getByRole("dialog");
   expect(within(dialog).getByText("The submitted draft")).toBeInTheDocument();
   fireEvent.change(within(dialog).getByLabelText("Decision note"), {
@@ -403,7 +483,9 @@ it("shows an approval conflict without claiming success or closing the draft", a
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
   await openPage(/^Approvals/);
-  fireEvent.click(screen.getByRole("button", { name: /Review exact draft/ }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Review draft: Launch post" }),
+  );
   fireEvent.click(
     within(screen.getByRole("dialog")).getByRole("button", {
       name: "Approve draft",

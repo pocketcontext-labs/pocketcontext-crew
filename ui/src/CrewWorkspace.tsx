@@ -202,19 +202,40 @@ function CopyLink({
     </span>
   );
 }
-/** Grows with its content, so a long note scrolls with the dialog, not inside it. */
+/**
+ * Grows with its content, so a long note scrolls with the dialog, not inside it,
+ * up to a cap (CSS max-height) past which the field scrolls itself.
+ */
 function GrowingTextarea({ value, ...props }: ComponentProps<"textarea">) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
+  const measure = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     const scroller = el.closest("dialog");
     const top = scroller?.scrollTop;
+    const own = el.scrollTop;
     el.style.height = "auto";
     if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight + 2}px`;
+    // Past the cap the field scrolls itself; keep its place while typing.
+    el.scrollTop = own;
     if (scroller && top !== undefined) scroller.scrollTop = top;
-    // A hidden textarea measures zero, so measure again when it appears.
-  }, [value, props.hidden]);
+  }, []);
+  useLayoutEffect(measure, [measure, value, props.hidden]);
+  // A textarea in a dialog not yet shown, or hidden, measures zero; children's
+  // layout effects run before the dialog's showModal(). Measure again when it
+  // gets a width, and when the width changes and the text rewraps.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let width = 0;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      measure();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [measure]);
   return (
     <textarea
       ref={ref}
@@ -1245,26 +1266,35 @@ export default function CrewWorkspace() {
           {view === "reviews" && (
             <>
               <div className="crew-review-list">
-                {pending.map((x) => (
-                  <article className="crew-review-card" key={x.id}>
-                    <small className="crew-review-date">{when(x.created)}</small>
-                    <h2>
-                      {val(
-                        data.tasks.find((t) => t.id === val(x, "task")),
-                        "title",
-                      ) || "Task draft"}
-                    </h2>
-                    <p className="crew-review-preview">
-                      {plainPreview(val(x, "draft")).slice(0, 600)}
-                    </p>
+                {pending.map((x) => {
+                  const title =
+                    val(
+                      data.tasks.find((t) => t.id === val(x, "task")),
+                      "title",
+                    ) || "Task draft";
+                  return (
+                    // The whole card opens the review; nothing inside is interactive.
                     <button
-                      className="crew-primary"
+                      type="button"
+                      className="crew-review-card"
+                      key={x.id}
+                      aria-label={`Review draft: ${title}`}
+                      aria-describedby={`review-preview-${x.id}`}
                       onClick={() => setDialog({ kind: "review", row: x })}
                     >
-                      Review exact draft →
+                      <small className="crew-review-date">
+                        {when(x.created)}
+                      </small>
+                      <h2>{title}</h2>
+                      <p
+                        className="crew-review-preview"
+                        id={`review-preview-${x.id}`}
+                      >
+                        {plainPreview(val(x, "draft")).slice(0, 600)}
+                      </p>
                     </button>
-                  </article>
-                ))}
+                  );
+                })}
               </div>
               {!pending.length && (
                 <Empty
@@ -1330,7 +1360,10 @@ export default function CrewWorkspace() {
                       {agentInitials(val(x, "name"), data.agents)}
                     </span>
                     <h2>{val(x, "name")}</h2>
-                    <p>{val(x, "brief")}</p>
+                    {/* A preview: one paragraph clamped to whole lines. */}
+                    <p title={val(x, "brief") || undefined}>
+                      {val(x, "brief").replace(/\s+/g, " ").trim()}
+                    </p>
                   </button>
                 ))}
               </div>
