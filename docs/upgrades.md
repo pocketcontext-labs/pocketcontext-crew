@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.13.0 to 0.14.0
+
+No data migration, protocol change or operator step, and no new managed block. Saved
+webhook settings are unchanged. Replace the binary or image with the normal procedure
+(`CREW_REPLACE_VERSION=0.13.0` for the installer) and upgrade paired clients with the
+server. A client and server must report the same release. Bookmarks to `#/team` and
+`#/memory` redirect to `#/tasks` and `#/notes`. From 0.12.x, first follow the 0.13.0 step
+below.
+
 ## Crew 0.12.x to 0.13.0
 
 No data migration, protocol change or operator step, and no new managed block. Replace
