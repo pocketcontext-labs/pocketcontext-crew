@@ -222,7 +222,8 @@ counted per task; exceeding `max_bot_handoffs` (default 4) applies the write but
 stops the task as Waiting without a wake. Any reader task write resets the count.
 A work client may set the stopped task Ready (when the owner asks, or after
 breaking and reporting the loop), but that keeps the count, so the next
-work-client reassignment stops it again.
+work-client reassignment stops it again. The owner sets wake subscriptions
+and the limit under Wake rules on the reader's Connect page.
 
 ## Capability discovery and cached tool schemas
 

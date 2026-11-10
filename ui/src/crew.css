@@ -1752,6 +1752,39 @@ a.crew-logo:hover .product-brand span {
   align-items: center;
   gap: 8px;
 }
+.crew-wake-rules-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.crew-wake-rules-heading h3 {
+  margin: 0;
+}
+.crew-wake-rule label {
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+.crew-wake-rule p {
+  margin: 2px 0 0 26px;
+}
+.crew-recommended {
+  font-size: 10px;
+  font-weight: 400;
+  border-radius: 4px;
+  background: #eef0e7;
+  padding: 2px 7px;
+  color: #5d6a52;
+}
+.crew-wake-warning {
+  background: #fff6e0;
+  color: #7a5b18;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .crew-integration-actions {
   display: flex;
   flex-wrap: wrap;

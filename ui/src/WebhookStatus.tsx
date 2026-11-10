@@ -9,29 +9,76 @@ import {
 import { crewApi, list, val, type Row } from "./crewApi";
 import Help, { HelpField } from "./Help";
 import type { HelpTopic } from "./helpContent";
-const reasons = [
-  "created",
-  "assigned",
-  "reassigned",
-  "ready",
-  "reopened",
-  "review_outcome",
-  "unassigned",
-  "catch_up",
-  "comment",
-];
-const labels: Record<string, string> = {
-  created: "Created ready",
-  assigned: "Assigned",
-  reassigned: "Reassigned",
-  ready: "Marked ready",
-  reopened: "Reopened",
-  review_outcome: "Review resolved",
-  unassigned: "Unassigned (triage)",
-  catch_up: "Explicit catch-up",
-  comment:
-    "Owner comment (your browser comments only; agent comments never wake)",
+type WakeRule = {
+  reason: string;
+  label: string;
+  /** Crew's default for new installs (pb_migrations/1800300000_crew_global_webhook.js). */
+  recommended: boolean;
+  /** When it fires, then what turning it off means. True to pb_hooks/crew_webhooks.js. */
+  help: string;
 };
+const wakeRules: WakeRule[] = [
+  {
+    reason: "created",
+    label: "Created ready",
+    recommended: true,
+    help: "Wakes the assigned bot when a task is created already Ready. Off: such tasks wait until something else wakes them.",
+  },
+  {
+    reason: "assigned",
+    label: "Assigned",
+    recommended: true,
+    help: "Wakes the bot a Ready task is assigned to. Off: assigning alone wakes no one.",
+  },
+  {
+    reason: "reassigned",
+    label: "Reassigned",
+    recommended: true,
+    help: "Wakes the new bot when a Ready task moves from one bot to another. Off: handoffs between bots stall.",
+  },
+  {
+    reason: "ready",
+    label: "Marked ready",
+    recommended: true,
+    help: "Wakes the assigned bot when a Waiting task is set Ready, the normal way to release work. Off: setting Ready wakes no one.",
+  },
+  {
+    reason: "reopened",
+    label: "Reopened",
+    recommended: true,
+    help: "Wakes the assigned bot when a Ready task is reopened from Done or restored from the archive. Off: it waits until something else wakes it.",
+  },
+  {
+    reason: "review_outcome",
+    label: "Review resolved",
+    recommended: true,
+    help: "Wakes the assigned bot when a review is decided or withdrawn, so it can continue. Off: it waits until something else wakes it.",
+  },
+  {
+    reason: "unassigned",
+    label: "Unassigned (triage)",
+    recommended: false,
+    help: "Wakes the triage agent when a Ready task loses its assignee. Off: such tasks wait for you.",
+  },
+  {
+    reason: "catch_up",
+    label: "Explicit catch-up",
+    recommended: true,
+    help: "Lets you or your assistant ask for a catch-up wake on chosen Ready tasks. Never fires on its own. Off: catch-up requests are refused.",
+  },
+  {
+    reason: "comment",
+    label: "Owner comment",
+    recommended: false,
+    help: "Wakes the assigned bot when you comment on a Ready task in the browser; agent comments never wake. Turn on if you steer bots through comments. Off: comments are only recorded.",
+  },
+];
+const recommendedSubscriptions = wakeRules
+  .filter((x) => x.recommended)
+  .map((x) => x.reason);
+const recommendedHandoffLimit = 4;
+const sameSet = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((x) => b.includes(x));
 const deliveryStates: Record<string, string> = {
   pending: "Queued",
   in_flight: "Sending",
@@ -383,13 +430,88 @@ export default function WebhookStatus({
       document.removeEventListener("visibilitychange", refreshSilently);
     };
   }, [load]);
-  async function mutate(
+  // Sends one revision-checked write with a retry key that survives a lost
+  // response, so retrying the same change cannot apply it twice.
+  async function send(
     action: string,
     data: Record<string, unknown>,
     row: Row | undefined,
-    success: string,
     expectedRevision?: number,
   ) {
+    const operationText = JSON.stringify([
+      action,
+      data,
+      row?.id,
+      row?.revision,
+      expectedRevision,
+    ]);
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(operationText),
+    );
+    const operation = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    const key = retryKeys.current.get(operation) || crypto.randomUUID();
+    retryKeys.current.set(operation, key);
+    await crewApi.write(action, data, row, "", {
+      idempotency_key: key,
+      ...(expectedRevision !== undefined
+        ? { expected_revision: expectedRevision }
+        : {}),
+    });
+    retryKeys.current.delete(operation);
+  }
+  // Safe guidance for a failed write; raw server text is never shown.
+  function describeFailure(failure: unknown) {
+    const conflict =
+      typeof failure === "object" &&
+      failure !== null &&
+      "status" in failure &&
+      failure.status === 409;
+    const reason =
+      (
+        failure as {
+          response?: { data?: { reason?: { code?: string } } };
+          data?: { reason?: { code?: string } };
+        }
+      )?.response?.data?.reason?.code ||
+      (failure as { data?: { reason?: { code?: string } } })?.data?.reason
+        ?.code;
+    const guidance: Record<string, string> = {
+      instructions_mismatch:
+        "The saved routine's managed block does not match Crew. Apply the current block from step 2, then report synchronization again.",
+      runtime_unverified:
+        "Send the safe connection test and wait for the actual webhook routine to report its capabilities.",
+      native_handoff_missing:
+        "The routine has not reported native messaging. If it uses WakeParent, select the parent bridge and apply its current instructions.",
+      parent_wake_missing:
+        "The routine has not reported WakeParent. Check its actual tools and run the connection test again.",
+      parent_receipt_missing:
+        "The dispatcher parent has not acknowledged the wake. Check its Grok conversation before sending another test.",
+      parent_native_handoff_missing:
+        "The dispatcher parent has not reported native bot messaging. Check its available tools.",
+      parent_execution_protocol_missing:
+        "The dispatcher parent cannot use Crew's execution protocol. Refresh its tools before testing again.",
+      recipient_test_required:
+        "Choose a mapped teammate and run the end-to-end test before enabling delivery.",
+      recipient_ack_missing:
+        "The recipient has not acknowledged the test. Check its Grok conversation and prior authorization; do not resend an uncertain message.",
+      execution_required:
+        "Another execution is live on this task. The recipient must use execution.begin and the fenced task protocol, or wait for the live run to end.",
+      test_ack_missing:
+        "Send the safe connection test and wait for its acknowledgment.",
+    };
+    return {
+      conflict,
+      text:
+        (reason && guidance[reason]) ||
+        (conflict
+          ? "This configuration changed elsewhere. Review the latest settings and try again."
+          : "The change could not be confirmed. Check the configuration and try again. Credentials are never included in this message."),
+    };
+  }
+  function startWrite() {
     if (busy) return false;
     setBusy(true);
     busyRef.current = true;
@@ -398,83 +520,32 @@ export default function WebhookStatus({
     loadTicket.current++;
     setError("");
     setMessage("");
+    return true;
+  }
+  function endWrite() {
+    busyRef.current = false;
+    setBusy(false);
+  }
+  async function mutate(
+    action: string,
+    data: Record<string, unknown>,
+    row: Row | undefined,
+    success: string,
+    expectedRevision?: number,
+  ) {
+    if (!startWrite()) return false;
     try {
-      const operationText = JSON.stringify([
-        action,
-        data,
-        row?.id,
-        row?.revision,
-        expectedRevision,
-      ]);
-      const digest = await crypto.subtle.digest(
-        "SHA-256",
-        new TextEncoder().encode(operationText),
-      );
-      const operation = Array.from(new Uint8Array(digest), (byte) =>
-        byte.toString(16).padStart(2, "0"),
-      ).join("");
-      const key = retryKeys.current.get(operation) || crypto.randomUUID();
-      retryKeys.current.set(operation, key);
-      await crewApi.write(action, data, row, "", {
-        idempotency_key: key,
-        ...(expectedRevision !== undefined
-          ? { expected_revision: expectedRevision }
-          : {}),
-      });
-      retryKeys.current.delete(operation);
+      await send(action, data, row, expectedRevision);
       setMessage(success);
       setRefresh((x) => x + 1);
       return true;
     } catch (failure) {
-      const conflict =
-        typeof failure === "object" &&
-        failure !== null &&
-        "status" in failure &&
-        failure.status === 409;
-      const reason =
-        (
-          failure as {
-            response?: { data?: { reason?: { code?: string } } };
-            data?: { reason?: { code?: string } };
-          }
-        )?.response?.data?.reason?.code ||
-        (failure as { data?: { reason?: { code?: string } } })?.data?.reason
-          ?.code;
-      const guidance: Record<string, string> = {
-        instructions_mismatch:
-          "The saved routine's managed block does not match Crew. Apply the current block from step 2, then report synchronization again.",
-        runtime_unverified:
-          "Send the safe connection test and wait for the actual webhook routine to report its capabilities.",
-        native_handoff_missing:
-          "The routine has not reported native messaging. If it uses WakeParent, select the parent bridge and apply its current instructions.",
-        parent_wake_missing:
-          "The routine has not reported WakeParent. Check its actual tools and run the connection test again.",
-        parent_receipt_missing:
-          "The dispatcher parent has not acknowledged the wake. Check its Grok conversation before sending another test.",
-        parent_native_handoff_missing:
-          "The dispatcher parent has not reported native bot messaging. Check its available tools.",
-        parent_execution_protocol_missing:
-          "The dispatcher parent cannot use Crew's execution protocol. Refresh its tools before testing again.",
-        recipient_test_required:
-          "Choose a mapped teammate and run the end-to-end test before enabling delivery.",
-        recipient_ack_missing:
-          "The recipient has not acknowledged the test. Check its Grok conversation and prior authorization; do not resend an uncertain message.",
-        execution_required:
-          "Another execution is live on this task. The recipient must use execution.begin and the fenced task protocol, or wait for the live run to end.",
-        test_ack_missing:
-          "Send the safe connection test and wait for its acknowledgment.",
-      };
-      setError(
-        (reason && guidance[reason]) ||
-          (conflict
-            ? "This configuration changed elsewhere. Review the latest settings and try again."
-            : "The change could not be confirmed. Check the configuration and try again. Credentials are never included in this message."),
-      );
+      const { conflict, text } = describeFailure(failure);
+      setError(text);
       if (conflict) setRefresh((x) => x + 1);
       return false;
     } finally {
-      busyRef.current = false;
-      setBusy(false);
+      endWrite();
     }
   }
   const blocked = loading || busy;
@@ -671,6 +742,88 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
     : activity.filter(
         (x) => x.index < initialActivityEntries || x.warning === "current",
       );
+  const savedSubscriptions = list(config, "subscriptions");
+  const savedHandoffLimit = Number(routing?.max_bot_handoffs) || 4;
+  const triageAgent = activeAgents.find(
+    (a) => a.id === val(routing, "triage_agent"),
+  );
+  const subscriptionsChanged = !sameSet(subscriptions, savedSubscriptions);
+  const limitValid =
+    /^\d+$/.test(handoffLimit) &&
+    Number(handoffLimit) >= 1 &&
+    Number(handoffLimit) <= 20;
+  const limitChanged =
+    !!routing && limitValid && Number(handoffLimit) !== savedHandoffLimit;
+  const canSaveWakeRules =
+    !blocked &&
+    subscriptions.length > 0 &&
+    (!routing || limitValid) &&
+    (subscriptionsChanged || limitChanged);
+  const atRecommended =
+    sameSet(subscriptions, recommendedSubscriptions) &&
+    (!routing || handoffLimit === String(recommendedHandoffLimit));
+  // What webhook.integration.update does to changed subscriptions on the server.
+  const wakeRulesWarning = `Saving changed wake rules ${
+    config?.enabled ? "turns delivery off, " : ""
+  }cancels queued wakes and interrupts bots working on Ready tasks.${
+    config?.enabled ? " Turn delivery back on afterwards." : ""
+  } Ready tasks are not woken again until you set them Waiting, then Ready.`;
+  // Fills the form only; nothing is saved until Save wake rules.
+  function resetWakeRules() {
+    setSubscriptions(recommendedSubscriptions);
+    if (routing) setHandoffLimit(String(recommendedHandoffLimit));
+  }
+  async function saveWakeRules(event: FormEvent) {
+    event.preventDefault();
+    if (!canSaveWakeRules) return;
+    if (
+      subscriptionsChanged &&
+      !window.confirm(`${wakeRulesWarning}\n\nSave the new wake rules?`)
+    )
+      return;
+    if (!startWrite()) return;
+    let limitSaved = false;
+    try {
+      // The limit goes first: it never pauses delivery, so a failure after it
+      // leaves the integration as it was.
+      if (limitChanged) {
+        await send(
+          "webhook.routing.update",
+          { max_bot_handoffs: Number(handoffLimit) },
+          routing,
+        );
+        limitSaved = true;
+      }
+      if (subscriptionsChanged)
+        await send(
+          "webhook.integration.update",
+          {
+            subscriptions: wakeRules
+              .map((x) => x.reason)
+              .filter((x) => subscriptions.includes(x)),
+          },
+          config,
+        );
+      setMessage(
+        subscriptionsChanged
+          ? config?.enabled
+            ? "Wake rules saved. Delivery is off; turn it back on with Enable delivery."
+            : "Wake rules saved."
+          : "Bot handoff limit saved.",
+      );
+    } catch (failure) {
+      const { text } = describeFailure(failure);
+      setError(
+        limitSaved
+          ? `The handoff limit was saved, but the rule changes were not. ${text}`
+          : text,
+      );
+    } finally {
+      // Reload either way, so the form shows exactly what was saved.
+      setRefresh((x) => x + 1);
+      endWrite();
+    }
+  }
   if (!open)
     return loading ? null : (
       <button type="button" onClick={() => setOpen(true)}>
@@ -1188,6 +1341,106 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
             </Step>
           </div>
           )}
+          <form
+            className="crew-webhook-card crew-wake-rules"
+            aria-labelledby="crew-wake-rules-title"
+            onSubmit={(e) => void saveWakeRules(e)}
+          >
+            <div className="crew-wake-rules-heading">
+              <h3 id="crew-wake-rules-title">Wake rules</h3>
+              <button
+                type="button"
+                disabled={blocked || atRecommended}
+                onClick={resetWakeRules}
+              >
+                Reset to recommended
+              </button>
+            </div>
+            <p>
+              Which changes wake a bot. A task must be Ready, not done and not
+              waiting for approval before any rule can wake it.
+            </p>
+            <fieldset className="crew-integration-events">
+              <legend>Wake a bot when</legend>
+              {wakeRules.map((rule) => (
+                <div className="crew-wake-rule" key={rule.reason}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      aria-describedby={`crew-wake-${rule.reason}`}
+                      checked={subscriptions.includes(rule.reason)}
+                      disabled={blocked}
+                      onChange={(e) =>
+                        setSubscriptions((xs) =>
+                          e.target.checked
+                            ? [...xs, rule.reason]
+                            : xs.filter((x) => x !== rule.reason),
+                        )
+                      }
+                    />
+                    <span>{rule.label}</span>
+                    <span className="crew-recommended">
+                      {rule.recommended
+                        ? "Recommended: on"
+                        : "Recommended: off"}
+                    </span>
+                  </label>
+                  <p id={`crew-wake-${rule.reason}`} className="crew-footnote">
+                    {rule.help}
+                    {rule.reason === "unassigned" && (
+                      <>
+                        {" "}
+                        {triageAgent
+                          ? `Triage agent: ${val(triageAgent, "name")}.`
+                          : "No triage agent is chosen, so this wakes no one; your assistant can choose one. Turn it on only after that."}
+                      </>
+                    )}
+                  </p>
+                </div>
+              ))}
+            </fieldset>
+            {routing && (
+              <>
+                <HelpField label="Bot handoff limit" topic="handoff-limit">
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    step={1}
+                    aria-describedby="crew-handoff-limit-help"
+                    value={handoffLimit}
+                    disabled={blocked}
+                    onChange={(e) => setHandoffLimit(e.target.value)}
+                  />
+                </HelpField>
+                <p id="crew-handoff-limit-help" className="crew-footnote">
+                  <span className="crew-recommended">
+                    Recommended: {recommendedHandoffLimit}
+                  </span>{" "}
+                  How many times in a row bots can pass a task to each other (1
+                  to 20). When reached, the task stops as Waiting until you act.
+                  Any edit or comment from you resets the count; an agent
+                  setting it Ready does not.
+                </p>
+              </>
+            )}
+            <button className="crew-primary" disabled={!canSaveWakeRules}>
+              Save wake rules
+            </button>
+            {!subscriptions.length && (
+              <p className="crew-footnote">Choose at least one rule.</p>
+            )}
+            {routing && !limitValid && (
+              <p className="crew-footnote">
+                Enter a whole number from 1 to 20.
+              </p>
+            )}
+            {subscriptionsChanged && subscriptions.length > 0 && (
+              <p className="crew-wake-warning" id="crew-wake-warning">
+                {wakeRulesWarning}
+              </p>
+            )}
+          </form>
           <section
             className="crew-webhook-card"
             aria-label="Notification activity"
@@ -1293,17 +1546,18 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               Copy instructions
             </button>
             <form
+              aria-label="Role and reporting instructions"
               onSubmit={(e) => {
                 e.preventDefault();
+                // Wake rules are saved in their own section, never from here.
                 void mutate(
                   "webhook.integration.update",
                   {
-                    subscriptions,
                     role_instructions: roleInstructions,
                     reporting_instructions: reportingInstructions,
                   },
                   config,
-                  "Notification events saved. Review and re-enable delivery if it paused.",
+                  "Instructions saved. Delivery is off until the routine is applied, tested and enabled again.",
                 );
               }}
             >
@@ -1329,84 +1583,17 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 These settings stay outside Crew's managed block. After changing
                 them, apply and report the saved routine again.
               </p>
-              <fieldset className="crew-integration-events">
-                <legend>Notify when a task becomes actionable</legend>
-                {reasons.map((reason) => (
-                  <label key={reason}>
-                    <input
-                      type="checkbox"
-                      checked={subscriptions.includes(reason)}
-                      disabled={blocked}
-                      onChange={(e) =>
-                        setSubscriptions((xs) =>
-                          e.target.checked
-                            ? [...xs, reason]
-                            : xs.filter((x) => x !== reason),
-                        )
-                      }
-                    />
-                    {labels[reason]}
-                  </label>
-                ))}
-              </fieldset>
               <button
                 disabled={
                   blocked ||
-                  !subscriptions.length ||
-                  (JSON.stringify(subscriptions) ===
-                    JSON.stringify(list(config, "subscriptions")) &&
-                    roleInstructions === val(config, "role_instructions") &&
+                  (roleInstructions === val(config, "role_instructions") &&
                     reportingInstructions ===
                       val(config, "reporting_instructions"))
                 }
               >
-                Save advanced settings
+                Save instructions
               </button>
             </form>
-            {routing && (
-              <form
-                aria-label="Bot handoff limit settings"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void mutate(
-                    "webhook.routing.update",
-                    { max_bot_handoffs: Number(handoffLimit) },
-                    routing,
-                    "Bot handoff limit saved.",
-                  );
-                }}
-              >
-                <HelpField label="Bot handoff limit" topic="handoff-limit">
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    step={1}
-                    value={handoffLimit}
-                    disabled={blocked}
-                    onChange={(e) => setHandoffLimit(e.target.value)}
-                  />
-                </HelpField>
-                <p className="crew-footnote">
-                  Consecutive agent reassignments allowed before Crew stops the
-                  task as Waiting without a wake. Any edit or comment from you
-                  resets the count. An agent setting it Ready keeps the count,
-                  so the next agent reassignment stops it again.
-                </p>
-                <button
-                  disabled={
-                    blocked ||
-                    !/^\d+$/.test(handoffLimit) ||
-                    Number(handoffLimit) < 1 ||
-                    Number(handoffLimit) > 20 ||
-                    Number(handoffLimit) ===
-                      (Number(routing.max_bot_handoffs) || 4)
-                  }
-                >
-                  Save handoff limit
-                </button>
-              </form>
-            )}
             <ExecutionRecovery
               executions={executions}
               disabled={blocked}

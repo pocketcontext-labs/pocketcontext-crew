@@ -264,6 +264,12 @@ opting in to `comment`, invalidates the configuration: delivery pauses, Ready ta
 move to a new wake generation and in-flight work for the old generation is refused
 with a conflict. Change configuration between runs, then re-enable delivery; enabling
 sends no backlog, so set an affected task Waiting and then Ready to wake it again.
+The reader's Wake rules section (Connect page, Grok setup) shows each
+subscription with its recommended value, the Crew default for new installs: all on
+except `unassigned` and `comment`. Its Reset to recommended only fills the form.
+Save sends `webhook.integration.update` with `subscriptions` only when they changed,
+after a confirmation that names these consequences, and `webhook.routing.update`
+only when the handoff limit changed.
 Changing the selected dispatcher requires a new webhook binding and clears the
 old credentials; editing the current managed protocol during upgrade preserves
 credentials. Mapping changes invalidate affected routing. No-op mapping saves
@@ -354,7 +360,8 @@ changes invalidate previous authority; later eligible work uses a new generation
 Wake reasons are `created`, `assigned`, `reassigned`, `unassigned`, `ready`,
 `reopened`, `review_outcome`, `catch_up` and `comment`. `comment` is opt-in: no
 existing or default configuration subscribes to it, and upgrades never add it.
-Enable it under Advanced settings or with `webhook.integration.update`.
+Turn it on under Wake rules on the reader's Connect page (Grok setup) or with
+`webhook.integration.update`.
 
 Only a comment written through the reader route (the owner browser, actor
 `owner:`) can wake. Work-client comments (MCP or CLI, actor `mcp:`) never wake
@@ -393,9 +400,10 @@ empty, by `task.update`, `task.claim` or an assigned `task.create`. Any reader
 write to the task (update, comment, review request, decision or withdrawal)
 resets it to 0.
 
-`webhook_routing.max_bot_handoffs` (default 4, range 1–20) sets the limit. Any
-caller can change it with `webhook.routing.update`; the default authorization
-rules tell agents not to unless the owner asks. When a work-client assignment
+`webhook_routing.max_bot_handoffs` (default 4, range 1–20) sets the limit. The
+owner sets it under Wake rules on the reader's Connect page. Any caller can change
+it with `webhook.routing.update`; the default authorization rules tell agents not
+to unless the owner asks. When a work-client assignment
 change would exceed the limit, the write still applies, but the task becomes
 Waiting in the same transaction with a waiting reason, `handoff_limited: true`
 and a `task.hop_limit` event with reason `hop_limit`. No wake is emitted and

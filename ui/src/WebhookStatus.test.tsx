@@ -402,14 +402,11 @@ it("keeps role and reporting instructions outside the read-only managed block", 
     screen.getByRole("textbox", { name: "Reporting instructions" }),
     { target: { value: "Report task links" } },
   );
-  fireEvent.click(
-    screen.getByRole("button", { name: "Save advanced settings" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Save instructions" }));
   await waitFor(() =>
     expect(crewApi.write).toHaveBeenCalledWith(
       "webhook.integration.update",
       {
-        subscriptions: ["created", "ready"],
         role_instructions: "",
         reporting_instructions: "Report task links",
       },
@@ -574,35 +571,187 @@ it("does not require a recipient acknowledgment for a dispatcher-only bridge tes
   expect(screen.getByRole("button", { name: "Enable delivery" })).toBeEnabled();
   expect(screen.queryByText(/Native send:/)).not.toBeInTheDocument();
 });
-it("offers opt-in owner comment wakes and saves the handoff limit", async () => {
+const recommended = [
+  "created",
+  "assigned",
+  "reassigned",
+  "ready",
+  "reopened",
+  "review_outcome",
+  "catch_up",
+];
+function withRouting(extra: Record<string, unknown> = {}) {
   const routing: Row = {
     id: "routing",
     revision: 7,
     singleton: "routing",
     max_bot_handoffs: 4,
+    ...extra,
   };
   fixtures.webhook_routing = [routing];
-  await open();
-  const comment = screen.getByLabelText(/Owner comment/);
-  expect(comment).not.toBeChecked();
-  const limit = screen.getByLabelText("Bot handoff limit");
-  expect(limit).toHaveValue(4);
-  const save = screen.getByRole("button", { name: "Save handoff limit" });
-  expect(save).toBeDisabled();
-  fireEvent.change(limit, { target: { value: "21" } });
-  expect(save).toBeDisabled();
-  fireEvent.change(limit, { target: { value: "2" } });
-  fireEvent.click(save);
+  return routing;
+}
+const wakeRules = () => screen.getByRole("form", { name: "Wake rules" });
+const saveWakeRules = () =>
+  screen.getByRole("button", { name: "Save wake rules" });
+it("shows wake rules outside Advanced with explanations and recommended values", async () => {
+  withRouting();
+  render(<WebhookStatus agents={agents} />);
+  await screen.findByRole("form", { name: "Wake rules" });
   await waitFor(() =>
-    expect(crewApi.write).toHaveBeenCalledWith(
-      "webhook.routing.update",
-      { max_bot_handoffs: 2 },
-      routing,
-      "",
-      { idempotency_key: expect.any(String) },
-    ),
+    expect(screen.queryByText("Loading integration…")).toBeNull(),
   );
+  const advanced = screen
+    .getByText("Advanced settings and recovery")
+    .closest("details")!;
+  expect(advanced).not.toHaveAttribute("open");
+  expect(advanced).not.toContainElement(wakeRules());
+  expect(wakeRules()).toBeVisible();
+  const owner = screen.getByRole("checkbox", { name: /Owner comment/ });
+  expect(owner).not.toBeChecked();
+  expect(owner).toHaveAccessibleDescription(/agent comments never wake/);
+  expect(
+    screen.getByRole("checkbox", { name: /Marked ready/ }),
+  ).toHaveAccessibleDescription(/normal way to release work/);
+  for (const name of ["Created ready", "Assigned", "Explicit catch-up"])
+    expect(
+      screen.getByRole("checkbox", { name: new RegExp(`^${name}`) }),
+    ).toHaveAccessibleName(`${name} Recommended: on`);
+  for (const name of ["Unassigned (triage)", "Owner comment"])
+    expect(
+      screen.getByRole("checkbox", {
+        name: new RegExp(`^${name.replace(/[()]/g, "\\$&")}`),
+      }),
+    ).toHaveAccessibleName(`${name} Recommended: off`);
+  expect(screen.getByText(/No triage agent is chosen/)).toBeVisible();
+  expect(screen.getByLabelText("Bot handoff limit")).toHaveValue(4);
+  expect(screen.getByText("Recommended: 4")).toBeVisible();
+  // The old Advanced controls are gone; instructions keep their own save.
+  expect(
+    screen.queryByRole("button", { name: "Save handoff limit" }),
+  ).toBeNull();
+  expect(screen.queryByText("Save advanced settings")).toBeNull();
+  expect(saveWakeRules()).toBeDisabled();
+});
+it("names the current triage agent", async () => {
+  withRouting({ triage_agent: "learn" });
+  await open();
+  expect(screen.getByText(/Triage agent: Learn\./)).toBeVisible();
+});
+it("resets to recommended values without saving", async () => {
+  withRouting({ max_bot_handoffs: 9 });
+  config.subscriptions = ["ready", "comment"];
+  await open();
+  const confirm = vi.spyOn(window, "confirm");
+  fireEvent.click(screen.getByRole("button", { name: "Reset to recommended" }));
+  const checked = Array.from(
+    wakeRules().querySelectorAll<HTMLInputElement>("input[type=checkbox]"),
+  )
+    .filter((box) => box.checked)
+    .map((box) =>
+      box.getAttribute("aria-describedby")?.replace("crew-wake-", ""),
+    );
+  expect(checked).toEqual(recommended);
+  expect(
+    screen.getByRole("checkbox", { name: /Owner comment/ }),
+  ).not.toBeChecked();
+  expect(screen.getByLabelText("Bot handoff limit")).toHaveValue(4);
+  expect(
+    screen.getByRole("button", { name: "Reset to recommended" }),
+  ).toBeDisabled();
+  expect(saveWakeRules()).toBeEnabled();
+  expect(crewApi.write).not.toHaveBeenCalled();
+  expect(confirm).not.toHaveBeenCalled();
+});
+it("saves only a changed handoff limit, without a warning", async () => {
+  const routing = withRouting();
+  const confirm = vi.spyOn(window, "confirm");
+  await open();
+  const limit = screen.getByLabelText("Bot handoff limit");
+  fireEvent.change(limit, { target: { value: "21" } });
+  expect(saveWakeRules()).toBeDisabled();
+  expect(screen.getByText("Enter a whole number from 1 to 20.")).toBeVisible();
+  fireEvent.change(limit, { target: { value: "2" } });
+  expect(screen.queryByText(/Saving changed wake rules/)).toBeNull();
+  fireEvent.click(saveWakeRules());
+  await screen.findByText("Bot handoff limit saved.");
+  expect(confirm).not.toHaveBeenCalled();
   expect(crewApi.write).toHaveBeenCalledTimes(1);
+  expect(crewApi.write).toHaveBeenCalledWith(
+    "webhook.routing.update",
+    { max_bot_handoffs: 2 },
+    routing,
+    "",
+    { idempotency_key: expect.any(String) },
+  );
+});
+it("warns and confirms before saving changed rules, then sends only subscriptions", async () => {
+  withRouting();
+  config.enabled = true;
+  const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+  await open();
+  const comment = screen.getByRole("checkbox", { name: /Owner comment/ });
+  fireEvent.click(comment);
+  const warning = screen.getByText(/Saving changed wake rules/);
+  expect(warning).toHaveTextContent(
+    "Saving changed wake rules turns delivery off, cancels queued wakes and interrupts bots working on Ready tasks. Turn delivery back on afterwards.",
+  );
+  fireEvent.click(saveWakeRules());
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(confirm.mock.calls[0][0]).toContain("turns delivery off");
+  expect(crewApi.write).not.toHaveBeenCalled();
+  confirm.mockReturnValueOnce(true);
+  fireEvent.click(saveWakeRules());
+  await screen.findByText(/Wake rules saved\. Delivery is off/);
+  expect(crewApi.write).toHaveBeenCalledTimes(1);
+  expect(crewApi.write).toHaveBeenCalledWith(
+    "webhook.integration.update",
+    { subscriptions: ["created", "ready", "comment"] },
+    config,
+    "",
+    { idempotency_key: expect.any(String) },
+  );
+});
+it("requires at least one rule and treats a reordered set as unchanged", async () => {
+  withRouting();
+  config.subscriptions = ["ready", "created"];
+  await open();
+  expect(saveWakeRules()).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox", { name: /Created ready/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Marked ready/ }));
+  expect(screen.getByText("Choose at least one rule.")).toBeVisible();
+  expect(saveWakeRules()).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox", { name: /Marked ready/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Created ready/ }));
+  expect(saveWakeRules()).toBeDisabled();
+  expect(screen.queryByText(/Saving changed wake rules/)).toBeNull();
+});
+it("reports a partial save when the limit saves but the rules do not, and reloads", async () => {
+  const routing = withRouting();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  vi.mocked(crewApi.write)
+    .mockResolvedValueOnce(routing)
+    .mockRejectedValueOnce({ status: 409 });
+  await open();
+  fireEvent.change(screen.getByLabelText("Bot handoff limit"), {
+    target: { value: "6" },
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: /Assigned/ }));
+  const reads = vi.mocked(crewApi.read).mock.calls.length;
+  fireEvent.click(saveWakeRules());
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The handoff limit was saved, but the rule changes were not. This configuration changed elsewhere.",
+  );
+  const calls = vi.mocked(crewApi.write).mock.calls;
+  expect(calls.map((c) => c[0])).toEqual([
+    "webhook.routing.update",
+    "webhook.integration.update",
+  ]);
+  await waitFor(() =>
+    expect(vi.mocked(crewApi.read).mock.calls.length).toBeGreaterThan(reads),
+  );
+  // The unsaved rule change stays in the form for another try.
+  expect(screen.getByRole("checkbox", { name: /Assigned/ })).toBeChecked();
 });
 
 const stepToggle = (name: RegExp) => screen.getByRole("button", { name });

@@ -234,6 +234,24 @@ try {
  await learnMapping.locator('p').filter({hasText:'Synthetic Learn Grok'}).waitFor();
  await learnMapping.scrollIntoViewIfNeeded();
  await snapView('crew-bot-mapping-card');
+ // Wake rules sit outside Advanced with recommended values and one Save; Reset only fills the form.
+ const wakeRules=integration.getByRole('form',{name:'Wake rules'});
+ assert.equal(await wakeRules.evaluate(f=>!!f.closest('details')),false,'wake rules outside Advanced');
+ assert.equal(await wakeRules.getByRole('button',{name:'Reset to recommended'}).isDisabled(),true,'new installs use the recommended rules');
+ assert.equal(await wakeRules.getByRole('button',{name:'Save wake rules'}).isDisabled(),true);
+ const wakeWrites=writeActions.length;
+ await wakeRules.getByRole('checkbox',{name:/^Owner comment/}).check();
+ await wakeRules.getByText(/^Saving changed wake rules/).waitFor();
+ for(const width of [1280,390]){
+  await page.setViewportSize({width,height:900});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Wake rules horizontal overflow at ${width}`);
+  if(process.env.CREW_SCREENSHOTS) await wakeRules.screenshot({path:path.join(process.env.CREW_SCREENSHOTS,'crew-wake-rules-'+width+'.png')});
+ }
+ await page.setViewportSize({width:1440,height:1000});
+ await wakeRules.getByRole('button',{name:'Reset to recommended'}).click();
+ assert.equal(await wakeRules.getByRole('checkbox',{name:/^Owner comment/}).isChecked(),false);
+ assert.equal(await wakeRules.getByText(/^Saving changed wake rules/).count(),0);
+ assert.equal(writeActions.length,wakeWrites,'Wake rules changed nothing before Save');
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:900});
   for(const name of ['Home','Tasks','Notes','Approvals','Agents','Archive']){
