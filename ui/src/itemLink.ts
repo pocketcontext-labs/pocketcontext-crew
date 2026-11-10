@@ -24,13 +24,80 @@ export type View = keyof typeof viewHashes;
 
 /**
  * Item links and unknown addresses show Home; any Guide address shows the Guide
- * and any search address shows Search, which validates its own query.
+ * and any search address shows Search, which validates its own query. The
+ * memory page keeps its filter and sorts in a query, read by viewStateFromHash.
  */
 export function viewFromHash(hash: string): View {
   if (/^#\/guide(?:\/|$)/.test(hash)) return "guide";
   if (/^#\/search(?:\?|$)/.test(hash)) return "search";
+  if (/^#\/memory\?/.test(hash)) return "memory";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
   return match ? (match[0] as View) : "home";
+}
+
+export const noteSorts = ["updated", "created", "title", "bucket"] as const;
+export const bucketSorts = ["name", "notes", "activity"] as const;
+export type NoteSort = (typeof noteSorts)[number];
+export type BucketSort = (typeof bucketSorts)[number];
+/** Page state that lives in the address. */
+export type ViewState = {
+  /** A bucket id, or "" for all buckets. */
+  bucket: string;
+  noteSort: NoteSort;
+  bucketSort: BucketSort;
+};
+export const defaultViewState: ViewState = {
+  bucket: "",
+  noteSort: "updated",
+  bucketSort: "name",
+};
+const recordId = /^[a-z0-9]{15}$/;
+
+/**
+ * Reads `#/memory?bucket=<id>&sort=<notes>&buckets=<buckets>`. A missing, repeated or invalid value
+ * falls back to its default; unknown parameters are ignored. Whether an id
+ * still names an active record is for the page to decide.
+ */
+export function viewStateFromHash(hash: string): ViewState {
+  const view = viewFromHash(hash);
+  const query = /^#\/[a-z]+\?(.*)$/.exec(hash)?.[1];
+  if (view !== "memory" || query === undefined) return defaultViewState;
+  const params = new URLSearchParams(query);
+  const one = (key: string, valid: (value: string) => boolean) => {
+    const values = params.getAll(key);
+    return values.length === 1 && valid(values[0]) ? values[0] : null;
+  };
+  return {
+    ...defaultViewState,
+    bucket: one("bucket", (v) => recordId.test(v)) ?? defaultViewState.bucket,
+    noteSort: (one("sort", (v) => (noteSorts as readonly string[]).includes(v)) ??
+      defaultViewState.noteSort) as NoteSort,
+    bucketSort: (one("buckets", (v) =>
+      (bucketSorts as readonly string[]).includes(v),
+    ) ?? defaultViewState.bucketSort) as BucketSort,
+  };
+}
+
+/** The canonical address of a view with its state; defaults are left out. */
+export function viewStateHash(view: View, state: ViewState): string {
+  const params = new URLSearchParams();
+  if (view === "memory") {
+    if (state.bucket) params.set("bucket", state.bucket);
+    if (state.noteSort !== defaultViewState.noteSort)
+      params.set("sort", state.noteSort);
+    if (state.bucketSort !== defaultViewState.bucketSort)
+      params.set("buckets", state.bucketSort);
+  }
+  const query = params.toString();
+  return viewHashes[view] + (query ? `?${query}` : "");
+}
+
+/** Only the exact form viewStateHash writes for a page with state. */
+export function isCanonicalViewStateHash(hash: string): boolean {
+  const view = viewFromHash(hash);
+  return (
+    view === "memory" && hash === viewStateHash(view, viewStateFromHash(hash))
+  );
 }
 
 /**
@@ -137,6 +204,7 @@ export function loginReturnHash(hash: string): string | null {
       ? searchHash(text)
       : viewHashes.search;
   }
+  if (view === "memory") return viewStateHash(view, viewStateFromHash(hash));
   return view === "home" ? null : hash;
 }
 
@@ -179,7 +247,8 @@ export function takeLoginReturn(): string | null {
     return typeof hash === "string" &&
       (returnPattern.test(hash) ||
         isStoredSignin(hash) ||
-        isCanonicalSearchHash(hash)) &&
+        isCanonicalSearchHash(hash) ||
+        isCanonicalViewStateHash(hash)) &&
       typeof expires === "number" &&
       expires > now &&
       expires <= now + returnLifetimeMs

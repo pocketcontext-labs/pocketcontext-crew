@@ -39,14 +39,21 @@ import { searchHash, searchTextFromHash, type SearchHit } from "./searchApi";
 import "./crew.css";
 import type { ServerVersion } from "./crewApi";
 import {
+  bucketSorts,
   isItemHash,
   itemPath,
   itemShareUrl,
+  noteSorts,
   parseItemHash,
+  type BucketSort,
   type ItemKind,
+  type NoteSort,
   type View,
+  type ViewState,
   viewFromHash,
   viewHashes,
+  viewStateFromHash,
+  viewStateHash,
 } from "./itemLink";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
@@ -87,6 +94,22 @@ const pushAddress = (hash: string) => {
   if (location.hash !== hash)
     history.pushState(null, "", location.pathname + location.search + hash);
 };
+const noteSortLabels: Record<NoteSort, string> = {
+  updated: "Sort: Last updated",
+  created: "Sort: Newest first",
+  title: "Sort: Title A–Z",
+  bucket: "Sort: Bucket",
+};
+const bucketSortLabels: Record<BucketSort, string> = {
+  name: "Sort: Name",
+  notes: "Sort: Most notes",
+  activity: "Sort: Last activity",
+};
+const byName = (a: string, b: string) =>
+  a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
+/** Newest first; timestamps share one format, and missing ones sort last. */
+const byNewest = (a: unknown, b: unknown) =>
+  String(b || "").localeCompare(String(a || ""));
 const when = (raw: unknown) =>
   raw ? new Date(String(raw)).toLocaleString() : "Just now";
 /** Readable card text: Markdown markers would otherwise show, and could be cut in half. */
@@ -513,7 +536,10 @@ export default function CrewWorkspace() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [query, setQuery] = useState(""),
-    [bucket, setBucket] = useState(""),
+    // Memory filter and sorts, kept in the address (#/memory?bucket=…&sort=…).
+    [viewState, setViewState] = useState<ViewState>(() =>
+      viewStateFromHash(location.hash),
+    ),
     [assignmentFilter, setAssignmentFilter] = useState("all"),
     // The Search page's query, from its address; null for an invalid address.
     [searchText, setSearchText] = useState(() =>
@@ -641,6 +667,7 @@ export default function CrewWorkspace() {
         return;
       }
       setView(viewFromHash(location.hash));
+      setViewState(viewStateFromHash(location.hash));
       setSearchText(searchTextFromHash(location.hash));
       setQuery("");
       setDialog(null);
@@ -648,6 +675,26 @@ export default function CrewWorkspace() {
     window.addEventListener("hashchange", receive);
     return () => window.removeEventListener("hashchange", receive);
   }, []);
+  // The address follows the page state; replacing it adds no history entry and
+  // fires no hashchange. An open item keeps its own address.
+  useEffect(() => {
+    if (view !== "memory" || isItemHash(location.hash)) return;
+    setAddress(viewStateHash(view, viewState));
+  }, [view, viewState]);
+  // An address naming a bucket that isn't active falls back to all buckets.
+  useEffect(() => {
+    if (
+      ready &&
+      viewState.bucket &&
+      !data.buckets.some((x) => x.id === viewState.bucket)
+    )
+      setViewState((state) => ({ ...state, bucket: "" }));
+  }, [ready, data.buckets, viewState.bucket]);
+  const bucket = data.buckets.some((x) => x.id === viewState.bucket)
+    ? viewState.bucket
+    : "";
+  const setBucket = (id: string) =>
+    setViewState((state) => ({ ...state, bucket: id }));
   const openTitle =
     dialog?.row && (dialog.kind === "task" || dialog.kind === "note")
       ? val(dialog.row, "title")
@@ -681,7 +728,9 @@ export default function CrewWorkspace() {
   const closeDialog = () => {
     if (isItemHash(location.hash))
       pushAddress(
-        view === "search" && searchText ? searchHash(searchText) : viewHashes[view],
+        view === "search" && searchText
+          ? searchHash(searchText)
+          : viewStateHash(view, viewState),
       );
     setDialog(null);
   };
@@ -763,6 +812,47 @@ export default function CrewWorkspace() {
       .join(" ")
       .toLowerCase()
       .includes(query.toLowerCase());
+  // Note count and latest note update per bucket, for the cards and their sorts.
+  const bucketStats = new Map<string, { count: number; latest: string }>();
+  for (const note of data.notes) {
+    const id = val(note, "bucket");
+    const stats = bucketStats.get(id) ?? { count: 0, latest: "" };
+    stats.count++;
+    if (String(note.updated || "") > stats.latest)
+      stats.latest = String(note.updated || "");
+    bucketStats.set(id, stats);
+  }
+  const sortedBuckets = [...data.buckets].sort((a, b) => {
+    const [sa, sb] = [bucketStats.get(a.id), bucketStats.get(b.id)];
+    const order =
+      viewState.bucketSort === "notes"
+        ? (sb?.count ?? 0) - (sa?.count ?? 0)
+        : viewState.bucketSort === "activity"
+          ? byNewest(sa?.latest, sb?.latest)
+          : 0;
+    return order || byName(val(a, "name"), val(b, "name"));
+  });
+  const shownNotes = data.notes
+    .filter((x) => !bucket || val(x, "bucket") === bucket)
+    .sort((a, b) => {
+      const sort = viewState.noteSort;
+      const order =
+        sort === "title"
+          ? byName(val(a, "title"), val(b, "title"))
+          : sort === "created"
+            ? byNewest(a.created, b.created)
+            : sort === "bucket"
+              ? byName(
+                  name(val(a, "bucket"), "buckets"),
+                  name(val(b, "bucket"), "buckets"),
+                )
+              : 0;
+      return (
+        order ||
+        byNewest(a.updated, b.updated) ||
+        byName(val(a, "title"), val(b, "title"))
+      );
+    });
   const seed = () =>
     perform(async () => {
       for (const [n, purpose] of [
@@ -994,53 +1084,31 @@ export default function CrewWorkspace() {
                 </button>
               </div>
             )}
-          {(view === "board" || view === "memory") && (
+          {view === "board" && (
             <div className="crew-toolbar">
               <label className="crew-search">
                 <span aria-hidden="true">⌕</span>
                 <input
                   type="search"
-                  aria-label={
-                    view === "board" ? "Search tasks" : "Search memory"
-                  }
-                  placeholder={
-                    view === "board"
-                      ? "Search tasks, descriptions or labels…"
-                      : "Search note titles and content…"
-                  }
+                  aria-label="Search tasks"
+                  placeholder="Search tasks, descriptions or labels…"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
               </label>
-              {view === "board" && (
-                <select
-                  aria-label="Filter by assignment"
-                  value={assignmentFilter}
-                  onChange={(e) => setAssignmentFilter(e.target.value)}
-                >
-                  <option value="all">All tasks</option>
-                  <option value="unassigned">
-                    Unassigned ({unassignedCount})
-                  </option>
-                  <option value="invalid">
-                    Invalid assignments ({invalidCount})
-                  </option>
-                </select>
-              )}
-              {view === "memory" && (
-                <select
-                  aria-label="Filter by bucket"
-                  value={bucket}
-                  onChange={(e) => setBucket(e.target.value)}
-                >
-                  <option value="">All buckets</option>
-                  {data.buckets.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {val(x, "name")}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <select
+                aria-label="Filter by assignment"
+                value={assignmentFilter}
+                onChange={(e) => setAssignmentFilter(e.target.value)}
+              >
+                <option value="all">All tasks</option>
+                <option value="unassigned">
+                  Unassigned ({unassignedCount})
+                </option>
+                <option value="invalid">
+                  Invalid assignments ({invalidCount})
+                </option>
+              </select>
             </div>
           )}
           {view === "home" && (
@@ -1187,60 +1255,126 @@ export default function CrewWorkspace() {
                 <h2>Buckets</h2>
                 <Help topic="bucket" />
                 <span>Groups of notes</span>
+                <div className="crew-section-tools">
+                  <select
+                    aria-label="Sort buckets"
+                    value={viewState.bucketSort}
+                    onChange={(e) =>
+                      setViewState((state) => ({
+                        ...state,
+                        bucketSort: e.target.value as BucketSort,
+                      }))
+                    }
+                  >
+                    {bucketSorts.map((key) => (
+                      <option key={key} value={key}>
+                        {bucketSortLabels[key]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="crew-buckets">
-                {data.buckets
-                  .filter((x) => !bucket || x.id === bucket)
-                  .map((x) => (
-                    <button
-                      className="crew-bucket-card"
+                {sortedBuckets.map((x) => {
+                  const selected = x.id === bucket;
+                  const count = bucketStats.get(x.id)?.count ?? 0;
+                  return (
+                    // Two sibling buttons: the card filters, Edit opens the bucket.
+                    <div
+                      className={`crew-bucket-card${selected ? " selected" : ""}`}
                       key={x.id}
-                      onClick={() => setDialog({ kind: "bucket", row: x })}
                     >
-                      <span>▤</span>
-                      <h2>{val(x, "name")}</h2>
-                      <p>{val(x, "purpose")}</p>
-                      <small>
-                        {name(val(x, "responsible_agent"))} · responsible agent
-                      </small>
-                    </button>
-                  ))}
+                      <button
+                        type="button"
+                        className="crew-bucket-filter"
+                        aria-pressed={selected}
+                        title={val(x, "purpose") || undefined}
+                        onClick={() => setBucket(selected ? "" : x.id)}
+                      >
+                        <span aria-hidden="true">▤</span>
+                        <h2>{val(x, "name")}</h2>
+                        <small>
+                          {name(val(x, "responsible_agent"))} · responsible
+                          agent
+                        </small>
+                        <small className="crew-bucket-count">
+                          {count} {count === 1 ? "note" : "notes"}
+                        </small>
+                      </button>
+                      <button
+                        type="button"
+                        className="crew-bucket-edit"
+                        aria-label={`Edit bucket ${val(x, "name")}`}
+                        onClick={() => setDialog({ kind: "bucket", row: x })}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
               <div className="crew-section-title">
                 <h2>Notes</h2>
                 <Help topic="note" />
                 <span>Useful context, with a history</span>
+                <div className="crew-section-tools">
+                  <select
+                    aria-label="Filter by bucket"
+                    value={bucket}
+                    onChange={(e) => setBucket(e.target.value)}
+                  >
+                    <option value="">All buckets</option>
+                    {data.buckets.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {val(x, "name")}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Sort notes"
+                    value={viewState.noteSort}
+                    onChange={(e) =>
+                      setViewState((state) => ({
+                        ...state,
+                        noteSort: e.target.value as NoteSort,
+                      }))
+                    }
+                  >
+                    {noteSorts.map((key) => (
+                      <option key={key} value={key}>
+                        {noteSortLabels[key]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="crew-notes">
-                {data.notes
-                  .filter(
-                    (x) =>
-                      (!bucket || val(x, "bucket") === bucket) && matches(x),
-                  )
-                  .map((x) => (
-                    <button
-                      className="crew-note-card"
-                      key={x.id}
-                      onClick={() => openItem("note", x)}
-                    >
-                      <span className="crew-eyebrow">
-                        {name(val(x, "bucket"), "buckets")}
-                      </span>
-                      <h3>{val(x, "title")}</h3>
-                      <p>{plainPreview(val(x, "body")).slice(0, 180)}</p>
-                      <small>
-                        Revision {x.revision} · {when(x.updated)}
-                      </small>
-                    </button>
-                  ))}
+                {shownNotes.map((x) => (
+                  <button
+                    className="crew-note-card"
+                    key={x.id}
+                    onClick={() => openItem("note", x)}
+                  >
+                    <span className="crew-eyebrow">
+                      {name(val(x, "bucket"), "buckets")}
+                    </span>
+                    <h3>{val(x, "title")}</h3>
+                    <p>{plainPreview(val(x, "body")).slice(0, 180)}</p>
+                    <small>
+                      Revision {x.revision} · {when(x.updated)}
+                    </small>
+                  </button>
+                ))}
               </div>
-              {!data.notes.filter(
-                (x) => (!bucket || val(x, "bucket") === bucket) && matches(x),
-              ).length && (
+              {!shownNotes.length && (
                 <Empty
-                  title={query ? "No matching notes" : "No notes yet"}
+                  title={bucket ? "No notes in this bucket" : "No notes yet"}
                   action={
-                    query ? undefined : data.buckets.length ? (
+                    bucket ? (
+                      <button onClick={() => setBucket("")}>
+                        Show all buckets
+                      </button>
+                    ) : data.buckets.length ? (
                       <button
                         className="crew-primary"
                         onClick={() => setDialog({ kind: "note" })}
@@ -1254,8 +1388,8 @@ export default function CrewWorkspace() {
                     )
                   }
                 >
-                  {query
-                    ? "Try different words, or clear the search."
+                  {bucket
+                    ? "Add one with New note, or show the notes in every bucket."
                     : data.buckets.length
                       ? "Notes hold decisions, preferences and findings your agents should remember."
                       : "Notes live in buckets. Create a bucket first, then add notes to it."}

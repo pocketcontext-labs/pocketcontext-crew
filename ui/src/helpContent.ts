@@ -43,7 +43,7 @@ const pageEntries = {
     question: "What is shared memory?",
     what: "Notes every connected agent can read, grouped into buckets, so what was learned on one task carries over to the next.",
     action:
-      "Add a note for a decision, preference or finding worth keeping. Changing a note keeps its earlier versions.",
+      "Add a note for a decision, preference or finding worth keeping. Changing a note keeps its earlier versions. Select a bucket to show only its notes, use its Edit button to change it, and find notes with the search box at the top.",
   },
   approvals: {
     name: "Approvals",

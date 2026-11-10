@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  defaultViewState,
+  isItemHash,
   loginReturnHash,
+  parseItemHash,
+  viewFromHash,
+  viewStateFromHash,
+  viewStateHash,
   oauthTargetFromHash,
   rememberLoginReturn,
   safeOAuthTarget,
@@ -91,6 +97,62 @@ describe("stored return target", () => {
     put(hash, Date.now() - 1);
     expect(takeLoginReturn()).toBeNull();
     put(hash, Date.now() + 16 * 60 * 1000);
+    expect(takeLoginReturn()).toBeNull();
+  });
+});
+
+describe("memory address state", () => {
+  const bucketId = "bucket000000001";
+  it("reads views with and without a query", () => {
+    expect(viewFromHash("#/memory")).toBe("memory");
+    expect(viewFromHash(`#/memory?bucket=${bucketId}`)).toBe("memory");
+    expect(viewFromHash("#/team")).toBe("board");
+    expect(viewFromHash("#/teamx")).toBe("home");
+    expect(viewFromHash("#/memory/x")).toBe("home");
+  });
+  it("round-trips memory filters and sorts in canonical order", () => {
+    const state = viewStateFromHash(
+      `#/memory?buckets=activity&sort=title&bucket=${bucketId}`,
+    );
+    expect(state).toEqual({
+      ...defaultViewState,
+      bucket: bucketId,
+      noteSort: "title",
+      bucketSort: "activity",
+    });
+    expect(viewStateHash("memory", state)).toBe(
+      `#/memory?bucket=${bucketId}&sort=title&buckets=activity`,
+    );
+    expect(viewStateHash("memory", defaultViewState)).toBe("#/memory");
+  });
+  it.each([
+    ["unknown sort", "#/memory?sort=random"],
+    ["bad bucket id", "#/memory?bucket=../x"],
+    ["repeated bucket", `#/memory?bucket=${bucketId}&bucket=${bucketId}`],
+    ["unknown bucket sort", "#/memory?buckets=size"],
+    ["other page", `#/agents?bucket=${bucketId}`],
+    ["board page", `#/team?bucket=${bucketId}`],
+  ])("falls back to defaults for %s", (_name, value) => {
+    expect(viewStateFromHash(value)).toEqual(defaultViewState);
+  });
+  it("leaves item links alone", () => {
+    expect(isItemHash("#/notes/voice-guide-note00000000001")).toBe(true);
+    expect(parseItemHash("#/notes/voice-guide-note00000000001")).toEqual({
+      kind: "note",
+      id: "note00000000001",
+    });
+    expect(viewStateFromHash("#/notes/voice-guide-note00000000001")).toEqual(
+      defaultViewState,
+    );
+  });
+  it("remembers a canonical filtered page across sign-in", () => {
+    const remembered = loginReturnHash(
+      `#/memory?x=1&sort=created&bucket=${bucketId}`,
+    )!;
+    expect(remembered).toBe(`#/memory?bucket=${bucketId}&sort=created`);
+    rememberLoginReturn(remembered);
+    expect(takeLoginReturn()).toBe(remembered);
+    rememberLoginReturn(`#/memory?y=1&bucket=${bucketId}`);
     expect(takeLoginReturn()).toBeNull();
   });
 });

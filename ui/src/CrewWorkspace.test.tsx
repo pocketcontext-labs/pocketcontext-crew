@@ -556,7 +556,7 @@ it("shows bucket responsibility and saves a changed or cleared assignment", asyn
   await openPage("Shared memory");
   expect(screen.getByText("Network · responsible agent")).toBeInTheDocument();
   fireEvent.click(
-    screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
+    screen.getByRole("button", { name: "Edit bucket NETWORK" }),
   );
   let dialog = within(screen.getByRole("dialog"));
   expect(dialog.getByLabelText("Responsible agent")).toHaveValue(agent.id);
@@ -578,7 +578,7 @@ it("shows bucket responsibility and saves a changed or cleared assignment", asyn
   );
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   fireEvent.click(
-    screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
+    screen.getByRole("button", { name: "Edit bucket NETWORK" }),
   );
   dialog = within(screen.getByRole("dialog"));
   fireEvent.change(dialog.getByLabelText("Responsible agent"), {
@@ -607,7 +607,7 @@ it("keeps bucket assignment conflicts visible for reassessment", async () => {
   await screen.findByRole("heading", { name: "Launch post" });
   await openPage("Shared memory");
   fireEvent.click(
-    screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
+    screen.getByRole("button", { name: "Edit bucket NETWORK" }),
   );
   const dialog = within(screen.getByRole("dialog"));
   fireEvent.change(dialog.getByLabelText("Responsible agent"), {
@@ -1167,7 +1167,7 @@ it("never opens or reopens a dialog on a data refresh", async () => {
   await screen.findByRole("heading", { name: "Launch post" });
   await openPage("Shared memory");
   fireEvent.click(
-    screen.getByRole("button", { name: /NETWORK Voice and audiences/ }),
+    screen.getByRole("button", { name: "Edit bucket NETWORK" }),
   );
   expect(screen.getByRole("dialog", { name: "Edit bucket" })).toBeVisible();
   // An item hash left in place by a replaceState must not act on refresh.
@@ -1802,5 +1802,268 @@ describe("help and Guide", () => {
     expect(document.querySelector(".crew-help-popover")).toHaveTextContent(
       "a woken cloud bot can't answer",
     );
+  });
+});
+
+describe("shared memory page", () => {
+  const design: Row = {
+    id: "bucket000000002",
+    revision: 1,
+    name: "DESIGN",
+    responsible_agent: "",
+    purpose: "Brand and visual direction",
+  };
+  const research: Row = {
+    id: "bucket000000003",
+    revision: 1,
+    name: "ARCHIVE NOTES",
+    responsible_agent: "",
+    purpose: "",
+  };
+  const note = (
+    id: string,
+    title: string,
+    bucketId: string,
+    created: string,
+    updated: string,
+  ): Row => ({
+    id,
+    revision: 1,
+    title,
+    bucket: bucketId,
+    body: `${title} body`,
+    links: [],
+    created,
+    updated,
+  });
+  beforeEach(() => {
+    fixtures.buckets = [bucket, design, research];
+    fixtures.notes = [
+      note(
+        "note00000000001",
+        "Beta voice",
+        bucket.id,
+        "2026-01-02 00:00:00.000Z",
+        "2026-03-01 00:00:00.000Z",
+      ),
+      note(
+        "note00000000002",
+        "Alpha palette",
+        design.id,
+        "2026-01-03 00:00:00.000Z",
+        "2026-01-04 00:00:00.000Z",
+      ),
+      note(
+        "note00000000003",
+        "Gamma audience",
+        bucket.id,
+        "2026-01-01 00:00:00.000Z",
+        "2026-02-01 00:00:00.000Z",
+      ),
+    ];
+  });
+  const noteTitles = () =>
+    [...document.querySelectorAll(".crew-note-card h3")].map(
+      (x) => x.textContent,
+    );
+  const bucketNames = () =>
+    [...document.querySelectorAll(".crew-bucket-card h2")].map(
+      (x) => x.textContent,
+    );
+  const filterButton = (name: string) =>
+    within(document.querySelector<HTMLElement>(".crew-buckets")!).getByRole(
+      "button",
+      { name: new RegExp(`^${name} `) },
+    );
+  async function openMemory(hash = "#/memory") {
+    history.replaceState(null, "", `/${hash}`);
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Beta voice" });
+  }
+
+  it("has no page search; the header search finds notes", async () => {
+    await openMemory();
+    expect(
+      screen.queryByRole("searchbox", { name: "Search memory" }),
+    ).toBeNull();
+    expect(screen.queryByPlaceholderText(/Search note titles/)).toBeNull();
+    expect(
+      screen.getByRole("combobox", { name: "Search Crew" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows name, responsible agent and note count, with the description only as a tooltip", async () => {
+    await openMemory();
+    const card = filterButton("NETWORK");
+    expect(card).toHaveTextContent("Network · responsible agent");
+    expect(card).toHaveTextContent("2 notes");
+    expect(card).not.toHaveTextContent("Voice and audiences");
+    expect(card).toHaveAttribute("title", "Voice and audiences");
+    expect(filterButton("DESIGN")).toHaveTextContent("1 note");
+    expect(filterButton("ARCHIVE NOTES")).toHaveTextContent("0 notes");
+    expect(screen.queryByText("Voice and audiences")).toBeNull();
+  });
+
+  it("filters notes by clicking a bucket, keeps the dropdown in sync and clears on a second click", async () => {
+    await openMemory();
+    const dropdown = screen.getByRole("combobox", { name: "Filter by bucket" });
+    const card = filterButton("NETWORK");
+    expect(card).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(card);
+    expect(card).toHaveAttribute("aria-pressed", "true");
+    expect(card.closest(".crew-bucket-card")).toHaveClass("selected");
+    expect(dropdown).toHaveValue(bucket.id);
+    expect(noteTitles()).toEqual(["Beta voice", "Gamma audience"]);
+    expect(location.hash).toBe(`#/memory?bucket=${bucket.id}`);
+    // Every bucket card stays visible, so another can be chosen directly.
+    expect(bucketNames()).toHaveLength(3);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(card);
+    expect(card).toHaveAttribute("aria-pressed", "false");
+    expect(dropdown).toHaveValue("");
+    expect(noteTitles()).toHaveLength(3);
+    expect(location.hash).toBe("#/memory");
+    fireEvent.change(dropdown, { target: { value: design.id } });
+    expect(filterButton("DESIGN")).toHaveAttribute("aria-pressed", "true");
+    expect(noteTitles()).toEqual(["Alpha palette"]);
+  });
+
+  it("offers a way back from an empty bucket", async () => {
+    await openMemory();
+    fireEvent.click(filterButton("ARCHIVE NOTES"));
+    expect(screen.getByText("No notes in this bucket")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show all buckets" }));
+    expect(noteTitles()).toHaveLength(3);
+  });
+
+  it("opens a bucket with its own Edit button, not by clicking the card", async () => {
+    await openMemory();
+    const edit = screen.getByRole("button", { name: "Edit bucket NETWORK" });
+    // Sibling buttons: nothing interactive is nested in another control.
+    expect(edit.closest("button")).toBe(edit);
+    expect(edit.parentElement?.closest("button")).toBeNull();
+    expect(
+      filterButton("NETWORK").querySelector("button, a, input, select"),
+    ).toBeNull();
+    edit.focus();
+    expect(document.activeElement).toBe(edit);
+    fireEvent.click(edit);
+    const dialog = within(screen.getByRole("dialog", { name: "Edit bucket" }));
+    expect(dialog.getByDisplayValue("Voice and audiences")).toBeInTheDocument();
+  });
+
+  it("sorts notes by last updated by default, then created, title and bucket", async () => {
+    await openMemory();
+    expect(noteTitles()).toEqual([
+      "Beta voice",
+      "Gamma audience",
+      "Alpha palette",
+    ]);
+    const sort = screen.getByRole("combobox", { name: "Sort notes" });
+    fireEvent.change(sort, { target: { value: "created" } });
+    expect(noteTitles()).toEqual([
+      "Alpha palette",
+      "Beta voice",
+      "Gamma audience",
+    ]);
+    expect(location.hash).toBe("#/memory?sort=created");
+    fireEvent.change(sort, { target: { value: "title" } });
+    expect(noteTitles()).toEqual([
+      "Alpha palette",
+      "Beta voice",
+      "Gamma audience",
+    ]);
+    fireEvent.change(sort, { target: { value: "bucket" } });
+    // DESIGN before NETWORK; within a bucket, most recently updated first.
+    expect(noteTitles()).toEqual([
+      "Alpha palette",
+      "Beta voice",
+      "Gamma audience",
+    ]);
+    fireEvent.change(sort, { target: { value: "updated" } });
+    expect(location.hash).toBe("#/memory");
+  });
+
+  it("sorts buckets by name by default, then note count and last activity", async () => {
+    await openMemory();
+    expect(bucketNames()).toEqual(["ARCHIVE NOTES", "DESIGN", "NETWORK"]);
+    const sort = screen.getByRole("combobox", { name: "Sort buckets" });
+    fireEvent.change(sort, { target: { value: "notes" } });
+    expect(bucketNames()).toEqual(["NETWORK", "DESIGN", "ARCHIVE NOTES"]);
+    fireEvent.change(sort, { target: { value: "activity" } });
+    expect(bucketNames()).toEqual(["NETWORK", "DESIGN", "ARCHIVE NOTES"]);
+    fixtures.notes = [
+      ...fixtures.notes,
+      note(
+        "note00000000004",
+        "Delta type",
+        design.id,
+        "2026-04-01 00:00:00.000Z",
+        "2026-04-01 00:00:00.000Z",
+      ),
+    ];
+    const refresh = screen.getByRole("button", { name: "Refresh" });
+    await waitFor(() => expect(refresh).toBeEnabled());
+    fireEvent.click(refresh);
+    await screen.findByRole("heading", { name: "Delta type" });
+    expect(bucketNames()).toEqual(["DESIGN", "NETWORK", "ARCHIVE NOTES"]);
+    expect(location.hash).toBe("#/memory?buckets=activity");
+  });
+
+  it("restores the filter and sorts from the address", async () => {
+    await openMemory(`#/memory?buckets=notes&sort=title&bucket=${bucket.id}`);
+    expect(
+      screen.getByRole("combobox", { name: "Filter by bucket" }),
+    ).toHaveValue(bucket.id);
+    expect(screen.getByRole("combobox", { name: "Sort notes" })).toHaveValue(
+      "title",
+    );
+    expect(screen.getByRole("combobox", { name: "Sort buckets" })).toHaveValue(
+      "notes",
+    );
+    expect(noteTitles()).toEqual(["Beta voice", "Gamma audience"]);
+    expect(filterButton("NETWORK")).toHaveAttribute("aria-pressed", "true");
+    // The address is rewritten in canonical order without a navigation.
+    expect(location.hash).toBe(
+      `#/memory?bucket=${bucket.id}&sort=title&buckets=notes`,
+    );
+  });
+
+  it.each([
+    ["an unknown bucket", "#/memory?bucket=missing00000001"],
+    ["a malformed bucket", "#/memory?bucket=x"],
+    ["unknown sorts", "#/memory?sort=size&buckets=color"],
+  ])("falls back to defaults for %s", async (_name, hash) => {
+    await openMemory(hash);
+    expect(
+      screen.getByRole("combobox", { name: "Filter by bucket" }),
+    ).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Sort notes" })).toHaveValue(
+      "updated",
+    );
+    expect(noteTitles()).toHaveLength(3);
+    await waitFor(() => expect(location.hash).toBe("#/memory"));
+  });
+
+  it("returns to the filtered page when a note closes, and keeps note links", async () => {
+    await openMemory(`#/memory?bucket=${bucket.id}&sort=title`);
+    fireEvent.click(screen.getByRole("button", { name: /Gamma audience/ }));
+    expect(location.hash).toBe("#/notes/note00000000003");
+    fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+    expect(location.hash).toBe(`#/memory?bucket=${bucket.id}&sort=title`);
+    expect(noteTitles()).toEqual(["Beta voice", "Gamma audience"]);
+    navigate("#/notes/note00000000002");
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(
+      dialog.getByRole("heading", { name: "Alpha palette" }),
+    ).toBeInTheDocument();
+  });
+
+  it("starts unfiltered from the sidebar link", async () => {
+    await openMemory(`#/memory?bucket=${bucket.id}`);
+    await openPage("AI Team");
+    await openPage("Shared memory");
+    expect(location.hash).toBe("#/memory");
+    expect(noteTitles()).toHaveLength(3);
   });
 });
