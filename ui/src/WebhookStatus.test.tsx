@@ -214,6 +214,9 @@ it("saves an edited or cleared bot display name as bot_name", async () => {
     ),
   );
   vi.mocked(crewApi.write).mockClear();
+  // The save reloads the settings; edits made while the form is disabled are dropped.
+  await screen.findByText("Bot mapping saved.");
+  await waitFor(() => expect(name).toBeEnabled());
   fireEvent.change(name, { target: { value: "" } });
   fireEvent.click(save);
   await waitFor(() =>
