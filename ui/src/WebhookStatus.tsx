@@ -543,7 +543,7 @@ export default function WebhookStatus({
   const setupPrompt = `Set up this existing Grok Bot as the Crew dispatcher, keeping its normal responsibilities. Use the existing shared Crew MCP connection; do not create another bot or connection.
 
 1. Read crew_read collection capabilities for current operation contracts, then read webhook_configs, agents and webhook_mappings. Use the advertised data._crew compatibility envelope if this client lacks top-level execution or idempotency fields. Stop if neither path is available.
-2. Reuse the selected dispatcher ${JSON.stringify(val(currentAgent, "name"))} (Crew agent ${JSON.stringify(val(currentAgent, "id"))}). Discover existing Grok Bots and save confirmed mappings, including readable names; ask only about ambiguous matches. Never guess identifiers or use a Crew agent ID as a native messaging address.
+2. Reuse the selected dispatcher ${JSON.stringify(val(currentAgent, "name"))} (Crew agent ${JSON.stringify(val(currentAgent, "id"))}). Discover existing Grok Bots and save confirmed mappings with each bot's display name as bot_name; ask only about ambiguous matches. Never guess identifiers or use a Crew agent ID as a native messaging address.
 3. The configured dispatch mode is ${parentBridge ? "parent_bridge: the webhook routine wakes this bot's parent conversation with WakeParent; the parent handles its own work or calls SendToAgent with priority:true for a teammate" : "native: dispatch directly inside the webhook routine using its native messaging tools"}. Apply Crew's current managed instruction block to the existing webhook routine, preserving the bot's role and reporting settings outside it. Read saved text back and report synchronization honestly.
 4. Inspect tools in their actual execution context. Do not claim native messaging inside a routine merely because the parent can send. Follow Crew's durable wake/send guards and report missing tools honestly. Never retry an ambiguous native call.
 5. Confirm that each recipient has the owner's direct authorization to use this Crew instance for its assigned work and explicit setup diagnostics. Report any missing authorization; do not claim that your message grants it.
@@ -839,9 +839,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                       <strong>{val(a, "name")}</strong>
                       <span>
                         →{" "}
-                        {m
-                          ? val(m, "bot_name") || "Connected Grok Bot"
-                          : "Not mapped"}
+                        {m ? mappingLabel(a, m) : "Not mapped"}
                       </span>
                     </li>
                   );
@@ -1249,10 +1247,15 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                   agent={a}
                   mapping={mappings.find((m) => m.agent === a.id)}
                   disabled={blocked}
-                  onSave={(ref, row) =>
+                  onSave={(ref, name, row) =>
                     mutate(
                       "webhook.mapping.update",
-                      { agent: a.id, bot_ref: ref },
+                      {
+                        agent: a.id,
+                        bot_ref: ref,
+                        // Omitted when untouched, so the saved name is kept.
+                        ...(name === undefined ? {} : { bot_name: name }),
+                      },
                       row,
                       "Bot mapping saved.",
                       row?.revision ?? 0,
@@ -1424,6 +1427,29 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
     </section>
   );
 }
+// Shortens an opaque bot reference for display; the full value stays in the field.
+export function shortBotRef(ref: string) {
+  return ref.length > 18 ? `${ref.slice(0, 8)}…${ref.slice(-6)}` : ref;
+}
+// The saved bot display name, or the Crew agent plus a shortened reference:
+// never placeholder text that reads like a name.
+export function mappingLabel(agent: Row, mapping?: Row) {
+  const name = val(mapping, "bot_name").trim();
+  if (name) return name;
+  const ref = val(mapping, "bot_ref");
+  return ref ? `${val(agent, "name")} bot (${shortBotRef(ref)})` : "";
+}
+// A newer saved value replaces the field only if the owner hasn't edited it.
+function useSavedField(saved: string) {
+  const [value, setValue] = useState(saved);
+  const lastSaved = useRef(saved);
+  useEffect(() => {
+    const previous = lastSaved.current;
+    lastSaved.current = saved;
+    setValue((current) => (current === previous ? saved : current));
+  }, [saved]);
+  return [value, setValue] as const;
+}
 function AgentMapping({
   agent,
   mapping,
@@ -1433,28 +1459,33 @@ function AgentMapping({
   agent: Row;
   mapping?: Row;
   disabled: boolean;
-  onSave: (value: string, mapping?: Row) => Promise<boolean>;
+  onSave: (
+    value: string,
+    name: string | undefined,
+    mapping?: Row,
+  ) => Promise<boolean>;
 }) {
   const saved = val(mapping, "bot_ref");
-  const [reference, setReference] = useState(saved);
-  const lastSaved = useRef(saved);
-  // A newer saved reference replaces the field only if the owner hasn't edited it.
-  useEffect(() => {
-    const previous = lastSaved.current;
-    lastSaved.current = saved;
-    setReference((value) => (value === previous ? saved : value));
-  }, [saved]);
+  const savedName = val(mapping, "bot_name");
+  const [reference, setReference] = useSavedField(saved);
+  const [name, setName] = useSavedField(savedName);
+  const nameChanged = name.trim() !== savedName;
+  const label = mappingLabel(agent, mapping);
   return (
     <form
       className="crew-webhook-card"
       aria-label={`${val(agent, "name")} routing`}
       onSubmit={(e) => {
         e.preventDefault();
-        void onSave(reference.trim(), mapping);
+        void onSave(
+          reference.trim(),
+          nameChanged ? name.trim() : undefined,
+          mapping,
+        );
       }}
     >
       <h4>{val(agent, "name")}</h4>
-      <p>{val(mapping, "bot_name") || "Grok Bot reference"}</p>
+      {label && <p>{label}</p>}
       <label className="crew-field">
         <span>Grok Bot reference for {val(agent, "name")}</span>
         <input
@@ -1464,8 +1495,20 @@ function AgentMapping({
           placeholder="Confirmed bot reference"
         />
       </label>
+      <label className="crew-field">
+        <span>Bot display name for {val(agent, "name")} (optional)</span>
+        <input
+          value={name}
+          maxLength={200}
+          disabled={disabled}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name shown in Grok"
+        />
+      </label>
       <button
-        disabled={disabled || reference.trim() === val(mapping, "bot_ref")}
+        disabled={
+          disabled || (reference.trim() === saved && !nameChanged)
+        }
       >
         Save {val(agent, "name")} mapping
       </button>

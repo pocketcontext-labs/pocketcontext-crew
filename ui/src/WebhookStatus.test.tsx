@@ -163,6 +163,76 @@ it("creates a recipient mapping with an explicit zero revision", async () => {
     ),
   );
 });
+it("never shows placeholder text as a bot name", async () => {
+  fixtures.webhook_mappings[0].bot_ref = "grok-bot-0123456789abcdef";
+  await open();
+  for (const placeholder of ["Grok Bot reference", "Connected Grok Bot"])
+    expect(screen.queryByText(placeholder)).toBeNull();
+  // Without bot_name, the Crew agent and a shortened reference stand in.
+  expect(
+    screen.getAllByText(/Build bot \(grok-bot…abcdef\)/).length,
+  ).toBeGreaterThanOrEqual(2);
+  const learn = screen.getByRole("form", { name: "Learn routing" });
+  expect(learn.querySelector("p")).toBeNull();
+});
+it("shows a saved bot display name and keeps it when only the reference changes", async () => {
+  fixtures.webhook_mappings[0].bot_name = "Builder Grok";
+  await open();
+  expect(screen.getAllByText(/Builder Grok/).length).toBeGreaterThanOrEqual(2);
+  const name = screen.getByLabelText("Bot display name for Build (optional)");
+  expect(name).toHaveValue("Builder Grok");
+  fireEvent.change(screen.getByLabelText("Grok Bot reference for Build"), {
+    target: { value: "Build bot 2" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save Build mapping" }));
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "webhook.mapping.update",
+      { agent: "build", bot_ref: "Build bot 2" },
+      fixtures.webhook_mappings[0],
+      "",
+      { idempotency_key: expect.any(String), expected_revision: 2 },
+    ),
+  );
+});
+it("saves an edited or cleared bot display name as bot_name", async () => {
+  fixtures.webhook_mappings[0].bot_name = "Builder Grok";
+  await open();
+  const name = screen.getByLabelText("Bot display name for Build (optional)");
+  const save = screen.getByRole("button", { name: "Save Build mapping" });
+  expect(save).toBeDisabled();
+  fireEvent.change(name, { target: { value: "  Builder  " } });
+  expect(save).toBeEnabled();
+  fireEvent.click(save);
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "webhook.mapping.update",
+      { agent: "build", bot_ref: "Build bot", bot_name: "Builder" },
+      fixtures.webhook_mappings[0],
+      "",
+      { idempotency_key: expect.any(String), expected_revision: 2 },
+    ),
+  );
+  vi.mocked(crewApi.write).mockClear();
+  fireEvent.change(name, { target: { value: "" } });
+  fireEvent.click(save);
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "webhook.mapping.update",
+      { agent: "build", bot_ref: "Build bot", bot_name: "" },
+      fixtures.webhook_mappings[0],
+      "",
+      { idempotency_key: expect.any(String), expected_revision: 2 },
+    ),
+  );
+});
+it("asks the setup assistant to save bot names as bot_name", async () => {
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "Read setup prompt" }));
+  const prompt = document.querySelector("pre.crew-copy-prompt")?.textContent;
+  expect(prompt).toContain("display name as bot_name");
+  expect(prompt).not.toContain("readable names");
+});
 it("blocks enable and tests when instruction changes have not been applied", async () => {
   config.applied_revision = 1;
   delete config.setup;

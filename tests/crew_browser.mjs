@@ -197,6 +197,19 @@ try {
  await integration.getByRole('button',{name:/Enable future notifications/}).click();
  assert.equal(await integration.getByRole('button',{name:'Enable delivery',exact:true}).isDisabled(),true);
  assert.equal(writeActions.includes('webhook.test'),false,'Setup controls unexpectedly sent a test');
+ // Bot mappings: no placeholder reads as a name; a display name is saved as bot_name.
+ await integration.getByText('Advanced settings and recovery',{exact:true}).click();
+ const learnMapping=integration.getByRole('form',{name:'Learn routing'});
+ await learnMapping.waitFor();
+ assert.equal(await integration.getByText(/^(Grok Bot reference|Connected Grok Bot)$/).count(),0,'no placeholder bot names');
+ await learnMapping.getByLabel('Grok Bot reference for Learn').fill('synthetic-learn-bot-reference-0001');
+ await learnMapping.getByLabel('Bot display name for Learn (optional)').fill('Synthetic Learn Grok');
+ const mappingWrite=page.waitForRequest(r=>r.url().endsWith('/api/crew/write')&&r.postDataJSON()?.action==='webhook.mapping.update');
+ await learnMapping.getByRole('button',{name:'Save Learn mapping'}).click();
+ assert.equal((await mappingWrite).postDataJSON().data.bot_name,'Synthetic Learn Grok');
+ await learnMapping.locator('p').filter({hasText:'Synthetic Learn Grok'}).waitFor();
+ await learnMapping.scrollIntoViewIfNeeded();
+ await snapView('crew-bot-mapping-card');
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:900});
   for(const name of ['Home','AI Team','Shared memory','Approvals','Agents','Archive']){

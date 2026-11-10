@@ -378,3 +378,22 @@ func TestWebhookAttemptStartSurvivesUnknownOutcome(t *testing.T) {
 		t.Fatal("unexpected attempt history phases")
 	}
 }
+
+func TestWebhookMappingBotNameKeptWhenOmitted(t *testing.T) {
+	a := newTestApp(t)
+	agent := webhookOperation(t, a, "agent.ensure", "", 0, map[string]any{"name": "Synthetic named agent"}, "ensure")
+	m := webhookOperation(t, a, "webhook.mapping.update", "", 0, map[string]any{"agent": agent["id"], "bot_ref": "synthetic-ref", "bot_name": "Synthetic Grok"}, "")
+	if m["bot_name"] != "Synthetic Grok" {
+		t.Fatal(m)
+	}
+	// Omitting bot_name keeps the saved name, even when the reference changes.
+	m = webhookOperation(t, a, "webhook.mapping.update", m["id"].(string), int(m["revision"].(float64)), map[string]any{"agent": agent["id"], "bot_ref": "synthetic-ref-2"}, "")
+	if m["bot_name"] != "Synthetic Grok" || m["bot_ref"] != "synthetic-ref-2" {
+		t.Fatal(m)
+	}
+	// An explicit empty string clears it.
+	m = webhookOperation(t, a, "webhook.mapping.update", m["id"].(string), int(m["revision"].(float64)), map[string]any{"agent": agent["id"], "bot_ref": "synthetic-ref-2", "bot_name": ""}, "")
+	if m["bot_name"] != "" || m["bot_ref"] != "synthetic-ref-2" {
+		t.Fatal(m)
+	}
+}
