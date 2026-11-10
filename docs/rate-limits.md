@@ -44,8 +44,8 @@ validation, batch transaction boundaries and publish behavior are unchanged.
 
 Crew operations keep their existing `expected_revision` conflict checks and
 immutable history. Generic REST/batch writes to Crew records remain forbidden;
-MCP continues using only the agent-write route for Crew mutations. Owner-only
-review decisions stay on the owner route. Rate-limit admission does not confer
+MCP continues using only the work-client (agent-write) route for Crew mutations;
+webhook credential entry stays on the reader route. Rate-limit admission does not confer
 any new authority. Ordinary Crew notes and tasks do not use a `run_key`.
 
 For inherited evidence staging, existing resume logic skips saved identities,

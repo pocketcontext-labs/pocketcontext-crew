@@ -53,15 +53,15 @@ func TestCrewMCPAuthorityBoundary(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if body["action"] == "review.decide" {
-			http.Error(w, "Owner action required", http.StatusForbidden)
+		if body["action"] == "webhook.credentials.update" {
+			http.Error(w, "Enter webhook credentials in the owner UI", http.StatusForbidden)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": "syntheticrecord", "action": body["action"]})
 	})
 	h := mcpTestHandler(api)
 	mcpCall(t, h, "synthetic", "crew_write", map[string]any{"action": "task.create", "reported_agent": "Network", "data": map[string]any{"title": "Synthetic"}}, false)
-	mcpCall(t, h, "synthetic", "crew_write", map[string]any{"action": "review.decide", "reported_agent": "owner", "data": map[string]any{"decision": "approved"}}, true)
+	mcpCall(t, h, "synthetic", "crew_write", map[string]any{"action": "webhook.credentials.update", "reported_agent": "owner", "data": map[string]any{"secret": "synthetic-never-save"}}, true)
 	if calls != 2 {
 		t.Fatalf("got %d API calls", calls)
 	}
@@ -70,7 +70,7 @@ func TestCrewMCPAuthorityBoundary(t *testing.T) {
 // This uses the real API and JS hooks. The MCP harness injects the ordinary
 // principal supplied by OAuth; bundle's OAuth suite separately checks exchange,
 // audience binding, revocation and conversion of external grants to that identity.
-func TestCrewMCPRealWorkflowAndApprovalBoundary(t *testing.T) {
+func TestCrewMCPRealWorkflowAndDelegatedApproval(t *testing.T) {
 	api, token := mcpRealAPI(t)
 	h := mcpTestHandler(api)
 	call := func(name string, args map[string]any) any { return mcpCall(t, h, token, name, args, false) }
@@ -154,8 +154,8 @@ func TestCrewMCPRealWorkflowAndApprovalBoundary(t *testing.T) {
 		t.Fatal("MCP archive defaults leaked/missed notes")
 	}
 	note = write("note.update", archived, map[string]any{"archived": false})
-	denied("crew_write", writeArgs("bucket.update", bucket, map[string]any{"archived": true}))
-	bucket = owner(writeArgs("bucket.update", bucket, map[string]any{"archived": true}))
+	// Work clients archive buckets like the reader; the skill rules say when.
+	bucket = write("bucket.update", bucket, map[string]any{"archived": true})
 	denied("crew_write", writeArgs("bucket.assign", bucket, map[string]any{"agent": dig(agent, "id")}))
 	if len(read("notes", nil)) != 0 {
 		t.Fatal("Archived ancestor leaked notes through MCP")
@@ -167,10 +167,9 @@ func TestCrewMCPRealWorkflowAndApprovalBoundary(t *testing.T) {
 	}
 	task := write("task.create", nil, map[string]any{"title": "Synthetic launch post", "draft": "Exact draft for review", "assigned_agent": dig(agent, "id")})
 	review := write("review.request", task, map[string]any{})
-	denied("crew_write", writeArgs("review.decide", review, map[string]any{"decision": "approved"}))
 	forged := writeArgs("review.decide", review, map[string]any{"decision": "approved"})
 	forged["reported_agent"] = "owner"
-	denied("crew_write", forged)
+	// Generic writes, batch and the reader route stay unreachable through MCP.
 	denied("create", map[string]any{"collection": "crew_reviews", "fields": map[string]any{"task": dig(task, "id"), "status": "approved"}})
 	denied("update", map[string]any{"collection": "crew_reviews", "id": dig(review, "id"), "fields": map[string]any{"status": "approved"}})
 	denied("batch", map[string]any{"requests": []any{map[string]any{"method": "PATCH", "url": "/api/collections/crew_reviews/records/" + dig(review, "id").(string), "body": map[string]any{"status": "approved"}}}})
@@ -180,9 +179,11 @@ func TestCrewMCPRealWorkflowAndApprovalBoundary(t *testing.T) {
 	if len(pending) != 1 || dig(pending[0], "status") != "pending" {
 		t.Fatal("MCP forged decision changed review")
 	}
-	approved := owner(writeArgs("review.decide", review, map[string]any{"decision": "approved"}))
-	if dig(approved, "draft") != "Exact draft for review" || dig(approved, "status") != "approved" {
-		t.Fatal("Owner did not approve exact snapshot")
+	// A decision the owner delegated is recorded through crew_write, attributed
+	// to the work-client route.
+	approved := write("review.decide", review, map[string]any{"decision": "approved"})
+	if dig(approved, "draft") != "Exact draft for review" || dig(approved, "status") != "approved" || !strings.HasPrefix(dig(approved, "decided_by").(string), "mcp:") {
+		t.Fatal("Delegated decision did not approve exact snapshot", approved)
 	}
 	currentTask := read("tasks", map[string]any{"id": dig(task, "id")})[0]
 	if dig(currentTask, "status") == "done" {
@@ -338,7 +339,7 @@ func TestCrewDiscoveryAndCachedEnvelopeCompatibility(t *testing.T) {
 	task := mcpCall(t, h, token, "crew_write", map[string]any{"action": "task.create", "reported_agent": "Synthetic", "data": map[string]any{"title": "Compatibility proof test"}}, false)
 	// Normalization cannot turn malformed/stale proof into an ordinary unfenced write.
 	mcpCall(t, h, token, "crew_write", map[string]any{"action": "task.comment", "reported_agent": "Synthetic", "id": dig(task, "id"), "expected_revision": dig(task, "revision"), "data": map[string]any{"body": "must not appear", "_crew": map[string]any{"idempotency_key": "invalid-proof", "execution": map[string]any{"id": "missingrecord00", "worker_id": "synthetic", "fence": 1}}}}, true)
-	// Owner-only operation remains owner-only through the compatible envelope.
+	// Credential entry, the sole reader-only operation, stays refused through the compatible envelope.
 	configs := dig(mcpCall(t, h, token, "crew_read", map[string]any{"collection": "webhook_configs"}, false), "items").([]any)
 	for _, c := range configs {
 		if dig(c, "scope") == "global" {

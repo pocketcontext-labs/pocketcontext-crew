@@ -21,6 +21,8 @@ import e2e
 import upgrades
 
 PREVIOUS = '0.8.0'
+# Migrations added by releases after PREVIOUS; nothing else may change the ledger.
+LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js'}
 
 
 def settled(operation, *args):
@@ -121,11 +123,14 @@ def rehearse(target, previous, root):
     config_after = json.loads((project / 'pocketcontext.json').read_text(encoding='utf-8'))
     assert config_after['instance'] == instance and config_after['port'] == port
     assert set(config_after) >= set(json.loads(config_before))
-    # No migration added by the identity change: same applied ledger.
+    # No migration added by the identity change: the ledger gains only the later
+    # releases' own migrations (0.12.0's managed instruction revision).
     def migrations(path):
         with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
-            return sorted(row[0] for row in db.execute('SELECT file FROM _migrations'))
-    assert migrations(project / 'pocketcontext.db') == migrations(backup / 'pocketcontext.db')
+            return set(row[0] for row in db.execute('SELECT file FROM _migrations'))
+    before_ledger, after_ledger = migrations(backup / 'pocketcontext.db'), migrations(project / 'pocketcontext.db')
+    assert before_ledger <= after_ledger, before_ledger - after_ledger
+    assert after_ledger - before_ledger == LATER_MIGRATIONS, after_ledger - before_ledger
 
     # Rollback: restore the complete backup and matching binary, then verify.
     settled(shutil.rmtree, project)

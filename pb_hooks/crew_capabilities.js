@@ -159,7 +159,7 @@ function document() {
   op("task.update", task, [], {
     revision: "record",
     execution_proof:
-      "Required for governed tasks, including before first acquisition. Owner explicit Waiting releases governance.",
+      "Required only while another execution is live on the task (lease or acknowledgment window not expired); supplied proof is always validated. Setting Waiting releases governance.",
   });
   op(
     "task.claim",
@@ -170,15 +170,17 @@ function document() {
   op("task.comment", { body: str }, ["body"], {
     revision: "record",
     execution_proof:
-      "Required for governed tasks; proof-bearing comments also require idempotency_key.",
+      "Required only while another execution is live on the task; proof-bearing comments also require idempotency_key.",
   });
   op("review.request", {}, [], {
     revision: "task",
-    execution_proof: "Required for governed tasks",
+    execution_proof:
+      "Required only while another execution is live on the task",
   });
   op("review.withdraw", {}, [], {
     revision: "review",
-    execution_proof: "Required for governed tasks",
+    execution_proof:
+      "Required only while another execution is live on the task",
   });
   op(
     "review.decide",
@@ -187,7 +189,13 @@ function document() {
       note: str,
     },
     ["decision"],
-    { revision: "review", owner: true },
+    {
+      revision: "review",
+      execution_proof:
+        "Required only while another execution is live on the task",
+      description:
+        "Records the owner's review decision. Work clients use it only when the owner explicitly delegates the decision. Approval never performs an external action.",
+    },
   );
   op(
     "webhook.integration.update",
@@ -296,9 +304,8 @@ function document() {
     [],
     {
       revision: "routing",
-      owner_only_fields: ["max_bot_handoffs"],
       description:
-        "Supply triage_agent, max_bot_handoffs or both. Only the owner browser may change max_bot_handoffs.",
+        "Supply triage_agent, max_bot_handoffs or both. Change max_bot_handoffs only when the owner asks.",
     },
   );
   op("execution.validate", event, ["event_id", "epoch", "generation"], {
@@ -382,7 +389,7 @@ function document() {
     "execution.recover",
     { resolution: { enum: ["cancel", "retry"] } },
     ["resolution"],
-    { revision: "execution", key: true, owner: true },
+    { revision: "execution", key: true },
   );
   const collections = {};
   for (const name of [
@@ -723,9 +730,9 @@ function document() {
     wake_reasons: require(`${__hooks}/crew_webhooks.js`).reasons.slice(),
     wake_rules: {
       comment:
-        "Opt-in. Only an owner browser comment wakes; shared-MCP comments never wake. During a live execution the wake is deferred until execution.complete; payloads carry comment_event_id, never comment text.",
+        "Opt-in. Loop prevention: only a reader (owner browser) comment wakes; work-client comments never wake. During a live execution the wake is deferred until execution.complete; payloads carry comment_event_id, never comment text.",
       bot_handoffs:
-        "Consecutive shared-MCP assignment changes; any owner task write resets it. Exceeding webhook_routing.max_bot_handoffs applies the write but sets Waiting without a wake; only the owner can set Ready again.",
+        "Consecutive work-client assignment changes; any reader task write resets it. Exceeding webhook_routing.max_bot_handoffs applies the write but sets Waiting without a wake. A work client may set Ready again (when the owner asks or the loop is broken), but that keeps the count, so the next work-client reassignment stops it again.",
     },
     setup_entry:
       "Read webhook_configs; follow the canonical managed routine instructions. Never request credentials through chat or MCP.",

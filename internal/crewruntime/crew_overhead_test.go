@@ -302,7 +302,7 @@ func TestWakePayloadCarriesProtocolAndDigest(t *testing.T) {
 func TestCompactManagedBlockKeepsRules(t *testing.T) {
 	a := newTestApp(t)
 	block := jsStringConstant(t, "../../pb_hooks/crew_setup.js", "DEFAULT_INSTRUCTIONS")
-	if migrated := jsStringConstant(t, "../../pb_migrations/1800800000_crew_retrieval_instructions.js", "canonical"); migrated != block {
+	if migrated := jsStringConstant(t, "../../pb_migrations/1800900000_crew_authorization_instructions.js", "canonical"); migrated != block {
 		t.Fatal("migration and setup blocks differ")
 	}
 	config, err := a.app.FindFirstRecordByFilter("crew_webhook_configs", "scope='global'")
@@ -328,8 +328,8 @@ func TestCompactManagedBlockKeepsRules(t *testing.T) {
 		"original dispatcher worker_id/fence", "never authorize work", `role:"recipient"`, "before any task mutation",
 		"task_context and proof", "Proof on task writes and review requests", "stable keys on fenced comments",
 		"Renew long work", "execution.complete", "mark_done:true with task_revision", "comment_event_id",
-		"Stop on stale, expired, duplicate or conflicting work", "Never repeat uncertain external effects",
-		"bypass human review", "acknowledgment loops", "not exactly-once",
+		"Stop on stale, expired, duplicate or conflicting work",
+		"Never decide reviews", "repeat uncertain external effects", "acknowledgment loops", "not exactly-once",
 		"Protocol steps never use crew_search/schema/query", "Read compactly (crew_search, fields, small limit)",
 	} {
 		if !strings.Contains(block, rule) {
@@ -343,7 +343,7 @@ func TestCompactManagedBlockKeepsRules(t *testing.T) {
 }
 
 func TestCompactInstructionMigrationPreservesBindingAndPauses(t *testing.T) {
-	for _, migration := range []string{"1800700000_crew_compact_instructions.js", "1800800000_crew_retrieval_instructions.js"} {
+	for _, migration := range []string{"1800700000_crew_compact_instructions.js", "1800800000_crew_retrieval_instructions.js", "1800900000_crew_authorization_instructions.js"} {
 		t.Run(migration, func(t *testing.T) { checkInstructionMigration(t, migration) })
 	}
 }

@@ -19,5 +19,6 @@ validated by custom operations rather than generic record writes. Every Crew
 record has revision and timestamps. Notes have immutable snapshots; events are
 append-only. Agents, buckets, notes and tasks archive without purging history.
 
-Responsibility does not enforce write isolation. Owner-only decisions, bucket
-archival and agent deactivation remain enforced. See [Crew contract](crew.md).
+Responsibility does not enforce write isolation. Work clients have the reader's
+operations except webhook credential entry; review decisions, archival and
+deactivation follow the owner's authorization rules. See [Crew contract](crew.md).

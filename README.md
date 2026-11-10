@@ -26,28 +26,31 @@ SQL; [Crew 0.7.1](docs/releases/0.7.1.md) fixed remote client invitations.
   own, request changes elsewhere through tasks. This is behavior, not isolation.
 - AI Team board: To do, In progress, Needs review, Done; assignments, labels,
   revision-checked claims, comments, drafts and append-only events.
-- Human review inbox with exact draft snapshots. Only the owner's ordinary login
-  can decide; the MCP connection cannot manufacture a decision. Draft edits
+- Human review inbox with exact draft snapshots. The owner reviews; an agent
+  records a decision only when the owner explicitly delegates it. Draft edits
   withdraw pending review. Approval never executes an external action or completes
   a task. The owner performs external actions and records completion separately.
-- Archive and restore, with history retained indefinitely. Bucket archival and
-  agent deactivation are owner operations. No purge endpoint.
+- Archive and restore, with history retained indefinitely. No purge endpoint.
 
-Agent names are reported attribution. A shared MCP connection cannot independently
-identify its bots. Never give MCP or hosted agents the owner's browser/CLI token:
-the human approval boundary is between owner credentials and the MCP OAuth
-connection. Installs without a domain are the exception below.
+Work clients (MCP `crew_write` and the CLI `write` command) have the same
+operations as the owner's reader, except webhook URL and secret entry, which
+stay in the owner browser. Authorization for the rest is a set of owner-editable
+default rules in the skill and MCP instructions (for example: decide reviews
+only on explicit delegation); attribution (`actor`, `reported_agent`) is kept
+for audit and never used to block. Agent names are reported attribution, not
+identity. Never give MCP or hosted agents the owner's browser token; installs
+without a domain are the exception below.
 
 ## Connect and use
 
 Without a domain, run Crew on your own computer: the binary is both the localhost
 server and the CLI your coding agent calls through the installed skill (`skill`).
 The commands `read`, `search`, `schema`, `query` and `write` take the MCP tools'
-JSON and call the same routes, `write` only the agent route; other computers
+JSON and call the same routes, `write` only the work-client route; other computers
 join through `tunnel serve` and `tunnel invite`. CLI agents there act with owner
-authority (local key or a paired computer's saved session), so the human-review
-boundary is enforced only for OAuth MCP clients, and cloud assistants cannot
-reach such an install. See [local use](docs/local.md).
+authority (local key or a paired computer's saved session), so even webhook
+credential entry is kept from them only by the skill's rules, and cloud
+assistants cannot reach such an install. See [local use](docs/local.md).
 
 With a domain, sign in with the native owner password/sign-in link, or the configured owner email
 for a hosted container. Connect
@@ -56,7 +59,7 @@ signed-in browser. The Crew tools are `crew_read` (filtered, projected reads),
 `crew_search` (ranked full-text search over notes and tasks), `crew_schema` and
 `crew_query` (bounded read-only SQL for reporting) and `crew_write`; their
 schemas describe collections, operations and revision requirements. The browser
-provides the same work and memory operations plus owner-only decisions.
+provides the same operations plus webhook credential entry.
 
 Create the optional five-agent starter setup in the UI, or create agents and
 buckets yourself. Each agent should read its brief and bucket, track work in a

@@ -667,17 +667,11 @@ function handle(app, b, actor, isAgent) {
   const d = b.data || {};
   if (b.action.startsWith("webhook.bridge."))
     return require(`${__hooks}/crew_bridge.js`).handle(app, b, actor);
-  // Check authorization before idempotency replay, so an owner result cannot be
-  // replayed through MCP and credentials can never enter the agent API.
+  // The sole work-client exception. Check it before idempotency replay, so a
+  // reader result cannot be replayed through MCP and credentials can never
+  // enter the work-client API.
   if (b.action === "webhook.credentials.update" && isAgent)
     throw new ForbiddenError("Enter webhook credentials in the owner UI");
-  // The bot handoff limit stops agent loops, so agents cannot raise it.
-  if (
-    b.action === "webhook.routing.update" &&
-    isAgent &&
-    d.max_bot_handoffs !== undefined
-  )
-    throw new ForbiddenError("Only the owner can change the bot handoff limit");
   if (["webhook.create", "webhook.update"].includes(b.action))
     bad(
       "Use the global integration; legacy per-agent configuration is retired",

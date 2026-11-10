@@ -149,10 +149,8 @@ function invalidateStale(app, task, b, actor) {
     }
   }
 }
-function handle(app, b, actor, isAgent) {
+function handle(app, b, actor) {
   const d = b.data || {};
-  if (b.action === "execution.recover" && isAgent)
-    throw new ForbiddenError("Execution recovery requires the owner");
   // Validation is a fresh read, never a cached idempotency result.
   if (b.action === "execution.validate") {
     only(d, ["event_id", "epoch", "generation"]);
@@ -385,8 +383,6 @@ function handle(app, b, actor, isAgent) {
       }
       if (b.action === "execution.recover") {
         only(d, ["resolution"]);
-        if (isAgent)
-          throw new ForbiddenError("Execution recovery requires the owner");
         if (!["cancel", "retry"].includes(d.resolution))
           bad("resolution must be cancel or retry");
         if (
@@ -519,23 +515,6 @@ function handle(app, b, actor, isAgent) {
     );
   return result;
 }
-// A done task with nothing running may be archived without proof. b.data is
-// already free of the _crew envelope. The marker stays: unarchiving needs the owner.
-function archivesDoneTask(task, b, active) {
-  const d = b.data;
-  return (
-    b.action === "task.update" &&
-    !b.execution &&
-    !!d &&
-    typeof d === "object" &&
-    Object.keys(d).length === 1 &&
-    d.archived === true &&
-    task.getString("status") === "done" &&
-    !task.getBool("archived") &&
-    !task.getBool("handoff_limited") &&
-    !active.length
-  );
-}
 // Refusals carry only code and message through PocketBase, so the holder is in
 // the message. Never name fences or worker ids here.
 function holderSummary(r) {
@@ -559,44 +538,37 @@ function holderSummary(r) {
     ")"
   );
 }
-function executionRequiredMessage(active) {
-  const base = "This task is governed by webhook execution. ";
-  if (!active.length)
-    return (
-      base +
-      "No execution is active. Begin its current event and supply execution proof; otherwise the owner can set Waiting to release the task or archive it directly"
-    );
+function executionRequiredMessage(live) {
   return (
-    base +
-    "Active: " +
-    active.map(holderSummary).join("; ") +
-    ". Begin its current event and supply execution proof, or ask the owner to mark it Waiting to release it"
+    "This task has a live webhook execution: " +
+    live.map(holderSummary).join("; ") +
+    ". Supply its execution proof, wait for it to end, or recover it"
   );
 }
-// Called in the same transaction as task writes. Owner edits remain authoritative.
+// A live execution holds its lease, or for handed_off its acknowledgment window.
+function isLive(r) {
+  const out = exported(r);
+  return !out.waiting_overdue && !out.lease_expired;
+}
+// Called in the same transaction as task writes. Reader writes remain
+// authoritative. A work client needs execution proof only while an execution
+// is live on the task, so a stale worker cannot write during another live run.
+// Supplied proof is always validated, never ignored.
 function guardTaskWrite(app, task, b, isAgent) {
   if (!isAgent) return;
   invalidateStale(app, task, b, "system:execution-reconcile");
-  const active = rows(
-    app,
-    "task={:task} && (state='dispatching' || state='handed_off' || state='running')",
-    { task: task.id },
-  );
-  if (
-    !active.length &&
-    !b.execution &&
-    task.getInt("execution_required_generation") === 0
-  )
-    return;
-  if (archivesDoneTask(task, b, active)) return;
   const p = b.execution;
-  if ((!p || typeof p !== "object") && task.getBool("handoff_limited"))
-    fail(
-      "The bot handoff limit stopped this task; only the owner can review it and set Ready",
-      "handoff_limited",
-    );
-  if (!p || typeof p !== "object")
-    fail(executionRequiredMessage(active), "execution_required");
+  if (!p) {
+    const live = rows(
+      app,
+      "task={:task} && (state='dispatching' || state='handed_off' || state='running')",
+      { task: task.id },
+    ).filter(isLive);
+    if (live.length) fail(executionRequiredMessage(live), "execution_required");
+    return;
+  }
+  if (typeof p !== "object" || Array.isArray(p))
+    bad("execution must be an object");
   only(p, ["id", "worker_id", "fence"]);
   const r = wh.get(app, "webhook_executions", p.id);
   if (r.getString("task") !== task.id || r.getString("state") !== "running")

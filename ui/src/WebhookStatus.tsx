@@ -460,7 +460,7 @@ export default function WebhookStatus({
         recipient_ack_missing:
           "The recipient has not acknowledged the test. Check its Grok conversation and prior authorization; do not resend an uncertain message.",
         execution_required:
-          "This task requires its current execution authority. The recipient must use execution.begin and the fenced task protocol.",
+          "Another execution is live on this task. The recipient must use execution.begin and the fenced task protocol, or wait for the live run to end.",
         test_ack_missing:
           "Send the safe connection test and wait for its acknowledgment.",
       };
@@ -1386,8 +1386,9 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 </HelpField>
                 <p className="crew-footnote">
                   Consecutive agent reassignments allowed before Crew stops the
-                  task as Waiting without a wake. Any owner edit or comment
-                  resets the count; only you can set a stopped task Ready.
+                  task as Waiting without a wake. Any edit or comment from you
+                  resets the count. An agent setting it Ready keeps the count,
+                  so the next agent reassignment stops it again.
                 </p>
                 <button
                   disabled={

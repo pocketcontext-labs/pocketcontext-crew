@@ -156,7 +156,7 @@ const glossaryEntries = {
     question: "What is the handoff limit?",
     what: "How many times in a row agents can reassign a task before Crew stops it. A stopped task becomes Waiting and no agent is woken.",
     action:
-      "The default is 4 and you can set 1 to 20. Any edit or comment from you resets the count, and only you can set a stopped task back to Ready.",
+      "The default is 4 and you can set 1 to 20. Any edit or comment from you resets the count. An agent may set a stopped task Ready if you ask, but that keeps the count, so the next agent reassignment stops it again.",
   },
   bucket: {
     name: "Bucket",

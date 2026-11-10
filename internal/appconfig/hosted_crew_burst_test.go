@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -102,11 +103,12 @@ func TestHostedCrewBurstAndAuthority(t *testing.T) {
 	review := call("/api/crew/agent-write", args, 200)
 	args = operation("review.decide", map[string]any{"decision": "approved"})
 	args["id"], args["expected_revision"], args["reported_agent"] = review["id"], review["revision"], "owner"
-	call("/api/crew/agent-write", args, 403)
-	approved := call("/api/crew/write", args, 200)
-	if approved["status"] != "approved" || approved["draft"] != "Revised synthetic draft" {
-		t.Fatalf("owner decision: %v", approved)
+	// Work clients may record a decision the owner delegated; the actor shows the route.
+	approved := call("/api/crew/agent-write", args, 200)
+	if approved["status"] != "approved" || approved["draft"] != "Revised synthetic draft" || !strings.HasPrefix(approved["decided_by"].(string), "mcp:") {
+		t.Fatalf("delegated decision: %v", approved)
 	}
+	call("/api/crew/write", args, 409)
 	for _, path := range []string{"/api/crew/read", "/api/crew/agent-write", "/api/crew/write"} {
 		if w := request(public, path, map[string]any{}, ""); w.Code != 401 {
 			t.Fatalf("anonymous %s: %d", path, w.Code)

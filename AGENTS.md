@@ -10,15 +10,21 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   metadata, never credentials. Buckets are not security boundaries.
 - All Crew mutations use revision-checked custom operations. Generic REST/batch
   writes remain disabled. History is immutable. Archive, never purge.
-- MCP and the CLI work commands use only the agent-write route. Shared MCP may configure and activate
-  the global HTTPS dispatcher integration through the revision-checked Crew operations. This
-  narrow exception does not expose owner decisions, local keys, general host
-  administration, shell, arbitrary host paths or network fetching through MCP.
-  Webhook URL/credentials are owner-browser-only and never returned by MCP; agents manage non-secret instructions and mappings. Agent names remain reported attribution.
+- MCP and the CLI work commands use only the work-client route
+  (`/api/crew/agent-write`). It accepts every reader (`/api/crew/write`)
+  operation except `webhook.credentials.update`: webhook URL/credentials are
+  owner-browser-only and never returned by reads. Keep that 403 before
+  idempotency replay and keep `/api/crew/write` off the MCP proxy allowlist.
+  Authorization for everything else is owner-editable default rules in the skill
+  and MCP instructions; attribution (`actor`, `reported_agent`) is audit only,
+  never a gate. No per-bot tokens or policy engine. Loop prevention stays on the
+  route split: work-client comments never wake, work-client reassignments count
+  toward max_bot_handoffs, reader writes reset it. MCP exposes no local keys,
+  general host administration, shell, arbitrary host paths or network fetching.
 - Owner tokens must not be shared with MCP or hosted agents. Scoped exception: on
   installs without a domain, CLI agents act with owner authority (local key on
-  the host, saved session token on tunnel-paired computers); the human-review
-  boundary is enforced only for OAuth MCP clients. Docs and skill say so plainly.
+  the host, saved session token on tunnel-paired computers); only the skill keeps
+  them off the reader route and webhook credentials. Docs and skill say so plainly.
   Reported names are not identity. No local MCP or unauthenticated endpoints.
 - External platforms run agents. Crew never posts, sends or pays.
 - Keep runtime credentials and OAuth state private and out of Git and knowledge.

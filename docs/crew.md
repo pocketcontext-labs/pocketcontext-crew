@@ -95,18 +95,37 @@ and multiple statements are rejected. Limits: 2 seconds, 1000 rows and 1 MiB per
 result, 64 KiB of SQL. Prefer crew_read filters and crew_search for ordinary
 lookups; use SQL for counts, joins, aggregates and history.
 
-`POST /api/crew/write` is the owner path. MCP and the CLI `write` command only
-forward to `POST /api/crew/agent-write`, which denies decisions, bucket archival
-and agent deactivation. All use the same transaction and revision checks.
-MCP OAuth credentials cannot authenticate ordinary REST; internal owner-account
-tokens are never returned by MCP. Direct owner credentials carry owner authority
-and must not be shared with MCP or hosted agents; installs without a domain are
-the exception described below. Claimed agent names never grant authority.
+## Reader writes and work-client writes
+
+`POST /api/crew/write` carries reader writes (the owner browser). MCP and the
+CLI `write` command only forward to `POST /api/crew/agent-write`, the work-client
+route. Both accept the same operations with the same transaction and revision
+checks, except `webhook.credentials.update`: webhook URL and secret entry stays
+reader-only, and reads never return them. The routes otherwise differ only in
+loop accounting and audit: work-client comments never wake (so bots cannot
+ping-pong), work-client reassignments count toward `max_bot_handoffs` while
+reader task writes reset the count, and events record an `owner:` or `mcp:`
+actor plus the unverified `reported_agent`.
+
+Authorization for everything else is a set of owner-editable default rules in the
+skill and MCP instructions, not a server gate: decide reviews only on explicit
+owner delegation; change `max_bot_handoffs`, archive or restore buckets, and
+deactivate or reactivate agents only when the owner asks; recover executions,
+set Waiting or set a hop-limited task Ready when the owner asks or work is stuck
+and the owner would otherwise do it in the reader. Attribution is kept for audit
+and never used to block. History is append-only, so every such write remains
+auditable through `actor` and `reported_agent`.
+
+MCP OAuth credentials cannot authenticate ordinary REST, and the MCP proxy never
+reaches the reader route; internal owner-account tokens are never returned by
+MCP. Direct owner credentials carry owner authority and must not be shared with
+MCP or hosted agents; installs without a domain are the exception described
+below. Claimed agent names never grant authority.
 
 ## Command-line work commands
 
 The binary's `read`, `search`, `schema`, `query` and `write` commands are the
-agent path for installs without a domain (see [local use](local.md)). They take
+work-client path for installs without a domain (see [local use](local.md)). They take
 the MCP tool's input as one JSON object (argument, or `-` for standard input),
 validate it against the same schema before any request, and share the MCP
 request builders:
@@ -121,27 +140,27 @@ request builders:
 
 They run locally with `--db` (the local key; the server starts if needed) or on
 a tunnel-paired computer with `--url` (its saved session token). `write` never
-uses the owner route, so CLI writes behave like MCP agent writes: events record
-an `mcp:` actor, comments never wake, reassignments count toward
-`max_bot_handoffs`, and owner decisions, bucket archival, agent deactivation and
-credential entry are refused (HTTP 403, exit 1). On these installs CLI agents
-act with owner authority, because the credential they use is the owner's; the
-human-review boundary is enforced only for OAuth MCP clients. Output is JSON on
-stdout. Invalid input exits 2; HTTP 409 exits 4, and the last stderr line
+uses the reader route, so CLI writes behave like MCP writes: events record an
+`mcp:` actor, comments never wake, reassignments count toward
+`max_bot_handoffs`, and credential entry is refused (HTTP 403, exit 1). On these
+installs CLI agents act with owner authority, because the credential they use is
+the owner's: a raw HTTP call to the reader route could even enter webhook
+credentials, which the skill forbids. Output is JSON on stdout. Invalid input exits 2; HTTP 409 exits 4, and the last stderr line
 distinguishes a revision conflict (reread, reassess, retry) from a refusal with
-a reason code such as `execution_required` or `handoff_limited` (do not retry
-unchanged). There is no local MCP endpoint and no unauthenticated route.
+a reason code such as `execution_required` (do not retry unchanged). There is no local MCP endpoint and no unauthenticated route.
 
 Writes have action, optional id/expected_revision/reported_agent/reason, and data.
 Actions: agent.create/update; bucket.create/update/assign; note.create/update/restore;
-task.create/update/claim/comment; review.request/decide/withdraw. A restore names
+task.create/update/claim/comment; review.request/decide/withdraw; plus the
+webhook and execution operations in the [webhook guide](webhooks.md). A restore names
 revision_id and creates a new note revision. Claim requires an unassigned task.
 Comments preserve task revision; append-only events record them. Link arrays hold
 note IDs. Human is reserved as a derived pending-review label, not editable data.
 
 Creating a review snapshots the task draft and moves it to needs_review. Editing
-the draft or archiving the task withdraws its pending reviews atomically. Owner
-decision requires a still-pending request and matching current draft. It moves
+the draft or archiving the task withdraws its pending reviews atomically. A
+decision (by the owner, or by a work client the owner explicitly delegated)
+requires a still-pending request and matching current draft. It moves
 the task to in_progress, never done. Closed decisions cannot be rewritten. New
 content requires a new review; historical approval never transfers to a new draft.
 
@@ -160,9 +179,10 @@ messages, publish posts or perform payments.
 Crew integration tests exercise authenticated read/write, compact read filters
 and projections, ranked search freshness and archive semantics, SQL allowlists
 (each excluded secret column is rejected), mutation rejection and limits, immutable history,
-conflicts and concurrent claims, archive ancestry, review invalidation, owner-only
-decisions, generic REST/batch rejection and restart persistence. MCP tests cover
-transport allowlists and the agent path. `CREW_READ_BENCH=1 go test ./internal/crewruntime
+conflicts and concurrent claims, archive ancestry, review invalidation, delegated
+decisions on the work-client route, reader-only credential entry, generic
+REST/batch rejection and restart persistence. MCP tests cover transport
+allowlists and the work-client route. `CREW_READ_BENCH=1 go test ./internal/crewruntime
 -run TestCrewRetrievalBenchmark -v` (with the usual CGO and build tags) seeds a
 synthetic 500-note, 300-task project and compares response bytes and call counts
 of full pages with compact reads, search and SQL, checking identical answers. Hosted image gates additionally rehearse
@@ -187,16 +207,19 @@ id/name or null. The optional filter accepts an ID or unique exact name.
 Tasks expose readiness (waiting by default), waiting_reason and server-managed
 wake_generation. Ready work, assignment, review and invalidation changes share a
 transaction with durable outbox records. Shared MCP manages the global dispatcher, bot mappings and non-secret instructions
-through revision-checked operations; URL and secret entry is owner-browser-only; this does not expose owner decisions or
+through revision-checked operations; URL and secret entry is owner-browser-only; this does not expose
 general host administration. Read [webhooks](webhooks.md) for the operation and
 receiver contracts, idempotency, destination versions and restore epochs.
 
-Owner browser comments can wake an eligible task's assignee when the integration
-opts into the `comment` reason; shared-MCP comments never wake. A comment during
-live execution is deferred until `execution.complete`. Consecutive shared-MCP
-reassignments are counted per task; exceeding the owner-set
-`max_bot_handoffs` (default 4) applies the write but stops the task as Waiting
-without a wake until the owner sets it Ready.
+Reader (owner browser) comments can wake an eligible task's assignee when the
+integration opts into the `comment` reason; work-client comments never wake.
+This is loop prevention, not a privilege. A comment during live execution is
+deferred until `execution.complete`. Consecutive work-client reassignments are
+counted per task; exceeding `max_bot_handoffs` (default 4) applies the write but
+stops the task as Waiting without a wake. Any reader task write resets the count.
+A work client may set the stopped task Ready (when the owner asks, or after
+breaking and reporting the loop), but that keeps the count, so the next
+work-client reassignment stops it again.
 
 ## Capability discovery and cached tool schemas
 
@@ -207,8 +230,9 @@ without bypassing checks or exposing owner credentials. Wake runs read the compa
 execution subset (`id: "execution"`) and can skip it when they already hold the
 payload's `capabilities_digest`. Conflicting top-level
 and nested metadata is refused. `execution.begin` atomically validates/acquires
-work. Governed tasks require proof even before an execution exists; explicit owner
-Waiting releases governance. Read the webhook guide for the full lifecycle.
+work. Work-client task writes need execution proof only while another execution
+is live on the task (its lease or acknowledgment window has not expired);
+supplied proof is always validated. Setting Waiting releases governance. Read the webhook guide for the full lifecycle.
 
 ## Parent bridge coordination
 

@@ -41,4 +41,6 @@ Update with note.update, id, expected_revision and only intended changed fields.
 Read note_revisions with parent set to the note ID before note.restore.
 
 Request review with review.request, the task ID/current revision and empty data.
-Never manufacture an owner decision through reported_agent; `write` refuses it.
+Record a decision only when the owner explicitly delegated it in this conversation:
+`CREW write '{"action":"review.decide","id":"REVIEW_ID","expected_revision":1,"reported_agent":"Build","reason":"Owner reviewed and asked me to record approval","data":{"decision":"approved"}}'`.
+Keep reported_agent your own name; never pose as the owner or another agent.

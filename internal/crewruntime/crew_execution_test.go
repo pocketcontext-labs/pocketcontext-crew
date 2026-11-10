@@ -61,11 +61,11 @@ func TestExecutionExpiredLeaseRequiresRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	executionOperation(t, a, "execution.acquire", "", 0, data, "expired", false, 409)
-	executionOperation(t, a, "execution.recover", stored.Id, stored.GetInt("revision"), map[string]any{"resolution": "retry"}, "forbidden-recovery", false, 403)
-	recovered := executionOperation(t, a, "execution.recover", stored.Id, stored.GetInt("revision"), map[string]any{"resolution": "retry"}, "recovery", true, 200)
-	executionOperation(t, a, "execution.recover", stored.Id, stored.GetInt("revision"), map[string]any{"resolution": "retry"}, "recovery", false, 403)
-	if recovered["state"] != "handed_off" {
-		t.Fatal(recovered)
+	// Work clients may recover, like the reader; a replay returns the stored result.
+	recovered := executionOperation(t, a, "execution.recover", stored.Id, stored.GetInt("revision"), map[string]any{"resolution": "retry"}, "recovery", false, 200)
+	replayed := executionOperation(t, a, "execution.recover", stored.Id, stored.GetInt("revision"), map[string]any{"resolution": "retry"}, "recovery", true, 200)
+	if recovered["state"] != "handed_off" || replayed["revision"] != recovered["revision"] {
+		t.Fatal(recovered, replayed)
 	}
 	data["worker_id"] = "worker-two"
 	next := executionOperation(t, a, "execution.acquire", "", 0, data, "second", false, 200)
@@ -126,6 +126,14 @@ func TestExecutionReviewTransitionInvalidatesAndReopens(t *testing.T) {
 	if prior.GetString("state") != "invalidated" {
 		t.Fatal("review left execution locked")
 	}
+	// With nothing live, the requester can still comment without proof; its
+	// invalidated proof is refused, and so is completing that execution.
+	current, _ := a.app.FindRecordById("crew_tasks", task.Id)
+	raw, _ = json.Marshal(map[string]any{"action": "task.comment", "id": task.Id, "expected_revision": current.GetInt("revision"), "data": map[string]any{"body": "Synthetic note after review request"}})
+	a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
+	raw, _ = json.Marshal(map[string]any{"action": "task.comment", "id": task.Id, "expected_revision": current.GetInt("revision"), "idempotency_key": "stale-proof-comment", "data": map[string]any{"body": "Synthetic stale proof"}, "execution": proof})
+	a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 409)
+	executionOperation(t, a, "execution.complete", prior.Id, prior.GetInt("revision"), map[string]any{"worker_id": "worker", "fence": run["fence"], "outcome": "completed"}, "complete-after-review", false, 409)
 	raw, _ = json.Marshal(map[string]any{"action": "review.decide", "id": review["id"], "expected_revision": review["revision"], "data": map[string]any{"decision": "approved"}})
 	a.request(t, "POST", "/api/crew/write", a.token, string(raw), 200)
 	events, err := a.app.FindRecordsByFilter("crew_webhook_deliveries", "task={:task}", "-created", 10, 0, map[string]any{"task": task.Id})
@@ -139,7 +147,7 @@ func TestExecutionReviewTransitionInvalidatesAndReopens(t *testing.T) {
 	executionOperation(t, a, "execution.acquire", "", 0, data, "after-review", false, 200)
 }
 
-func TestExecutionGovernanceBeforeAcquireAndOwnerRelease(t *testing.T) {
+func TestExecutionGovernanceFencesOnlyLiveExecutions(t *testing.T) {
 	a, _, task, event := webhookFixture(t)
 	if task.GetInt("execution_required_generation") != task.GetInt("wake_generation") {
 		t.Fatal("wake did not establish governance")
@@ -148,28 +156,27 @@ func TestExecutionGovernanceBeforeAcquireAndOwnerRelease(t *testing.T) {
 		current, _ := a.app.FindRecordById("crew_tasks", task.Id)
 		return executionOperation(t, a, action, task.Id, current.GetInt("revision"), data, "", false, status)
 	}
-	write("task.comment", map[string]any{"body": "must not bypass acquire"}, 409)
-	write("task.update", map[string]any{"status": "done"}, 409)
-	write("review.request", map[string]any{}, 409)
-	plain := executionOperation(t, a, "task.create", "", 0, map[string]any{"title": "Ordinary ungoverned task"}, "", false, 200)
-	executionOperation(t, a, "task.comment", plain["id"].(string), int(plain["revision"].(float64)), map[string]any{"body": "ordinary MCP work still works"}, "", false, 200)
+	// Nothing is live before acquisition, so a governed task accepts work-client writes.
+	write("task.comment", map[string]any{"body": "Synthetic comment before acquire"}, 200)
 	begin := map[string]any{"event_id": event.GetString("event_id"), "epoch": event.GetString("epoch"), "generation": event.GetInt("generation"), "role": "dispatcher", "worker_id": "self-worker"}
 	run := executionOperation(t, a, "execution.begin", "", 0, begin, "begin-self", false, 200)
 	if run["state"] != "running" || run["next_step"] != "self_work" || run["acquired_at"] == "" || run["task"] != task.Id {
 		t.Fatal("begin did not atomically start self work", run)
 	}
+	// A live execution fences other writers.
+	write("task.comment", map[string]any{"body": "must not bypass the live run"}, 409)
+	write("task.update", map[string]any{"status": "done"}, 409)
+	write("review.request", map[string]any{}, 409)
 	proof := map[string]any{"id": run["id"], "worker_id": "self-worker", "fence": run["fence"]}
-	raw, _ := json.Marshal(map[string]any{"action": "task.update", "id": task.Id, "expected_revision": task.GetInt("revision"), "data": map[string]any{"readiness": "waiting"}, "execution": proof})
+	current, _ := a.app.FindRecordById("crew_tasks", task.Id)
+	raw, _ := json.Marshal(map[string]any{"action": "task.update", "id": task.Id, "expected_revision": current.GetInt("revision"), "data": map[string]any{"readiness": "waiting"}, "execution": proof})
 	a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
-	// A worker cannot invalidate its own generation and then omit proof.
-	write("task.comment", map[string]any{"body": "stale fallback"}, 409)
+	// Waiting from a work client releases governance and ends the run.
 	saved, _ := a.app.FindRecordById("crew_tasks", task.Id)
-	executionOperation(t, a, "task.update", task.Id, saved.GetInt("revision"), map[string]any{"readiness": "waiting"}, "", true, 200)
-	saved, _ = a.app.FindRecordById("crew_tasks", task.Id)
 	if saved.GetInt("execution_required_generation") != 0 {
-		t.Fatal("explicit owner waiting did not release governance")
+		t.Fatal("work-client Waiting did not release governance")
 	}
-	write("task.comment", map[string]any{"body": "owner released ordinary work"}, 200)
+	write("task.comment", map[string]any{"body": "released ordinary work"}, 200)
 }
 
 func TestExecutionBeginRequiresRuntimeHandoffAndWaitDeadline(t *testing.T) {
@@ -224,7 +231,8 @@ func TestExecutionReassignmentFencesOldWorkerAndNewGenerationBeforeAcquire(t *te
 	executionOperation(t, a, "execution.begin", "", 0, begin, "old-event", false, 409)
 	raw, _ := json.Marshal(map[string]any{"action": "task.comment", "id": task.Id, "expected_revision": updated["revision"], "data": map[string]any{"body": "old worker"}, "execution": run["execution"]})
 	a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 409)
-	executionOperation(t, a, "task.comment", task.Id, int(updated["revision"].(float64)), map[string]any{"body": "new worker without acquire"}, "", false, 409)
+	// The new generation has no live execution yet, so an unproved write applies.
+	executionOperation(t, a, "task.comment", task.Id, int(updated["revision"].(float64)), map[string]any{"body": "new worker without acquire"}, "", false, 200)
 	latest, err := a.app.FindFirstRecordByFilter("crew_webhook_deliveries", "task={:task} && generation={:generation}", map[string]any{"task": task.Id, "generation": updated["wake_generation"]})
 	if err != nil {
 		t.Fatal(err)

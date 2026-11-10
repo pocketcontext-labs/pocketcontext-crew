@@ -56,12 +56,11 @@ JSON|- takes one object as an argument or from standard input):
   search JSON|-        ranked full-text search over notes and tasks (crew_search)
   schema               read-only SQL views and limits (crew_schema)
   query JSON|-         one bounded read-only SQL statement (crew_query)
-  write JSON|-         revision-checked agent writes and review requests
-                       (crew_write); owner decisions, bucket archival and
-                       agent deactivation are refused
+  write JSON|-         revision-checked work-client writes (crew_write): the
+                       reader's operations except webhook credential entry
   They work locally (--db) and through a paired computer (--url). Without a
-  domain they act with the owner's sign-in; the agent route still applies.
-  Use the reader for owner decisions. All Crew records are instance-wide.
+  domain they act with the owner's sign-in. Follow the owner's authorization
+  rules in the skill. All Crew records are instance-wide.
 
 Tunnel (carry the server's port to another computer):
   tunnel serve [--new-address]
@@ -106,9 +105,9 @@ Remote client (the server runs on another computer, reached through
 Run ` + "`pocketcontext-crew help COMMAND`" + ` or ` + "`pocketcontext-crew COMMAND --help`" + ` for usage, details and an example.
 Options for every command: --db PATH or --url URL, --pretty.
 --url and --db exclude each other; --db overrides POCKETCONTEXT_URL.
-Exit codes: 0 ok, 1 HTTP or transport error (including 403 owner-only refusals
+Exit codes: 0 ok, 1 HTTP or transport error (including the 403 credential refusal
 and 429 rate limits, which name the seconds to wait), 2 usage or invalid input,
 3 check differences, 4 HTTP 409: either a revision conflict (reread, reassess,
-retry) or a Crew refusal with a reason code such as handoff_limited (do not
+retry) or a Crew refusal with a reason code such as execution_required (do not
 retry unchanged); the last stderr line says which.
 `

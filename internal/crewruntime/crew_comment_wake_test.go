@@ -228,11 +228,14 @@ func TestBotHandoffLimitStopsLoopWithoutWake(t *testing.T) {
 	if routing.GetInt("max_bot_handoffs") != 4 {
 		t.Fatal("default limit", routing.GetInt("max_bot_handoffs"))
 	}
-	// The limit is owner-only; triage remains available to shared MCP.
-	agentWrite(t, a, "webhook.routing.update", routing.Id, routing.GetInt("revision"), map[string]any{"max_bot_handoffs": 20}, 403)
-	raw, _ := json.Marshal(map[string]any{"action": "webhook.routing.update", "id": routing.Id, "expected_revision": routing.GetInt("revision"), "data": map[string]any{"max_bot_handoffs": 0}})
+	// Work clients and the reader can both change the limit.
+	if agentWrite(t, a, "webhook.routing.update", routing.Id, routing.GetInt("revision"), map[string]any{"max_bot_handoffs": 20}, 200)["max_bot_handoffs"] != float64(20) {
+		t.Fatal("work client could not set limit")
+	}
+	agentWrite(t, a, "webhook.routing.update", routing.Id, routing.GetInt("revision")+1, map[string]any{"max_bot_handoffs": 0}, 400)
+	raw, _ := json.Marshal(map[string]any{"action": "webhook.routing.update", "id": routing.Id, "expected_revision": routing.GetInt("revision") + 1, "data": map[string]any{"max_bot_handoffs": 0}})
 	a.request(t, "POST", "/api/crew/write", a.token, string(raw), 400)
-	raw, _ = json.Marshal(map[string]any{"action": "webhook.routing.update", "id": routing.Id, "expected_revision": routing.GetInt("revision"), "data": map[string]any{"max_bot_handoffs": 2}})
+	raw, _ = json.Marshal(map[string]any{"action": "webhook.routing.update", "id": routing.Id, "expected_revision": routing.GetInt("revision") + 1, "data": map[string]any{"max_bot_handoffs": 2}})
 	if a.request(t, "POST", "/api/crew/write", a.token, string(raw), 200)["max_bot_handoffs"] != float64(2) {
 		t.Fatal("owner could not set limit")
 	}
@@ -272,20 +275,26 @@ func TestBotHandoffLimitStopsLoopWithoutWake(t *testing.T) {
 	if err != nil || len(events) != 1 || events[0].GetString("reason") != "hop_limit" {
 		t.Fatal("hop limit audit missing", err, len(events))
 	}
-	// Agents cannot release the stop; the owner can.
-	agentWrite(t, a, "task.update", id, rev(), map[string]any{"readiness": "ready"}, 403)
-	// A governed stopped task names the handoff limit instead of generic governance advice.
-	governed := apiWebhookRecord(t, a, "tasks", id)
-	governed.Set("execution_required_generation", governed.GetInt("wake_generation"))
-	if err := a.app.Save(governed); err != nil {
-		t.Fatal(err)
+	// A work client may set the stopped task Ready, but the counter and marker
+	// stay, so the next work-client reassignment stops it again.
+	agentReady := agentWrite(t, a, "task.update", id, rev(), map[string]any{"readiness": "ready"}, 200)
+	if agentReady["readiness"] != "ready" || agentReady["handoff_limited"] != true || agentReady["bot_handoffs"] != float64(3) {
+		t.Fatal("agent Ready reset the hop accounting", agentReady)
 	}
-	refused := agentWrite(t, a, "task.comment", id, rev(), map[string]any{"body": "retry"}, 409)
-	if reason, _ := refused["data"].(map[string]any)["reason"].(map[string]any); reason["code"] != "handoff_limited" {
-		t.Fatal("stopped governed task lacks handoff_limited refusal", refused)
+	if len(apiWebhookDeliveries(t, a, id)) != before+1 {
+		t.Fatal("agent Ready did not wake the assignee")
 	}
-	released := webhookOperation(t, a, "task.update", id, rev(), map[string]any{"readiness": "ready"}, "")
-	if released["bot_handoffs"] != float64(0) || released["handoff_limited"] != false || len(apiWebhookDeliveries(t, a, id)) != before+1 {
+	// The assignee's execution is now live; release it so the next agent
+	// write is not fenced.
+	agentWrite(t, a, "task.update", id, rev(), map[string]any{"readiness": "waiting"}, 200)
+	restopped := agentWrite(t, a, "task.update", id, rev(), map[string]any{"assigned_agent": b, "readiness": "ready"}, 200)
+	if restopped["readiness"] != "waiting" || restopped["handoff_limited"] != true || restopped["bot_handoffs"] != float64(4) {
+		t.Fatal("next reassignment after agent Ready did not stop again", restopped)
+	}
+	// An agent comment on the stopped task applies silently.
+	agentWrite(t, a, "task.comment", id, rev(), map[string]any{"body": "Synthetic agent note"}, 200)
+	released := webhookOperation(t, a, "task.update", id, rev(), map[string]any{"assigned_agent": dispatcher, "readiness": "ready"}, "")
+	if released["bot_handoffs"] != float64(0) || released["handoff_limited"] != false || len(apiWebhookDeliveries(t, a, id)) != before+2 {
 		t.Fatal("owner release did not reset and wake", released)
 	}
 }
@@ -298,9 +307,20 @@ func TestCapabilitiesDescribeCommentWakeAndHandoffLimit(t *testing.T) {
 	if !strings.Contains(string(reasons), `"comment"`) {
 		t.Fatal("comment reason not discoverable", string(reasons))
 	}
-	op := doc["operations"].(map[string]any)["webhook.routing.update"].(map[string]any)
-	if owner, _ := json.Marshal(op["owner_only_fields"]); string(owner) != `["max_bot_handoffs"]` {
-		t.Fatal("limit not owner-only in capabilities", string(owner))
+	ops := doc["operations"].(map[string]any)
+	op := ops["webhook.routing.update"].(map[string]any)
+	if _, ok := op["owner_only_fields"]; ok || op["authority"] != "shared_mcp" {
+		t.Fatal("limit still owner-only in capabilities", op)
+	}
+	// Work clients share every operation except credential entry.
+	for name, raw := range ops {
+		want := "shared_mcp"
+		if name == "webhook.credentials.update" {
+			want = "owner_browser"
+		}
+		if authority := raw.(map[string]any)["authority"]; authority != want {
+			t.Errorf("%s authority %v, want %s", name, authority, want)
+		}
 	}
 }
 

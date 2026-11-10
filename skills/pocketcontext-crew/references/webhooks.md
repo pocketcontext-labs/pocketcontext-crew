@@ -202,8 +202,8 @@ current configuration. Measured with `go test -run TestWakeProtocolOverhead -v`
 | parent_bridge self_work | 9 / 129,462                   | 6 / 15,548            | 4 / 4,656   |
 | parent_bridge handoff   | 14 / 195,122                  | 9 / 23,776            | 6 / 7,438   |
 
-The managed block shrank from 6,659 to 3,986 bytes including the retrieval rules
-below; in this synthetic test full capabilities are about 52 KB and the execution
+The managed block shrank from 6,659 to 3,981 bytes including the retrieval and
+authorization rules below; in this synthetic test full capabilities are about 52 KB and the execution
 subset about 5.4 KB. Live parent-bridge measurements are in the
 Crew 0.7.0 release notes.
 
@@ -240,7 +240,7 @@ Rule mapping from the protocol 3 block to the compact block:
 | Disabled delivery, stale generation or changed assignment never authorize work                | TASK DISPATCH last sentence                                                |
 | Recipient begins before any mutation; uses task_context and proof                             | TASK RECIPIENT sentence 1                                                  |
 | Proof on writes/reviews; stable keys on fenced comments; renew; complete with mark_done       | TASK RECIPIENT sentences 2–4                                               |
-| Stop on stale/expired/duplicate/conflict; no repeated effects, review bypass or ack loops     | TASK RECIPIENT closing sentences                                           |
+| Stop on stale/expired/duplicate/conflict; no review decisions, repeated effects or ack loops  | TASK RECIPIENT closing sentences                                           |
 | Transport, parent receipt, acquisition, completion are separate; no exactly-once              | TASK RECIPIENT final sentence                                              |
 
 `TestCompactManagedBlockKeepsRules` fails if any of these phrases disappears.
@@ -252,6 +252,13 @@ results), and task work reads compactly with `crew_search`, `fields` and a small
 `limit` instead of listing whole collections at full size. Live parent-bridge runs
 before this rule showed one unprompted 9 KB schema read in a wake run and one
 102 KB full listing during task work.
+
+The 0.12.0 instruction revision replaces "bypass human review" with "Never decide
+reviews". Work clients may now call `review.decide` when the owner delegates a
+decision in a conversation; a wake run has no such conversation, so the managed
+block says plainly that it never decides reviews. The protocol is unchanged, but
+like every instruction revision it pauses delivery until the dispatcher re-syncs
+the managed block and passes setup again.
 
 Changing instructions pauses delivery and invalidates prior setup evidence.
 Any integration or credential update, including a subscription-only change such as
@@ -292,30 +299,24 @@ an active recipient, a mapping and an enabled subscribed integration can emit a
 wake. The task and outbox record commit atomically. A persisted governance marker
 is set at enqueue, before any worker acquires the event.
 
-MCP task mutations and review requests for governed tasks require a valid running
-execution proof even when no execution record exists yet. Governance persists
-after completion, invalidation and lease expiry; apart from the archive exception
-below, omitting proof does not restore ordinary access. The owner can explicitly set
-Waiting to release a task from coordination. Owner edits remain authoritative.
-Non-governed tasks retain ordinary revision-checked MCP behavior. These rules
-coordinate the shared principal, not independently authenticated bots.
-
-An agent may archive a finished governed task without proof. The write must be a
-`task.update` whose data is exactly `{"archived": true}` with no `execution`, on a
-`done`, unarchived task that is not stopped by the bot handoff limit and has no
-execution in `dispatching`, `handed_off` or `running` once stale executions have been
-invalidated. The revision check and normal audit event still apply. The task stays
-governed: an agent cannot unarchive it, and only the owner can restore it. Crew
-cannot verify that the owner asked for the archive, so any agent can archive a done
-governed task. Everything else on a governed task still needs proof or the owner,
-including Waiting, archiving tasks that are not done, and any archive combined with
-other fields.
+Work-client task writes (`task.update`, `task.claim`, `task.comment`,
+`review.request`, `review.withdraw`, `review.decide`) need execution proof only
+while a live execution holds the task: `dispatching` or `running` with an unexpired
+lease, or `handed_off` before its acknowledgment deadline. Stale executions are
+invalidated first. Without a live execution the write applies without proof, even
+on a governed task whose `execution_required_generation` is still set, so a worker
+whose run ended (for example after its own `review.request`, which invalidates
+the execution) can still comment, edit, archive or restore the task. Supplied
+proof is always validated, never ignored: obsolete or mismatched proof is refused
+with `execution_conflict`. Setting Waiting releases governance for any caller.
+Reader writes remain authoritative and never need proof. These rules keep a stale
+worker from writing during someone else's live run; they coordinate the shared
+principal, not independently authenticated bots.
 
 A refusal keeps the reason code `execution_required`, and its message names each
-active execution (id, event, state, `lease_until` or `handoff_deadline_at`, and
-whether it is live). When none is active, the message says so and that the owner can
-set Waiting to release the task or archive it directly. Fences and worker ids are
-never included.
+live execution (id, event, state, `lease_until` or `handoff_deadline_at`). Supply
+its proof, wait for it to end, or recover it. Fences and worker ids are never
+included.
 
 An agent can record work it has already started: an agent `task.create` that is
 Ready, `in_progress` and assigned to the agent named by its own `reported_agent`
@@ -350,16 +351,16 @@ pong. Complete through `execution.complete`; `mark_done:true` plus task_revision
 commits task completion and execution outcome together. Review/Waiting/reassignment
 changes invalidate previous authority; later eligible work uses a new generation.
 
-## Owner comment wakes
+## Reader comment wakes
 
 Wake reasons are `created`, `assigned`, `reassigned`, `unassigned`, `ready`,
 `reopened`, `review_outcome`, `catch_up` and `comment`. `comment` is opt-in: no
 existing or default configuration subscribes to it, and upgrades never add it.
 Enable it under Advanced settings or with `webhook.integration.update`.
 
-Only a comment written through the authenticated owner browser session (actor
-`owner:`) can wake. Comments through shared MCP (`mcp:`) never wake anyone,
-because MCP agent names are unverified; this prevents bot comment ping-pong. The
+Only a comment written through the reader route (the owner browser, actor
+`owner:`) can wake. Work-client comments (MCP or CLI, actor `mcp:`) never wake
+anyone. This is loop prevention, not a privilege: it stops bot comment ping-pong. The
 task must also be eligible exactly as for other wakes: Ready, todo/in_progress,
 no pending review, an active routed recipient with a mapping and an enabled
 integration subscribed to `comment`. Otherwise the comment is only recorded.
@@ -377,10 +378,10 @@ integration subscribed to `comment`. Otherwise the comment is only recorded.
 - An expired lease never fires the marker by itself, because expiry is a recovery
   condition, not proof that work stopped. The pending marker is visible on the
   task card. An owner comment after expiry counts as no live execution and wakes
-  immediately; the new generation fences the old worker. Owner
+  immediately; the new generation fences the old worker.
   `execution.recover` with `cancel` drops the marker (comment again or set
   Waiting then Ready to authorize new work); `retry` keeps it for the recovered
-  execution. Owner Waiting clears it.
+  execution. Waiting clears it.
 
 Comment wakes never change the task revision. The payload carries
 `reason: "comment"` and `comment_event_id` (the `events` record), never the
@@ -388,20 +389,25 @@ comment text; read the event through Crew after revalidating the wake.
 
 ## Bot handoff limit
 
-Each task counts consecutive assignment changes made through shared MCP in
-`bot_handoffs`: every change of `assigned_agent`, including to or from empty, by
-`task.update`, `task.claim` or an assigned `task.create`. Any owner write to the
-task (update, comment, review request, decision or withdrawal) resets it to 0.
+Each task counts consecutive assignment changes made through the work-client
+route in `bot_handoffs`: every change of `assigned_agent`, including to or from
+empty, by `task.update`, `task.claim` or an assigned `task.create`. Any reader
+write to the task (update, comment, review request, decision or withdrawal)
+resets it to 0.
 
-`webhook_routing.max_bot_handoffs` (default 4, range 1–20) sets the limit. Only
-the owner browser can change it: `webhook.routing.update` remains available to
-shared MCP for `triage_agent`, but a `max_bot_handoffs` field from MCP is refused.
-When an MCP assignment change would exceed the limit, the write still applies,
-but the task becomes Waiting in the same transaction with a waiting reason,
-`handoff_limited: true` and a `task.hop_limit` event with reason `hop_limit`. No
-wake is emitted and current execution authority is invalidated as for any
-Waiting transition. Shared MCP cannot set the stopped task Ready; the owner
-reviews it and sets Ready, which resets the count.
+`webhook_routing.max_bot_handoffs` (default 4, range 1–20) sets the limit. Any
+caller can change it with `webhook.routing.update`; the default authorization
+rules tell agents not to unless the owner asks. When a work-client assignment
+change would exceed the limit, the write still applies, but the task becomes
+Waiting in the same transaction with a waiting reason, `handoff_limited: true`
+and a `task.hop_limit` event with reason `hop_limit`. No wake is emitted and
+current execution authority is invalidated as for any Waiting transition.
+
+A work client may set the stopped task Ready (the rules allow it when the owner
+asks, or after the agent has clearly broken the loop and reported it). That wakes
+the assignee but keeps `bot_handoffs` and `handoff_limited`, so the next
+work-client reassignment stops the task again. This is intended: only a reader
+write resets the count.
 
 ## Operation reference
 
@@ -409,8 +415,8 @@ Read capabilities for the current machine-readable schemas. All mutations are
 revision checked; stable idempotency keys are required for execution mutations,
 proof-bearing comments, agent.ensure and webhook.test/catch_up. Replaying an
 acquisition does not extend its lease. Fresh execution.validate never caches
-eligibility. Owner-only operations remain unavailable through the compatibility
-metadata path.
+eligibility. Webhook credential entry, the sole reader-only operation, remains
+unavailable through the compatibility metadata path.
 
 | Action                     | Main fields                                                                                                                           |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -427,13 +433,13 @@ metadata path.
 | webhook.bridge.ack         | bridge id/revision; recipient_agent_id, automatic:true; automatic diagnostic recipient observation                                    |
 | webhook.retry              | failed delivery id/revision, config_revision; no stale event replay                                                                   |
 | webhook.catch_up           | config id/revision, tasks [{id,expected_revision}], at most 100; explicit request only                                                |
-| webhook.routing.update     | routing revision; triage_agent ID/null and/or owner-only max_bot_handoffs 1–20                                                        |
+| webhook.routing.update     | routing revision; triage_agent ID/null and/or max_bot_handoffs 1–20 (change only when the owner asks)                                 |
 | execution.begin            | event_id, epoch, generation, worker_id, role dispatcher/recipient; actual native_handoff capability; optional lease_seconds 30–900    |
 | execution.test_ack         | event_id, epoch; no task work                                                                                                         |
 | execution.renew            | execution id/revision; worker_id, fence; optional lease_seconds                                                                       |
 | execution.dispatched       | execution id/revision; original dispatcher worker_id/fence, sent:true, optional message_ref                                           |
 | execution.complete         | execution id/revision; worker_id/fence, completed/failed outcome; optional mark_done/task_revision                                    |
-| execution.recover          | owner-only; execution id/revision; cancel/retry after reconciling uncertain effects                                                   |
+| execution.recover          | execution id/revision; cancel/retry after reconciling uncertain effects; when the owner asks or work is stuck                         |
 
 The lower-level validate/acquire/start/handoff operations remain available for
 compatibility, subject to the same governance, capability and fencing rules.
@@ -472,7 +478,7 @@ results are redacted too. Sender HTTPS checks block private/reserved destination
 DNS rebinding and redirects. Delivery retries are bounded; acceptance is not
 completion or a promise of eventual success.
 
-The protocol 3 upgrade and the later compact-instruction and retrieval-instruction upgrades retain mappings,
+The protocol 3 upgrade and the later compact-instruction, retrieval-instruction and authorization-instruction upgrades retain mappings,
 dispatcher, dispatch mode, credentials, old instructions and histories, install
 the new managed block as a new instruction revision and pause delivery. Existing
 configurations retain native mode until explicitly switched to parent_bridge. It sends no tests or backlog.

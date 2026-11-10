@@ -504,7 +504,7 @@ it("does not require a recipient acknowledgment for a dispatcher-only bridge tes
   expect(screen.getByRole("button", { name: "Enable delivery" })).toBeEnabled();
   expect(screen.queryByText(/Native send:/)).not.toBeInTheDocument();
 });
-it("offers opt-in owner comment wakes and saves an owner-only handoff limit", async () => {
+it("offers opt-in owner comment wakes and saves the handoff limit", async () => {
   const routing: Row = {
     id: "routing",
     revision: 7,

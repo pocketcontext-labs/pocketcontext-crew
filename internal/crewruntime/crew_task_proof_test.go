@@ -99,9 +99,9 @@ func TestAgentArchivesDoneGovernedTask(t *testing.T) {
 	}
 }
 
-// The _crew envelope is removed before the guard, so it neither adds a key nor
-// lets a request claim the exemption while carrying proof.
-func TestArchiveExemptionEnvelopeHandling(t *testing.T) {
+// Supplied proof is always validated, even when no proof would be needed: the
+// _crew envelope is removed before the guard and its proof is checked the same way.
+func TestSuppliedProofIsAlwaysValidated(t *testing.T) {
 	a, _, task, event := webhookFixture(t)
 	run := beginSelf(t, a, event, "synthetic-envelope")
 	done := doneGoverned(t, a, task.Id)
@@ -113,49 +113,39 @@ func TestArchiveExemptionEnvelopeHandling(t *testing.T) {
 		out, _ := json.Marshal(b)
 		return string(out)
 	}
-	// Proof makes the write an ordinary proof-checked one, even if it is obsolete.
+	// The done task invalidated the execution, so its proof is obsolete.
 	body := a.request(t, "POST", "/api/crew/agent-write", a.token, raw(map[string]any{"archived": true, "_crew": map[string]any{"execution": run["execution"]}}, nil), 409)
 	assertRefusal(t, body, "execution_conflict")
 	body = a.request(t, "POST", "/api/crew/agent-write", a.token, raw(map[string]any{"archived": true}, map[string]any{"execution": run["execution"]}), 409)
 	assertRefusal(t, body, "execution_conflict")
+	a.request(t, "POST", "/api/crew/agent-write", a.token, raw(map[string]any{"archived": true}, map[string]any{"execution": "synthetic-not-proof"}), 400)
 	// Unknown envelope keys are refused before the guard.
 	a.request(t, "POST", "/api/crew/agent-write", a.token, raw(map[string]any{"archived": true, "_crew": map[string]any{"owner": true}}, nil), 400)
-	// Other data alongside the envelope still counts as extra fields.
-	body = a.request(t, "POST", "/api/crew/agent-write", a.token, raw(map[string]any{"archived": true, "description": "x", "_crew": map[string]any{"idempotency_key": "synthetic-extra"}}, nil), 409)
-	assertRefusal(t, body, "execution_required")
 	if archiveRecord(t, a, task.Id).GetBool("archived") {
 		t.Fatal("a refused write archived the task")
 	}
-	// An idempotency key alone adds no field.
-	a.request(t, "POST", "/api/crew/agent-write", a.token, raw(map[string]any{"archived": true, "_crew": map[string]any{"idempotency_key": "synthetic-only"}}, nil), 200)
+	// Without proof and without a live execution the write applies.
+	a.request(t, "POST", "/api/crew/agent-write", a.token, raw(map[string]any{"archived": true, "description": "x", "_crew": map[string]any{"idempotency_key": "synthetic-only"}}, nil), 200)
 	if !archiveRecord(t, a, task.Id).GetBool("archived") {
-		t.Fatal("envelope key defeated the exemption")
+		t.Fatal("unproved write without a live execution was refused")
 	}
 }
 
-func TestArchiveExemptionRefusals(t *testing.T) {
+// execution_required_generation no longer blocks work clients by itself; only a
+// live execution does.
+func TestAgentWritesGovernedTaskWithoutLiveExecution(t *testing.T) {
 	t.Run("extra fields", func(t *testing.T) {
 		a, _, task, _ := webhookFixture(t)
 		doneGoverned(t, a, task.Id)
-		assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"archived": true, "description": "Synthetic extra"}, 409), "execution_required")
+		archiveWrite(t, a, task.Id, map[string]any{"archived": true, "description": "Synthetic extra"}, 200)
 	})
-	t.Run("archived not true", func(t *testing.T) {
-		a, _, task, _ := webhookFixture(t)
-		doneGoverned(t, a, task.Id)
-		assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"archived": "true"}, 409), "execution_required")
-	})
-	t.Run("agent cannot restore", func(t *testing.T) {
+	t.Run("agent restores", func(t *testing.T) {
 		a, _, task, _ := webhookFixture(t)
 		doneGoverned(t, a, task.Id)
 		archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 200)
-		assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"archived": false}, 409), "execution_required")
-		assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 409), "execution_required")
-		if !archiveRecord(t, a, task.Id).GetBool("archived") {
-			t.Fatal("agent restored the task")
-		}
-		selfStartWrite(t, a, "task.update", task.Id, archiveRecord(t, a, task.Id).GetInt("revision"), map[string]any{"archived": false}, "", true, 200)
+		archiveWrite(t, a, task.Id, map[string]any{"archived": false}, 200)
 		if archiveRecord(t, a, task.Id).GetBool("archived") {
-			t.Fatal("owner could not restore the task")
+			t.Fatal("agent could not restore the task")
 		}
 	})
 	for _, status := range []string{"todo", "in_progress"} {
@@ -168,14 +158,19 @@ func TestArchiveExemptionRefusals(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 409), "execution_required")
+			if archiveRecord(t, a, task.Id).GetInt("execution_required_generation") == 0 {
+				t.Fatal("fixture task is not governed")
+			}
+			archiveWrite(t, a, task.Id, map[string]any{"description": "Synthetic unfenced update"}, 200)
+			archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 200)
 		})
 	}
-	t.Run("agent waiting", func(t *testing.T) {
+	t.Run("agent waiting releases governance", func(t *testing.T) {
 		a, _, task, _ := webhookFixture(t)
-		assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"readiness": "waiting"}, 409), "execution_required")
-		doneGoverned(t, a, task.Id)
-		assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"readiness": "waiting"}, 409), "execution_required")
+		archiveWrite(t, a, task.Id, map[string]any{"readiness": "waiting"}, 200)
+		if got := archiveRecord(t, a, task.Id).GetInt("execution_required_generation"); got != 0 {
+			t.Fatal("agent Waiting did not release governance", got)
+		}
 	})
 	t.Run("handoff limited", func(t *testing.T) {
 		a, _, task, _ := webhookFixture(t)
@@ -184,7 +179,7 @@ func TestArchiveExemptionRefusals(t *testing.T) {
 		if err := a.app.Save(done); err != nil {
 			t.Fatal(err)
 		}
-		assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 409), "handoff_limited")
+		archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 200)
 	})
 	t.Run("revision conflict", func(t *testing.T) {
 		a, _, task, _ := webhookFixture(t)
@@ -194,6 +189,31 @@ func TestArchiveExemptionRefusals(t *testing.T) {
 			t.Fatal("stale revision archived the task")
 		}
 	})
+}
+
+// A live execution still fences other writers: without proof the write is
+// refused, wrong proof is refused, and the holder's own proof succeeds.
+func TestLiveExecutionRequiresProof(t *testing.T) {
+	a, _, task, event := webhookFixture(t)
+	run := beginSelf(t, a, event, "synthetic-live")
+	assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"description": "Synthetic stale writer"}, 409), "execution_required")
+	for _, action := range []string{"task.comment", "review.request"} {
+		data := map[string]any{}
+		if action == "task.comment" {
+			data["body"] = "Synthetic stale comment"
+		}
+		body := selfStartWrite(t, a, action, task.Id, archiveRecord(t, a, task.Id).GetInt("revision"), data, archiveAgent, false, 409)
+		assertRefusal(t, body, "execution_required")
+	}
+	proof, _ := run["execution"].(map[string]any)
+	wrong := map[string]any{"id": proof["id"], "worker_id": proof["worker_id"], "fence": proof["fence"].(float64) + 1}
+	b, _ := json.Marshal(map[string]any{"action": "task.update", "id": task.Id, "expected_revision": archiveRecord(t, a, task.Id).GetInt("revision"), "reported_agent": archiveAgent, "data": map[string]any{"description": "Synthetic wrong fence"}, "execution": wrong})
+	assertRefusal(t, a.request(t, "POST", "/api/crew/agent-write", a.token, string(b), 409), "execution_conflict")
+	b, _ = json.Marshal(map[string]any{"action": "task.update", "id": task.Id, "expected_revision": archiveRecord(t, a, task.Id).GetInt("revision"), "reported_agent": archiveAgent, "data": map[string]any{"description": "Synthetic fenced"}, "execution": proof})
+	a.request(t, "POST", "/api/crew/agent-write", a.token, string(b), 200)
+	if archiveRecord(t, a, task.Id).GetString("description") != "Synthetic fenced" {
+		t.Fatal("holder proof did not apply")
+	}
 }
 
 func TestArchiveExemptionOwnerUnchanged(t *testing.T) {
@@ -263,7 +283,7 @@ func TestExecutionRequiredNamesHolder(t *testing.T) {
 		execution, _ := a.app.FindRecordById("crew_webhook_executions", run["id"].(string))
 		body := archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 409)
 		message := assertRefusal(t, body, "execution_required")
-		for _, want := range []string{execution.Id, event.GetString("event_id"), "state running", "lease_until " + execution.GetString("lease_until"), ", live)"} {
+		for _, want := range []string{"Supply its execution proof", execution.Id, event.GetString("event_id"), "state running", "lease_until " + execution.GetString("lease_until"), ", live)"} {
 			if !strings.Contains(message, want) {
 				t.Fatal("holder detail missing", want, message)
 			}
@@ -299,19 +319,12 @@ func TestExecutionRequiredNamesHolder(t *testing.T) {
 		if err := a.app.Save(stored); err != nil {
 			t.Fatal(err)
 		}
-		message := assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 409), "execution_required")
-		if !strings.Contains(message, ", not live)") {
-			t.Fatal("expired lease reported as live", message)
-		}
+		// An expired lease no longer fences other writers.
+		archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 200)
 	})
 	t.Run("none", func(t *testing.T) {
 		a, _, task, _ := webhookFixture(t)
-		message := assertRefusal(t, archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 409), "execution_required")
-		for _, want := range []string{"No execution is active", "set Waiting", "archive it directly"} {
-			if !strings.Contains(message, want) {
-				t.Fatal("no-holder guidance missing", want, message)
-			}
-		}
+		archiveWrite(t, a, task.Id, map[string]any{"archived": true}, 200)
 	})
 }
 

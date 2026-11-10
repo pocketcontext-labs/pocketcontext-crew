@@ -190,8 +190,8 @@ def main():
                 status, result = request(source_port, "/mcp", {"jsonrpc": "2.0", "id": 12, "method": "tools/call", "params": {"name": name, "arguments": arguments}}, old_mcp["access_token"])
                 assert status == 200, "authenticated Crew MCP call"
                 return result["result"]
-            denied = crew_tool("crew_write", {"action": "review.decide", "id": review_row["id"], "expected_revision": 1, "reported_agent": "owner", "data": {"decision": "approved"}})
-            assert denied.get("isError"), "OAuth agent cannot approve"
+            denied = crew_tool("crew_write", {"action": "webhook.credentials.update", "id": "abcdefghijklmno", "expected_revision": 1, "reported_agent": "Synthetic", "data": {"secret": "synthetic-never-save"}})
+            assert denied.get("isError"), "OAuth agent cannot enter webhook credentials"
             read = crew_tool("crew_read", {"collection": "notes"})
             assert not read.get("isError") and "Durable synthetic decision" in json.dumps(read), "OAuth agent reads Crew"
             crew_write("review.decide", {"decision": "approved", "note": "Synthetic owner review"}, review_row)

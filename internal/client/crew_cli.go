@@ -1,9 +1,9 @@
 package client
 
 // The CLI work commands call the same Crew routes as the MCP tools, with the
-// same input shapes and request builders. Writes use only the agent route, so
-// the server refuses owner decisions, bucket archival and agent deactivation
-// for CLI agents exactly as it does for MCP.
+// same input shapes and request builders. Writes use only the work-client
+// route, so CLI agents get exactly the MCP operations: every reader operation
+// except webhook credential entry, silent comments and counted handoffs.
 import (
 	"bytes"
 	"encoding/json"

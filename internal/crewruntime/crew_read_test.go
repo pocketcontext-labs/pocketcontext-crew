@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// crewOp performs an owner write; the owner route also covers owner-only archival.
+// crewOp performs a reader write through /api/crew/write.
 func crewOp(t *testing.T, a *testApp, action string, record map[string]any, data map[string]any) map[string]any {
 	t.Helper()
 	b := map[string]any{"action": action, "data": data, "reported_agent": "synthetic-test"}

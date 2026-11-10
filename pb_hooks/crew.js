@@ -61,7 +61,7 @@ function event(app, r, action, b, actor, changes) {
   app.save(ev);
   return ev;
 }
-// Any owner write to a task ends a run of consecutive shared-MCP handoffs.
+// Any reader write to a task ends a run of consecutive work-client handoffs.
 function ownerTouch(t) {
   t.set("bot_handoffs", 0);
   t.set("handoff_limited", false);
@@ -450,7 +450,7 @@ function write(e, isAgent) {
   let result;
   e.app.runInTransaction((app) => {
     if (b.action.startsWith("execution.")) {
-      result = execution.handle(app, b, actor, isAgent);
+      result = execution.handle(app, b, actor);
       return;
     }
     if (b.action === "agent.ensure" || b.action.startsWith("webhook.")) {
@@ -487,12 +487,6 @@ function write(e, isAgent) {
       const oldTask =
         kind === "task" && op !== "create" ? webhooks.state(app, r) : null;
       let autoWithdraw = false;
-      if (
-        isAgent &&
-        ((kind === "agent" && d.archived !== undefined) ||
-          (kind === "bucket" && d.archived !== undefined))
-      )
-        throw new ForbiddenError("Owner action required");
       if (
         op !== "create" &&
         r.getBool("archived") &&
@@ -533,8 +527,8 @@ function write(e, isAgent) {
           );
         } else {
           const comment = event(app, r, b.action, b, actor);
-          // Only the authenticated owner session can wake through a comment.
-          // Shared-MCP names are unverified, so agent comments never wake.
+          // Loop prevention, not a privilege: only reader comments wake.
+          // Work-client comments never wake, so bots cannot ping-pong.
           if (!isAgent) {
             ownerTouch(r);
             app.save(r);
@@ -632,12 +626,11 @@ function write(e, isAgent) {
           bad("Resolve or withdraw the pending review before completion");
       }
       let hopStop = null;
+      // Reader writes end a run of work-client handoffs. A work client may set
+      // a hop-limited task Ready, but that does not reset the counter or the
+      // marker, so the next work-client reassignment stops it again.
       if (kind === "task" && !isAgent) ownerTouch(r);
       else if (kind === "task") {
-        if (r.getBool("handoff_limited") && values.readiness === "ready")
-          throw new ForbiddenError(
-            "The bot handoff limit stopped this task; the owner must review it and set Ready",
-          );
         const before = op === "create" ? "" : r.getString("assigned_agent");
         if (
           values.assigned_agent !== undefined &&
@@ -677,12 +670,8 @@ function write(e, isAgent) {
           selfStartAgent:
             isAgent && op === "create" ? b.reported_agent || "" : "",
         });
-      if (
-        kind === "task" &&
-        !isAgent &&
-        op === "update" &&
-        d.readiness === "waiting"
-      ) {
+      // Setting Waiting releases execution governance for every caller.
+      if (kind === "task" && op === "update" && d.readiness === "waiting") {
         r.set("execution_required_generation", 0);
         app.save(r);
       }
@@ -759,8 +748,6 @@ function write(e, isAgent) {
       return;
     }
     if (kind === "review" && ["decide", "withdraw"].includes(op)) {
-      if (isAgent && op === "decide")
-        throw new ForbiddenError("Only the owner can decide a review");
       only(d, op === "decide" ? ["decision", "note"] : []);
       const r = get(app, "reviews", b.id);
       check(r, b);

@@ -166,7 +166,7 @@ func TestCrewCommandConflictsAndRefusalsAreDistinct(t *testing.T) {
 		"stale":   {409, `{"message":"Revision conflict; reread and reassess"}`},
 		"coded":   {409, `{"message":"stale","data":{"reason":{"code":"revision_conflict","message":"stale"}}}`},
 		"limited": {409, `{"message":"stopped","data":{"reason":{"code":"handoff_limited","message":"stopped"}}}`},
-		"owner":   {403, `{"message":"Owner action required"}`},
+		"owner":   {403, `{"message":"Enter webhook credentials in the owner UI"}`},
 		"busy":    {429, `{"message":"slow down","data":{"rate_limit":{"limit":"crew-write","retry_after_seconds":7}}}`},
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +200,7 @@ func TestCrewCommandConflictsAndRefusalsAreDistinct(t *testing.T) {
 		t.Fatalf("refusal: exit %d %s", code, stderr)
 	}
 	if code, stderr = result("owner"); code != 1 || !strings.Contains(stderr, "HTTP 403") {
-		t.Fatalf("owner-only: exit %d %s", code, stderr)
+		t.Fatalf("credentials refusal: exit %d %s", code, stderr)
 	}
 	if code, stderr = result("busy"); code != 1 || !strings.Contains(stderr, "Retry after 7 seconds") {
 		t.Fatalf("rate limit: exit %d %s", code, stderr)
@@ -278,16 +278,22 @@ func TestCrewCommandsRealWorkflow(t *testing.T) {
 		t.Fatalf("comment not recorded as an agent comment: %v", events)
 	}
 
-	// Review requests work; owner-only actions are refused through write.
+	// Work clients have the reader's operations: a delegated review decision,
+	// bucket archival and agent deactivation all apply through write.
 	review := call("", "write", write("review.request", task, map[string]any{}))
-	refused(1, "HTTP 403", "write", write("review.decide", review, map[string]any{"decision": "approved"}))
-	forged := strings.Replace(write("review.decide", review, map[string]any{"decision": "approved"}), `"reported_agent":"Build"`, `"reported_agent":"owner"`, 1)
-	refused(1, "HTTP 403", "write", forged)
-	refused(1, "HTTP 403", "write", write("bucket.update", bucket, map[string]any{"archived": true}))
-	refused(1, "HTTP 403", "write", write("agent.update", other, map[string]any{"archived": true}))
-	if status := dig(dig(call("", "read", `{"collection":"reviews","id":"`+dig(review, "id").(string)+`"}`), "items").([]any)[0], "status"); status != "pending" {
-		t.Fatalf("refused decision changed review: %v", status)
+	decided := call("", "write", write("review.decide", review, map[string]any{"decision": "approved"}))
+	if dig(decided, "status") != "approved" || !strings.HasPrefix(dig(decided, "decided_by").(string), "mcp:") || dig(decided, "reported_agent") != "Build" {
+		t.Fatalf("delegated decision: %v", decided)
 	}
+	archivedBucket := call("", "write", write("bucket.update", bucket, map[string]any{"archived": true}))
+	bucket = call("", "write", write("bucket.update", archivedBucket, map[string]any{"archived": false}))
+	inactive := call("", "write", write("agent.update", other, map[string]any{"archived": true}))
+	other = call("", "write", write("agent.update", inactive, map[string]any{"archived": false}))
+	if dig(bucket, "archived") != false || dig(other, "archived") != false {
+		t.Fatalf("restore through write: %v %v", bucket, other)
+	}
+	// Credential entry stays reader-only.
+	refused(1, "HTTP 403", "write", `{"action":"webhook.credentials.update","id":"abcdefghijklmno","expected_revision":1,"reported_agent":"Build","data":{"secret":"synthetic-never-save"}}`)
 
 	// A stale revision is a plain revision conflict: exit 4 with the reread hint.
 	current := call("", "write", write("note.update", note, map[string]any{"body": "Updated through the CLI."}))
@@ -299,7 +305,7 @@ func TestCrewCommandsRealWorkflow(t *testing.T) {
 		t.Fatalf("note update: %v", current)
 	}
 
-	// Reassignments through write count toward the owner's handoff limit (default 4).
+	// Reassignments through write count toward the handoff limit (default 4).
 	handoff := call("", "write", write("task.create", nil, map[string]any{"title": "Synthetic handoff loop", "readiness": "ready"}))
 	for i := 0; i < 5; i++ {
 		target := []any{dig(agent, "id"), dig(other, "id")}[i%2]
@@ -308,5 +314,9 @@ func TestCrewCommandsRealWorkflow(t *testing.T) {
 	if dig(handoff, "handoff_limited") != true || dig(handoff, "readiness") != "waiting" {
 		t.Fatalf("handoffs not counted: %v", handoff)
 	}
-	refused(1, "HTTP 403", "write", write("task.update", handoff, map[string]any{"readiness": "ready"}))
+	// A work client may set the stopped task Ready, but the hop accounting stays.
+	ready := call("", "write", write("task.update", handoff, map[string]any{"readiness": "ready"}))
+	if dig(ready, "readiness") != "ready" || dig(ready, "handoff_limited") != true {
+		t.Fatalf("agent Ready: %v", ready)
+	}
 }

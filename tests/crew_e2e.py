@@ -68,7 +68,10 @@ def scenario(pc):
     unarchived = write('note.restore', {'revision_id': first['id']}, archived)
     assert not unarchived['archived_at'] and current('notes', note)['id'] == note['id']
 
-    write('bucket.update', {'archived': True}, bucket, expected=403)
+    # Work clients archive and restore buckets like the reader.
+    bucket = write('bucket.update', {'archived': True}, bucket)
+    assert bucket['archived'] and bucket['archived_by'].startswith('mcp:')
+    bucket = write('bucket.update', {'archived': False}, bucket)
     # Assignment is metadata, with the same concurrency/audit contract on both paths.
     assert current('buckets', bucket)['responsible_agent_details'] == {'id': network['id'], 'name': 'Network'}
     prior = bucket
@@ -82,7 +85,7 @@ def scenario(pc):
         write('bucket.assign', {'agent': invalid}, bucket, expected=400)
     write('bucket.assign', {}, bucket, expected=400)
     write('bucket.assign.extra', {'agent': network['id']}, bucket, expected=400)
-    write('bucket.assign', {'agent': network['id'], 'archived': True}, bucket, expected=403)
+    write('bucket.assign', {'agent': network['id'], 'archived': True}, bucket, expected=400)
     write('bucket.assign', {'agent': network['id'], 'unexpected': True}, bucket, expected=400)
     write('note.assign', {'agent': network['id']}, note, expected=400)
     assert len(read('events', parent=bucket['id'])) == count
@@ -116,7 +119,9 @@ def scenario(pc):
     write('note.create', {'bucket': bucket['id'], 'title': 'Blocked'}, expected=400)
     bucket = write('bucket.update', {'archived': False}, bucket, agent=False)
     assert len(read('notes')) == 2
-    write('agent.update', {'archived': True}, network, expected=403)
+    network = write('agent.update', {'archived': True}, network)
+    network = write('agent.update', {'archived': False}, network)
+    assert not network['archived']
     historical = write('task.create', {'title': 'Existing assignment', 'assigned_agent': design['id']})
     design = write('agent.update', {'archived': True}, design, agent=False)
     # An unchanged historical assignment stays editable, but cannot be newly assigned.
@@ -150,7 +155,6 @@ def scenario(pc):
     assert review['draft'] == 'Draft one' and review['status'] == 'pending'
     task = current('tasks', task)
     assert task['status'] == 'needs_review'
-    write('review.decide', {'decision': 'approved'}, review, expected=403)
     write('task.update', {'status': 'done'}, task, expected=400)
     write('task.update', {'status': 'todo'}, task, expected=400)
     write('task.update', {'draft': 'Attempted review bypass', 'status': 'done'}, task, expected=400)
@@ -161,9 +165,10 @@ def scenario(pc):
     assert current('reviews', review)['status'] == 'withdrawn'
     write('review.decide', {'decision': 'approved'}, current('reviews', review), agent=False, expected=400)
     review = write('review.request', record=task)
-    approved = write('review.decide', {'decision': 'approved', 'note': 'Ready for me to publish.'}, review, agent=False)
+    # A decision the owner delegated, recorded by a work client.
+    approved = write('review.decide', {'decision': 'approved', 'note': 'Owner reviewed it and asked me to record approval.'}, review)
     assert approved['draft'] == 'Draft two' and approved['status'] == 'approved'
-    assert approved['decided_by'].startswith('owner:') and approved['decided_at']
+    assert approved['decided_by'].startswith('mcp:') and approved['reported_agent'] == 'Network' and approved['decided_at']
     assert current('tasks', task)['status'] != 'done', 'Approval must not complete external action'
     write('review.decide', {'decision': 'rejected'}, approved, agent=False, expected=400)
     task = current('tasks', task)
@@ -306,16 +311,20 @@ def cli_scenario(pc):
     assert counted['rows'] == [[1]], counted
     review = write('review.request', {}, task)
     assert review['status'] == 'pending' and review['draft'] == 'Synthetic CLI draft'
-    assert 'HTTP 403' in write('review.decide', {'decision': 'approved'}, review, expect=1)
-    assert 'HTTP 403' in write('bucket.update', {'archived': True}, bucket, expect=1)
-    assert 'HTTP 403' in write('agent.update', {'archived': True}, agent, expect=1)
-    assert cli('read', {'collection': 'reviews', 'id': review['id']})['items'][0]['status'] == 'pending'
+    # The work-client route has the reader's operations except credential entry.
+    decided = write('review.decide', {'decision': 'approved'}, review)
+    assert decided['status'] == 'approved' and decided['decided_by'].startswith('mcp:'), decided
+    bucket = write('bucket.update', {'archived': False}, write('bucket.update', {'archived': True}, bucket))
+    agent = write('agent.update', {'archived': False}, write('agent.update', {'archived': True}, agent))
+    assert not bucket['archived'] and not agent['archived']
+    config = next(c for c in cli('read', {'collection': 'webhook_configs'})['items'] if c['scope'] == 'global')
+    assert 'HTTP 403' in write('webhook.credentials.update', {'secret': 'synthetic-never-save'}, config, expect=1)
     write('note.update', {'body': 'Changed by the CLI.'}, note)
     stale = write('note.update', {'body': 'Stale overwrite'}, note, expect=4)
     assert 'another request changed the record first' in stale, stale
     assert 'unknown' in cli('read', {'collection': 'notes', 'unknown': True}, expect=2)
     assert 'not valid JSON' in pc.run('write', '{"action":', expect=2).stderr
-    print('Crew CLI commands, agent-route refusals and conflicts passed.')
+    print('Crew CLI commands, work-client route, credential refusal and conflicts passed.')
 
 
 def main():
