@@ -336,7 +336,10 @@ try {
  await networkCard.click();
  const briefField=dialog().getByLabel('Agent brief',{exact:true});
  assert.equal(await briefField.inputValue(),longBrief);
- assert.equal(await briefField.evaluate(e=>e.scrollHeight>e.clientHeight&&getComputedStyle(e).overflowY==='auto'&&e.offsetHeight>=Math.floor(innerHeight*0.7)-2),true,'a long agent brief opens at the cap with a scrollbar');
+ // The field re-measures once the dialog has laid out (ResizeObserver), so wait for it.
+ await page.waitForFunction(e=>e.scrollHeight>e.clientHeight&&getComputedStyle(e).overflowY==='auto'&&e.offsetHeight>=Math.floor(innerHeight*0.7)-2,await briefField.elementHandle(),{timeout:5000}).catch(()=>{});
+ {const m=await briefField.evaluate(e=>({sh:e.scrollHeight,ch:e.clientHeight,oh:e.offsetHeight,ih:innerHeight,oy:getComputedStyle(e).overflowY,mh:getComputedStyle(e).maxHeight,h:e.style.height,lh:getComputedStyle(e).lineHeight,font:getComputedStyle(e).fontFamily}));
+ assert.ok(m.sh>m.ch&&m.oy==='auto'&&m.oh>=Math.floor(m.ih*0.7)-2,'a long agent brief opens at the cap with a scrollbar: '+JSON.stringify(m));}
  await snapView('crew-agent-brief-1280');
  await close();await dialog().waitFor({state:'hidden'});
  // Search boxes draw one focus ring, on the box, never a second one on the field inside.
