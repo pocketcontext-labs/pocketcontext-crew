@@ -1,5 +1,13 @@
 # Crew upgrades and rollback
 
+## Crew 0.12.x to 0.13.0
+
+No data migration, protocol change or operator step, and no new managed block. Replace
+the binary or image with the normal procedure (`CREW_REPLACE_VERSION=0.12.1` for the
+installer, or the 0.12.x release you run) and upgrade paired clients with the server. A
+client and server must report the same release. From 0.11.x, first follow the 0.12.0
+steps below.
+
 ## Crew 0.12.0 to 0.12.1
 
 No data migration, protocol change or operator step, and no new managed block. Replace
