@@ -128,6 +128,28 @@ export function viewStateHash(view: View, state: ViewState): string {
   return viewHashes[view] + (query ? `?${query}` : "");
 }
 
+const boardColumns = ["todo", "in_progress", "needs_review", "done"];
+
+/**
+ * A Tasks address that asks the board to bring one status column into view
+ * once (`#/tasks?column=<status>`). It is not page state: the board consumes
+ * it and drops it from the address, keeping the filters beside it.
+ */
+export const boardColumnHash = (status: string) =>
+  `${viewHashes.board}?column=${encodeURIComponent(status)}`;
+
+/** The status column a Tasks address asks for, or null. */
+export function boardColumnFromHash(hash: string): string | null {
+  hash = legacyRedirect(hash) ?? hash;
+  if (viewFromHash(hash) !== "board") return null;
+  const query = /^#\/tasks\?(.*)$/.exec(hash)?.[1];
+  if (query === undefined) return null;
+  const values = new URLSearchParams(query).getAll("column");
+  return values.length === 1 && boardColumns.includes(values[0])
+    ? values[0]
+    : null;
+}
+
 /** Only the exact form viewStateHash writes for the Tasks or Notes page. */
 export function isCanonicalViewStateHash(hash: string): boolean {
   const view = viewFromHash(hash);

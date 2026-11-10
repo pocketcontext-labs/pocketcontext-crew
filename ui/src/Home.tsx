@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { ConnectionPending, skillCommand } from "./Connect";
 import Help from "./Help";
 import { statuses, val, type ConnectionState, type Row } from "./crewApi";
-import { viewHashes, type ItemKind } from "./itemLink";
+import { boardColumnHash, viewHashes, type ItemKind } from "./itemLink";
 
 type Data = Record<string, Row[]>;
 const connectedKey = "pocketcontext.crew.agent_connected";
@@ -239,12 +239,21 @@ export default function Home({
       <section aria-label="Your crew right now">
         <h2>Your crew right now</h2>
         <div className="crew-home-counts">
-          {statuses.map(([status, label]) => (
-            <a key={status} href={viewHashes.board}>
-              <b>{data.tasks.filter((x) => val(x, "status") === status).length}</b>
-              {label}
-            </a>
-          ))}
+          {statuses.map(([status, label]) => {
+            const count = data.tasks.filter(
+              (x) => val(x, "status") === status,
+            ).length;
+            return (
+              <a
+                key={status}
+                href={boardColumnHash(status)}
+                aria-label={`${count} ${label}, show on the Tasks board`}
+              >
+                <b>{count}</b>
+                {label}
+              </a>
+            );
+          })}
         </div>
       </section>
       {recent.length > 0 && (

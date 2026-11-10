@@ -39,6 +39,7 @@ import { searchHash, searchTextFromHash, type SearchHit } from "./searchApi";
 import "./crew.css";
 import type { ServerVersion } from "./crewApi";
 import {
+  boardColumnFromHash,
   bucketSorts,
   isItemHash,
   itemPath,
@@ -622,6 +623,13 @@ export default function CrewWorkspace() {
     [pendingLink, setPendingLink] = useState(() =>
       parseItemHash(location.hash),
     ),
+    // A status column a Home tile asked the board to show; consumed once, like
+    // pendingLink, after the data has loaded.
+    [pendingColumn, setPendingColumn] = useState(() =>
+      boardColumnFromHash(location.hash),
+    ),
+    [highlightColumn, setHighlightColumn] = useState(""),
+    columnRefs = useRef<Record<string, HTMLElement | null>>({}),
     [ready, setReady] = useState(false),
     generation = useRef(0),
     edited = useRef(false),
@@ -702,6 +710,7 @@ export default function CrewWorkspace() {
     const receive = () => {
       redirectLegacyAddress();
       setPendingLink(parseItemHash(location.hash));
+      setPendingColumn(boardColumnFromHash(location.hash));
       if (isItemHash(location.hash)) return;
       if (!discardOk()) {
         history.forward();
@@ -772,6 +781,29 @@ export default function CrewWorkspace() {
       open?.kind === kind && open.row?.id === id ? open : { kind, row },
     );
   }, [pendingLink, ready, data, archived]);
+  // Bring the asked-for column into view, focus it and highlight it briefly.
+  // The address effect above has already dropped `column` from the address, so
+  // a refresh or Back does not repeat this.
+  useEffect(() => {
+    if (!pendingColumn || !ready) return;
+    setPendingColumn(null);
+    const column = columnRefs.current[pendingColumn];
+    if (view !== "board" || !column) return;
+    const reduce =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    column.scrollIntoView?.({
+      behavior: reduce ? "auto" : "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+    column.focus({ preventScroll: true });
+    setHighlightColumn(pendingColumn);
+  }, [pendingColumn, ready, view]);
+  useEffect(() => {
+    if (!highlightColumn) return;
+    const timer = setTimeout(() => setHighlightColumn(""), 1200);
+    return () => clearTimeout(timer);
+  }, [highlightColumn]);
   const openItem = (kind: ItemKind, row: Row) => {
     pushAddress(itemPath(kind, row));
     setDialog({ kind, row });
@@ -1216,9 +1248,21 @@ export default function CrewWorkspace() {
                     assignmentMatches(assignmentFilter, x, invalidAssignment),
                 );
                 return (
-                  <section className="crew-column" key={status}>
+                  <section
+                    className={
+                      highlightColumn === status
+                        ? "crew-column crew-column-highlight"
+                        : "crew-column"
+                    }
+                    key={status}
+                    ref={(el) => {
+                      columnRefs.current[status] = el;
+                    }}
+                    tabIndex={-1}
+                    aria-labelledby={`crew-column-${status}`}
+                  >
                     <div className="crew-column-head">
-                      <h2>
+                      <h2 id={`crew-column-${status}`}>
                         <i className={status} />
                         {label}
                         <span>{tasks.length}</span>

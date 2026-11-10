@@ -866,9 +866,11 @@ it("shows the MCP address and connected apps when the server has MCP", async () 
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Copy address" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
-  expect(
-    screen.getByRole("region", { name: "Connected apps" }),
-  ).toBeInTheDocument();
+  const apps = screen.getByRole("region", { name: "Connected apps" });
+  expect(apps).toHaveTextContent(
+    "They decide a review only when you ask them to in the conversation.",
+  );
+  expect(apps).not.toHaveTextContent("can't record");
 });
 
 it("gives skill instructions and no MCP details without a domain", async () => {
@@ -878,6 +880,10 @@ it("gives skill instructions and no MCP details without a domain", async () => {
     await screen.findByText("./pocketcontext-crew skill"),
   ).toBeInTheDocument();
   expect(screen.getByText("./pocketcontext-crew tunnel invite")).toBeInTheDocument();
+  expect(document.body).toHaveTextContent(
+    "It decides a review only when you ask it to in the conversation.",
+  );
+  expect(document.body).not.toHaveTextContent("approval decisions yourself");
   expect(document.body).not.toHaveTextContent("/mcp");
   expect(screen.queryByRole("region", { name: "Connected apps" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
@@ -2241,13 +2247,138 @@ describe("board agent filter", () => {
     expect(location.hash).toBe("#/tasks?agent=invalid");
   });
 
-  it("Home's status tiles open the whole board", async () => {
+  it("Home's status tiles open the whole board on their column", async () => {
     await openBoard(`#/tasks?agent=${agent.id}`);
     await openPage("Home");
-    const tile = screen.getByRole("link", { name: /To do/ });
-    expect(tile).toHaveAttribute("href", "#/tasks");
+    const tile = screen.getByRole("link", {
+      name: "3 To do, show on the Tasks board",
+    });
+    expect(tile).toHaveAttribute("href", "#/tasks?column=todo");
+    expect(tile).toHaveTextContent("3To do");
     fireEvent.click(tile);
     await waitFor(() => expect(filter()).toHaveValue("all"));
     expect(cardTitles()).toHaveLength(5);
+    expect(document.querySelectorAll(".crew-column")).toHaveLength(4);
+  });
+});
+
+describe("Home tiles focus a board column", () => {
+  const scroll = vi.fn();
+  const column = (name: string) =>
+    screen.getByRole("region", { name: new RegExp(`^${name}`) });
+  beforeEach(() => {
+    scroll.mockClear();
+    Element.prototype.scrollIntoView = scroll;
+    fixtures.reviews = [];
+    fixtures.tasks = [
+      { ...task, id: "task00000000001", title: "First", status: "todo" },
+      { ...task, id: "task00000000002", title: "Second", status: "done" },
+    ];
+  });
+  afterEach(() => {
+    delete (Element.prototype as Partial<Element>).scrollIntoView;
+    delete (window as Partial<Window>).matchMedia;
+  });
+
+  it("links each tile to its column, named for where it goes", async () => {
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Your crew right now" });
+    const tiles = [
+      ["1 To do", "todo"],
+      ["0 In progress", "in_progress"],
+      ["0 Needs review", "needs_review"],
+      ["1 Done", "done"],
+    ];
+    for (const [name, status] of tiles)
+      await waitFor(() =>
+        expect(
+          screen.getByRole("link", { name: `${name}, show on the Tasks board` }),
+        ).toHaveAttribute("href", `#/tasks?column=${status}`),
+      );
+  });
+
+  it("scrolls to, focuses and briefly highlights the column, then drops it from the address", async () => {
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Your crew right now" });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("link", { name: /^1 Done, show on/ }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("link", { name: /^1 Done, show on/ }));
+    await waitFor(() => expect(column("Done")).toHaveFocus());
+    const done = column("Done");
+    expect(done).toHaveAttribute("tabindex", "-1");
+    expect(done).toHaveClass("crew-column-highlight");
+    expect(column("To do")).not.toHaveClass("crew-column-highlight");
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(done);
+    expect(scroll).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+    expect(location.hash).toBe("#/tasks");
+    expect(screen.getAllByRole("heading", { name: /First|Second/ })).toHaveLength(2);
+    await waitFor(
+      () => expect(done).not.toHaveClass("crew-column-highlight"),
+      { timeout: 2000 },
+    );
+  });
+
+  it("keeps the board filters beside the column", async () => {
+    history.replaceState(null, "", `/#/tasks?agent=${agent.id}&column=done`);
+    render(<CrewWorkspace />);
+    await waitFor(() => expect(column("Done")).toHaveFocus());
+    expect(location.hash).toBe(`#/tasks?agent=${agent.id}`);
+    expect(
+      screen.getByRole("combobox", { name: "Filter by assignment" }),
+    ).toHaveValue(agent.id);
+  });
+
+  it("highlights once after a slow load, and never on a refresh", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    vi.mocked(crewApi.read).mockImplementation(async (c, f = {}) => {
+      await gate;
+      return f.archived ? [] : fixtures[c] || [];
+    });
+    history.replaceState(null, "", "/#/tasks?column=todo");
+    const { rerender } = render(<CrewWorkspace />);
+    await screen.findByText("Loading your workspace…");
+    expect(location.hash).toBe("#/tasks");
+    expect(scroll).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => expect(column("To do")).toHaveFocus());
+    rerender(<CrewWorkspace />);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => {});
+    expect(scroll).toHaveBeenCalledTimes(1);
+  });
+
+  it("scrolls instantly when motion is reduced", async () => {
+    window.matchMedia = vi.fn(
+      (query: string) =>
+        ({ matches: query.includes("reduce"), media: query }) as MediaQueryList,
+    );
+    history.replaceState(null, "", "/#/tasks?column=in_progress");
+    render(<CrewWorkspace />);
+    await waitFor(() => expect(column("In progress")).toHaveFocus());
+    expect(scroll).toHaveBeenCalledWith(
+      expect.objectContaining({ behavior: "auto" }),
+    );
+  });
+
+  it("ignores an unknown column", async () => {
+    history.replaceState(null, "", "/#/tasks?column=later");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "First" });
+    expect(location.hash).toBe("#/tasks");
+    expect(scroll).not.toHaveBeenCalled();
+    expect(document.querySelector(".crew-column-highlight")).toBeNull();
   });
 });

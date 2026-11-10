@@ -242,6 +242,16 @@ try {
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
   }
   await page.getByRole('navigation').getByRole('link',{name:'Home',exact:true}).click();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();await snap('crew-home-'+width);
+  // A status tile opens the whole board on its column: scrolled to, focused and
+  // highlighted, with the one-shot column query gone from the address; Back returns Home.
+  await page.getByRole('link',{name:/^\d+ Done, show on the Tasks board$/}).click();
+  await page.waitForURL(u=>u.hash==='#/tasks');
+  await page.waitForFunction(()=>{const c=document.activeElement;if(!c?.matches('.crew-column')||!c.textContent.startsWith('Done'))return false;const r=c.getBoundingClientRect();return r.top>=0&&r.top<innerHeight&&r.left>=0&&r.right<=innerWidth;});
+  assert.equal(await page.locator('.crew-column').count(),4,`all columns at ${width}`);
+  await page.waitForTimeout(250);await snapView('crew-board-column-'+width);
+  await page.locator('.crew-column-highlight').waitFor({state:'detached'});
+  await page.goBack();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>location.hash),'#/');
   if(width<1440){
    // Help opens on tap, stays on screen, and the Guide is reachable from Home.
    await page.getByRole('button',{name:'What is Home?',exact:true}).click();

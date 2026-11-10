@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  boardColumnFromHash,
+  boardColumnHash,
   defaultViewState,
   isItemHash,
   legacyRedirect,
@@ -232,5 +234,35 @@ describe("Tasks and Notes address state", () => {
     expect(takeLoginReturn()).toBe(`#/notes?bucket=${bucketId}&sort=title`);
     rememberLoginReturn("#/team?agent=x&y=1");
     expect(takeLoginReturn()).toBeNull();
+  });
+});
+
+describe("board column address", () => {
+  it("names one status column on the Tasks page", () => {
+    expect(boardColumnHash("needs_review")).toBe("#/tasks?column=needs_review");
+    expect(viewFromHash("#/tasks?column=todo")).toBe("board");
+    expect(boardColumnFromHash("#/tasks?column=todo")).toBe("todo");
+    expect(boardColumnFromHash("#/tasks?agent=unassigned&column=done")).toBe(
+      "done",
+    );
+    expect(boardColumnFromHash("#/team?column=in_progress")).toBe("in_progress");
+  });
+
+  it("refuses anything else", () => {
+    for (const hash of [
+      "#/tasks",
+      "#/tasks?column=later",
+      "#/tasks?column=todo&column=done",
+      "#/notes?column=todo",
+      "#/?column=todo",
+    ])
+      expect(boardColumnFromHash(hash)).toBeNull();
+  });
+
+  it("is not page state", () => {
+    expect(viewStateHash("board", viewStateFromHash("#/tasks?column=todo"))).toBe(
+      "#/tasks",
+    );
+    expect(loginReturnHash("#/tasks?column=todo")).toBe("#/tasks");
   });
 });

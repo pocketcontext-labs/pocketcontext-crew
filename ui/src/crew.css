@@ -311,6 +311,37 @@ a.crew-logo:hover .product-brand span {
   min-height: 345px;
   padding: 14px 12px;
 }
+/* A Home tile opens the board on one column: it takes focus and pulses once. */
+.crew-column {
+  scroll-margin: 16px;
+}
+.crew-column:focus {
+  outline: none;
+}
+.crew-column:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: 3px;
+}
+.crew-column-highlight {
+  animation: crew-column-pulse 1s ease-out;
+}
+@keyframes crew-column-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(72, 125, 85, 0.55);
+    border-color: #487d55;
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(72, 125, 85, 0);
+    border-color: #e5e8df;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-column-highlight {
+    animation: none;
+    border-color: #487d55;
+    box-shadow: 0 0 0 2px #487d55;
+  }
+}
 .crew-column h2 {
   font-size: 12px;
   font-weight: 600;

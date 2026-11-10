@@ -64,7 +64,8 @@ function ConnectedApps() {
       <h2>Connected apps</h2>
       <p>
         These apps can read and change notes and tasks, and request your
-        review. They can't record your approval decisions.
+        review. They decide a review only when you ask them to in the
+        conversation.
       </p>
       {error && <p role="alert">{error}</p>}
       {apps && !apps.length && !error && <p>No apps connected yet.</p>}
@@ -144,7 +145,8 @@ function LocalSteps() {
           <h2>Ask your agent to use Crew</h2>
           <p>
             There is no address to add. Your agent uses Crew with your owner
-            access, so make approval decisions yourself here.
+            access. It decides a review only when you ask it to in the
+            conversation.
           </p>
         </li>
         <li>
