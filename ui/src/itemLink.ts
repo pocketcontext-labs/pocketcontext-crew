@@ -11,8 +11,8 @@ export type ItemLink = { kind: ItemKind; id: string };
 
 export const viewHashes = {
   home: "#/",
-  board: "#/team",
-  memory: "#/memory",
+  board: "#/tasks",
+  memory: "#/notes",
   reviews: "#/approvals",
   agents: "#/agents",
   archive: "#/archive",
@@ -23,16 +23,33 @@ export const viewHashes = {
 export type View = keyof typeof viewHashes;
 
 /**
- * Item links and unknown addresses show Home; any Guide address shows the Guide
- * and any search address shows Search, which validates its own query. The board
- * and memory pages keep their filters and sorts in a query, read by
- * viewStateFromHash.
+ * The current address of an older page address (`#/team` became `#/tasks`,
+ * `#/memory` became `#/notes`), keeping its query; null for any other address.
+ */
+export function legacyRedirect(hash: string): string | null {
+  const match = /^#\/(team|memory)(\?.*)?$/.exec(hash);
+  if (!match) return null;
+  return (
+    (match[1] === "team" ? viewHashes.board : viewHashes.memory) +
+    (match[2] ?? "")
+  );
+}
+
+/**
+ * A valid item link shows its own list (a task over Tasks, a note over Notes);
+ * unknown addresses show Home. Any Guide address shows the Guide and any search
+ * address shows Search, which validates its own query. The Tasks and Notes
+ * pages keep their filters and sorts in a query, read by viewStateFromHash.
+ * Old page addresses are read as their replacements.
  */
 export function viewFromHash(hash: string): View {
+  hash = legacyRedirect(hash) ?? hash;
   if (/^#\/guide(?:\/|$)/.test(hash)) return "guide";
   if (/^#\/search(?:\?|$)/.test(hash)) return "search";
-  if (/^#\/team\?/.test(hash)) return "board";
-  if (/^#\/memory\?/.test(hash)) return "memory";
+  if (/^#\/tasks\?/.test(hash)) return "board";
+  if (/^#\/notes\?/.test(hash)) return "memory";
+  const link = parseItemHash(hash);
+  if (link) return link.kind === "task" ? "board" : "memory";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
   return match ? (match[0] as View) : "home";
 }
@@ -41,7 +58,7 @@ export const noteSorts = ["updated", "created", "title", "bucket"] as const;
 export const bucketSorts = ["name", "notes", "activity"] as const;
 export type NoteSort = (typeof noteSorts)[number];
 export type BucketSort = (typeof bucketSorts)[number];
-/** Board and memory page state that lives in the address. */
+/** Tasks and Notes page state that lives in the address. */
 export type ViewState = {
   /** A bucket id, or "" for all buckets. */
   bucket: string;
@@ -60,12 +77,14 @@ const recordId = /^[a-z0-9]{15}$/;
 const assignments = ["unassigned", "invalid"];
 
 /**
- * Reads `#/memory?bucket=<id>&sort=<notes>&buckets=<buckets>` and
- * `#/team?agent=<id|unassigned|invalid>`. A missing, repeated or invalid value
- * falls back to its default; unknown parameters are ignored. Whether an id
- * still names an active record is for the page to decide.
+ * Reads `#/notes?bucket=<id>&sort=<notes>&buckets=<buckets>` and
+ * `#/tasks?agent=<id|unassigned|invalid>`, or their older `#/memory` and `#/team`
+ * forms. A missing, repeated or invalid value falls back to its default; unknown
+ * parameters are ignored. Whether an id still names an active record is for the
+ * page to decide.
  */
 export function viewStateFromHash(hash: string): ViewState {
+  hash = legacyRedirect(hash) ?? hash;
   const view = viewFromHash(hash);
   const query = /^#\/[a-z]+\?(.*)$/.exec(hash)?.[1];
   if ((view !== "board" && view !== "memory") || query === undefined)
@@ -109,7 +128,7 @@ export function viewStateHash(view: View, state: ViewState): string {
   return viewHashes[view] + (query ? `?${query}` : "");
 }
 
-/** Only the exact form viewStateHash writes for the board or memory page. */
+/** Only the exact form viewStateHash writes for the Tasks or Notes page. */
 export function isCanonicalViewStateHash(hash: string): boolean {
   const view = viewFromHash(hash);
   return (
@@ -154,7 +173,7 @@ export function itemShareUrl(kind: ItemKind, row: Row): string {
 const returnKey = "pocketcontext.crew.login_return";
 const returnLifetimeMs = 15 * 60 * 1000;
 const returnPattern =
-  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|team|memory|approvals|agents|archive|connect|search|guide(?:\/[a-z-]+)?)$/;
+  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|tasks|notes|team|memory|approvals|agents|archive|connect|search|guide(?:\/[a-z-]+)?)$/;
 
 // OAuth consent sends the browser here to sign in and come back. The path is
 // fixed: only the query (validated by the consent endpoint) can vary.
@@ -267,11 +286,11 @@ export function takeLoginReturn(): string | null {
       (returnPattern.test(hash) ||
         isStoredSignin(hash) ||
         isCanonicalSearchHash(hash) ||
-        isCanonicalViewStateHash(hash)) &&
+        isCanonicalViewStateHash(legacyRedirect(hash) ?? hash)) &&
       typeof expires === "number" &&
       expires > now &&
       expires <= now + returnLifetimeMs
-      ? hash
+      ? (legacyRedirect(hash) ?? hash)
       : null;
   } catch {
     return null;

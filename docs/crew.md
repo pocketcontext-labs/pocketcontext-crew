@@ -53,7 +53,10 @@ revision records are never indexed or returned.
 Tasks and notes open in the reader at `#/tasks/<slug>-<id>` and
 `#/notes/<slug>-<id>`. The id decides what opens and the slug is cosmetic, so links
 survive renames. Older bare `#/tasks/<id>` links still work. Archived items open
-read-only.
+read-only. Opened from its link, a task shows over the Tasks page (`#/tasks`) and a
+note over the Notes page (`#/notes`). An item opened from a page closes back to that
+page with its filters (`#/tasks?agent=…`, `#/notes?bucket=…&sort=…&buckets=…`). The
+older page addresses `#/team` and `#/memory` redirect to these, keeping their query.
 
 Responses always include `path`, for example `#/tasks/launch-post-vicfcuk53eds6yt`.
 `url` is the absolute link and is present only when the install has a domain; without

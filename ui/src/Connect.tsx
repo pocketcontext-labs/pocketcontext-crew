@@ -63,7 +63,7 @@ function ConnectedApps() {
     <section className="crew-connected-apps" aria-label="Connected apps">
       <h2>Connected apps</h2>
       <p>
-        These apps can read and change shared memory and tasks, and request your
+        These apps can read and change notes and tasks, and request your
         review. They can't record your approval decisions.
       </p>
       {error && <p role="alert">{error}</p>}

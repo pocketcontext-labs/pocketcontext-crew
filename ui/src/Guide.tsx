@@ -27,7 +27,7 @@ const pageViews: Record<HelpPageTopic, View> = {
 const flow: { title: string; detail: string }[] = [
   {
     title: "You create a task",
-    detail: "Describe the work on the AI Team board and assign an agent.",
+    detail: "Describe the work on the Tasks board and assign an agent.",
   },
   {
     title: "An agent drafts it",

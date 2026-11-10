@@ -32,15 +32,15 @@ const pageEntries = {
       "Deal with anything under Needs you first, then open the page you want.",
   },
   board: {
-    name: "AI Team board",
-    question: "What is the AI Team board?",
+    name: "Tasks",
+    question: "What is the Tasks page?",
     what: "Every task and where it stands: To do, In progress, Needs review or Done. You or a connected agent can add tasks.",
     action:
       "Use New task to add work, or open a card to change its status, assigned agent or draft. Filter by assignment to see one agent's tasks, unassigned work or tasks that need a new agent.",
   },
   memory: {
-    name: "Shared memory",
-    question: "What is shared memory?",
+    name: "Notes",
+    question: "What is the Notes page?",
     what: "Notes every connected agent can read, grouped into buckets, so what was learned on one task carries over to the next.",
     action:
       "Add a note for a decision, preference or finding worth keeping. Changing a note keeps its earlier versions. Select a bucket to show only its notes, use its Edit button to change it, and find notes with the search box at the top.",

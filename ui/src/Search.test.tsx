@@ -97,7 +97,7 @@ function controlledSearch() {
     );
 }
 beforeEach(() => {
-  history.replaceState(null, "", "/#/team");
+  history.replaceState(null, "", "/#/tasks");
   calls = [];
   fixtures = {
     agents: [agent],
@@ -360,7 +360,7 @@ describe("opening results", () => {
     );
     const dialog = await screen.findByRole("dialog", { name: "Edit agent" });
     expect(within(dialog).getByDisplayValue("Network")).toBeTruthy();
-    expect(location.hash).toBe("#/team");
+    expect(location.hash).toBe("#/tasks");
   });
 
   it("opens a bucket's dialog", async () => {

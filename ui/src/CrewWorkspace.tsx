@@ -43,6 +43,7 @@ import {
   isItemHash,
   itemPath,
   itemShareUrl,
+  legacyRedirect,
   noteSorts,
   parseItemHash,
   type BucketSort,
@@ -57,8 +58,8 @@ import {
 } from "./itemLink";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
-  ["board", "AI Team", "▦"],
-  ["memory", "Shared memory", "▤"],
+  ["board", "Tasks", "▦"],
+  ["memory", "Notes", "▤"],
   ["reviews", "Approvals", "✓"],
   ["agents", "Agents", "◎"],
   ["archive", "Archive", "↶"],
@@ -69,6 +70,17 @@ const pages: [View, string, string][] = [
   ["guide", "Guide", "?"],
   ["search", "Search", "⌕"],
 ];
+const eyebrows: Record<View, string> = {
+  home: "START HERE",
+  board: "BOARD",
+  memory: "BUCKETS AND NOTES",
+  reviews: "YOUR FINAL SAY",
+  agents: "YOUR TEAM",
+  archive: "NOTHING IS DELETED",
+  connect: "ONE CONNECTION FOR ALL YOUR AGENTS",
+  guide: "HOW IT WORKS",
+  search: "FIND ANYTHING",
+};
 const viewHelp: Partial<Record<View, HelpTopic>> = {
   home: "home",
   board: "board",
@@ -90,6 +102,11 @@ type Data = Record<string, Row[]>;
 /** Never fires hashchange, so writing the address cannot open a dialog. */
 const setAddress = (hash: string) =>
   history.replaceState(null, "", location.pathname + location.search + hash);
+/** Replaces an old page address with its current form, adding no history entry. */
+const redirectLegacyAddress = () => {
+  const next = legacyRedirect(location.hash);
+  if (next) setAddress(next);
+};
 const pushAddress = (hash: string) => {
   if (location.hash !== hash)
     history.pushState(null, "", location.pathname + location.search + hash);
@@ -537,7 +554,10 @@ function Modal({
   );
 }
 export default function CrewWorkspace() {
-  const [view, setView] = useState<View>(() => viewFromHash(location.hash)),
+  const [view, setView] = useState<View>(() => {
+      redirectLegacyAddress();
+      return viewFromHash(location.hash);
+    }),
     [data, setData] = useState<Data>({
       agents: [],
       buckets: [],
@@ -556,8 +576,8 @@ export default function CrewWorkspace() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [query, setQuery] = useState(""),
-    // Board and memory filters and sorts, kept in the address
-    // (#/team?agent=…, #/memory?bucket=…&sort=…).
+    // Tasks and Notes filters and sorts, kept in the address
+    // (#/tasks?agent=…, #/notes?bucket=…&sort=…).
     [viewState, setViewState] = useState<ViewState>(() =>
       viewStateFromHash(location.hash),
     ),
@@ -680,6 +700,7 @@ export default function CrewWorkspace() {
   }, [load]);
   useEffect(() => {
     const receive = () => {
+      redirectLegacyAddress();
       setPendingLink(parseItemHash(location.hash));
       if (isItemHash(location.hash)) return;
       if (!discardOk()) {
@@ -943,8 +964,7 @@ export default function CrewWorkspace() {
   const descriptions = {
     home: "Where you and your AI agents share tasks and memory. Agents do the work; you decide what's approved.",
     board: "Follow each task from request to finished work. Agents draft; you decide what's approved.",
-    memory:
-      "Keep decisions, preferences and useful findings where every agent can find them.",
+    memory: "Decisions, preferences and findings every agent can find.",
     reviews:
       "Review the exact draft. Approval never sends or publishes anything.",
     agents:
@@ -1029,23 +1049,7 @@ export default function CrewWorkspace() {
         <section className="crew-content">
           <div className="crew-heading">
             <div>
-              <p className="crew-eyebrow">
-                {view === "guide"
-                  ? "HOW IT WORKS"
-                  : view === "search"
-                  ? "FIND ANYTHING"
-                  : view === "connect"
-                  ? "ONE CONNECTION FOR ALL YOUR AGENTS"
-                  : view === "home"
-                  ? "START HERE"
-                  : view === "reviews"
-                  ? "YOUR FINAL SAY"
-                  : view === "memory"
-                    ? "CONTEXT THAT CARRIES FORWARD"
-                    : view === "agents"
-                      ? "YOUR TEAM"
-                      : "FROM SHARED CONTEXT TO FINISHED WORK"}
-              </p>
+              <p className="crew-eyebrow">{eyebrows[view]}</p>
               <div className="crew-title-row">
                 <h1>{pages.find((x) => x[0] === view)?.[1]}</h1>
                 {titleHelp && <Help topic={titleHelp} />}
@@ -1484,7 +1488,7 @@ export default function CrewWorkspace() {
               {!pending.length && (
                 <Empty
                   title="Nothing waiting for your review"
-                  action={<a href={viewHashes.board}>Go to the AI Team board</a>}
+                  action={<a href={viewHashes.board}>Go to Tasks</a>}
                 >
                   Drafts sent for approval will appear here. Your approval does
                   not perform the external action.

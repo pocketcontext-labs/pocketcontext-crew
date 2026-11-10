@@ -43,7 +43,7 @@ const review: Row = {
 };
 let fixtures: Record<string, Row[]>;
 beforeEach(() => {
-  history.replaceState(null, "", "/#/team");
+  history.replaceState(null, "", "/#/tasks");
   vi.spyOn(crewApi, "serverVersion").mockResolvedValue({
     version: "0.3.1",
     commit: "synthetic-build",
@@ -94,8 +94,8 @@ it("puts each page in the address", async () => {
   await screen.findByRole("heading", { name: "Launch post" });
   await openPage("Agents");
   expect(location.hash).toBe("#/agents");
-  await openPage("AI Team");
-  expect(location.hash).toBe("#/team");
+  await openPage("Tasks");
+  expect(location.hash).toBe("#/tasks");
   await openPage("Home");
   expect(location.hash).toBe("#/");
 });
@@ -131,7 +131,7 @@ it("shows note previews without Markdown markers", async () => {
   ];
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  await openPage("Shared memory");
+  await openPage("Notes");
   expect(
     screen.getByText(/^Summary Task: abc and snake_case site$/),
   ).toBeInTheDocument();
@@ -150,7 +150,7 @@ it("closes an overlay on a backdrop click but not on a drag from inside", async 
   fireEvent.mouseDown(dialog, outside);
   fireEvent.click(dialog, outside);
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  expect(location.hash).toBe("#/");
+  expect(location.hash).toBe("#/tasks");
 });
 it("asks before discarding edits, and only when something changed", async () => {
   history.replaceState(null, "", "/#/tasks/task00000000001");
@@ -553,7 +553,7 @@ it("shows bucket responsibility and saves a changed or cleared assignment", asyn
   fixtures.agents.push(design);
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  await openPage("Shared memory");
+  await openPage("Notes");
   expect(screen.getByText("Network · responsible agent")).toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("button", { name: "Edit bucket NETWORK" }),
@@ -605,7 +605,7 @@ it("keeps bucket assignment conflicts visible for reassessment", async () => {
   );
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  await openPage("Shared memory");
+  await openPage("Notes");
   fireEvent.click(
     screen.getByRole("button", { name: "Edit bucket NETWORK" }),
   );
@@ -952,7 +952,7 @@ it("opens webhook task links and clears the route when the editor closes", async
   expect(dialog.getByLabelText("Title")).toHaveValue("Launch post");
   fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
   expect(screen.queryByRole("dialog")).toBeNull();
-  expect(location.hash).toBe("#/");
+  expect(location.hash).toBe("#/tasks");
   fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });
@@ -1165,7 +1165,7 @@ it("never opens or reopens a dialog on a data refresh", async () => {
   fixtures.tasks = [linkedTask];
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  await openPage("Shared memory");
+  await openPage("Notes");
   fireEvent.click(
     screen.getByRole("button", { name: "Edit bucket NETWORK" }),
   );
@@ -1208,18 +1208,86 @@ it("keeps in-progress edits and the opened row across a refresh of a linked dial
 });
 
 it.each([
-  ["task", "#/tasks/launch-post-task00000000001"],
-  ["note", "#/notes/voice-guide-note00000000001"],
-])("clears the %s hash when its dialog closes", async (_kind, hash) => {
-  fixtures.tasks = [linkedTask];
+  ["task", "#/tasks/launch-post-task00000000001", "Tasks", "#/tasks"],
+  ["note", "#/notes/voice-guide-note00000000001", "Notes", "#/notes"],
+])(
+  "opens a %s link over its own list and returns to that list on close",
+  async (_kind, hash, page, list) => {
+    fixtures.tasks = [linkedTask];
+    fixtures.notes = [linkedNote];
+    history.replaceState(null, "", `/${hash}`);
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(location.hash).toBe(hash);
+    expect(screen.getByRole("link", { name: page })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.getByRole("heading", { level: 1, name: page }),
+    ).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(location.hash).toBe(list);
+    expect(screen.getByRole("link", { name: page })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  },
+);
+
+it.each([
+  ["#/team", "#/tasks", "Tasks"],
+  ["#/team?agent=unassigned", "#/tasks?agent=unassigned", "Tasks"],
+  ["#/memory", "#/notes", "Notes"],
+  [
+    "#/memory?sort=title&buckets=notes",
+    "#/notes?sort=title&buckets=notes",
+    "Notes",
+  ],
+])("redirects the old address %s to %s", async (old, current, page) => {
   fixtures.notes = [linkedNote];
-  history.replaceState(null, "", `/${hash}`);
+  history.replaceState(null, "", `/${old}`);
+  const length = history.length;
   render(<CrewWorkspace />);
-  const dialog = within(await screen.findByRole("dialog"));
-  expect(location.hash).toBe(hash);
-  fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
-  expect(screen.queryByRole("dialog")).toBeNull();
-  expect(location.hash).toBe("#/");
+  await waitFor(() =>
+    expect(screen.getByRole("link", { name: page })).toHaveAttribute(
+      "aria-current",
+      "page",
+    ),
+  );
+  await waitFor(() => expect(location.hash).toBe(current));
+  expect(history.length).toBe(length);
+});
+
+it("redirects an old address reached by navigation without an extra history entry", async () => {
+  render(<CrewWorkspace />);
+  await screen.findByRole("heading", { name: "Launch post" });
+  await openPage("Agents");
+  const length = history.length;
+  location.hash = `#/team?agent=${agent.id}`;
+  await waitFor(() =>
+    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    ),
+  );
+  // The navigation adds one entry; the redirect replaces it.
+  expect(location.hash).toBe(`#/tasks?agent=${agent.id}`);
+  expect(history.length).toBe(length + 1);
+  expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(screen.getByRole("combobox", { name: "Filter by assignment" })).toHaveValue(
+    agent.id,
+  );
+  navigate("#/memory?sort=title");
+  await waitFor(() => expect(location.hash).toBe("#/notes?sort=title"));
+  expect(screen.getByRole("link", { name: "Notes" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
 });
 
 it("updates the address on click without a duplicate open, and not for new items", async () => {
@@ -1233,13 +1301,13 @@ it("updates the address on click without a duplicate open, and not for new items
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
   expect(listener).not.toHaveBeenCalled();
-  await openPage("Shared memory");
+  await openPage("Notes");
   listener.mockClear(); // The sidebar link is a real navigation.
   fireEvent.click(screen.getByRole("button", { name: /Voice guide/ }));
   expect(location.hash).toBe("#/notes/voice-guide-note00000000001");
   fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
   fireEvent.click(screen.getByRole("button", { name: /New note/ }));
-  expect(location.hash).toBe("#/memory");
+  expect(location.hash).toBe("#/notes");
   expect(listener).not.toHaveBeenCalled();
   window.removeEventListener("hashchange", listener);
 });
@@ -1432,7 +1500,7 @@ describe("simple dialogs", () => {
   it("opens new notes for editing and always shows their create button", async () => {
     render(<CrewWorkspace />);
     await screen.findByRole("heading", { name: "Launch post" });
-    await openPage("Shared memory");
+    await openPage("Notes");
     fireEvent.click(screen.getByRole("button", { name: /New note/ }));
     const dialog = within(screen.getByRole("dialog"));
     expect(dialog.getByLabelText("Bucket")).toHaveValue(bucket.id);
@@ -1705,7 +1773,7 @@ describe("help and Guide", () => {
     render(<CrewWorkspace />);
     await screen.findByRole("heading", { name: "Launch post" });
     const button = screen.getByRole("button", {
-      name: "What is the AI Team board?",
+      name: "What is the Tasks page?",
     });
     expect(button).toHaveAttribute("type", "button");
     expect(button).toHaveAttribute("aria-expanded", "false");
@@ -1805,7 +1873,7 @@ describe("help and Guide", () => {
   });
 });
 
-describe("shared memory page", () => {
+describe("Notes page", () => {
   const design: Row = {
     id: "bucket000000002",
     revision: 1,
@@ -1875,7 +1943,7 @@ describe("shared memory page", () => {
       "button",
       { name: new RegExp(`^${name} `) },
     );
-  async function openMemory(hash = "#/memory") {
+  async function openMemory(hash = "#/notes") {
     history.replaceState(null, "", `/${hash}`);
     render(<CrewWorkspace />);
     await screen.findByRole("heading", { name: "Beta voice" });
@@ -1914,7 +1982,7 @@ describe("shared memory page", () => {
     expect(card.closest(".crew-bucket-card")).toHaveClass("selected");
     expect(dropdown).toHaveValue(bucket.id);
     expect(noteTitles()).toEqual(["Beta voice", "Gamma audience"]);
-    expect(location.hash).toBe(`#/memory?bucket=${bucket.id}`);
+    expect(location.hash).toBe(`#/notes?bucket=${bucket.id}`);
     // Every bucket card stays visible, so another can be chosen directly.
     expect(bucketNames()).toHaveLength(3);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -1922,7 +1990,7 @@ describe("shared memory page", () => {
     expect(card).toHaveAttribute("aria-pressed", "false");
     expect(dropdown).toHaveValue("");
     expect(noteTitles()).toHaveLength(3);
-    expect(location.hash).toBe("#/memory");
+    expect(location.hash).toBe("#/notes");
     fireEvent.change(dropdown, { target: { value: design.id } });
     expect(filterButton("DESIGN")).toHaveAttribute("aria-pressed", "true");
     expect(noteTitles()).toEqual(["Alpha palette"]);
@@ -1966,7 +2034,7 @@ describe("shared memory page", () => {
       "Beta voice",
       "Gamma audience",
     ]);
-    expect(location.hash).toBe("#/memory?sort=created");
+    expect(location.hash).toBe("#/notes?sort=created");
     fireEvent.change(sort, { target: { value: "title" } });
     expect(noteTitles()).toEqual([
       "Alpha palette",
@@ -1981,7 +2049,7 @@ describe("shared memory page", () => {
       "Gamma audience",
     ]);
     fireEvent.change(sort, { target: { value: "updated" } });
-    expect(location.hash).toBe("#/memory");
+    expect(location.hash).toBe("#/notes");
   });
 
   it("sorts buckets by name by default, then note count and last activity", async () => {
@@ -2007,11 +2075,11 @@ describe("shared memory page", () => {
     fireEvent.click(refresh);
     await screen.findByRole("heading", { name: "Delta type" });
     expect(bucketNames()).toEqual(["DESIGN", "NETWORK", "ARCHIVE NOTES"]);
-    expect(location.hash).toBe("#/memory?buckets=activity");
+    expect(location.hash).toBe("#/notes?buckets=activity");
   });
 
   it("restores the filter and sorts from the address", async () => {
-    await openMemory(`#/memory?buckets=notes&sort=title&bucket=${bucket.id}`);
+    await openMemory(`#/notes?buckets=notes&sort=title&bucket=${bucket.id}`);
     expect(
       screen.getByRole("combobox", { name: "Filter by bucket" }),
     ).toHaveValue(bucket.id);
@@ -2025,14 +2093,14 @@ describe("shared memory page", () => {
     expect(filterButton("NETWORK")).toHaveAttribute("aria-pressed", "true");
     // The address is rewritten in canonical order without a navigation.
     expect(location.hash).toBe(
-      `#/memory?bucket=${bucket.id}&sort=title&buckets=notes`,
+      `#/notes?bucket=${bucket.id}&sort=title&buckets=notes`,
     );
   });
 
   it.each([
-    ["an unknown bucket", "#/memory?bucket=missing00000001"],
-    ["a malformed bucket", "#/memory?bucket=x"],
-    ["unknown sorts", "#/memory?sort=size&buckets=color"],
+    ["an unknown bucket", "#/notes?bucket=missing00000001"],
+    ["a malformed bucket", "#/notes?bucket=x"],
+    ["unknown sorts", "#/notes?sort=size&buckets=color"],
   ])("falls back to defaults for %s", async (_name, hash) => {
     await openMemory(hash);
     expect(
@@ -2042,15 +2110,15 @@ describe("shared memory page", () => {
       "updated",
     );
     expect(noteTitles()).toHaveLength(3);
-    await waitFor(() => expect(location.hash).toBe("#/memory"));
+    await waitFor(() => expect(location.hash).toBe("#/notes"));
   });
 
   it("returns to the filtered page when a note closes, and keeps note links", async () => {
-    await openMemory(`#/memory?bucket=${bucket.id}&sort=title`);
+    await openMemory(`#/notes?bucket=${bucket.id}&sort=title`);
     fireEvent.click(screen.getByRole("button", { name: /Gamma audience/ }));
     expect(location.hash).toBe("#/notes/note00000000003");
     fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
-    expect(location.hash).toBe(`#/memory?bucket=${bucket.id}&sort=title`);
+    expect(location.hash).toBe(`#/notes?bucket=${bucket.id}&sort=title`);
     expect(noteTitles()).toEqual(["Beta voice", "Gamma audience"]);
     navigate("#/notes/note00000000002");
     const dialog = within(await screen.findByRole("dialog"));
@@ -2060,10 +2128,10 @@ describe("shared memory page", () => {
   });
 
   it("starts unfiltered from the sidebar link", async () => {
-    await openMemory(`#/memory?bucket=${bucket.id}`);
-    await openPage("AI Team");
-    await openPage("Shared memory");
-    expect(location.hash).toBe("#/memory");
+    await openMemory(`#/notes?bucket=${bucket.id}`);
+    await openPage("Tasks");
+    await openPage("Notes");
+    expect(location.hash).toBe("#/notes");
     expect(noteTitles()).toHaveLength(3);
   });
 });
@@ -2094,7 +2162,7 @@ describe("board agent filter", () => {
     document
       .querySelector(`.crew-column:has(h2 i.${label}) h2 span`)
       ?.textContent;
-  async function openBoard(hash = "#/team") {
+  async function openBoard(hash = "#/tasks") {
     history.replaceState(null, "", `/${hash}`);
     render(<CrewWorkspace />);
     // Loaded once the agent options carry their counts.
@@ -2124,11 +2192,11 @@ describe("board agent filter", () => {
     expect(columnCount("todo")).toBe("1");
     expect(columnCount("in_progress")).toBe("0");
     expect(columnCount("done")).toBe("1");
-    expect(location.hash).toBe(`#/team?agent=${agent.id}`);
+    expect(location.hash).toBe(`#/tasks?agent=${agent.id}`);
     fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
     expect(filter()).toHaveValue("all");
     expect(cardTitles()).toHaveLength(5);
-    expect(location.hash).toBe("#/team");
+    expect(location.hash).toBe("#/tasks");
     expect(screen.queryByRole("button", { name: "Show all tasks" })).toBeNull();
     fireEvent.change(filter(), { target: { value: design.id } });
     fireEvent.change(filter(), { target: { value: "all" } });
@@ -2136,48 +2204,48 @@ describe("board agent filter", () => {
   });
 
   it("combines the agent filter with the board search", async () => {
-    await openBoard(`#/team?agent=${agent.id}`);
+    await openBoard(`#/tasks?agent=${agent.id}`);
     fireEvent.change(screen.getByRole("searchbox", { name: "Search tasks" }), {
       target: { value: "shipped" },
     });
     expect(cardTitles()).toEqual(["Network shipped"]);
-    expect(location.hash).toBe(`#/team?agent=${agent.id}`);
+    expect(location.hash).toBe(`#/tasks?agent=${agent.id}`);
   });
 
   it("restores the filter from the address and keeps it when a task closes", async () => {
-    await openBoard(`#/team?agent=${design.id}`);
+    await openBoard(`#/tasks?agent=${design.id}`);
     expect(filter()).toHaveValue(design.id);
     expect(cardTitles()).toEqual(["Design palette"]);
     fireEvent.click(screen.getByRole("button", { name: /Design palette/ }));
     expect(location.hash).toBe("#/tasks/task00000000003");
     fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
-    expect(location.hash).toBe(`#/team?agent=${design.id}`);
+    expect(location.hash).toBe(`#/tasks?agent=${design.id}`);
     expect(cardTitles()).toEqual(["Design palette"]);
   });
 
   it.each([
-    ["an unknown agent", "#/team?agent=nobody000000001"],
-    ["a malformed value", "#/team?agent=everyone"],
+    ["an unknown agent", "#/tasks?agent=nobody000000001"],
+    ["a malformed value", "#/tasks?agent=everyone"],
   ])("falls back to all tasks for %s", async (_name, hash) => {
     await openBoard(hash);
     expect(filter()).toHaveValue("all");
     expect(cardTitles()).toHaveLength(5);
-    await waitFor(() => expect(location.hash).toBe("#/team"));
+    await waitFor(() => expect(location.hash).toBe("#/tasks"));
   });
 
   it("keeps the unassigned and invalid queues in the address", async () => {
-    await openBoard("#/team?agent=unassigned");
+    await openBoard("#/tasks?agent=unassigned");
     expect(cardTitles()).toEqual(["Nobody yet"]);
     fireEvent.change(filter(), { target: { value: "invalid" } });
     expect(cardTitles()).toEqual(["Gone agent"]);
-    expect(location.hash).toBe("#/team?agent=invalid");
+    expect(location.hash).toBe("#/tasks?agent=invalid");
   });
 
   it("Home's status tiles open the whole board", async () => {
-    await openBoard(`#/team?agent=${agent.id}`);
+    await openBoard(`#/tasks?agent=${agent.id}`);
     await openPage("Home");
     const tile = screen.getByRole("link", { name: /To do/ });
-    expect(tile).toHaveAttribute("href", "#/team");
+    expect(tile).toHaveAttribute("href", "#/tasks");
     fireEvent.click(tile);
     await waitFor(() => expect(filter()).toHaveValue("all"));
     expect(cardTitles()).toHaveLength(5);

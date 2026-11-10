@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   defaultViewState,
   isItemHash,
+  legacyRedirect,
   loginReturnHash,
   parseItemHash,
   viewFromHash,
@@ -101,20 +102,56 @@ describe("stored return target", () => {
   });
 });
 
-describe("board and memory address state", () => {
+describe("Tasks and Notes address state", () => {
   const bucketId = "bucket000000001";
   const agentId = "agent0000000001";
   it("reads views with and without a query", () => {
-    expect(viewFromHash("#/memory")).toBe("memory");
-    expect(viewFromHash(`#/memory?bucket=${bucketId}`)).toBe("memory");
-    expect(viewFromHash("#/team")).toBe("board");
-    expect(viewFromHash(`#/team?agent=${agentId}`)).toBe("board");
-    expect(viewFromHash("#/teamx")).toBe("home");
-    expect(viewFromHash("#/memory/x")).toBe("home");
+    expect(viewFromHash("#/notes")).toBe("memory");
+    expect(viewFromHash(`#/notes?bucket=${bucketId}`)).toBe("memory");
+    expect(viewFromHash("#/tasks")).toBe("board");
+    expect(viewFromHash(`#/tasks?agent=${agentId}`)).toBe("board");
+    expect(viewFromHash("#/tasksx")).toBe("home");
+    expect(viewFromHash("#/notesx")).toBe("home");
+  });
+  it("shows a valid item link over its own list and a malformed one over Home", () => {
+    expect(viewFromHash("#/tasks/launch-post-task00000000001")).toBe("board");
+    expect(viewFromHash("#/tasks/task00000000001")).toBe("board");
+    expect(viewFromHash("#/notes/voice-guide-note00000000001")).toBe("memory");
+    expect(viewFromHash("#/notes/x")).toBe("home");
+    expect(viewFromHash("#/tasks/task00000000001/extra")).toBe("home");
+    expect(viewFromHash("#/tasks/task00000000001?agent=x")).toBe("home");
+  });
+  it.each([
+    ["#/team", "#/tasks"],
+    ["#/memory", "#/notes"],
+    [`#/team?agent=${agentId}`, `#/tasks?agent=${agentId}`],
+    ["#/team?agent=bad&x=1", "#/tasks?agent=bad&x=1"],
+    [
+      `#/memory?buckets=notes&sort=title&bucket=${bucketId}`,
+      `#/notes?buckets=notes&sort=title&bucket=${bucketId}`,
+    ],
+    ["#/memory?", "#/notes?"],
+  ])("redirects the old address %s to %s with its query", (old, current) => {
+    expect(legacyRedirect(old)).toBe(current);
+    expect(viewFromHash(old)).toBe(viewFromHash(current));
+    expect(viewStateFromHash(old)).toEqual(viewStateFromHash(current));
+  });
+  it.each([
+    "#/tasks",
+    "#/notes",
+    "#/teamx",
+    "#/memory/x",
+    "#/team/task00000000001",
+    "#/tasks/task00000000001",
+    "#/search?q=team",
+    "#/guide/memory",
+    "#/",
+  ])("does not redirect %s", (value) => {
+    expect(legacyRedirect(value)).toBeNull();
   });
   it("round-trips memory filters and sorts in canonical order", () => {
     const state = viewStateFromHash(
-      `#/memory?buckets=activity&sort=title&bucket=${bucketId}`,
+      `#/notes?buckets=activity&sort=title&bucket=${bucketId}`,
     );
     expect(state).toEqual({
       ...defaultViewState,
@@ -123,28 +160,30 @@ describe("board and memory address state", () => {
       bucketSort: "activity",
     });
     expect(viewStateHash("memory", state)).toBe(
-      `#/memory?bucket=${bucketId}&sort=title&buckets=activity`,
+      `#/notes?bucket=${bucketId}&sort=title&buckets=activity`,
     );
-    expect(viewStateHash("memory", defaultViewState)).toBe("#/memory");
+    expect(viewStateHash("memory", defaultViewState)).toBe("#/notes");
   });
   it("round-trips the board assignment filter", () => {
     for (const value of [agentId, "unassigned", "invalid"]) {
-      const state = viewStateFromHash(`#/team?agent=${value}`);
+      const state = viewStateFromHash(`#/tasks?agent=${value}`);
       expect(state.assignment).toBe(value);
-      expect(viewStateHash("board", state)).toBe(`#/team?agent=${value}`);
+      expect(viewStateHash("board", state)).toBe(`#/tasks?agent=${value}`);
     }
-    expect(viewStateHash("board", defaultViewState)).toBe("#/team");
+    expect(viewStateHash("board", defaultViewState)).toBe("#/tasks");
   });
   it.each([
-    ["unknown sort", "#/memory?sort=random"],
-    ["bad bucket id", "#/memory?bucket=../x"],
-    ["repeated bucket", `#/memory?bucket=${bucketId}&bucket=${bucketId}`],
-    ["unknown bucket sort", "#/memory?buckets=size"],
+    ["unknown sort", "#/notes?sort=random"],
+    ["bad bucket id", "#/notes?bucket=../x"],
+    ["repeated bucket", `#/notes?bucket=${bucketId}&bucket=${bucketId}`],
+    ["unknown bucket sort", "#/notes?buckets=size"],
     ["other page", `#/agents?bucket=${bucketId}`],
-    ["memory parameter on the board", `#/team?bucket=${bucketId}`],
-    ["bad agent", "#/team?agent=all"],
-    ["empty agent", "#/team?agent="],
-    ["repeated agent", `#/team?agent=${agentId}&agent=unassigned`],
+    ["memory parameter on the board", `#/tasks?bucket=${bucketId}`],
+    ["bad agent", "#/tasks?agent=all"],
+    ["empty agent", "#/tasks?agent="],
+    ["repeated agent", `#/tasks?agent=${agentId}&agent=unassigned`],
+    ["bad agent at the old address", "#/team?agent=all"],
+    ["unknown sort at the old address", "#/memory?sort=random"],
   ])("falls back to defaults for %s", (_name, value) => {
     expect(viewStateFromHash(value)).toEqual(defaultViewState);
   });
@@ -160,18 +199,37 @@ describe("board and memory address state", () => {
   });
   it("remembers a canonical filtered page across sign-in", () => {
     const remembered = loginReturnHash(
-      `#/memory?x=1&sort=created&bucket=${bucketId}`,
+      `#/notes?x=1&sort=created&bucket=${bucketId}`,
     )!;
-    expect(remembered).toBe(`#/memory?bucket=${bucketId}&sort=created`);
+    expect(remembered).toBe(`#/notes?bucket=${bucketId}&sort=created`);
     rememberLoginReturn(remembered);
     expect(takeLoginReturn()).toBe(remembered);
-    rememberLoginReturn(`#/memory?y=1&bucket=${bucketId}`);
+    rememberLoginReturn(`#/notes?y=1&bucket=${bucketId}`);
     expect(takeLoginReturn()).toBeNull();
-    expect(loginReturnHash(`#/team?x=1&agent=${agentId}`)).toBe(
-      `#/team?agent=${agentId}`,
+    expect(loginReturnHash(`#/tasks?x=1&agent=${agentId}`)).toBe(
+      `#/tasks?agent=${agentId}`,
     );
+    rememberLoginReturn(`#/tasks?agent=${agentId}`);
+    expect(takeLoginReturn()).toBe(`#/tasks?agent=${agentId}`);
+    rememberLoginReturn("#/tasks?agent=x&y=1");
+    expect(takeLoginReturn()).toBeNull();
+    for (const page of ["#/tasks", "#/notes"]) {
+      expect(loginReturnHash(page)).toBe(page);
+      rememberLoginReturn(page);
+      expect(takeLoginReturn()).toBe(page);
+    }
+  });
+  it("returns an old address remembered before an upgrade at its new form", () => {
+    expect(loginReturnHash(`#/team?x=1&agent=${agentId}`)).toBe(
+      `#/tasks?agent=${agentId}`,
+    );
+    expect(loginReturnHash("#/memory")).toBe("#/notes");
     rememberLoginReturn(`#/team?agent=${agentId}`);
-    expect(takeLoginReturn()).toBe(`#/team?agent=${agentId}`);
+    expect(takeLoginReturn()).toBe(`#/tasks?agent=${agentId}`);
+    rememberLoginReturn("#/memory");
+    expect(takeLoginReturn()).toBe("#/notes");
+    rememberLoginReturn(`#/memory?bucket=${bucketId}&sort=title`);
+    expect(takeLoginReturn()).toBe(`#/notes?bucket=${bucketId}&sort=title`);
     rememberLoginReturn("#/team?agent=x&y=1");
     expect(takeLoginReturn()).toBeNull();
   });

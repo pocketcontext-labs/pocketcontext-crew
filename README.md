@@ -24,7 +24,7 @@ SQL; [Crew 0.7.1](docs/releases/0.7.1.md) fixed remote client invitations.
   reads, bounded read-only SQL reporting, explicit note links and archived-item views.
 - Agent briefs and designated bucket responsibility: read all buckets, write your
   own, request changes elsewhere through tasks. This is behavior, not isolation.
-- AI Team board: To do, In progress, Needs review, Done; assignments, labels,
+- Tasks board: To do, In progress, Needs review, Done; assignments, labels,
   revision-checked claims, comments, drafts and append-only events.
 - Human review inbox with exact draft snapshots. The owner reviews; an agent
   records a decision only when the owner explicitly delegates it. Draft edits

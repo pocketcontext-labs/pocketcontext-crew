@@ -23,24 +23,24 @@ try {
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
  await page.getByRole('heading',{name:'Get started',exact:true}).waitFor();
  await snap('crew-home-new');
- await page.getByRole('navigation').getByRole('link',{name:'AI Team',exact:true}).click();
- await page.waitForURL('**/#/team');
- await page.getByRole('heading',{name:'AI Team',exact:true}).waitFor();
+ await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await page.waitForURL('**/#/tasks');
+ await page.getByRole('heading',{name:'Tasks',exact:true}).waitFor();
  await page.getByRole('button',{name:'Set up starter crew'}).click();
  await page.getByText('Your five starter agents and memory buckets are ready.').waitFor();
- await page.getByRole('link',{name:'Shared memory',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Shared memory'}).waitFor();
+ await page.getByRole('navigation').getByRole('link',{name:'Notes',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Notes'}).waitFor();
  assert.equal(await page.locator('.crew-bucket-card').count(),5);
  await page.getByRole('button',{name:'New note'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch voice');
  await dialog().getByLabel('Bucket',{exact:true}).selectOption({label:'NETWORK'});
  await noteBody().fill('Write plainly for independent founders.');
  await dialog().getByRole('button',{name:'Save note'}).click();await saved();
- // Shared memory: no page search; a bucket card filters the notes, Edit is its own button, and the address keeps filter and sort.
+ // Notes: no page search; a bucket card filters the notes, Edit is its own button, and the address keeps filter and sort.
  assert.equal(await page.getByRole('searchbox',{name:'Search memory'}).count(),0,'no page search on memory');
  const bucketCard=name=>page.locator('.crew-buckets').getByRole('button',{name:new RegExp('^'+name+' ')});
  await bucketCard('NETWORK').click();
- await page.waitForFunction(()=>/^#\/memory\?bucket=[a-z0-9]{15}$/.test(location.hash));
+ await page.waitForFunction(()=>/^#\/notes\?bucket=[a-z0-9]{15}$/.test(location.hash));
  assert.equal(await bucketCard('NETWORK').getAttribute('aria-pressed'),'true');
  await page.waitForFunction(()=>{const e=[...document.querySelectorAll('.crew-note-card .crew-eyebrow')];return e.length===2&&e.every(x=>x.textContent==='NETWORK');});
  await page.getByRole('combobox',{name:'Sort notes'}).selectOption('title');
@@ -49,14 +49,14 @@ try {
  await page.reload();
  await page.locator('.crew-buckets').getByRole('button',{name:/^NETWORK /,pressed:true}).waitFor();
  await page.waitForFunction(()=>document.querySelectorAll('.crew-note-card').length===2);
- assert.equal(page.url(),filteredMemory,'reload keeps the memory address');
+ assert.equal(page.url(),filteredMemory,'reload keeps the Notes address');
  assert.equal(await page.getByRole('combobox',{name:'Sort notes'}).inputValue(),'title');
  assert.equal(await page.getByRole('combobox',{name:'Filter by bucket'}).locator('option:checked').innerText(),'NETWORK');
  await snap('crew-memory-filtered');
  await bucketCard('NETWORK').click();
- await page.waitForFunction(()=>location.hash==='#/memory?sort=title');
+ await page.waitForFunction(()=>location.hash==='#/notes?sort=title');
  await page.getByRole('combobox',{name:'Sort notes'}).selectOption('updated');
- await page.waitForFunction(()=>location.hash==='#/memory'&&document.querySelectorAll('.crew-note-card').length===6);
+ await page.waitForFunction(()=>location.hash==='#/notes'&&document.querySelectorAll('.crew-note-card').length===6);
  await page.getByRole('button',{name:'Edit bucket NETWORK'}).click();
  await page.getByRole('dialog',{name:'Edit bucket'}).waitFor();
  await close();await dialog().waitFor({state:'hidden'});
@@ -80,7 +80,7 @@ try {
  await page.locator('nav a[aria-current=page]').filter({hasText:'Archive'}).waitFor();
  await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByRole('button',{name:'Restore'}).click();
  await page.getByText('Restored. Prior approvals were not reactivated.').waitFor();
- await page.getByRole('link',{name:'AI Team',exact:true}).click();
+ await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
  await page.getByRole('button',{name:'New task'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch post');
  await dialog().getByLabel('Description',{exact:true}).fill('Introduce our product in our voice.');
@@ -103,8 +103,8 @@ try {
  await dialog().getByLabel('Decision note').fill('Ready for manual publishing.');
  await dialog().getByRole('button',{name:'Approve draft',exact:true}).click();await saved();
  await page.getByRole('heading',{name:'Nothing waiting for your review'}).waitFor();
- await page.getByRole('link',{name:'AI Team',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();
+ await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/In progress/})}).locator('.crew-task-card').count(),1);
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
  const taskDialogHeight=()=>dialog().evaluate(d=>Math.round(d.getBoundingClientRect().height));
@@ -137,7 +137,7 @@ try {
  await dialog().waitFor();
  assert.match(page.url(),/#\/tasks\/synthetic-launch-post-[a-z0-9]{15}$/,'a task result opens at its path');
  await close();await dialog().waitFor({state:'hidden'});
- await page.waitForURL('**/#/team');
+ await page.waitForURL('**/#/tasks');
  await searchBox.fill('netw');
  await results.getByRole('group',{name:'Agents'}).getByRole('option',{name:/Network/}).click();
  await page.getByRole('dialog',{name:'Edit agent'}).waitFor();
@@ -236,7 +236,7 @@ try {
  await snapView('crew-bot-mapping-card');
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:900});
-  for(const name of ['Home','AI Team','Shared memory','Approvals','Agents','Archive']){
+  for(const name of ['Home','Tasks','Notes','Approvals','Agents','Archive']){
    await page.getByRole('navigation').getByRole('link',{name:new RegExp('^'+name)}).click();
    await page.locator('nav a[aria-current=page]').filter({hasText:name}).waitFor();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
@@ -260,15 +260,15 @@ try {
    await snap('crew-guide-'+width);
    await page.getByRole('navigation').getByRole('link',{name:'Home',exact:true}).click();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
   }
-  await page.getByRole('link',{name:'AI Team',exact:true}).click();await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();await snap('crew-board-'+width);
+  await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();await snap('crew-board-'+width);
   assert.equal(await page.locator('button:visible').filter({hasText:/^Sign out$/}).count(),1,`one Sign out at ${width}`);
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isVisible(),true,`Refresh at ${width}`);
   assert.equal(await page.locator('.crew-topbar > span').isVisible(),width>680,`top bar at ${width}`);
  }
  // Phone sheets: reading first, edit second, Save pinned once something changed.
  await page.setViewportSize({width:390,height:844});
- await page.getByRole('navigation').getByRole('link',{name:'Shared memory',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Shared memory'}).waitFor();
+ await page.getByRole('navigation').getByRole('link',{name:'Notes',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Notes'}).waitFor();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  await dialog().getByRole('heading',{name:'Synthetic launch voice'}).waitFor();
  const sheet=await dialog().boundingBox();
@@ -317,8 +317,8 @@ try {
  await page.locator('#guide-bucket.current').waitFor({state:'detached'});
  await page.getByRole('heading',{name:'How Crew works',exact:true}).waitFor();
  await page.waitForFunction(()=>window.scrollY<5);
- await page.getByRole('link',{name:'AI Team',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'AI Team'}).waitFor();
+ await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
  await page.getByRole('button',{name:/New task/}).click();
  await page.getByRole('dialog').waitFor();
  await page.mouse.click(5,5);
@@ -344,12 +344,12 @@ try {
  await page.goBack();
  await page.waitForURL('**/#/agents');
  assert.match(await currentPage(),/Agents/,'Back returns to the page');
- await page.getByRole('link',{name:'Shared memory',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Shared memory'}).waitFor();
+ await page.getByRole('navigation').getByRole('link',{name:'Notes',exact:true}).click();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Notes'}).waitFor();
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  assert.equal(await dialog().locator('.crew-prose').innerText(),'Write plainly for independent founders.');await close();
  await page.setViewportSize({width:1280,height:800});
- await page.getByRole('link',{name:'AI Team',exact:true}).click();
+ await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
  await page.getByRole('button',{name:'New task'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic long description');
  await dialog().getByLabel('Description',{exact:true}).fill(Array.from({length:40},(_,i)=>`Synthetic line ${i+1}`).join('\n'));
@@ -365,7 +365,7 @@ try {
  await cards(2);
  await page.waitForFunction(()=>[...document.querySelectorAll('select[aria-label="Filter by assignment"] option')].some(o=>o.textContent==='Network (1)'));
  await assignment.selectOption({label:'Network (1)'});
- await page.waitForFunction(()=>/^#\/team\?agent=[a-z0-9]{15}$/.test(location.hash));
+ await page.waitForFunction(()=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(location.hash));
  await cards(1);
  const filteredBoard=page.url();
  await page.reload();
@@ -375,7 +375,53 @@ try {
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('h2 span').innerText(),'1','column counts follow the filter');
  await snap('crew-board-agent-filter');
  await page.getByRole('button',{name:'Show all tasks',exact:true}).click();
- await page.waitForFunction(()=>location.hash==='#/team');
+ await page.waitForFunction(()=>location.hash==='#/tasks');
+ await cards(2);
+ // Old page addresses redirect in place, keeping the query, on navigation and on load.
+ await assignment.selectOption({label:'Network (1)'});
+ await page.waitForFunction(()=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(location.hash));
+ const agentQuery=await page.evaluate(()=>location.hash.split('?')[1]);
+ await page.getByRole('navigation').getByRole('link',{name:'Agents',exact:true}).click();
+ await page.waitForURL('**/#/agents');
+ await page.evaluate(q=>{location.hash='#/team?'+q;},agentQuery);
+ await page.waitForFunction(q=>location.hash==='#/tasks?'+q,agentQuery);
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
+ await cards(1);
+ // The redirect replaced the old address: Back goes straight to the previous page.
+ await page.goBack();
+ await page.waitForURL('**/#/agents');
+ await page.goForward();
+ await page.waitForFunction(q=>location.hash==='#/tasks?'+q,agentQuery);
+ await cards(1);
+ await page.evaluate(()=>history.replaceState(null,'','#/memory?sort=title'));
+ await page.reload();
+ await page.waitForFunction(()=>location.hash==='#/notes?sort=title');
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Notes'}).waitFor();
+ await page.waitForFunction(()=>document.querySelector('select[aria-label="Sort notes"]')?.value==='title');
+ await page.waitForFunction(()=>document.querySelectorAll('.crew-note-card').length>0);
+ await snap('crew-notes-1280');
+ await page.evaluate(q=>history.replaceState(null,'','#/team?'+q),agentQuery);
+ await page.reload();
+ await page.waitForFunction(q=>location.hash==='#/tasks?'+q,agentQuery);
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
+ await cards(1);
+ // A task opened from the filtered board closes back to it; its link opens over the board.
+ await page.getByRole('button',{name:/Synthetic launch post/}).click();
+ await dialog().waitFor();
+ await page.waitForFunction(()=>/^#\/tasks\/synthetic-launch-post-[a-z0-9]{15}$/.test(location.hash));
+ const taskPath=await page.evaluate(()=>location.hash);
+ await close();await dialog().waitFor({state:'hidden'});
+ await page.waitForFunction(q=>location.hash==='#/tasks?'+q,agentQuery);
+ await cards(1);
+ await page.evaluate(p=>history.replaceState(null,'',p),taskPath);
+ await page.reload();
+ await dialog().waitFor();
+ await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
+ await page.waitForFunction(()=>document.querySelector('.crew-heading h1')?.textContent==='Tasks'&&document.querySelectorAll('.crew-column .crew-task-card').length===2);
+ assert.equal(page.url().endsWith(taskPath),true,'the task link keeps its address');
+ await snapView('crew-task-over-board-1280');
+ await close();await dialog().waitFor({state:'hidden'});
+ await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
  // A long agent brief opens at full height (capped, with a scrollbar), and its card clamps to whole lines.
  await page.getByRole('navigation').getByRole('link',{name:'Agents',exact:true}).click();
@@ -398,8 +444,8 @@ try {
  await snapView('crew-agent-brief-1280');
  await close();await dialog().waitFor({state:'hidden'});
  // Search boxes draw one focus ring, on the box, never a second one on the field inside.
- await page.getByRole('link',{name:'AI Team',exact:true}).click();
- await page.waitForURL('**/#/team');
+ await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await page.waitForURL('**/#/tasks');
  for(const [box,field] of [['.crew-global-field','.crew-global-field input'],['.crew-search','.crew-search input']]){
   await page.locator(field).first().focus();
   assert.equal(await page.locator(field).first().evaluate(e=>getComputedStyle(e).boxShadow),'none',`${field} draws no ring of its own`);
@@ -411,5 +457,5 @@ try {
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');
- console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, memory and board filters, global search 1440/390, responsive 1440/390/320, logout.');
+ console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, global search 1440/390, responsive 1440/390/320, logout.');
 }catch(error){ console.error('Synthetic browser page:', (await page.locator('body').innerText()).slice(0,2500)); await snap('crew-failure'); throw error; }finally{await browser.close();}

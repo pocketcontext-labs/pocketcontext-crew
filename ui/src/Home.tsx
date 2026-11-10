@@ -126,7 +126,7 @@ export default function Home({
         <>
           <p>
             Describe a piece of work and assign it to an agent. It appears on
-            the AI Team board.
+            the Tasks board.
           </p>
           <button className="crew-primary" onClick={newTask}>
             ＋ New task
