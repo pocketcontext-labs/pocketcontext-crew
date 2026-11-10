@@ -16,8 +16,6 @@ const snap=async name=>{if(process.env.CREW_SCREENSHOTS) await page.screenshot({
 const snapView=async name=>{if(process.env.CREW_SCREENSHOTS) await page.screenshot({path:path.join(process.env.CREW_SCREENSHOTS,name+'.png')});};
 // Exact label matching sees a textarea's own text, so match the label's span.
 const noteBody=()=>dialog().getByLabel('Note',{exact:true});
-// Growing fields open at full height up to 70% of the viewport, then scroll inside.
-const grownToCap=e=>{const cap=Math.floor(innerHeight*0.7);return e.clientHeight>300&&(e.scrollHeight<=e.clientHeight+2||(e.offsetHeight>=cap-2&&getComputedStyle(e).overflowY==='auto'));};
 const edit=()=>dialog().getByRole('tab',{name:'Edit',exact:true}).click();
 try {
  await page.goto(base);
@@ -259,7 +257,7 @@ try {
  await noteField.fill(Array.from({length:60},(_,i)=>`Synthetic line ${i+1}`).join('\n'));
  const save=await dialog().getByRole('button',{name:'Save note'}).boundingBox();
  assert.ok(save.y+save.height<=844&&save.y>700,'Save stays pinned to the bottom of the sheet');
- assert.equal(await noteField.evaluate(grownToCap),true,'the note field grows to the cap, then scrolls');
+ assert.equal(await noteField.evaluate(e=>e.scrollHeight<=e.clientHeight+1),true,'the note field grows instead of scrolling');
  await dialog().getByLabel('Reason for change',{exact:true}).waitFor();
  await snapView('crew-note-edit-390');
  // Help inside a dialog: no dirty state change, Escape closes only the popover.
@@ -321,7 +319,7 @@ try {
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic long description/}).click();
  await dialog().getByRole('tablist',{name:'Description view'}).getByRole('tab',{name:'Edit',exact:true}).click();
- assert.equal(await dialog().getByLabel('Description',{exact:true}).evaluate(grownToCap),true,'a saved description opens at full height in Edit');
+ assert.equal(await dialog().getByLabel('Description',{exact:true}).evaluate(e=>e.scrollHeight<=e.clientHeight+2&&e.clientHeight>300),true,'a saved description opens at full height in Edit');
  await page.keyboard.press('Escape');
  await dialog().waitFor({state:'hidden'});
  // A long agent brief opens at full height (capped, with a scrollbar), and its card clamps to whole lines.

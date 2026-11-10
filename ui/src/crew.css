@@ -1241,9 +1241,12 @@ a.crew-logo:hover .product-brand span {
 .crew-dialog .crew-note-text {
   min-height: 240px;
 }
-/* Grows with its text up to a cap, then scrolls inside with a scrollbar. */
 .crew-dialog textarea.crew-grow {
   resize: none;
+  overflow: hidden;
+}
+/* A long agent brief grows up to a cap, then scrolls inside with a scrollbar. */
+.crew-dialog textarea.crew-grow.crew-long-text {
   max-height: 70vh;
   overflow-y: auto;
 }

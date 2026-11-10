@@ -203,8 +203,8 @@ function CopyLink({
   );
 }
 /**
- * Grows with its content, so a long note scrolls with the dialog, not inside it,
- * up to a cap (CSS max-height) past which the field scrolls itself.
+ * Grows with its content, so a long note scrolls with the dialog, not inside it.
+ * The agent brief is capped (CSS max-height) and past that scrolls itself.
  */
 function GrowingTextarea({ value, ...props }: ComponentProps<"textarea">) {
   const ref = useRef<HTMLTextAreaElement>(null);
