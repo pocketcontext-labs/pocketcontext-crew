@@ -2067,3 +2067,119 @@ describe("shared memory page", () => {
     expect(noteTitles()).toHaveLength(3);
   });
 });
+
+describe("board agent filter", () => {
+  const design: Row = { id: "agent0000000002", revision: 1, name: "Design" };
+  const boardTask = (
+    id: string,
+    title: string,
+    status: string,
+    assigned: string,
+  ): Row => ({ ...task, id, title, status, assigned_agent: assigned });
+  beforeEach(() => {
+    fixtures.agents = [agent, design];
+    fixtures.reviews = [];
+    fixtures.tasks = [
+      boardTask("task00000000001", "Network draft", "todo", agent.id),
+      boardTask("task00000000002", "Network shipped", "done", agent.id),
+      boardTask("task00000000003", "Design palette", "in_progress", design.id),
+      boardTask("task00000000004", "Nobody yet", "todo", ""),
+      boardTask("task00000000005", "Gone agent", "todo", "missingagent001"),
+    ];
+  });
+  const filter = () => screen.getByRole("combobox", { name: "Filter by assignment" });
+  const cardTitles = () =>
+    [...document.querySelectorAll(".crew-task-card h3")].map((x) => x.textContent);
+  const columnCount = (label: string) =>
+    document
+      .querySelector(`.crew-column:has(h2 i.${label}) h2 span`)
+      ?.textContent;
+  async function openBoard(hash = "#/team") {
+    history.replaceState(null, "", `/${hash}`);
+    render(<CrewWorkspace />);
+    // Loaded once the agent options carry their counts.
+    await screen.findByRole("option", { name: "Design (1)" });
+  }
+
+  it("extends the assignment filter with one option per active agent, with counts", async () => {
+    await openBoard();
+    expect(screen.getAllByRole("combobox", { name: /Filter/ })).toHaveLength(1);
+    const options = within(filter())
+      .getAllByRole("option")
+      .map((x) => x.textContent);
+    expect(options).toEqual([
+      "All tasks",
+      "Unassigned (1)",
+      "Invalid assignments (1)",
+      "Design (1)",
+      "Network (2)",
+    ]);
+  });
+
+  it("shows one agent's tasks with matching column counts, and clears with All", async () => {
+    await openBoard();
+    expect(columnCount("todo")).toBe("3");
+    fireEvent.change(filter(), { target: { value: agent.id } });
+    expect(cardTitles()).toEqual(["Network draft", "Network shipped"]);
+    expect(columnCount("todo")).toBe("1");
+    expect(columnCount("in_progress")).toBe("0");
+    expect(columnCount("done")).toBe("1");
+    expect(location.hash).toBe(`#/team?agent=${agent.id}`);
+    fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
+    expect(filter()).toHaveValue("all");
+    expect(cardTitles()).toHaveLength(5);
+    expect(location.hash).toBe("#/team");
+    expect(screen.queryByRole("button", { name: "Show all tasks" })).toBeNull();
+    fireEvent.change(filter(), { target: { value: design.id } });
+    fireEvent.change(filter(), { target: { value: "all" } });
+    expect(cardTitles()).toHaveLength(5);
+  });
+
+  it("combines the agent filter with the board search", async () => {
+    await openBoard(`#/team?agent=${agent.id}`);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search tasks" }), {
+      target: { value: "shipped" },
+    });
+    expect(cardTitles()).toEqual(["Network shipped"]);
+    expect(location.hash).toBe(`#/team?agent=${agent.id}`);
+  });
+
+  it("restores the filter from the address and keeps it when a task closes", async () => {
+    await openBoard(`#/team?agent=${design.id}`);
+    expect(filter()).toHaveValue(design.id);
+    expect(cardTitles()).toEqual(["Design palette"]);
+    fireEvent.click(screen.getByRole("button", { name: /Design palette/ }));
+    expect(location.hash).toBe("#/tasks/task00000000003");
+    fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+    expect(location.hash).toBe(`#/team?agent=${design.id}`);
+    expect(cardTitles()).toEqual(["Design palette"]);
+  });
+
+  it.each([
+    ["an unknown agent", "#/team?agent=nobody000000001"],
+    ["a malformed value", "#/team?agent=everyone"],
+  ])("falls back to all tasks for %s", async (_name, hash) => {
+    await openBoard(hash);
+    expect(filter()).toHaveValue("all");
+    expect(cardTitles()).toHaveLength(5);
+    await waitFor(() => expect(location.hash).toBe("#/team"));
+  });
+
+  it("keeps the unassigned and invalid queues in the address", async () => {
+    await openBoard("#/team?agent=unassigned");
+    expect(cardTitles()).toEqual(["Nobody yet"]);
+    fireEvent.change(filter(), { target: { value: "invalid" } });
+    expect(cardTitles()).toEqual(["Gone agent"]);
+    expect(location.hash).toBe("#/team?agent=invalid");
+  });
+
+  it("Home's status tiles open the whole board", async () => {
+    await openBoard(`#/team?agent=${agent.id}`);
+    await openPage("Home");
+    const tile = screen.getByRole("link", { name: /To do/ });
+    expect(tile).toHaveAttribute("href", "#/team");
+    fireEvent.click(tile);
+    await waitFor(() => expect(filter()).toHaveValue("all"));
+    expect(cardTitles()).toHaveLength(5);
+  });
+});

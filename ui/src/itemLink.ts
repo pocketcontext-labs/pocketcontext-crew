@@ -24,12 +24,14 @@ export type View = keyof typeof viewHashes;
 
 /**
  * Item links and unknown addresses show Home; any Guide address shows the Guide
- * and any search address shows Search, which validates its own query. The
- * memory page keeps its filter and sorts in a query, read by viewStateFromHash.
+ * and any search address shows Search, which validates its own query. The board
+ * and memory pages keep their filters and sorts in a query, read by
+ * viewStateFromHash.
  */
 export function viewFromHash(hash: string): View {
   if (/^#\/guide(?:\/|$)/.test(hash)) return "guide";
   if (/^#\/search(?:\?|$)/.test(hash)) return "search";
+  if (/^#\/team\?/.test(hash)) return "board";
   if (/^#\/memory\?/.test(hash)) return "memory";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
   return match ? (match[0] as View) : "home";
@@ -39,34 +41,47 @@ export const noteSorts = ["updated", "created", "title", "bucket"] as const;
 export const bucketSorts = ["name", "notes", "activity"] as const;
 export type NoteSort = (typeof noteSorts)[number];
 export type BucketSort = (typeof bucketSorts)[number];
-/** Page state that lives in the address. */
+/** Board and memory page state that lives in the address. */
 export type ViewState = {
   /** A bucket id, or "" for all buckets. */
   bucket: string;
   noteSort: NoteSort;
   bucketSort: BucketSort;
+  /** "all", "unassigned", "invalid" or an agent id. */
+  assignment: string;
 };
 export const defaultViewState: ViewState = {
   bucket: "",
   noteSort: "updated",
   bucketSort: "name",
+  assignment: "all",
 };
 const recordId = /^[a-z0-9]{15}$/;
+const assignments = ["unassigned", "invalid"];
 
 /**
- * Reads `#/memory?bucket=<id>&sort=<notes>&buckets=<buckets>`. A missing, repeated or invalid value
+ * Reads `#/memory?bucket=<id>&sort=<notes>&buckets=<buckets>` and
+ * `#/team?agent=<id|unassigned|invalid>`. A missing, repeated or invalid value
  * falls back to its default; unknown parameters are ignored. Whether an id
  * still names an active record is for the page to decide.
  */
 export function viewStateFromHash(hash: string): ViewState {
   const view = viewFromHash(hash);
   const query = /^#\/[a-z]+\?(.*)$/.exec(hash)?.[1];
-  if (view !== "memory" || query === undefined) return defaultViewState;
+  if ((view !== "board" && view !== "memory") || query === undefined)
+    return defaultViewState;
   const params = new URLSearchParams(query);
   const one = (key: string, valid: (value: string) => boolean) => {
     const values = params.getAll(key);
     return values.length === 1 && valid(values[0]) ? values[0] : null;
   };
+  if (view === "board")
+    return {
+      ...defaultViewState,
+      assignment:
+        one("agent", (v) => recordId.test(v) || assignments.includes(v)) ??
+        defaultViewState.assignment,
+    };
   return {
     ...defaultViewState,
     bucket: one("bucket", (v) => recordId.test(v)) ?? defaultViewState.bucket,
@@ -81,6 +96,8 @@ export function viewStateFromHash(hash: string): ViewState {
 /** The canonical address of a view with its state; defaults are left out. */
 export function viewStateHash(view: View, state: ViewState): string {
   const params = new URLSearchParams();
+  if (view === "board" && state.assignment !== defaultViewState.assignment)
+    params.set("agent", state.assignment);
   if (view === "memory") {
     if (state.bucket) params.set("bucket", state.bucket);
     if (state.noteSort !== defaultViewState.noteSort)
@@ -92,11 +109,12 @@ export function viewStateHash(view: View, state: ViewState): string {
   return viewHashes[view] + (query ? `?${query}` : "");
 }
 
-/** Only the exact form viewStateHash writes for a page with state. */
+/** Only the exact form viewStateHash writes for the board or memory page. */
 export function isCanonicalViewStateHash(hash: string): boolean {
   const view = viewFromHash(hash);
   return (
-    view === "memory" && hash === viewStateHash(view, viewStateFromHash(hash))
+    (view === "board" || view === "memory") &&
+    hash === viewStateHash(view, viewStateFromHash(hash))
   );
 }
 
@@ -204,7 +222,8 @@ export function loginReturnHash(hash: string): string | null {
       ? searchHash(text)
       : viewHashes.search;
   }
-  if (view === "memory") return viewStateHash(view, viewStateFromHash(hash));
+  if (view === "board" || view === "memory")
+    return viewStateHash(view, viewStateFromHash(hash));
   return view === "home" ? null : hash;
 }
 

@@ -359,6 +359,24 @@ try {
  assert.equal(await dialog().getByLabel('Description',{exact:true}).evaluate(e=>e.scrollHeight<=e.clientHeight+2&&e.clientHeight>300),true,'a saved description opens at full height in Edit');
  await page.keyboard.press('Escape');
  await dialog().waitFor({state:'hidden'});
+ // Agent filter: the assignment select lists agents with counts; the address keeps it across reload.
+ const assignment=page.getByRole('combobox',{name:'Filter by assignment'});
+ const cards=n=>page.waitForFunction(n=>document.querySelectorAll('.crew-task-card').length===n,n);
+ await cards(2);
+ await page.waitForFunction(()=>[...document.querySelectorAll('select[aria-label="Filter by assignment"] option')].some(o=>o.textContent==='Network (1)'));
+ await assignment.selectOption({label:'Network (1)'});
+ await page.waitForFunction(()=>/^#\/team\?agent=[a-z0-9]{15}$/.test(location.hash));
+ await cards(1);
+ const filteredBoard=page.url();
+ await page.reload();
+ await page.waitForFunction(()=>{const s=document.querySelector('select[aria-label="Filter by assignment"]');return s&&s.selectedOptions[0]?.textContent==='Network (1)';});
+ await cards(1);
+ assert.equal(page.url(),filteredBoard,'reload keeps the board filter');
+ assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('h2 span').innerText(),'1','column counts follow the filter');
+ await snap('crew-board-agent-filter');
+ await page.getByRole('button',{name:'Show all tasks',exact:true}).click();
+ await page.waitForFunction(()=>location.hash==='#/team');
+ await cards(2);
  // A long agent brief opens at full height (capped, with a scrollbar), and its card clamps to whole lines.
  await page.getByRole('navigation').getByRole('link',{name:'Agents',exact:true}).click();
  await page.waitForURL('**/#/agents');
@@ -393,5 +411,5 @@ try {
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');
- console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, global search 1440/390, responsive 1440/390/320, logout.');
+ console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, memory and board filters, global search 1440/390, responsive 1440/390/320, logout.');
 }catch(error){ console.error('Synthetic browser page:', (await page.locator('body').innerText()).slice(0,2500)); await snap('crew-failure'); throw error; }finally{await browser.close();}

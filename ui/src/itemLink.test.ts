@@ -101,12 +101,14 @@ describe("stored return target", () => {
   });
 });
 
-describe("memory address state", () => {
+describe("board and memory address state", () => {
   const bucketId = "bucket000000001";
+  const agentId = "agent0000000001";
   it("reads views with and without a query", () => {
     expect(viewFromHash("#/memory")).toBe("memory");
     expect(viewFromHash(`#/memory?bucket=${bucketId}`)).toBe("memory");
     expect(viewFromHash("#/team")).toBe("board");
+    expect(viewFromHash(`#/team?agent=${agentId}`)).toBe("board");
     expect(viewFromHash("#/teamx")).toBe("home");
     expect(viewFromHash("#/memory/x")).toBe("home");
   });
@@ -125,13 +127,24 @@ describe("memory address state", () => {
     );
     expect(viewStateHash("memory", defaultViewState)).toBe("#/memory");
   });
+  it("round-trips the board assignment filter", () => {
+    for (const value of [agentId, "unassigned", "invalid"]) {
+      const state = viewStateFromHash(`#/team?agent=${value}`);
+      expect(state.assignment).toBe(value);
+      expect(viewStateHash("board", state)).toBe(`#/team?agent=${value}`);
+    }
+    expect(viewStateHash("board", defaultViewState)).toBe("#/team");
+  });
   it.each([
     ["unknown sort", "#/memory?sort=random"],
     ["bad bucket id", "#/memory?bucket=../x"],
     ["repeated bucket", `#/memory?bucket=${bucketId}&bucket=${bucketId}`],
     ["unknown bucket sort", "#/memory?buckets=size"],
     ["other page", `#/agents?bucket=${bucketId}`],
-    ["board page", `#/team?bucket=${bucketId}`],
+    ["memory parameter on the board", `#/team?bucket=${bucketId}`],
+    ["bad agent", "#/team?agent=all"],
+    ["empty agent", "#/team?agent="],
+    ["repeated agent", `#/team?agent=${agentId}&agent=unassigned`],
   ])("falls back to defaults for %s", (_name, value) => {
     expect(viewStateFromHash(value)).toEqual(defaultViewState);
   });
@@ -153,6 +166,13 @@ describe("memory address state", () => {
     rememberLoginReturn(remembered);
     expect(takeLoginReturn()).toBe(remembered);
     rememberLoginReturn(`#/memory?y=1&bucket=${bucketId}`);
+    expect(takeLoginReturn()).toBeNull();
+    expect(loginReturnHash(`#/team?x=1&agent=${agentId}`)).toBe(
+      `#/team?agent=${agentId}`,
+    );
+    rememberLoginReturn(`#/team?agent=${agentId}`);
+    expect(takeLoginReturn()).toBe(`#/team?agent=${agentId}`);
+    rememberLoginReturn("#/team?agent=x&y=1");
     expect(takeLoginReturn()).toBeNull();
   });
 });

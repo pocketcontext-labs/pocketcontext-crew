@@ -36,7 +36,7 @@ const pageEntries = {
     question: "What is the AI Team board?",
     what: "Every task and where it stands: To do, In progress, Needs review or Done. You or a connected agent can add tasks.",
     action:
-      "Use New task to add work, or open a card to change its status, assigned agent or draft.",
+      "Use New task to add work, or open a card to change its status, assigned agent or draft. Filter by assignment to see one agent's tasks, unassigned work or tasks that need a new agent.",
   },
   memory: {
     name: "Shared memory",

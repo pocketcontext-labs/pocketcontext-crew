@@ -110,6 +110,26 @@ const byName = (a: string, b: string) =>
 /** Newest first; timestamps share one format, and missing ones sort last. */
 const byNewest = (a: unknown, b: unknown) =>
   String(b || "").localeCompare(String(a || ""));
+/** All, unassigned, invalid, or an active agent's id. */
+const validAssignment = (value: string, agents: Row[]) =>
+  value === "all" ||
+  value === "unassigned" ||
+  value === "invalid" ||
+  agents.some((x) => x.id === value);
+/** Whether a task shows under the board's assignment filter. */
+function assignmentMatches(
+  filter: string,
+  task: Row,
+  invalid: (task: Row) => boolean,
+) {
+  if (filter === "all") return true;
+  // Unassigned and invalid are queues of open work.
+  if (filter === "unassigned")
+    return val(task, "status") !== "done" && !val(task, "assigned_agent");
+  if (filter === "invalid")
+    return val(task, "status") !== "done" && invalid(task);
+  return val(task, "assigned_agent") === filter;
+}
 const when = (raw: unknown) =>
   raw ? new Date(String(raw)).toLocaleString() : "Just now";
 /** Readable card text: Markdown markers would otherwise show, and could be cut in half. */
@@ -536,11 +556,11 @@ export default function CrewWorkspace() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [query, setQuery] = useState(""),
-    // Memory filter and sorts, kept in the address (#/memory?bucket=…&sort=…).
+    // Board and memory filters and sorts, kept in the address
+    // (#/team?agent=…, #/memory?bucket=…&sort=…).
     [viewState, setViewState] = useState<ViewState>(() =>
       viewStateFromHash(location.hash),
     ),
-    [assignmentFilter, setAssignmentFilter] = useState("all"),
     // The Search page's query, from its address; null for an invalid address.
     [searchText, setSearchText] = useState(() =>
       searchTextFromHash(location.hash),
@@ -678,10 +698,11 @@ export default function CrewWorkspace() {
   // The address follows the page state; replacing it adds no history entry and
   // fires no hashchange. An open item keeps its own address.
   useEffect(() => {
-    if (view !== "memory" || isItemHash(location.hash)) return;
+    if ((view !== "board" && view !== "memory") || isItemHash(location.hash))
+      return;
     setAddress(viewStateHash(view, viewState));
   }, [view, viewState]);
-  // An address naming a bucket that isn't active falls back to all buckets.
+  // An address naming a bucket or agent that isn't active falls back to all.
   useEffect(() => {
     if (
       ready &&
@@ -690,6 +711,15 @@ export default function CrewWorkspace() {
     )
       setViewState((state) => ({ ...state, bucket: "" }));
   }, [ready, data.buckets, viewState.bucket]);
+  useEffect(() => {
+    if (ready && !validAssignment(viewState.assignment, data.agents))
+      setViewState((state) => ({ ...state, assignment: "all" }));
+  }, [ready, data.agents, viewState.assignment]);
+  const assignmentFilter = validAssignment(viewState.assignment, data.agents)
+    ? viewState.assignment
+    : "all";
+  const setAssignmentFilter = (value: string) =>
+    setViewState((state) => ({ ...state, assignment: value }));
   const bucket = data.buckets.some((x) => x.id === viewState.bucket)
     ? viewState.bucket
     : "";
@@ -801,6 +831,14 @@ export default function CrewWorkspace() {
     (task) => !val(task, "assigned_agent"),
   ).length;
   const invalidCount = openTasks.filter(invalidAssignment).length;
+  // One filter option per active agent; its count is the cards it shows.
+  const agentOptions = [...data.agents]
+    .sort((a, b) => byName(val(a, "name"), val(b, "name")))
+    .map((agent) => ({
+      agent,
+      count: data.tasks.filter((x) => val(x, "assigned_agent") === agent.id)
+        .length,
+    }));
   const pending = data.reviews.filter((x) => val(x, "status") === "pending");
   const matches = (x: Row) =>
     [
@@ -1108,7 +1146,24 @@ export default function CrewWorkspace() {
                 <option value="invalid">
                   Invalid assignments ({invalidCount})
                 </option>
+                {agentOptions.length > 0 && (
+                  <optgroup label="By agent">
+                    {agentOptions.map(({ agent, count }) => (
+                      <option key={agent.id} value={agent.id}>
+                        {val(agent, "name")} ({count})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
+              {assignmentFilter !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => setAssignmentFilter("all")}
+                >
+                  Show all tasks
+                </button>
+              )}
             </div>
           )}
           {view === "home" && (
@@ -1154,11 +1209,7 @@ export default function CrewWorkspace() {
                   (x) =>
                     val(x, "status") === status &&
                     matches(x) &&
-                    (assignmentFilter === "all" ||
-                      (status !== "done" &&
-                        (assignmentFilter === "unassigned"
-                          ? !val(x, "assigned_agent")
-                          : invalidAssignment(x)))),
+                    assignmentMatches(assignmentFilter, x, invalidAssignment),
                 );
                 return (
                   <section className="crew-column" key={status}>
