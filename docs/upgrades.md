@@ -1,5 +1,13 @@
 # Crew upgrades and rollback
 
+## Crew 0.14.0 to 0.15.0
+
+No data migration, protocol change or new managed block, so webhook delivery is not paused.
+Replace the binary or image with the normal procedure (`CREW_REPLACE_VERSION=0.14.0` for
+the installer), upgrade paired clients with the server and run `skill` on each computer
+with a Crew profile to install the updated skill wording. A client and server must report
+the same release. From 0.13.0, first follow the 0.14.0 step below.
+
 ## Crew 0.13.0 to 0.14.0
 
 No data migration, protocol change or operator step, and no new managed block. Saved
