@@ -1,6 +1,6 @@
 ---
 name: pocketcontext-crew
-description: Manage a PocketContext Crew instance and use its CLI commands or MCP tools for shared memory, tasks and human review. Select the registered instance before acting.
+description: Manage a PocketContext Crew instance and use its CLI commands or MCP tools for notes, tasks and human review. Select the registered instance before acting.
 ---
 
 # PocketContext Crew (local)

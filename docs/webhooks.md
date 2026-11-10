@@ -2,7 +2,7 @@
 
 One existing Grok Bot keeps its normal role and also handles Crew notifications.
 One application-wide webhook wakes its routine; explicit mappings identify the
-other Grok Bots. One shared MCP connection supplies memory, tasks and coordination.
+other Grok Bots. One shared MCP connection supplies notes, tasks and coordination.
 Agent names and worker handles are attribution and coordination, not identities.
 
 Crew supports two dispatch modes. `native` dispatches in a webhook run that actually

@@ -1,6 +1,6 @@
 ---
 name: pocketcontext-crew
-description: Select a registered PocketContext Crew instance for shared memory, tasks and human review.
+description: Select a registered PocketContext Crew instance for notes, tasks and human review.
 ---
 
 # PocketContext Crew router (format 1)

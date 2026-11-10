@@ -1,6 +1,6 @@
 # Connect an assistant with MCP
 
-PocketContext Crew exposes shared memory, tasks and human review through one
+PocketContext Crew exposes notes, tasks and human review through one
 remote MCP endpoint. The same binary hosts MCP, OAuth and the reader. External
 assistants execute work; Crew does not run agents.
 

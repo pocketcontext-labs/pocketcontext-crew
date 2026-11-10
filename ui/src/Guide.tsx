@@ -38,7 +38,7 @@ const flow: { title: string; detail: string }[] = [
     detail: "Read the exact draft, then approve it, ask for changes or reject it.",
   },
   {
-    title: "The result is saved to memory",
+    title: "The result is saved as a note",
     detail: "You or the agent keep what's worth remembering as a note.",
   },
 ];
@@ -114,7 +114,7 @@ export default function Guide() {
           </li>
           <li>
             <strong>Crew doesn't run agents.</strong> They run on your own
-            platform or computer; Crew holds their tasks and memory.
+            platform or computer; Crew holds their tasks and notes.
           </li>
           <li>
             <strong>{connectFirst[mode].split(". ")[0]}.</strong>{" "}

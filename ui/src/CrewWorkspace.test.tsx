@@ -1318,7 +1318,7 @@ it("updates the address on click without a duplicate open, and not for new items
   window.removeEventListener("hashchange", listener);
 });
 
-it("updates the address when a linked note opens from a note's related memory", async () => {
+it("updates the address when a linked note opens from a note's related notes", async () => {
   const source: Row = {
     ...linkedNote,
     id: "note00000000002",

@@ -2,7 +2,7 @@
 
 One existing Grok Bot keeps its normal role and also handles Crew notifications.
 One application-wide webhook wakes its routine; explicit mappings identify the
-other Grok Bots. One shared MCP connection supplies memory, tasks and coordination.
+other Grok Bots. One shared MCP connection supplies notes, tasks and coordination.
 Agent names and worker handles are attribution and coordination, not identities.
 
 Tool names below are the MCP tools the Grok routine and bots use; they reach Crew
@@ -356,7 +356,8 @@ changes invalidate previous authority; later eligible work uses a new generation
 Wake reasons are `created`, `assigned`, `reassigned`, `unassigned`, `ready`,
 `reopened`, `review_outcome`, `catch_up` and `comment`. `comment` is opt-in: no
 existing or default configuration subscribes to it, and upgrades never add it.
-Enable it under Advanced settings or with `webhook.integration.update`.
+Turn it on under Wake rules on the reader's Connect page (Grok setup) or with
+`webhook.integration.update`.
 
 Only a comment written through the reader route (the owner browser, actor
 `owner:`) can wake. Work-client comments (MCP or CLI, actor `mcp:`) never wake
@@ -395,9 +396,10 @@ empty, by `task.update`, `task.claim` or an assigned `task.create`. Any reader
 write to the task (update, comment, review request, decision or withdrawal)
 resets it to 0.
 
-`webhook_routing.max_bot_handoffs` (default 4, range 1–20) sets the limit. Any
-caller can change it with `webhook.routing.update`; the default authorization
-rules tell agents not to unless the owner asks. When a work-client assignment
+`webhook_routing.max_bot_handoffs` (default 4, range 1–20) sets the limit. The
+owner sets it under Wake rules on the reader's Connect page. Any caller can change
+it with `webhook.routing.update`; the default authorization rules tell agents not
+to unless the owner asks. When a work-client assignment
 change would exceed the limit, the write still applies, but the task becomes
 Waiting in the same transaction with a waiting reason, `handoff_limited: true`
 and a `task.hop_limit` event with reason `hop_limit`. No wake is emitted and

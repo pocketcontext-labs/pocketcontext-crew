@@ -180,8 +180,8 @@ const glossaryEntries = {
       "Keep what's worth remembering. Use History to see earlier versions; restoring one adds a new revision.",
   },
   "related-memory": {
-    name: "Related memory",
-    question: "What is related memory?",
+    name: "Related notes",
+    question: "What are related notes?",
     what: "Links from this item to other notes, so you and your agents can find the background.",
     action:
       "Search for a note and add it. Linking doesn't change the note you link to.",

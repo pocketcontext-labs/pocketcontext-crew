@@ -1,12 +1,12 @@
 # PocketContext Crew
 
-Shared memory, tasks and human approvals for one person's AI team. One Go service,
+Notes, tasks and human approvals for one person's AI team. One Go service,
 one database and one authenticated MCP endpoint at `/mcp`, or, without a domain,
 the same binary's agent commands on your own computers. External assistants
 run the agents; Crew stores their context and coordinates work.
 
 Crew is a separate product derived from PocketContext source
-`b72e3ff5c96d9ba8792a89be6da724f27ffdc088`. It introduces its own work/memory
+`b72e3ff5c96d9ba8792a89be6da724f27ffdc088`. It introduces its own notes and tasks
 schema and application UI. Use a new project database; do not point it at an
 existing PocketContext installation. Crew has no spaces or inherited knowledge APIs. Notes need no publication run.
 
@@ -19,7 +19,7 @@ SQL; [Crew 0.7.1](docs/releases/0.7.1.md) fixed remote client invitations.
 
 ## First version
 
-- Memory buckets with editable Markdown notes, immutable versions and restoration.
+- Buckets of editable Markdown notes, immutable versions and restoration.
 - Ranked full-text search (FTS5/BM25) over notes and tasks, compact filtered
   reads, bounded read-only SQL reporting, explicit note links and archived-item views.
 - Agent briefs and designated bucket responsibility: read all buckets, write your

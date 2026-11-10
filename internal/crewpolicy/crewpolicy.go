@@ -43,10 +43,10 @@ var Identity = appidentity.Identity{
 var Text = appserver.Text{
 	AccountName:        "PocketContext",
 	LegacyRecreateHint: "Keep using the earlier release for it, or start a new project with `pocketcontext-crew init --db NEW_PATH` and recreate the Crew records you need",
-	OAuthResourceName:  "PocketContext Crew memory and tasks",
+	OAuthResourceName:  "PocketContext Crew notes and tasks",
 	OAuthConsent: appserver.OAuthConsentText{
-		ConnectionsHTML: `<p>These apps can read and change shared memory and tasks in every bucket, request human review, and record your review decisions when you delegate them. They cannot enter webhook credentials. Revoke access to disconnect an app.</p>`,
-		RequestHTML:     `<p><strong>{{.Name}}</strong> is asking to read and change shared memory and tasks in every bucket, request human review, and access supporting knowledge and originals.</p><p>It can record review decisions you delegate to it, archive buckets and deactivate agents, following the rules in its instructions. It cannot enter or read webhook credentials, administer the server or get shell access.</p>`,
+		ConnectionsHTML: `<p>These apps can read and change notes and tasks in every bucket, request human review, and record your review decisions when you delegate them. They cannot enter webhook credentials. Revoke access to disconnect an app.</p>`,
+		RequestHTML:     `<p><strong>{{.Name}}</strong> is asking to read and change notes and tasks in every bucket and request human review.</p><p>It can record review decisions you delegate to it, archive buckets and deactivate agents, following the rules in its instructions. It cannot enter or read webhook credentials, administer the server or get shell access.</p>`,
 		Page: appserver.OAuthPage{
 			CSS:             oauthPageCSS,
 			BrandHTML:       oauthBrandHTML,

@@ -1,6 +1,6 @@
 # PocketContext Crew
 
-Single-owner shared memory, tasks and human review, derived from PocketContext.
+Single-owner notes, tasks and human review, derived from PocketContext.
 Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
 
 - Work on main when authorized. Keep all records synthetic in tests.

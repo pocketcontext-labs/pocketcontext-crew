@@ -10,7 +10,7 @@ Read: `CREW read '{"collection":"buckets"}'` (MCP: `crew_read({"collection":"buc
 Your ready work, compactly:
 `CREW read '{"collection":"tasks","assigned_agent":"Build","readiness":"ready","fields":["title","status","revision"],"limit":20}'`.
 
-Find memory by topic, then read one hit:
+Find notes by topic, then read one hit:
 `CREW search '{"query":"release checklist","collections":["notes"],"limit":5}'`, then
 `CREW read '{"collection":"notes","id":"NOTE_ID","fields":["title","body"]}'`.
 

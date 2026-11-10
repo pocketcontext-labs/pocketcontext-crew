@@ -27,7 +27,7 @@ try {
  await page.waitForURL('**/#/tasks');
  await page.getByRole('heading',{name:'Tasks',exact:true}).waitFor();
  await page.getByRole('button',{name:'Set up starter crew'}).click();
- await page.getByText('Your five starter agents and memory buckets are ready.').waitFor();
+ await page.getByText('Your five starter agents and their buckets are ready.').waitFor();
  await page.getByRole('navigation').getByRole('link',{name:'Notes',exact:true}).click();
  await page.locator('nav a[aria-current=page]').filter({hasText:'Notes'}).waitFor();
  assert.equal(await page.locator('.crew-bucket-card').count(),5);

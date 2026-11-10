@@ -404,9 +404,9 @@ function RelatedNotes({
   const label = (note: Row) =>
     `${val(note, "title")}${note.archived ? " (archived)" : ""}`;
   return (
-    <fieldset className="crew-related" aria-label="Related memory">
+    <fieldset className="crew-related" aria-label="Related notes">
       <legend>
-        <span>Related memory</span>
+        <span>Related notes</span>
         {!readOnly && <Help topic="related-memory" />}
       </legend>
       {linked.length > 0 && (
@@ -958,7 +958,7 @@ export default function CrewWorkspace() {
           agents.find((x) => val(x, "name") === n) ||
           (await crewApi.write("agent.create", {
             name: n,
-            brief: `Read relevant memory before work. Maintain ${n.toUpperCase()}; request changes elsewhere through tasks. Record progress in tasks and save durable decisions and findings only. Submit drafts for human review. The owner performs external actions.`,
+            brief: `Read relevant notes before work. Maintain ${n.toUpperCase()}; request changes elsewhere through tasks. Record progress in tasks and save durable decisions and findings only. Submit drafts for human review. The owner performs external actions.`,
           }));
         const buckets = await crewApi.read("buckets");
         const b =
@@ -983,7 +983,7 @@ export default function CrewWorkspace() {
             links: [],
           });
       }
-    }, "Your five starter agents and memory buckets are ready.");
+    }, "Your five starter agents and their buckets are ready.");
   const archivedRow =
     dialog?.row && (dialog.kind === "task" || dialog.kind === "note")
       ? archived[`${dialog.kind}s`].find((x) => x.id === dialog.row?.id)
@@ -994,7 +994,7 @@ export default function CrewWorkspace() {
       ? "This note is read-only because its bucket is archived. Restore the bucket from the Archive view to make changes."
       : `This ${dialog?.kind} is archived and read-only. Restore it from the Archive view to make changes.`;
   const descriptions = {
-    home: "Where you and your AI agents share tasks and memory. Agents do the work; you decide what's approved.",
+    home: "Where you and your AI agents share tasks and notes. Agents do the work; you decide what's approved.",
     board: "Follow each task from request to finished work. Agents draft; you decide what's approved.",
     memory: "Decisions, preferences and findings every agent can find.",
     reviews:
@@ -1146,7 +1146,7 @@ export default function CrewWorkspace() {
                   <h2>A shared brief for every agent.</h2>
                   <p>
                     Create Build, Deploy, Design, Learn and Network with a
-                    memory bucket each. Edit their briefs to fit your work.
+                    bucket each. Edit their briefs to fit your work.
                   </p>
                 </div>
                 <button
@@ -2124,7 +2124,7 @@ function Editor({
             </div>
             {list(row, "links").length > 0 && (
               <section className="crew-linked-notes">
-                <h3>Related memory</h3>
+                <h3>Related notes</h3>
                 {list(row, "links").map((id) => {
                   const target = data.notes.find((note) => note.id === id);
                   return (
@@ -2339,7 +2339,7 @@ function Editor({
             )}
             {kind === "agent" && (
               <p className="crew-footnote">
-                Include its bucket, handoff rules and when to update memory.
+                Include its bucket, handoff rules and when to update notes.
                 Agent names are reported attribution, not verified identities.
               </p>
             )}

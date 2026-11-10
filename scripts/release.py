@@ -453,7 +453,7 @@ def publish(args):
             return
     else:
         base = f"https://github.com/{REPOSITORY}/releases/download/{tag}"
-        body = (f"PocketContext Crew {release_version}: shared agent memory, tasks and human review in one binary.\n\n"
+        body = (f"PocketContext Crew {release_version}: notes, tasks and human review for AI agents in one binary.\n\n"
                 "Linux amd64 and arm64: static musl binaries. macOS arm64: macOS 15 or later, ad hoc signed. "
                 "Windows amd64: statically linked MinGW build, unsigned.\n\n"
                 f"Install on Linux or macOS into the project folder: `curl -fsSL {base}/install.sh | sh -s -- /absolute/project/folder`\n\n"

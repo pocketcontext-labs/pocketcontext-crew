@@ -1,6 +1,6 @@
 ---
 name: pocketcontext-crew
-description: Connect to an existing PocketContext Crew instance and use its CLI commands or MCP tools for shared memory, tasks and human review.
+description: Connect to an existing PocketContext Crew instance and use its CLI commands or MCP tools for notes, tasks and human review.
 ---
 
 # PocketContext Crew (remote)

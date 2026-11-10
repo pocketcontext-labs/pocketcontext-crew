@@ -113,7 +113,7 @@ the private Docker network. Do not publish Crew directly or mount the Docker soc
    in the owner's signed-in browser. Verify the client sees `crew_read` and
    `crew_write`. An actual client connection is required before claiming it works.
 5. Optionally use **Set up starter crew** in the UI. External agents run the jobs;
-   Crew stores shared memory, tasks and review decisions. Approval does not post,
+   Crew stores notes, tasks and review decisions. Approval does not post,
    send or pay, and bucket responsibility is behavioral rather than isolation.
 6. Create a synthetic note in the UI, edit it once, and record its note ID and
    revision count for the restore rehearsal. Run a complete backup and retain its
