@@ -7,7 +7,9 @@ import {
   isSigninHash,
   oauthTargetFromHash,
   takeLoginReturn,
+  uploadTokenFromHash,
 } from "./itemLink";
+import UploadPage from "./UploadPage";
 
 const currentSigninHash = () =>
   isSigninHash(location.hash) ? location.hash : "";
@@ -33,7 +35,25 @@ function SigninStatus({ onRetry }: { onRetry?: () => void }) {
   );
 }
 
+/**
+ * A one-time upload link (`#/upload/<token>`) renders before the sign-in gate:
+ * no session is needed or used, none of the sign-in effects run, and the
+ * token is never stored. Every other address goes through Reader.
+ */
 export default function App() {
+  const [upload, setUpload] = useState(() =>
+    uploadTokenFromHash(location.hash),
+  );
+  useEffect(() => {
+    const receive = () => setUpload(uploadTokenFromHash(location.hash));
+    window.addEventListener("hashchange", receive);
+    return () => window.removeEventListener("hashchange", receive);
+  }, []);
+  if (upload !== null) return <UploadPage key={upload} token={upload} />;
+  return <Reader />;
+}
+
+function Reader() {
   const [emailLink, setEmailLink] = useState(readEmailLoginLink),
     [session, setSession] = useState(sessionGeneration),
     [authenticated, setAuthenticated] = useState(pb.authStore.isValid),

@@ -1312,6 +1312,7 @@ export default function CrewWorkspace() {
             <Connect
               agents={[...data.agents, ...archived.agents]}
               tasks={[...data.tasks, ...archived.tasks]}
+              notes={[...data.notes, ...archived.notes]}
               connection={connection}
               copyEndpoint={copyEndpoint}
             />

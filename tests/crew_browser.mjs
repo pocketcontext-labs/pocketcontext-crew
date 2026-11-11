@@ -563,9 +563,92 @@ try {
  await allLoaded('.crew-task-card .crew-card-thumb img');
  await snapView('attachments-board-thumbnail-390');
  await page.setViewportSize({width:1440,height:1000});
+ // One-time upload link: the owner creates it in a task dialog; a signed-out
+ // phone opens it, sends two screenshots in one request, and the task shows
+ // them. The token never appears in a request URL, a credential or storage,
+ // and the used link refuses a second visit.
+ await page.goto(base+'/#/tasks');
+ await page.getByRole('button',{name:'New task'}).click();
+ await dialog().getByLabel('Title',{exact:true}).fill('Synthetic phone upload');
+ await dialog().getByRole('button',{name:'Save task'}).click();await saved();
+ const phoneCard=page.locator('.crew-task-card').filter({hasText:'Synthetic phone upload'});
+ await phoneCard.click();
+ await dialog().getByRole('button',{name:'Get upload link'}).click();
+ const linkBox=dialog().locator('.crew-upload-link-box');
+ await linkBox.waitFor();
+ const uploadAddress=(await linkBox.locator('code').innerText()).trim();
+ assert.match(uploadAddress,/^http:\/\/[^/]+\/#\/upload\/[A-Za-z0-9]{43}$/,'upload address');
+ const uploadToken=uploadAddress.split('/').pop();
+ assert.equal(await linkBox.getByRole('link',{name:'Manage upload links'}).getAttribute('href'),'#/connect');
+ await linkBox.scrollIntoViewIfNeeded();
+ await snapView('upload-link-created-1440');
+ await close();await dialog().waitFor({state:'hidden'});
+ const phone=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true});
+ const guest=await phone.newPage();
+ const guestUrls=[],guestAuth=[],uploads=[];
+ guest.on('pageerror',e=>errors.push('guest: '+e.message));
+ guest.on('request',r=>{guestUrls.push(r.url());if(r.headers().authorization)guestAuth.push(r.url());if(r.url().endsWith('/api/crew/upload-link/upload'))uploads.push(r.url());});
+ const guestSnap=async name=>{if(process.env.CREW_SCREENSHOTS) await guest.screenshot({path:path.join(process.env.CREW_SCREENSHOTS,name+'.png'),fullPage:true});};
+ const guestFits=async w=>assert.equal(await guest.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'no sideways scroll at '+w);
+ await guest.goto(uploadAddress);
+ await guest.getByRole('heading',{name:'Add screenshots to: Synthetic phone upload'}).waitFor();
+ assert.equal(await guest.getByLabel('Password',{exact:true}).count(),0,'no sign-in on the upload page');
+ await guestFits(390);await guestSnap('upload-page-empty-390');
+ const shotsBase64=await guest.evaluate(async()=>{
+  const out=[];
+  for(const [w,h,color] of [[900,1600,'#2d5f8a'],[1170,2532,'#7a3d6b']]){
+   const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');
+   g.fillStyle=color;g.fillRect(0,0,w,h);g.fillStyle='#fff';g.font='64px sans-serif';g.fillText('phone '+w+'x'+h,40,120);
+   out.push(c.toDataURL('image/png').split(',')[1]);
+  }
+  return out;
+ });
+ await guest.locator('#upload-input').setInputFiles(shotsBase64.map((b,i)=>({name:`phone-${i+1}.png`,mimeType:'image/png',buffer:Buffer.from(b,'base64')})));
+ await guest.waitForFunction(()=>{const i=[...document.querySelectorAll('.upload-staged img')];return i.length===2&&i.every(x=>x.complete&&x.naturalWidth>0);});
+ assert.equal(await guest.getByRole('list',{name:'Files to send'}).getByRole('listitem').count(),2);
+ await guestFits(390);await guestSnap('upload-page-staged-390');
+ await guest.setViewportSize({width:320,height:700});
+ await guestFits(320);await guestSnap('upload-page-staged-320');
+ await guest.setViewportSize({width:390,height:844});
+ await guest.getByRole('button',{name:'Send 2 files'}).click();
+ await guest.getByRole('heading',{name:'Done'}).waitFor();
+ assert.equal(uploads.length,1,'one upload request for the batch');
+ assert.equal(await guest.getByRole('list',{name:'Upload results'}).getByText('Saved').count(),2);
+ assert.equal(await guest.getByRole('button',{name:/^Send/}).count(),0,'no second send');
+ await guestSnap('upload-page-done-390');
+ assert.ok(guestUrls.every(u=>!u.includes(uploadToken)||u===uploadAddress),'the token is never in a request URL');
+ assert.deepEqual(guestAuth,[],'the upload page sends no credentials');
+ assert.equal(await guest.evaluate(t=>JSON.stringify({...localStorage,...sessionStorage}).includes(t),uploadToken),false,'the token is not stored');
+ await guest.reload();
+ await guest.getByRole('heading',{name:'Upload link unavailable'}).waitFor();
+ await guest.getByText('This link has expired or was already used. Ask for a new one.').waitFor();
+ await guestSnap('upload-page-used-390');
+ await phone.close();
+ await phoneCard.click();
+ await page.waitForFunction(()=>document.querySelectorAll('.crew-dialog .crew-attachment-thumb img').length===2);
+ await allLoaded('.crew-dialog .crew-attachment-thumb img');
+ await dialog().locator('.crew-attachments').scrollIntoViewIfNeeded();
+ await snapView('upload-link-task-files-1440');
+ await close();await dialog().waitFor({state:'hidden'});
+ // File settings on the Connect page: usage, limit and the used link.
+ await page.goto(base+'/#/connect');
+ const fileSettings=page.getByRole('region',{name:'Files'});
+ await fileSettings.getByText(/ of 5\.0 GB used$/).waitFor();
+ await fileSettings.getByText(/^Recent used, expired or revoked links/).click();
+ const recentLinks=fileSettings.getByRole('list',{name:'Recent upload links'});
+ await recentLinks.getByRole('link',{name:'Synthetic phone upload'}).waitFor();
+ assert.match(await recentLinks.innerText(),/Used · .* 2\/10 files/);
+ assert.equal((await fileSettings.innerText()).includes(uploadToken),false,'settings never show a token');
+ await fileSettings.scrollIntoViewIfNeeded();
+ await snapView('file-settings-1440');
+ await page.setViewportSize({width:390,height:844});
+ await fileSettings.scrollIntoViewIfNeeded();
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'settings fit at 390');
+ await snapView('file-settings-390');
+ await page.setViewportSize({width:1440,height:1000});
  await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');
- console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, logout.');
+ console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, logout.');
 }catch(error){ console.error('Synthetic browser page:', (await page.locator('body').innerText()).slice(0,2500)); await snap('crew-failure'); throw error; }finally{await browser.close();}

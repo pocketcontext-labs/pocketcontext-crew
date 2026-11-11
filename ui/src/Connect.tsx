@@ -5,6 +5,7 @@ import {
   type ConnectionState,
   type Row,
 } from "./crewApi";
+import FileSettings from "./FileSettings";
 import Help from "./Help";
 import { viewHashes } from "./itemLink";
 import WebhookStatus from "./WebhookStatus";
@@ -179,11 +180,13 @@ function LocalSteps() {
 export default function Connect({
   agents,
   tasks,
+  notes = [],
   connection,
   copyEndpoint,
 }: {
   agents: Row[];
   tasks: Row[];
+  notes?: Row[];
   connection: ConnectionState;
   copyEndpoint: ReactNode;
 }) {
@@ -212,6 +215,7 @@ export default function Connect({
         collapsible
         mcpUrl={connection.kind === "mcp" ? connection.url : null}
       />
+      <FileSettings tasks={tasks} notes={notes} />
     </>
   );
 }

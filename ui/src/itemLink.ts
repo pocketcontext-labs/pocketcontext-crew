@@ -220,6 +220,17 @@ export function safeOAuthTarget(raw: unknown): string | null {
   }
 }
 
+// One-time upload links: `#/upload/<token>`. The token stays in the fragment
+// (never in a request URL) and is never remembered as a return address.
+const uploadPattern = /^#\/upload\/([^/?#]*)$/;
+export const isUploadHash = (hash: string) => /^#\/upload(?:\/|$)/.test(hash);
+/** The token of an upload address ("" for a malformed one), or null. */
+export function uploadTokenFromHash(hash: string): string | null {
+  if (!isUploadHash(hash)) return null;
+  const token = uploadPattern.exec(hash)?.[1] ?? "";
+  return /^[A-Za-z0-9]{43}$/.test(token) ? token : "";
+}
+
 export const isSigninHash = (hash: string) => /^#\/signin(?:\?|$)/.test(hash);
 
 /** The validated return target of a `#/signin?next=` address. */
@@ -248,6 +259,7 @@ export function clearLoginReturn() {
 
 /** The normalized place to return to: no slug and nothing from a login URL. */
 export function loginReturnHash(hash: string): string | null {
+  if (isUploadHash(hash)) return null;
   if (isSigninHash(hash)) {
     const target = oauthTargetFromHash(hash);
     return target ? signinHash(target) : null;
@@ -269,6 +281,7 @@ export function loginReturnHash(hash: string): string | null {
 }
 
 export function rememberLoginReturn(hash: string) {
+  if (isUploadHash(hash)) return;
   try {
     localStorage.setItem(
       returnKey,
