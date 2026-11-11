@@ -104,7 +104,7 @@ func Policy() appserver.Policy {
 
 // Observe lists the diagnostic labels; anything else is reported as unknown.
 var Observe = mcpobserve.Policy{
-	Tools:     []string{"crew_read", "crew_search", "crew_schema", "crew_query", "crew_write"},
+	Tools:     []string{"crew_read", "crew_search", "crew_schema", "crew_query", "crew_write", "crew_attachment"},
 	APIRoutes: []string{"/api/crew/read", "/api/crew/search", "/api/crew/schema", "/api/crew/query", "/api/crew/agent-write", "/api/crew/attachment-read"},
 }
 

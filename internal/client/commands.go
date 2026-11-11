@@ -22,12 +22,14 @@ type args struct {
 	pos   []string
 	flags map[string]string
 	bools map[string]bool
-	crew  *crewRequest // a validated Crew work request (read, search, schema, query, write)
+	lists map[string][]string        // every value of a repeated value flag, in order
+	crew  *crewRequest               // a validated Crew work request (read, search, schema, query, write)
+	work  func(*Client) (any, error) // a validated file command (attach, attachment)
 }
 
 // parseArgs accepts the given value flags and boolean flags (without dashes).
 func parseArgs(argv []string, values, booleans []string) (*args, error) {
-	a := &args{flags: map[string]string{}, bools: map[string]bool{}}
+	a := &args{flags: map[string]string{}, bools: map[string]bool{}, lists: map[string][]string{}}
 	isValue, isBool := map[string]bool{}, map[string]bool{}
 	for _, v := range append(values, "db", "url") {
 		isValue[v] = true
@@ -58,6 +60,7 @@ func parseArgs(argv []string, values, booleans []string) (*args, error) {
 				value = argv[i]
 			}
 			a.flags[name] = value
+			a.lists[name] = append(a.lists[name], value)
 		default:
 			return nil, fail(2, "unknown option --%s", name)
 		}
@@ -206,7 +209,9 @@ parsed:
 		"search":         {nil, nil},
 		"schema":         {nil, nil},
 		"query":          {nil, nil},
-		"write":          {nil, nil},
+		"write":          {{"file"}, nil},
+		"attach":         {{"task", "note", "reported-agent", "reason", "execution"}, nil},
+		"attachment":     {{"out", "variant"}, nil},
 		"login-code":     {{"ttl"}, nil},
 		"login":          {nil, {"password-stdin", "code-stdin"}},
 		"logout":         {nil, nil},
@@ -498,6 +503,13 @@ func runRemote(base, command string, a *args, pretty bool) error {
 // runData runs a Crew work command, or reports the authenticated instance
 // without selecting a partition.
 func runData(c *Client, command string, a *args, pretty bool) error {
+	if a.work != nil {
+		data, err := a.work(c)
+		if data != nil {
+			Print(data, pretty)
+		}
+		return err
+	}
 	if a.crew != nil {
 		data, err := a.crew.send(c)
 		if err != nil {

@@ -21,17 +21,38 @@ const crewCommandInputLimit = mcpInputLimit
 
 // crewCommandUsage lists the CLI work commands and their argument forms.
 var crewCommandUsage = map[string]string{
-	"read":   "read JSON|-",
-	"search": "search JSON|-",
-	"schema": "schema",
-	"query":  "query JSON|-",
-	"write":  "write JSON|-",
+	"read":       "read JSON|-",
+	"search":     "search JSON|-",
+	"schema":     "schema",
+	"query":      "query JSON|-",
+	"write":      "write JSON|- [--file PATH]...",
+	"attach":     "attach FILE... (--task ID | --note ID) --reported-agent NAME [--reason TEXT] [--execution JSON]",
+	"attachment": "attachment ID --out FILE|DIR [--variant original|preview|card|text]",
 }
+
+// crewFileActions accept files (write --file).
+var crewFileActions = map[string]bool{"attachment.add": true, "task.create": true, "note.create": true}
 
 // prepareCrewCommand validates a work command's input before any server is
 // started or contacted, and returns the request to send.
 func prepareCrewCommand(command string, a *args) (*crewRequest, error) {
 	usage := crewCommandUsage[command]
+	switch command {
+	case "attach":
+		cmd, err := prepareAttach(a)
+		if err != nil {
+			return nil, err
+		}
+		a.work = cmd.run
+		return nil, nil
+	case "attachment":
+		cmd, err := prepareDownload(a)
+		if err != nil {
+			return nil, err
+		}
+		a.work = cmd.run
+		return nil, nil
+	}
 	if command == "schema" {
 		if err := a.need(0, usage); err != nil {
 			return nil, err
@@ -41,6 +62,9 @@ func prepareCrewCommand(command string, a *args) (*crewRequest, error) {
 	}
 	if err := a.need(1, usage); err != nil {
 		return nil, err
+	}
+	if command != "write" && len(a.lists["file"]) > 0 {
+		return nil, fail(2, "usage: pocketcontext-crew %s", usage)
 	}
 	raw, err := readCrewInput(command, a.pos[0])
 	if err != nil {
@@ -69,6 +93,9 @@ func prepareCrewCommand(command string, a *args) (*crewRequest, error) {
 		var in crewWrite
 		if in, err = decodeCrewInput[crewWrite](command, raw); err == nil {
 			r = in.request()
+			if paths := a.lists["file"]; len(paths) > 0 {
+				r.files, err = writeFiles(in, paths)
+			}
 		}
 	default:
 		return nil, fail(2, "unknown command %q", command)
@@ -146,4 +173,28 @@ func decodeCrewInput[T any](command string, raw []byte) (T, error) {
 		return zero, fail(2, "%s: invalid input: %v", command, err)
 	}
 	return out, nil
+}
+
+// writeFiles checks write --file files: only for actions that take files,
+// never together with base64 data.files, and within one multipart request.
+// attachment:new-N in task.create/note.create names the Nth --file.
+func writeFiles(in crewWrite, paths []string) ([]crewFile, error) {
+	if !crewFileActions[in.Action] {
+		return nil, fail(2, "write: --file works only with attachment.add, task.create and note.create")
+	}
+	if _, ok := in.Data["files"]; ok {
+		return nil, fail(2, "write: use either --file or data.files, not both")
+	}
+	files, err := checkCrewFiles("write", paths)
+	if err != nil {
+		return nil, err
+	}
+	var total int64
+	for _, f := range files {
+		total += f.size
+	}
+	if total > crewMultipartBudget {
+		return nil, fail(2, "write: the files exceed 100 MiB in one request; create first, then use attach")
+	}
+	return files, nil
 }

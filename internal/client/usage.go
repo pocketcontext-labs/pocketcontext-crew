@@ -56,8 +56,14 @@ JSON|- takes one object as an argument or from standard input):
   search JSON|-        ranked full-text search over notes and tasks (crew_search)
   schema               read-only SQL views and limits (crew_schema)
   query JSON|-         one bounded read-only SQL statement (crew_query)
-  write JSON|-         revision-checked work-client writes (crew_write): the
-                       reader's operations except webhook credential entry
+  write JSON|- [--file PATH]...
+                       revision-checked work-client writes (crew_write): the
+                       reader's operations except webhook credential entry and
+                       upload links; --file sends files (attachment:new-N)
+  attach FILE... (--task ID | --note ID) --reported-agent NAME
+                       attach files to a task or note (20 MiB each)
+  attachment ID --out FILE|DIR [--variant original|preview|card|text]
+                       download one attachment, sha256-verified, never overwriting
   They work locally (--db) and through a paired computer (--url). Without a
   domain they act with the owner's sign-in. Follow the owner's authorization
   rules in the skill. All Crew records are instance-wide.
@@ -95,7 +101,7 @@ Remote client (the server runs on another computer, reached through
                        skip by default on SSH/headless/unknown sessions
   skill --url URL [--agent A] [--dir DIR]
                        install the agent skill for the remote server
-  read|search|schema|query|write --url URL [JSON|-]
+  read|search|schema|query|write|attach|attachment --url URL ...
                        Crew work through the signed-in session
   URL must be http://127.0.0.1:PORT or
   http://localhost:PORT. Remote mode never creates a database or starts a

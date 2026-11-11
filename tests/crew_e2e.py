@@ -428,7 +428,37 @@ def cli_scenario(pc):
     assert 'another request changed the record first' in stale, stale
     assert 'unknown' in cli('read', {'collection': 'notes', 'unknown': True}, expect=2)
     assert 'not valid JSON' in pc.run('write', '{"action":', expect=2).stderr
+    cli_attachment_scenario(pc)
     print('Crew CLI commands, work-client route, credential refusal and conflicts passed.')
+
+
+def cli_attachment_scenario(pc):
+    """attach, write --file and a verified attachment download round trip."""
+    files = pc.root / 'cli files'
+    files.mkdir()
+    shot = synthetic_png(1800, 30)
+    (files / 'step 1.png').write_bytes(shot)
+    log = ''.join('synthetic line %d \u00e9\n' % i for i in range(300000)).encode()  # several MiB: paged download
+    (files / 'run.log').write_bytes(log)
+    created = json.loads(pc.run('write', '--file', str(files / 'step 1.png'), '-', stdin=json.dumps(
+        {'action': 'task.create', 'reported_agent': 'CLI agent', 'data': {'title': 'CLI screenshot bug', 'description': '![step 1](attachment:new-1)'}})).stdout)
+    image = created['attachments'][0]
+    assert created['description'] == '![step 1](attachment:%s)' % image['id'] and image['name'] == 'step 1.png', created
+    attached = pc.json('attach', str(files / 'run.log'), '--task', created['id'], '--reported-agent', 'CLI agent')
+    assert attached['saved'] == 1 and attached['results'][0]['ok'], attached
+    log_id = attached['results'][0]['id']
+    out = pc.root / 'downloads'
+    out.mkdir()
+    got = pc.json('attachment', log_id, '--out', str(out / 'copy.log'))
+    assert got['verified'] and (out / 'copy.log').read_bytes() == log and got['sha256'] == hashlib.sha256(log).hexdigest(), got
+    assert 'already exists' in pc.run('attachment', log_id, '--out', str(out / 'copy.log'), expect=2).stderr
+    named = pc.json('attachment', image['id'], '--out', str(out))
+    assert Path(named['path']).name == 'step 1.png' and Path(named['path']).read_bytes() == shot, named
+    preview = pc.json('attachment', image['id'], '--out', str(out / 'preview.png'), '--variant', 'preview')
+    assert not preview['verified'] and (out / 'preview.png').read_bytes()[:8] == b'\x89PNG\r\n\x1a\n', preview
+    assert not [p for p in out.iterdir() if p.suffix == '.part']
+    assert 'missing.txt' in pc.run('attach', str(files / 'missing.txt'), '--task', created['id'], '--reported-agent', 'CLI agent', expect=2).stderr
+    print('Crew CLI attach, write --file and verified attachment download passed.')
 
 
 def main():

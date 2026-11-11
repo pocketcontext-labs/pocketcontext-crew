@@ -141,7 +141,7 @@ func TestMCPPublicHostedLoopbackListener(t *testing.T) {
 		t.Fatalf("initialize failed: %v", result)
 	}
 	listed := call("/mcp", token, "application/json", []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`), 200)
-	if len(dig(listed, "result", "tools").([]any)) != 5 {
+	if len(dig(listed, "result", "tools").([]any)) != 6 {
 		t.Fatal("missing Crew tools")
 	}
 	call("/mcp", "", "application/json", initialize, 401)

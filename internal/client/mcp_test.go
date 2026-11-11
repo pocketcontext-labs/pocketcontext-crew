@@ -85,7 +85,7 @@ func TestMCPToolAnnotations(t *testing.T) {
 	// Check the wire response, including explicit false values, rather than
 	// struct defaults: clients use this metadata for action permission groups.
 	wantReadOnly := map[string]bool{
-		"crew_read": true, "crew_search": true, "crew_schema": true, "crew_query": true, "crew_write": false,
+		"crew_read": true, "crew_search": true, "crew_schema": true, "crew_query": true, "crew_write": false, "crew_attachment": true,
 	}
 	h := mcpTestHandler(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("tool discovery must not call the knowledge API")
@@ -132,7 +132,7 @@ func TestMCPProtocolAndPrincipalIsolation(t *testing.T) {
 	}
 	listed := mcpRequest(t, h, "first", "tools/list", map[string]any{})
 	tools, _ := dig(listed, "result", "tools").([]any)
-	if len(tools) != 5 {
+	if len(tools) != 6 {
 		t.Fatalf("missing tools: %v", listed)
 	}
 	for _, tool := range tools {
