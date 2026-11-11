@@ -2,7 +2,6 @@ package client
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -221,7 +220,7 @@ func imageBlock(page map[string]any) (*mcp.ImageContent, int, error) {
 }
 
 func textBlock(v any) (mcp.Content, error) {
-	raw, err := json.Marshal(v)
+	raw, err := mcpJSON(v)
 	if err != nil {
 		return nil, &mcpClassifiedError{reason: "internal_error", err: err}
 	}

@@ -20,6 +20,7 @@ type fakeAttachments struct {
 	imageSize int
 	reads     []map[string]any
 	oversized map[string]bool // ids whose preview/card is a 413
+	text      string          // text variant content, when set
 }
 
 func (f *fakeAttachments) meta(id string) map[string]any {
@@ -57,6 +58,9 @@ func (f *fakeAttachments) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		meta := f.meta(id)
 		out := map[string]any{"attachment": meta, "variant": body["variant"]}
 		content := []byte("synthetic text\n")
+		if f.text != "" {
+			content = []byte(f.text)
+		}
 		if meta["media_type"] == "application/pdf" {
 			content = []byte("%PDF\xff\xfe..")
 		}
@@ -161,6 +165,23 @@ func TestCrewMCPAttachmentImagesPageAsImageContent(t *testing.T) {
 		{},
 	} {
 		mcpContentBlocks(t, h, bad, true)
+	}
+}
+
+// Text full of <, > and & is not HTML-escaped, so a 2 MiB read stays far
+// under the 6 MiB result limit.
+func TestCrewMCPAttachmentHTMLTextIsNotEscaped(t *testing.T) {
+	html := strings.Repeat("<p>a & b</p>\n", (2<<20)/13)
+	api := &fakeAttachments{t: t, text: html}
+	h := mcpTestHandler(api)
+	blocks := mcpContentBlocks(t, h, map[string]any{"id": "txttxttxttxttx1"}, false)
+	raw := blocks[0]["text"].(string)
+	if strings.Contains(raw, `\u003c`) || strings.Contains(raw, `\u0026`) || len(raw) > len(html)*6/5 { // newlines stay escaped
+		t.Fatalf("escaped or inflated: %d bytes for %d", len(raw), len(html))
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil || out["text"] != html {
+		t.Fatal("text differs", err)
 	}
 }
 

@@ -196,6 +196,19 @@ func mcpClient(ctx context.Context, api http.Handler) (*Client, error) {
 // Each call gets a fresh authenticated client; no identity is retained across requests.
 // Validation and operation errors are MCP tool errors, never transport success
 // pretending that a failed write was published.
+// mcpJSON marshals tool results without HTML escaping, so text full of <, >
+// and & (logs, HTML attachments) is not inflated sixfold toward the result
+// limit.
+func mcpJSON(v any) ([]byte, error) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
+}
+
 func addMCPTool[I any](server *mcp.Server, api http.Handler, name, description string, readOnly bool, fn func(*Client, I) (any, error)) {
 	closed := false
 	// Declare both hints explicitly: clients may conservatively classify an
@@ -226,7 +239,7 @@ func addMCPTool[I any](server *mcp.Server, api http.Handler, name, description s
 					observation.toolError(err, ctx.Err())
 				}
 				payload := map[string]any{"error": map[string]any{"code": "rate_limited", "message": err.Error(), "rate_limit": limited.RateLimit}}
-				raw, _ := json.Marshal(payload)
+				raw, _ := mcpJSON(payload)
 				return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: string(raw)}}, StructuredContent: payload}, nil, nil
 			}
 			return nil, nil, err
@@ -234,7 +247,13 @@ func addMCPTool[I any](server *mcp.Server, api http.Handler, name, description s
 		if own, ok := data.(*mcpContent); ok {
 			size := 0
 			for _, block := range own.content {
-				raw, err := json.Marshal(block)
+				var raw []byte
+				var err error
+				if text, ok := block.(*mcp.TextContent); ok {
+					raw, err = mcpJSON(text.Text)
+				} else {
+					raw, err = json.Marshal(block)
+				}
 				if err != nil {
 					return nil, nil, &mcpClassifiedError{reason: "internal_error", err: err}
 				}
@@ -245,7 +264,7 @@ func addMCPTool[I any](server *mcp.Server, api http.Handler, name, description s
 			}
 			return &mcp.CallToolResult{Content: own.content}, nil, nil
 		}
-		raw, err := json.Marshal(data)
+		raw, err := mcpJSON(data)
 		if err != nil {
 			return nil, nil, &mcpClassifiedError{reason: "internal_error", err: err}
 		}
