@@ -239,6 +239,18 @@ func inspectAttachment(index int, original string, size int64, open func() (io.R
 	}
 }
 
+// multipartName is the filename exactly as sent. Go's multipart reader keeps
+// only filepath.Base, which splits on backslashes on Windows but not
+// elsewhere; cleanAttachmentName drops directories the same way everywhere.
+func multipartName(fh *multipart.FileHeader) string {
+	if _, params, err := mime.ParseMediaType(fh.Header.Get("Content-Disposition")); err == nil {
+		if name, ok := params["filename"]; ok && name != "" {
+			return name
+		}
+	}
+	return fh.Filename
+}
+
 // inspectHook lets tests observe that file inspection ran; nil in production.
 var inspectHook func()
 
@@ -282,7 +294,7 @@ func crewAttachmentFiles(e *core.RequestEvent, list []any) map[string]any {
 	}
 	for i, fh := range headers {
 		fh := fh
-		files = append(files, inspectAttachment(i+1, fh.Filename, fh.Size,
+		files = append(files, inspectAttachment(i+1, multipartName(fh), fh.Size,
 			func() (io.ReadSeekCloser, error) {
 				f, err := fh.Open()
 				if err != nil {

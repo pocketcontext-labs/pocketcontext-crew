@@ -159,6 +159,16 @@ gets `image: false` and a `media_type` from a fixed extension table (an image
 extension whose bytes fail verification becomes `application/octet-stream`).
 Types are never sniffed and client-supplied types are ignored.
 
+File names: the server derives the display `name` from the supplied name the
+same way for multipart parts, base64 entries and upload-link files, on every
+operating system: it keeps only the last path segment (after the last `/` or
+`\`), drops invalid UTF-8, control characters and invisible bidirectional
+marks and overrides (U+061C, U+200E, U+200F, U+202A–U+202E, U+2066–U+2069,
+which can make `report<U+202E>gnp.exe` display as `reportexe.png`), trims
+spaces and shortens it to 200 characters keeping its extension. A name that is
+empty or only dots afterwards (`folder/`, `a/..`) is refused as `invalid_name`.
+The stored file uses a separate random ASCII storage name.
+
 Attachments are untrusted content, like notes.
 
 ### Operations
@@ -207,8 +217,7 @@ use `changed_since` on it) to see new files.
 
 - Multipart (reader, CLI): `multipart/form-data` to either write route, with a
   text field `@jsonPayload` holding the JSON envelope and file parts named
-  `files` (the part's filename is the display name; directory parts are
-  dropped). Accepted only by `attachment.add`, `task.create` and `note.create`.
+  `files` (the part's filename, as sent, is the name; see file names below). Accepted only by `attachment.add`, `task.create` and `note.create`.
   A multipart request may carry 101 MiB in total (the public HTTPS listener caps
   requests at 110 MiB); split larger batches over several `attachment.add`
   requests.

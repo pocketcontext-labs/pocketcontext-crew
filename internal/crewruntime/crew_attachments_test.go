@@ -1284,3 +1284,63 @@ func TestUploadLinkRefusesBeforeFilesAndSanitizes(t *testing.T) {
 		t.Fatal("archived parent", c, inspected)
 	}
 }
+
+// A supplied name keeps only its last path segment (either separator) for
+// multipart, base64 and upload-link files alike; a name with nothing after
+// the last separator is refused as invalid_name.
+func TestAttachmentNamesKeepLastPathSegment(t *testing.T) {
+	uploadGuard.reset()
+	t.Cleanup(uploadGuard.reset)
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{"title": "Names"})
+	id := task["id"].(string)
+	names := map[string]string{
+		"logs/run/app.log":            "app.log",
+		`C:\Users\synthetic\shot.png`: "shot.png",
+		`..\../mixed/notes.txt`:       "notes.txt",
+		"\u202edir/\u2066report.md":   "report.md",
+	}
+	data := []byte("synthetic")
+	var multipartFiles []testFile
+	var base64Files []any
+	for in := range names {
+		multipartFiles = append(multipartFiles, testFile{in, data})
+		base64Files = append(base64Files, map[string]any{"name": in, "content_base64": base64.StdEncoding.EncodeToString(data)})
+	}
+	check := func(results []any, how string) {
+		t.Helper()
+		got := map[string]bool{}
+		for _, r := range results {
+			m := r.(map[string]any)
+			if m["ok"] != true {
+				t.Fatal(how, "refused", m)
+			}
+			got[m["name"].(string)] = true
+		}
+		for _, want := range names {
+			if !got[want] {
+				t.Fatal(how, "missing", want, results)
+			}
+		}
+	}
+	out := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": id}), multipartFiles, 200)
+	check(out["results"].([]any), "multipart")
+	out = crewWrite(t, a, true, "attachment.add", "", 0, map[string]any{"task": id, "files": base64Files}, 200)
+	check(out["results"].([]any), "base64")
+	other := newTask(t, a, map[string]any{"title": "Link names"})
+	link := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": other["id"], "max_files": 4}, 200)
+	linked, _ := uploadLinkRequest(t, a, link["token"].(string), nil, multipartFiles, 200)
+	check(linked["results"].([]any), "upload link")
+	// Nothing after the last separator: invalid_name, for both transports.
+	bad := crewWrite(t, a, true, "attachment.add", "", 0, map[string]any{"task": id, "files": []any{
+		map[string]any{"name": "folder/", "content_base64": base64.StdEncoding.EncodeToString(data)}}}, 400)
+	if fileErrors(bad)["files.1"].(map[string]any)["code"] != "invalid_name" {
+		t.Fatal("trailing separator", bad)
+	}
+	for _, name := range []string{`folder\`, "folder/", "a/.."} {
+		bad = multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": id}), []testFile{{name, data}}, 400)
+		if fileErrors(bad)["files.1"].(map[string]any)["code"] != "invalid_name" {
+			t.Fatal("no last segment", name, bad)
+		}
+	}
+}
