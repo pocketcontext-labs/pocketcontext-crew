@@ -55,6 +55,22 @@ class NativeBackupTests(unittest.TestCase):
         (result / 'project/storage/source.txt').write_text('tampered')
         with self.assertRaises(ValueError):
             backup.verify(result)
+    def test_crew_attachment_checksums(self):
+        files = self.project / 'storage/pbc_attach/attachmentid0001'
+        files.mkdir(parents=True)
+        (files / 'a_synthetic01.txt').write_text('synthetic attachment')
+        with sqlite3.connect(self.project / 'pocketcontext.db') as db:
+            db.execute('DELETE FROM _collections')
+            for name in ('crew_agents', 'crew_buckets', 'crew_notes', 'crew_note_revisions', 'crew_tasks', 'crew_events', 'crew_reviews'):
+                db.execute('INSERT INTO _collections VALUES(?,?)', (name, name))
+            db.execute("INSERT INTO _collections VALUES('pbc_attach', 'crew_attachments')")
+            db.execute('CREATE TABLE crew_attachments(id TEXT, file TEXT, sha256 TEXT)')
+            db.execute("INSERT INTO crew_attachments VALUES('attachmentid0001', 'a_synthetic01.txt', ?)", (backup.digest(files / 'a_synthetic01.txt'),))
+        result = backup.snapshot(self.project, self.destination)
+        backup.verify(result)
+        (files / 'a_synthetic01.txt').write_text('changed')
+        with self.assertRaisesRegex(ValueError, 'Attachment'):
+            backup.snapshot(self.project, self.root / 'second')
     def test_webhook_key_backup_restore_and_marker(self):
         with sqlite3.connect(self.project / 'pocketcontext.db') as db:
             db.execute('CREATE TABLE crew_webhook_configs(secret_ciphertext TEXT)')

@@ -93,6 +93,20 @@ def validate_legacy_archives(project):
                 raise ValueError("Legacy archive database is corrupt")
 
 
+def verify_attachments(db, project):
+    """Every Crew attachment's protected file must match its recorded SHA-256."""
+    row = db.execute("SELECT id FROM _collections WHERE name='crew_attachments'").fetchone()
+    if not row:
+        return
+    for record, original, checksum in db.execute('SELECT id, file, sha256 FROM crew_attachments'):
+        parts = (row[0], record, original)
+        if any(not p or '/' in p or chr(92) in p or p in ('.', '..') for p in parts):
+            raise ValueError('Invalid attachment file reference')
+        path = project / 'storage' / row[0] / record / original
+        if not re.fullmatch('[0-9a-f]{64}', checksum or '') or not path.is_file() or path.is_symlink() or digest(path) != checksum:
+            raise ValueError('Attachment file is missing or corrupt')
+
+
 def validate_project(project):
     validate_archive_anchor(project / "pocketcontext.db", project)
     validate_legacy_archives(project)
@@ -105,6 +119,7 @@ def validate_project(project):
             present = {r[0] for r in db.execute('SELECT name FROM _collections')}
             if not required.issubset(present):
                 raise ValueError('Snapshot is missing Crew collections')
+            verify_attachments(db, project)
             return
         for record, original, checksum in db.execute('SELECT id, original, sha256 FROM sources'):
             parts = (row[0], record, original)

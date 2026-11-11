@@ -141,6 +141,27 @@ class Backups(unittest.TestCase):
         self.assertEqual(self.store.client.deleted, [result["key"]])
         self.assertEqual(set(self.store.client.objects), {unknown, other, no_owner})
 
+    def test_crew_attachments_roundtrip_and_corruption_refuses_backup(self):
+        self.config.db.unlink()
+        files = self.config.project / "storage" / "pbc_attach" / "attachmentid0001"
+        files.mkdir(parents=True)
+        (files / "a_synthetic01.png").write_bytes(b"\x89PNG synthetic attachment")
+        with sqlite3.connect(self.config.db) as db:
+            db.execute("CREATE TABLE _collections (id TEXT, name TEXT)")
+            for name in ("crew_agents", "crew_buckets", "crew_notes", "crew_note_revisions", "crew_tasks", "crew_events", "crew_reviews"):
+                db.execute("INSERT INTO _collections VALUES (?, ?)", (name, name))
+            db.execute("INSERT INTO _collections VALUES ('pbc_attach', 'crew_attachments')")
+            db.execute("CREATE TABLE crew_attachments (id TEXT, file TEXT, sha256 TEXT)")
+            db.execute("INSERT INTO crew_attachments VALUES ('attachmentid0001', 'a_synthetic01.png', ?)", (hosted.digest(files / "a_synthetic01.png"),))
+        result = hosted.complete_backup(self.config, self.store, self.config.revision)
+        target = hosted.Config(Path(self.temp.name) / "destination")
+        target.initialize_dirs()
+        hosted.restore(target, self.store, result["key"])
+        self.assertEqual((target.project / "storage/pbc_attach/attachmentid0001/a_synthetic01.png").read_bytes(), b"\x89PNG synthetic attachment")
+        (files / "a_synthetic01.png").write_bytes(b"changed")
+        with self.assertRaisesRegex(hosted.Failure, "attachment"):
+            hosted.snapshot(self.config, self.config.revision)
+
     def test_missing_original_refuses_backup(self):
         (self.config.project / "storage/sources/synthetic/note.txt").unlink()
         with self.assertRaises(hosted.Failure):
