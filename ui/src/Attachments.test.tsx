@@ -455,6 +455,9 @@ describe("Markdown references", () => {
       "![Foreign](attachment:zzzzzzzzzzzzzzz)",
       "![Tracker](https://evil.test/pixel.png)",
       "![Inline](data:image/png;base64,AAAA)",
+      "![Upper](ATTACHMENT:img1)",
+      "![Spaced](<attachment: img1>)",
+      "![Decoded](attachment&#58;img2)",
     ].join("\n\n");
     const dialog = await openTask();
     const one = await dialog.findByRole("button", {
@@ -482,6 +485,12 @@ describe("Markdown references", () => {
     expect(dialog.getByText("Image removed: Old step")).toBeInTheDocument();
     expect(dialog.getByText("Image unavailable: Foreign")).toBeInTheDocument();
     expect(dialog.getByText("Image unavailable: Inline")).toBeInTheDocument();
+    // Only the exact scheme resolves, after Markdown decoding.
+    expect(dialog.getByText("Image unavailable: Upper")).toBeInTheDocument();
+    expect(dialog.getByText("Image unavailable: Spaced")).toBeInTheDocument();
+    expect(
+      dialog.getByRole("button", { name: "Open image: Decoded" }),
+    ).toBeInTheDocument();
     expect(
       dialog.getByRole("link", { name: "image on evil.test" }),
     ).toHaveAttribute("href", "https://evil.test/pixel.png");

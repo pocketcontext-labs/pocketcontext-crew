@@ -11,6 +11,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/pocketcontext-labs/pocketcontext-core v0.1.4
 	github.com/tailscale/tailcat v0.7.0
+	github.com/yuin/goldmark v1.8.6
 	golang.org/x/image v0.47.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0

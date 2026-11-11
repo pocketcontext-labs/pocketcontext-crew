@@ -240,8 +240,15 @@ Placeholders anywhere else are refused.
 
 Note `body`, task `description` and task `draft` reference attachments as
 `![alt](attachment:ID)` (images) or `[label](attachment:ID)`, also in reference
-definitions (`[x]: attachment:ID`) and autolinks (`<attachment:ID>`). On every
-create, update and restore:
+definitions (`[x]: attachment:ID`, anywhere, including inside block quotes and
+lists) and autolinks (`<attachment:ID>`). The server finds them on a parsed
+CommonMark (GFM) tree, like the reader: destinations are decoded first
+(backslash escapes and character references, so `attachment\:ID` and
+`attachment&#58;ID` are references) and the scheme is compared without regard
+to case (`ATTACHMENT:ID` is a reference too). Links in code spans and code
+blocks are not references. The reader resolves only the exact lower-case
+`attachment:` scheme after decoding; anything else shows as unavailable. On
+every create, update and restore:
 
 - each reference must name an existing attachment of the same task or note
   (unknown or foreign IDs are refused with a message naming the reference);
@@ -250,7 +257,8 @@ create, update and restore:
   reader shows it as removed), and `note.restore` may bring back the note's own
   archived references;
 - embedded `data:` images (Markdown images, reference definitions or `<img
-  src="data:…">`) are refused: attach the file instead.
+  src="data:…">`, in any case or encoding) are refused: attach the file
+  instead.
 
 Prose such as `attachment: see below` is not a reference.
 

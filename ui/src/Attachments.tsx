@@ -207,10 +207,19 @@ function ProtectedMedia({
   );
 }
 
+/**
+ * An attachment destination after Markdown decoding (escapes and character
+ * references): exactly the lower-case `attachment:` scheme and an ID. The
+ * server validates every case and encoding of the scheme as a reference;
+ * anything else here shows as unavailable.
+ */
+const ATTACHMENT_REF = /^attachment:([a-z0-9-]+)$/;
+export const attachmentRefId = (url: string) =>
+  ATTACHMENT_REF.exec(url)?.[1] ?? null;
+
 /** react-markdown URL policy: `attachment:` only as an image or link target. */
 export function proseUrlTransform(url: string, key: string) {
-  if (/^attachment:/i.test(url) && (key === "src" || key === "href"))
-    return url;
+  if (attachmentRefId(url) && (key === "src" || key === "href")) return url;
   return defaultUrlTransform(url);
 }
 const domainOf = (url: string) => {
@@ -226,9 +235,8 @@ export function ProseImage({ src, alt }: { src?: unknown; alt?: string }) {
   const ctx = useContext(AttachmentsContext);
   const url = typeof src === "string" ? src : "";
   const label = alt?.trim() || "";
-  const match = /^attachment:(.+)$/i.exec(url);
-  if (match) {
-    const id = match[1];
+  const id = attachmentRefId(url);
+  if (id) {
     if (!ctx) return <span>[Image: {label || "attachment"}]</span>;
     const file = ctx.files.find((f) => f.id === id);
     const name = label || file?.name || "attachment";
@@ -311,9 +319,9 @@ export function ProseLink({
   children?: ReactNode;
 }) {
   const ctx = useContext(AttachmentsContext);
-  const match = /^attachment:(.+)$/i.exec(href || "");
-  if (match) {
-    const file = ctx?.files.find((f) => f.id === match[1]);
+  const id = attachmentRefId(href || "");
+  if (id) {
+    const file = ctx?.files.find((f) => f.id === id);
     if (!file || file.archived)
       return (
         <span className="crew-image-missing">

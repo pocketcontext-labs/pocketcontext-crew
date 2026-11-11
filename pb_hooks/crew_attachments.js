@@ -25,19 +25,14 @@ const ACTIONS = [
   "storage.update",
 ];
 const TEXT_FIELDS = { task: ["description", "draft"], note: ["body"] };
-// Markdown destinations that can carry an attachment reference: inline links
-// and images, reference definitions and autolinks. Prose such as
-// "attachment: see below" is not a destination and is left alone.
-const REF_PATTERNS = [
-  /\]\(\s*<?attachment:([^\s)>]*)/g,
-  /^ {0,3}\[[^\]\n]+\]:[ \t]*<?attachment:([^\s>]*)/gm,
-  /<attachment:([^\s>]*)>/g,
-];
-const DATA_IMAGES = [
-  /!\[[^\]]*\]\(\s*<?data:/i,
-  /^ {0,3}\[[^\]\n]+\]:[ \t]*<?data:/im,
-  /<img\b[^>]*\bsrc\s*=\s*["']?\s*data:/i,
-];
+// Attachment references and data: images are found on a parsed CommonMark
+// (GFM) tree in Go ($pocketcontext.crewMarkdownRefs), with the reader's
+// semantics: link and image destinations, reference definitions anywhere and
+// autolinks, after decoding backslash escapes and character references, with
+// a case-insensitive scheme. Prose such as "attachment: see below" is not a
+// destination. Raw HTML is never rendered by the reader; an <img> data: URL is
+// still refused.
+const HTML_DATA_IMAGE = /<img\b[^>]*\bsrc\s*=\s*["']?\s*data:/i;
 const PLACEHOLDER = /attachment:new-(\d+)/g;
 
 function bad(message) {
@@ -340,14 +335,14 @@ function snapshotMatches(app, review) {
   );
 }
 
+function markdown(text) {
+  const parsed = $pocketcontext.crewMarkdownRefs(text || "");
+  const refs = [];
+  for (let i = 0; i < parsed.refs.length; i++) refs.push(String(parsed.refs[i]));
+  return { refs, dataImage: !!parsed.data_image };
+}
 function refs(text) {
-  const out = [];
-  for (const pattern of REF_PATTERNS) {
-    pattern.lastIndex = 0;
-    let m;
-    while ((m = pattern.exec(text || ""))) out.push(m[1]);
-  }
-  return out;
+  return markdown(text).refs;
 }
 // New references must name active attachments of this task or note. A
 // reference already saved in the same field may stay after its attachment is
@@ -361,13 +356,14 @@ function checkRefs(app, kind, r, values, op) {
     const before = {};
     if (op !== "create")
       for (const id of refs(r.getString(f))) before[id] = true;
-    if (DATA_IMAGES.some((p) => p.test(text)))
+    const parsed = markdown(text);
+    if (parsed.dataImage || HTML_DATA_IMAGE.test(text))
       bad(
         f +
           " embeds a data: image; attach the file and reference it as ![alt](attachment:ID)",
       );
-    for (const ref of refs(text)) {
-      if (/^new-\d+$/.test(ref))
+    for (const ref of parsed.refs) {
+      if (/^new-\d+$/i.test(ref))
         bad(
           "attachment:" +
             ref +

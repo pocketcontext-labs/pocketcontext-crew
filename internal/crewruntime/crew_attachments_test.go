@@ -481,11 +481,30 @@ func TestAttachmentReferenceRules(t *testing.T) {
 		"<attachment:" + theirs["id"].(string) + ">",
 		"![x](data:image/png;base64,iVBORw0KGgo=)",
 		"![x](attachment:new-1)",
+		// Bypass attempts the reader would decode to the same destination.
+		"![x](ATTACHMENT:" + theirs["id"].(string) + ")",
+		"[x](Attachment:" + theirs["id"].(string) + ")",
+		`![x](attachment\:` + theirs["id"].(string) + ")",
+		"![x](attachment&#58;" + theirs["id"].(string) + ")",
+		"![x](attachment&colon;" + theirs["id"].(string) + ")",
+		"![x](&#97;ttachment:" + theirs["id"].(string) + ")",
+		"<ATTACHMENT:" + theirs["id"].(string) + ">",
+		"> [ref]: attachment:" + theirs["id"].(string),
+		"- item\n\n  [ref]: attachment:" + theirs["id"].(string),
+		"> - [ref]: <attachment\\:" + theirs["id"].(string) + ">",
+		"![x](&#100;ata:image/png;base64,iVBORw0KGgo=)",
+		"![x](DATA:image/png;base64,iVBORw0KGgo=)",
+		"> [d]: data:image/png;base64,iVBORw0KGgo=",
+		`<img src="data:image/png;base64,iVBORw0KGgo=">`,
+		"![x](ATTACHMENT:new-1)",
 	} {
 		crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"description": text}, 400)
 		crewWrite(t, a, true, "task.update", id, rev(), map[string]any{"draft": text}, 400)
 	}
-	ref := "Before\n\n![shot](attachment:" + mine["id"].(string) + ")\n\nattachment: plain prose is fine"
+	ref := "Before\n\n![shot](attachment:" + mine["id"].(string) + ")\n\nattachment: plain prose is fine\n\n`![code](attachment:zzzzzzzzzzzzzzz)` is code"
+	// Decoded variants naming this task's own active file are references too,
+	// and valid ones.
+	crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"description": "![x](attachment&#58;" + mine["id"].(string) + ")"}, 200)
 	crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"description": ref}, 200)
 	// Archived: an existing reference may stay, a new one is refused.
 	crewWrite(t, a, false, "attachment.archive", mine["id"].(string), 1, map[string]any{}, 200)
