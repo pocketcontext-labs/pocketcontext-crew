@@ -2859,36 +2859,3 @@ a.crew-logo:hover .product-brand span {
     padding: 12px;
   }
 }
-/* File preview (placeholder until full previews land). */
-.crew-preview {
-  width: min(560px, calc(100vw - 30px));
-  padding: 0 20px 20px;
-  border: 1px solid #d6dfcc;
-  border-radius: 12px;
-  background: #fafbf6;
-  color: #293e2c;
-  font: 14px/1.6 Inter, ui-sans-serif, system-ui, sans-serif;
-}
-.crew-preview::backdrop {
-  background: #19271f65;
-}
-.crew-preview header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px 0;
-  border-bottom: 1px solid #e0e5d7;
-}
-.crew-preview h2 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 550;
-  overflow-wrap: anywhere;
-}
-.crew-preview header button {
-  font-size: 22px;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
