@@ -76,7 +76,6 @@ func hookBindings() map[string]any {
 		"crewRecordLink":          crewRecordLink,
 		"crewAttachmentFiles":     crewAttachmentFiles,
 		"crewMarkdownRefs":        crewMarkdownRefs,
-		"crewUploadGuard":         crewUploadGuard,
 		"crewUploadLinkFiles":     crewUploadLinkFiles,
 	}
 }

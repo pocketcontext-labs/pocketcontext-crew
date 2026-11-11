@@ -718,7 +718,7 @@ try {
  const uploadAddress=(await linkBox.locator('code').innerText()).trim();
  assert.match(uploadAddress,/^http:\/\/[^/]+\/#\/upload\/[A-Za-z0-9]{43}$/,'upload address');
  const uploadToken=uploadAddress.split('/').pop();
- assert.equal(await linkBox.getByRole('link',{name:'Manage upload links'}).getAttribute('href'),'#/connect');
+ assert.equal(await linkBox.getByRole('link',{name:'Manage upload links'}).getAttribute('href'),'#/connect?section=files');
  await linkBox.scrollIntoViewIfNeeded();
  await snapView('upload-link-created-1440');
  await close();await dialog().waitFor({state:'hidden'});
@@ -769,9 +769,12 @@ try {
  await dialog().locator('.crew-attachments').scrollIntoViewIfNeeded();
  await snapView('upload-link-task-files-1440');
  await close();await dialog().waitFor({state:'hidden'});
- // File settings on the Connect page: usage, limit and the used link.
- await page.goto(base+'/#/connect');
+ // File settings on the Connect page (Manage upload links' address): focused
+ // once, then the address drops the section; usage, limit and the used link.
+ await page.goto(base+'/#/connect?section=files');
  const fileSettings=page.getByRole('region',{name:'Files'});
+ await page.waitForFunction(()=>document.activeElement?.id==='crew-file-settings');
+ await page.waitForFunction(()=>location.hash==='#/connect');
  await fileSettings.getByText(/ of 5\.0 GB used$/).waitFor();
  await fileSettings.getByText(/^Recent used, expired or revoked links/).click();
  const recentLinks=fileSettings.getByRole('list',{name:'Recent upload links'});

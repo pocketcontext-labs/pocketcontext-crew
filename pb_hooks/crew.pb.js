@@ -25,21 +25,19 @@ routerAdd(
 );
 // The only unauthenticated Crew writes: a one-time upload link adds files to
 // its one task or note. Token-scoped, upload only, expiring, single batch and
-// rate-limited; nothing is readable except the parent title on info. The Go
-// guard runs first: token in the X-Crew-Upload-Token header, separate rate
-// buckets for unknown tokens and for each link, multipart only and at most
-// two uploads in flight.
+// rate-limited; nothing is readable except the parent title on info. A Go
+// router middleware (uploadLinkGuard) runs first: token in the
+// X-Crew-Upload-Token header, separate rate buckets for unknown tokens and
+// for each link, multipart only and at most two uploads in flight.
 routerAdd(
   "POST",
   "/api/crew/upload-link/info",
   (e) => require(`${__hooks}/crew.js`).uploadInfo(e),
-  $pocketcontext.crewUploadGuard("info"),
   $apis.bodyLimit(4096),
 );
 routerAdd(
   "POST",
   "/api/crew/upload-link/upload",
   (e) => require(`${__hooks}/crew.js`).uploadFiles(e),
-  $pocketcontext.crewUploadGuard("upload"),
   $apis.bodyLimit(105906176),
 );

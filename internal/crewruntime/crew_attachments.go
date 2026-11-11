@@ -452,36 +452,59 @@ func uploadLinkID(app core.App, token string) string {
 	return rec.Id
 }
 
-// crewUploadGuard is the middleware for POST /api/crew/upload-link/{info,upload}.
-func crewUploadGuard(kind string) *hook.Handler[*core.RequestEvent] {
-	upload := kind == "upload"
-	return &hook.Handler[*core.RequestEvent]{Func: func(e *core.RequestEvent) error {
-		e.Response.Header().Set("Cache-Control", "no-store")
-		if upload {
-			mediaType, _, _ := mime.ParseMediaType(e.Request.Header.Get("Content-Type"))
-			if mediaType != "multipart/form-data" {
-				return uploadRefusal(e, http.StatusUnsupportedMediaType, 0, "Send files as multipart/form-data", nil)
-			}
-		} else if e.Request.ContentLength > uploadInfoBodyLimit {
-			return uploadRefusal(e, http.StatusRequestEntityTooLarge, 0, "Request body too large", nil)
-		}
-		linkID := uploadLinkID(e.App, e.Request.Header.Get(uploadTokenHeader))
-		if wait := uploadGuard.allow(linkID); wait > 0 {
-			return uploadRefusal(e, http.StatusTooManyRequests, wait, "Too many upload requests. Try again shortly.",
-				map[string]any{"rate_limit": map[string]any{"limit": "upload_link", "retry_after_seconds": wait}})
-		}
-		if !upload {
-			e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, uploadInfoBodyLimit)
-			return e.Next()
-		}
-		select {
-		case uploadGuard.inflight <- struct{}{}:
-			defer func() { <-uploadGuard.inflight }()
-		default:
-			return uploadRefusal(e, http.StatusServiceUnavailable, uploadBusyRetry, "Another upload is in progress. Try again shortly.", nil)
-		}
+// Upload-link routes (registered by pb_hooks/crew.pb.js) and their guard.
+const (
+	uploadInfoPath   = "/api/crew/upload-link/info"
+	uploadFilesPath  = "/api/crew/upload-link/upload"
+	uploadGuardIdent = "crewUploadLinkGuard"
+)
+
+// uploadLinkGuard is a router middleware (bound in Go, so the JavaScript
+// route files need no binding at load time) that runs before the upload-link
+// handlers and before anything reads their bodies.
+func uploadLinkGuard(e *core.RequestEvent) error {
+	if e.Request.Method != http.MethodPost {
 		return e.Next()
-	}}
+	}
+	path := e.Request.URL.Path
+	if pattern := e.Request.Pattern; pattern != "" {
+		path = pattern[strings.LastIndexByte(pattern, ' ')+1:]
+	}
+	switch path {
+	case uploadInfoPath:
+		return guardUploadLink(e, false)
+	case uploadFilesPath:
+		return guardUploadLink(e, true)
+	}
+	return e.Next()
+}
+
+func guardUploadLink(e *core.RequestEvent, upload bool) error {
+	e.Response.Header().Set("Cache-Control", "no-store")
+	if upload {
+		mediaType, _, _ := mime.ParseMediaType(e.Request.Header.Get("Content-Type"))
+		if mediaType != "multipart/form-data" {
+			return uploadRefusal(e, http.StatusUnsupportedMediaType, 0, "Send files as multipart/form-data", nil)
+		}
+	} else if e.Request.ContentLength > uploadInfoBodyLimit {
+		return uploadRefusal(e, http.StatusRequestEntityTooLarge, 0, "Request body too large", nil)
+	}
+	linkID := uploadLinkID(e.App, e.Request.Header.Get(uploadTokenHeader))
+	if wait := uploadGuard.allow(linkID); wait > 0 {
+		return uploadRefusal(e, http.StatusTooManyRequests, wait, "Too many upload requests. Try again shortly.",
+			map[string]any{"rate_limit": map[string]any{"limit": "upload_link", "retry_after_seconds": wait}})
+	}
+	if !upload {
+		e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, uploadInfoBodyLimit)
+		return e.Next()
+	}
+	select {
+	case uploadGuard.inflight <- struct{}{}:
+		defer func() { <-uploadGuard.inflight }()
+	default:
+		return uploadRefusal(e, http.StatusServiceUnavailable, uploadBusyRetry, "Another upload is in progress. Try again shortly.", nil)
+	}
+	return e.Next()
 }
 
 // crewUploadLinkFiles parses an upload-link request (file parts named files,
@@ -870,6 +893,7 @@ func lastRuneStart(data []byte) int {
 }
 
 func registerAttachmentRoutes(e *core.ServeEvent) {
+	e.Router.Bind(&hook.Handler[*core.RequestEvent]{Id: uploadGuardIdent, Func: uploadLinkGuard})
 	e.Router.GET("/api/crew/attachment", attachmentFile)
 	e.Router.POST("/api/crew/attachment-read", attachmentRead).Bind(apis.RequireAuth("users"))
 }

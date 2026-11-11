@@ -574,7 +574,7 @@ function handle(app, e, b, actor, isAgent, files, h) {
 // --- Public upload-link endpoints (no sign-in; token-scoped, upload only) ---
 
 // Rate limits, the multipart-only rule, the in-flight cap and body limits run
-// in Go before these handlers ($pocketcontext.crewUploadGuard in crew.pb.js).
+// in Go before these handlers (uploadLinkGuard in crew_attachments.go).
 // The token arrives in the X-Crew-Upload-Token header, never in the URL.
 function tokenOf(e) {
   return String(e.request.header.get("X-Crew-Upload-Token") || "");
