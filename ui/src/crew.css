@@ -2473,3 +2473,412 @@ a.crew-logo:hover .product-brand span {
     max-height: calc(100dvh - 80px);
   }
 }
+
+/* Attachments: Files section, inline images, card thumbnails, lightbox. */
+.crew-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.crew-attachments {
+  margin: 18px 0 8px;
+  padding: 14px 16px;
+  border: 1px dashed #ccd6c9;
+  border-radius: 10px;
+  background: #fffefb;
+}
+.crew-attachments.crew-dragging {
+  border-color: #487d55;
+  background: #edf2e9;
+}
+.crew-attachments-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.crew-attachments-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.crew-attachments-count {
+  color: #6b7964;
+  font-size: 12px;
+  margin-right: auto;
+}
+.crew-dialog .crew-attachments-head button {
+  margin-left: auto;
+  padding: 6px 12px;
+}
+.crew-attachments-count + button {
+  margin-left: 0 !important;
+}
+.crew-attachments-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #6b7964;
+}
+.crew-uploads,
+.crew-attachment-files,
+.crew-attachments-removed ul {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.crew-uploads li,
+.crew-attachment-files li,
+.crew-attachments-removed li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+.crew-uploads progress {
+  flex: 1 1 120px;
+  height: 8px;
+  accent-color: #487d55;
+}
+.crew-upload-name,
+.crew-attachment-name {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.crew-dialog .crew-attachment-name {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: #356b45;
+  text-decoration: underline;
+}
+.crew-attachment-files small,
+.crew-attachments-removed small {
+  color: #6b7964;
+  font-size: 12px;
+}
+.crew-upload-error {
+  color: #9b3b2f;
+  font-size: 12px;
+  flex-basis: 100%;
+}
+.crew-attachment-download {
+  color: #356b45;
+  font-size: 13px;
+}
+.crew-attachment-grid {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 12px;
+}
+.crew-attachment-grid li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.crew-dialog .crew-attachment-thumb {
+  display: block;
+  padding: 0;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #edf1e7;
+}
+.crew-attachment-thumb .crew-image-box {
+  width: 100%;
+  height: 100%;
+  max-width: none !important;
+  aspect-ratio: auto !important;
+}
+.crew-attachment-thumb .crew-image-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.crew-attachment-caption {
+  font-size: 12px;
+  color: #4d6048;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crew-attachment-grid .crew-quiet {
+  align-self: flex-start;
+}
+.crew-attachments-removed {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.crew-attachments-removed summary {
+  cursor: pointer;
+  color: #567257;
+}
+.crew-upload-link {
+  margin-top: 14px;
+}
+.crew-upload-link-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #edf2e9;
+  display: grid;
+  gap: 8px;
+}
+.crew-upload-link-box p {
+  margin: 0;
+  font-size: 13px;
+}
+.crew-upload-link-box code {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.crew-upload-link-box button {
+  justify-self: start;
+}
+/* Images keep their box before loading: width and height give the ratio. */
+.crew-image-box {
+  display: block;
+  width: 100%;
+  background: #edf1e7;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.crew-image-box img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.crew-image-pending {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 40px;
+}
+.crew-image-missing,
+.crew-image-external {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: #f1f0e8;
+  color: #6b6a55;
+  font-size: 13px;
+}
+.crew-app .crew-inline-image,
+.crew-dialog .crew-inline-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 8px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+.crew-dialog .crew-inline-file {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #356b45;
+  text-decoration: underline;
+}
+.crew-inline-video {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  background: #000;
+  border-radius: 6px;
+}
+.crew-inline-audio {
+  display: block;
+  width: 100%;
+}
+.crew-media-pending {
+  display: block;
+  padding: 10px;
+  color: #6b7964;
+  font-size: 13px;
+}
+/* Card thumbnails: a fixed box, so cards never jump when the image loads. */
+.crew-card-thumb {
+  display: block;
+  height: 96px;
+  margin: 8px 0 4px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #edf1e7;
+}
+.crew-card-thumb .crew-image-box {
+  height: 100%;
+  max-width: none !important;
+  aspect-ratio: auto !important;
+}
+.crew-card-thumb .crew-image-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.crew-note-card .crew-card-thumb {
+  height: 120px;
+}
+/* Lightbox */
+.crew-lightbox {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #111814f2;
+  color: #f5f7f2;
+  font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.crew-lightbox[open] {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.crew-lightbox::backdrop {
+  background: #111814e6;
+}
+.crew-lightbox-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px max(14px, env(safe-area-inset-right)) 10px
+    max(14px, env(safe-area-inset-left));
+}
+.crew-lightbox-count {
+  min-width: 3em;
+  font-variant-numeric: tabular-nums;
+}
+.crew-lightbox-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crew-lightbox button {
+  font: inherit;
+  color: inherit;
+  background: #ffffff1a;
+  border: 1px solid #ffffff33;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.crew-lightbox button:hover {
+  background: #ffffff33;
+}
+.crew-lightbox button:focus-visible {
+  outline: 2px solid #b9dcc0;
+  outline-offset: 2px;
+}
+.crew-lightbox-close {
+  font-size: 24px !important;
+  line-height: 1;
+  padding: 4px 12px;
+}
+.crew-lightbox-stage {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 56px 16px;
+}
+.crew-lightbox-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.crew-lightbox-prev,
+.crew-lightbox-next {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 30px !important;
+  line-height: 1;
+  padding: 10px 14px;
+}
+.crew-lightbox-prev {
+  left: max(8px, env(safe-area-inset-left));
+}
+.crew-lightbox-next {
+  right: max(8px, env(safe-area-inset-right));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .crew-lightbox-stage img {
+    animation: crew-lightbox-in 0.16s ease-out;
+  }
+}
+@keyframes crew-lightbox-in {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (max-width: 680px) {
+  .crew-lightbox-stage {
+    padding: 0 8px 64px;
+  }
+  .crew-lightbox-prev,
+  .crew-lightbox-next {
+    top: auto;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    transform: none;
+  }
+  .crew-attachment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .crew-attachments {
+    padding: 12px;
+  }
+}
+/* File preview (placeholder until full previews land). */
+.crew-preview {
+  width: min(560px, calc(100vw - 30px));
+  padding: 0 20px 20px;
+  border: 1px solid #d6dfcc;
+  border-radius: 12px;
+  background: #fafbf6;
+  color: #293e2c;
+  font: 14px/1.6 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.crew-preview::backdrop {
+  background: #19271f65;
+}
+.crew-preview header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid #e0e5d7;
+}
+.crew-preview h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.crew-preview header button {
+  font-size: 22px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}

@@ -39,6 +39,29 @@ import { searchHash, searchTextFromHash, type SearchHit } from "./searchApi";
 import "./crew.css";
 import type { ServerVersion } from "./crewApi";
 import {
+  AttachmentsProvider,
+  AttachmentsSection,
+  CardThumbnail,
+  eventSummary,
+  fileInputHandlers,
+  fileReference,
+  isFileEvent,
+  namePasted,
+  filesOf,
+  ProseImage,
+  ProseLink,
+  proseUrlTransform,
+  useItemAttachments,
+  useStagedFiles,
+  withdrawnNotice,
+} from "./Attachments";
+import {
+  attachmentsApi,
+  isImage,
+  useFileToken,
+  type CardThumb,
+} from "./attachmentsApi";
+import {
   boardColumnFromHash,
   bucketSorts,
   isItemHash,
@@ -155,7 +178,8 @@ const plainPreview = (markdown: string) =>
   markdown
     .replace(/^```.*$/gm, "")
     .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+)/gm, "")
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/!\[[^\]]*\]\([^)]*\)\n?/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\*\*|__|~~|`/g, "")
     .replace(/\*(\S[^*\n]*)\*/g, "$1")
     .replace(/\n{2,}/g, "\n")
@@ -178,13 +202,11 @@ function Prose({ children }: { children: string }) {
     <div className="crew-prose">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={proseUrlTransform}
         components={{
-          img: ({ alt }) => <span>[Image: {alt || "attachment"}]</span>,
-          a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {children}
-            </a>
-          ),
+          // Same-item attachments only; external images never load.
+          img: ({ src, alt }) => <ProseImage src={src} alt={alt} />,
+          a: ({ children, href }) => <ProseLink href={href}>{children}</ProseLink>,
         }}
       >
         {children}
@@ -314,6 +336,8 @@ function MarkdownField({
   value,
   onChange,
   tabs = true,
+  onFiles,
+  status,
 }: {
   label: string;
   help?: ReactNode;
@@ -322,6 +346,14 @@ function MarkdownField({
   className?: string;
   value: string;
   onChange: (value: string) => void;
+  /** Pasted or dropped files at the caret; returns the inserted text. */
+  onFiles?: (
+    files: File[],
+    range: [number, number],
+    pasted: boolean,
+  ) => string | void;
+  /** Upload messages shown under the field. */
+  status?: ReactNode;
 }) {
   const id = useId();
   const [reading, setReading] = useState(tabs && Boolean(value.trim()));
@@ -361,6 +393,7 @@ function MarkdownField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onInvalid={() => setReading(false)}
+          {...fileInputHandlers(onFiles)}
         />
         {reading && (
           <div className="crew-md-preview">
@@ -372,6 +405,7 @@ function MarkdownField({
           </div>
         )}
       </div>
+      {status}
     </div>
   );
 }
@@ -587,7 +621,10 @@ export default function CrewWorkspace() {
       searchTextFromHash(location.hash),
     ),
     // Bumped after each save, so search results show the change.
-    [saves, setSaves] = useState(0);
+    [saves, setSaves] = useState(0),
+    // The first image of each task and note, for card thumbnails.
+    [thumbs, setThumbs] = useState<Record<string, CardThumb>>({});
+  const thumbToken = useFileToken(Object.keys(thumbs).length > 0);
   // "Saved." confirms an action; it should not linger on other pages.
   useEffect(() => {
     if (!notice) return;
@@ -656,6 +693,16 @@ export default function CrewWorkspace() {
       .catch(() => {
         if (!silent && ticket === generation.current) setServerVersion(null);
       });
+    // One query for every card thumbnail; a failure only hides thumbnails.
+    void attachmentsApi
+      .cardThumbnails()
+      .then((next) => {
+        if (ticket !== generation.current) return;
+        setThumbs((current) =>
+          JSON.stringify(current) === JSON.stringify(next) ? current : next,
+        );
+      })
+      .catch(() => undefined);
     try {
       const result = await Promise.all(
         ["agents", "buckets", "notes", "tasks", "reviews"].map(
@@ -867,8 +914,39 @@ export default function CrewWorkspace() {
     row?: Row,
     reason = "",
   ) => {
-    if (await perform(() => crewApi.write(action, fields, row, reason)))
+    // A changed draft withdraws a pending approval; say so, as file changes do.
+    const withdraws =
+      action === "task.update" &&
+      !!row &&
+      typeof fields.draft === "string" &&
+      fields.draft !== val(row, "draft") &&
+      data.reviews.some(
+        (x) => val(x, "task") === row.id && val(x, "status") === "pending",
+      );
+    if (
+      await perform(
+        () => crewApi.write(action, fields, row, reason),
+        withdraws ? `Saved. ${withdrawnNotice}` : "Saved.",
+      )
+    )
       closeDialog();
+  };
+  // After a file change withdrew an approval the task has a new revision; the
+  // open form takes it so its next save does not conflict.
+  const refreshDialogRow = async (kind: ItemKind, id: string) => {
+    try {
+      const [fresh] = await crewApi.read(kind === "task" ? "tasks" : "notes", {
+        id,
+      });
+      if (fresh)
+        setDialog((open) =>
+          open && open.kind === kind && open.row?.id === id
+            ? { ...open, row: fresh }
+            : open,
+        );
+    } catch {
+      /* The next save reports a conflict instead. */
+    }
   };
   const name = (id: string, c = "agents") =>
     val(
@@ -1298,6 +1376,12 @@ export default function CrewWorkspace() {
                             <span key={l}>{l}</span>
                           ))}
                         </div>
+                        {thumbs[x.id] && (
+                          <CardThumbnail
+                            thumb={thumbs[x.id]}
+                            token={thumbToken}
+                          />
+                        )}
                         <h3>{val(x, "title")}</h3>
                         <p>{plainPreview(val(x, "description")).slice(0, 150)}</p>
                         <p className="crew-readiness">
@@ -1457,6 +1541,9 @@ export default function CrewWorkspace() {
                     <span className="crew-eyebrow">
                       {name(val(x, "bucket"), "buckets")}
                     </span>
+                    {thumbs[x.id] && (
+                      <CardThumbnail thumb={thumbs[x.id]} token={thumbToken} />
+                    )}
                     <h3>{val(x, "title")}</h3>
                     <p>{plainPreview(val(x, "body")).slice(0, 180)}</p>
                     <small>
@@ -1735,6 +1822,8 @@ export default function CrewWorkspace() {
             save={save}
             perform={perform}
             close={closeDialog}
+            refresh={() => void load({ silent: true })}
+            onWithdrawn={(kind, id) => void refreshDialogRow(kind, id)}
           />
         </Modal>
       )}
@@ -1759,7 +1848,42 @@ type EditorProps = {
   ) => Promise<void>;
   perform: (work: () => Promise<unknown>, message?: string) => Promise<boolean>;
   close: () => void;
+  /** Background reload after a file change (card thumbnails, task status). */
+  refresh?: () => void;
+  /** A file change withdrew this item's pending approval. */
+  onWithdrawn?: (kind: ItemKind, id: string) => void;
 };
+/** The form's field values for a record (or a new one). */
+function formValues(kind: Kind, row: Row | undefined, data: Data) {
+  return {
+    title: val(row, "title") || val(row, "name"),
+    body: val(
+      row,
+      kind === "agent"
+        ? "brief"
+        : kind === "bucket"
+          ? "purpose"
+          : kind === "task"
+            ? "description"
+            : "body",
+    ),
+    draft: val(row, "draft"),
+    links: list(row, "links").join("\n"),
+    selection:
+      val(
+        row,
+        kind === "note"
+          ? "bucket"
+          : kind === "bucket"
+            ? "responsible_agent"
+            : "assigned_agent",
+      ) || (kind === "note" ? data.buckets[0]?.id || "" : ""),
+    status: val(row, "status") || "todo",
+    readiness: val(row, "readiness") || "waiting",
+    waitingReason: val(row, "waiting_reason"),
+    labels: list(row, "labels").join(", "),
+  };
+}
 function Editor({
   kind,
   row,
@@ -1772,6 +1896,8 @@ function Editor({
   save,
   perform,
   close,
+  refresh,
+  onWithdrawn,
 }: EditorProps) {
   const readOnly = !!archiveNotice;
   const root = useRef<HTMLDivElement>(null);
@@ -1779,37 +1905,114 @@ function Editor({
     [history, setHistory] = useState<Row[]>([]),
     [events, setEvents] = useState<Row[]>([]),
     [relatedError, setRelatedError] = useState("");
-  const [title, setTitle] = useState(val(row, "title") || val(row, "name")),
-    [body, setBody] = useState(
-      val(
-        row,
-        kind === "agent"
-          ? "brief"
-          : kind === "bucket"
-            ? "purpose"
-            : kind === "task"
-              ? "description"
-              : "body",
-      ),
-    ),
-    [draft, setDraft] = useState(val(row, "draft")),
+  const [start] = useState(() => formValues(kind, row, data));
+  const [title, setTitle] = useState(start.title),
+    [body, setBody] = useState(start.body),
+    [draft, setDraft] = useState(start.draft),
     [reason, setReason] = useState(""),
     [comment, setComment] = useState(""),
-    [links, setLinks] = useState(list(row, "links").join("\n"));
-  const [selection, setSelection] = useState(
-      val(
-        row,
-        kind === "note"
-          ? "bucket"
-          : kind === "bucket"
-            ? "responsible_agent"
-            : "assigned_agent",
-      ) || (kind === "note" ? data.buckets[0]?.id || "" : ""),
-    ),
-    [status, setStatus] = useState(val(row, "status") || "todo"),
-    [readiness, setReadiness] = useState(val(row, "readiness") || "waiting"),
-    [waitingReason, setWaitingReason] = useState(val(row, "waiting_reason")),
-    [labels, setLabels] = useState(list(row, "labels").join(", "));
+    [links, setLinks] = useState(start.links);
+  const [selection, setSelection] = useState(start.selection),
+    [status, setStatus] = useState(start.status),
+    [readiness, setReadiness] = useState(start.readiness),
+    [waitingReason, setWaitingReason] = useState(start.waitingReason),
+    [labels, setLabels] = useState(start.labels);
+  // Files: an existing task or note's attachments, or files staged for a new one.
+  const itemKind = kind === "task" || kind === "note" ? kind : null;
+  const parent =
+    itemKind && row
+      ? { kind: itemKind, id: row.id }
+      : kind === "review" && row && val(row, "task")
+        ? { kind: "task" as const, id: val(row, "task") }
+        : undefined;
+  const reloadEvents = () => {
+    if (row && itemKind)
+      void crewApi
+        .read("events", { parent: row.id })
+        .then(setEvents, () => undefined);
+  };
+  const item = useItemAttachments({
+    parent,
+    onChanged: () => {
+      reloadEvents();
+      refresh?.();
+    },
+    onWithdrawn: () => {
+      if (row && itemKind) onWithdrawn?.(itemKind, row.id);
+    },
+  });
+  const staged = useStagedFiles();
+  const [inlineErrors, setInlineErrors] = useState<Record<string, string>>({});
+  const takenNames = () => [
+    ...item.attachments.map((a) => a.name),
+    ...staged.staged.map((s) => s.file.name),
+  ];
+  /**
+   * Pasted or dropped files in a Markdown field: an existing item uploads each
+   * and replaces an "Uploading…" line with its reference; a new item stages
+   * them and inserts `attachment:new-K` placeholders. Returns the inserted text.
+   */
+  const insertFiles =
+    (field: "body" | "draft", setText: (update: (text: string) => string) => void) =>
+    (incoming: File[], [from, to]: [number, number], pasted: boolean) => {
+      if (readOnly || !itemKind) return;
+      const files = pasted ? namePasted(incoming, takenNames()) : incoming;
+      onEdit();
+      setInlineErrors(({ [field]: _gone, ...rest }) => rest);
+      const splice = (text: string) =>
+        setText((value) => value.slice(0, from) + text + value.slice(to));
+      if (!row) {
+        const entries = staged.stage(files);
+        const text = entries
+          .map((e) => fileReference(e.file.name, `new-${e.key}`, e.image))
+          .join("\n");
+        splice(text);
+        return text;
+      }
+      const lines = files.map((f) => `⏳ Uploading ${f.name}…`);
+      const text = lines.join("\n");
+      splice(text);
+      files.forEach((file, i) => {
+        const line = lines[i];
+        item.upload(file).then(
+          (a) =>
+            setText((value) =>
+              value.replace(line, fileReference(a.name, a.id, isImage(a))),
+            ),
+          (e) => {
+            setText((value) =>
+              value.includes(`${line}\n`)
+                ? value.replace(`${line}\n`, "")
+                : value.includes(`\n${line}`)
+                  ? value.replace(`\n${line}`, "")
+                  : value.replace(line, ""),
+            );
+            setInlineErrors((all) => ({
+              ...all,
+              [field]: `Could not attach ${file.name}: ${e instanceof Error ? e.message : "upload failed"}`,
+            }));
+          },
+        );
+      });
+      return text;
+    };
+  const inlineStatus = (field: "body" | "draft") =>
+    inlineErrors[field] ? (
+      <p className="crew-alert crew-inline-upload-error" role="alert">
+        {inlineErrors[field]}
+      </p>
+    ) : null;
+  /** Staged files leave the text too, so no placeholder points at nothing. */
+  const unstage = (key: number) => {
+    const ref = new RegExp(`!?\\[(?:[^\\]\\\\]|\\\\.)*\\]\\(attachment:new-${key}\\)\\n?`, "g");
+    setBody((text) => text.replace(ref, ""));
+    setDraft((text) => text.replace(ref, ""));
+    staged.unstage(key);
+  };
+  // A newer revision of the open record (after a file change withdrew its
+  // approval) replaces the fields the owner has not changed.
+  const baseRow = useRef(row);
+  const initialRef = useRef(start);
   useEffect(() => {
     let alive = true;
     if (row && (kind === "note" || kind === "task"))
@@ -1853,7 +2056,29 @@ function Editor({
     waitingReason,
     labels,
   };
-  const initial = useRef(current).current;
+  const setters: Record<keyof typeof current, (v: string) => void> = {
+    title: setTitle,
+    body: setBody,
+    draft: setDraft,
+    links: setLinks,
+    selection: setSelection,
+    status: setStatus,
+    readiness: setReadiness,
+    waitingReason: setWaitingReason,
+    labels: setLabels,
+  };
+  useEffect(() => {
+    const before = baseRow.current;
+    baseRow.current = row;
+    if (!row || !before || before.revision === row.revision) return;
+    const next = formValues(kind, row, data);
+    for (const key of Object.keys(current) as (keyof typeof current)[])
+      if (current[key] === initialRef.current[key]) setters[key](next[key]);
+    initialRef.current = next;
+    // Runs only when the record itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row]);
+  const initial = initialRef.current;
   const dirty = (Object.keys(current) as (keyof typeof current)[]).some(
     (key) => current[key] !== initial[key],
   );
@@ -1892,10 +2117,33 @@ function Editor({
           : kind === "bucket"
             ? { name: title, purpose: body, responsible_agent: selection }
             : { name: title, brief: body };
+    if (!row && itemKind && staged.staged.length) {
+      // One atomic request: the item, its files and resolved placeholders.
+      const prepared = staged.prepare();
+      const textKeys = itemKind === "task" ? ["description", "draft"] : ["body"];
+      const withFiles: Record<string, unknown> = { ...fields };
+      for (const key of textKeys)
+        if (typeof withFiles[key] === "string")
+          withFiles[key] = prepared.renumber(withFiles[key] as string);
+      void perform(async () => {
+        try {
+          await attachmentsApi.createWithFiles(itemKind, withFiles, prepared.files, {
+            reason,
+          });
+        } catch (e) {
+          prepared.fail(e);
+          throw e;
+        }
+      }).then((ok) => {
+        if (ok) close();
+      });
+      return;
+    }
     void save(`${kind}.${row ? "update" : "create"}`, fields, row, reason);
   };
   if (kind === "review" && row)
     return (
+      <AttachmentsProvider attachments={item.attachments}>
       <div className="crew-dialog-body">
         <div className="crew-review-meta">
           <span
@@ -1982,6 +2230,7 @@ function Editor({
           </p>
         )}
       </div>
+      </AttachmentsProvider>
     );
   const bar = (action?: ReactNode) =>
     action || error ? (
@@ -2055,10 +2304,52 @@ function Editor({
   const buckets = data.buckets.find((x) => x.id === val(row, "bucket"));
   // Controls inside a disabled fieldset can't open, so read-only forms have no help.
   const help = (topic: HelpTopic) => (readOnly ? undefined : topic);
+  const filesSection = itemKind && (
+    <AttachmentsSection
+      parent={parent}
+      item={row ? item : undefined}
+      staged={row ? undefined : staged}
+      readOnly={readOnly}
+      onStage={(files) => {
+        onEdit();
+        staged.stage(files);
+      }}
+      onUnstage={unstage}
+    />
+  );
+  // Files pasted or dropped anywhere else in the dialog are added to the item.
+  const addToItem = (files: File[], pasted: boolean) => {
+    if (readOnly || !itemKind || !files.length) return;
+    const named = pasted ? namePasted(files, takenNames()) : files;
+    if (row) item.addFiles(named);
+    else {
+      onEdit();
+      staged.stage(named);
+    }
+  };
   return (
+    <AttachmentsProvider attachments={item.attachments} staged={staged.staged}>
     <div
       className={`crew-dialog-body${row && (kind === "note" || kind === "task") ? " crew-switching-views" : ""}`}
       ref={root}
+      onPaste={(e) => {
+        if (e.defaultPrevented) return;
+        const files = filesOf(e.clipboardData);
+        if (!files.length || !itemKind || readOnly) return;
+        e.preventDefault();
+        addToItem(files, true);
+      }}
+      onDragOver={(e) => {
+        if (itemKind && !readOnly && Array.from(e.dataTransfer.types).includes("Files"))
+          e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (e.defaultPrevented) return;
+        const files = filesOf(e.dataTransfer);
+        if (!files.length || !itemKind || readOnly) return;
+        e.preventDefault();
+        addToItem(files, false);
+      }}
     >
       {readOnly && (
         <p className="crew-notice" role="status">
@@ -2145,6 +2436,7 @@ function Editor({
               </section>
             )}
           </article>
+          {filesSection}
           {more}
           {bar(
             dirty && (
@@ -2235,6 +2527,8 @@ function Editor({
                 value={body}
                 onChange={setBody}
                 tabs={kind === "task"}
+                onFiles={insertFiles("body", setBody)}
+                status={inlineStatus("body")}
               />
             ) : (
               <Field
@@ -2307,6 +2601,8 @@ function Editor({
                   className="crew-long-text"
                   value={draft}
                   onChange={setDraft}
+                  onFiles={insertFiles("draft", setDraft)}
+                  status={inlineStatus("draft")}
                 />
                 {row && !readOnly && (
                   <div className="crew-review-row">
@@ -2350,6 +2646,7 @@ function Editor({
               </p>
             )}
           </fieldset>
+          {filesSection}
           {kind !== "note" && more}
           {bar(
             !readOnly && (
@@ -2372,6 +2669,24 @@ function Editor({
             Restoring creates a new revision and keeps every previous version.
           </p>
           {!history.length && <p>No earlier revisions available.</p>}
+          {events.some(isFileEvent) && (
+            <details className="crew-version">
+              <summary>File activity</summary>
+              <ol className="crew-timeline">
+                {events.filter(isFileEvent).map((x) => {
+                  const summary = eventSummary(x);
+                  return (
+                    <li key={x.id}>
+                      <strong>{summary.title}</strong>
+                      <small>
+                        {when(x.created)} · {summary.by}
+                      </small>
+                    </li>
+                  );
+                })}
+              </ol>
+            </details>
+          )}
           {[...history]
             .sort((a, b) => b.revision - a.revision)
             .map((x) => {
@@ -2462,18 +2777,20 @@ function Editor({
             </form>
           )}
           <ol className="crew-timeline">
-            {events.map((x) => (
-              <li key={x.id}>
-                <strong>{val(x, "action")}</strong>
-                <small>
-                  {when(x.created)} ·{" "}
-                  {val(x, "reported_agent") ||
-                    val(x, "actor") ||
-                    "Owner / connection"}
-                </small>
-                <p>{val(x, "body") || val(x, "reason")}</p>
-              </li>
-            ))}
+            {events.map((x) => {
+              const summary = eventSummary(x);
+              return (
+                <li key={x.id}>
+                  <strong>{summary.title}</strong>
+                  <small>
+                    {when(x.created)} · {summary.by}
+                  </small>
+                  {!summary.by.startsWith("via upload link") && (
+                    <p>{val(x, "body") || val(x, "reason")}</p>
+                  )}
+                </li>
+              );
+            })}
           </ol>
         </>
       )}
@@ -2515,5 +2832,6 @@ function Editor({
         </p>
       )}
     </div>
+    </AttachmentsProvider>
   );
 }

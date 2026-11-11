@@ -8,7 +8,7 @@ const page = await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[],outside=[],writeActions=[];
 page.on('pageerror',e=>errors.push(e.message));
 page.on('request',r=>{if(r.url().endsWith('/api/crew/write')){try{writeActions.push(r.postDataJSON()?.action);}catch{}}});
-page.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('data:'))outside.push(new URL(r.url()).origin);});
+page.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('data:')&&!r.url().startsWith('blob:'))outside.push(new URL(r.url()).origin);});
 const dialog=()=>page.getByRole('dialog');
 const close=()=>dialog().getByRole('button',{name:'Close dialog'}).click();
 const saved=async()=>{await page.getByRole('status').filter({hasText:'Saved.'}).waitFor();await page.getByRole('dialog').waitFor({state:'hidden'});};
@@ -481,9 +481,91 @@ try {
  }
  await snapView('crew-search-focus-1280');
  await page.locator('.crew-search input').first().blur();
+ // Attachments: a New task with two pasted screenshots (synthetic PNGs drawn
+ // in the page) staged inline, created in one request; inline images, the
+ // lightbox and the card thumbnail at 1440 and 390.
+ const pasteShots=async(locator,shots)=>locator.evaluate(async(el,shots)=>{
+  const dt=new DataTransfer();
+  for(const [w,h,color] of shots){
+   const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');
+   g.fillStyle=color;g.fillRect(0,0,w,h);g.fillStyle='#fff';g.font='48px sans-serif';g.fillText(`${w}x${h}`,30,80);
+   const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+   dt.items.add(new File([blob],'image.png',{type:'image/png'}));
+  }
+  el.focus();el.setSelectionRange(el.value.length,el.value.length);
+  el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));
+ },shots);
+ const allLoaded=async selector=>page.waitForFunction(s=>{const i=[...document.querySelectorAll(s)];return i.length>0&&i.every(x=>x.complete&&x.naturalWidth>0);},selector,{timeout:15000});
+ await page.getByRole('button',{name:'New task'}).click();
+ await dialog().getByLabel('Title',{exact:true}).fill('Synthetic crash with screenshots');
+ const desc=dialog().getByLabel('Description',{exact:true});
+ await desc.fill('Steps:\n1. Open the editor\n');
+ await pasteShots(desc,[[1200,700,'#2f6f4f']]);
+ await page.waitForFunction(()=>/attachment:new-1\)$/.test(document.activeElement?.value||''));
+ await desc.press('End');await desc.type('\n2. Press save\n');
+ await pasteShots(desc,[[700,1000,'#8a4b2d']]);
+ const descValue=await desc.inputValue();
+ assert.match(descValue,/^Steps:\n1\. Open the editor\n!\[[^\]]+\]\(attachment:new-1\)\n2\. Press save\n!\[[^\]]+\]\(attachment:new-2\)$/,'pasted references land at the caret: '+JSON.stringify(descValue));
+ assert.match(descValue,/!\[screenshot-\d{4}-\d{2}-\d{2}-1\.png\]\(attachment:new-1\)[\s\S]*!\[screenshot-\d{4}-\d{2}-\d{2}-2\.png\]\(attachment:new-2\)/,'two staged placeholders');
+ await allLoaded('.crew-dialog .crew-attachment-thumb img');
+ assert.equal(await dialog().locator('.crew-attachment-thumb img').count(),2,'two staged thumbnails');
+ await dialog().getByRole('tablist',{name:'Description view'}).getByRole('tab',{name:'Read'}).click();
+ await allLoaded('.crew-dialog .crew-inline-image img');
+ assert.ok((await dialog().locator('.crew-inline-image img').first().getAttribute('src')).startsWith('blob:'),'staged previews are local');
+ await snapView('attachments-new-task-staged-1440');
+ await dialog().getByRole('button',{name:'Save task'}).click();await saved();
+ const card=page.locator('.crew-task-card').filter({hasText:'Synthetic crash with screenshots'});
+ await allLoaded('.crew-task-card .crew-card-thumb img');
+ assert.match(await card.locator('.crew-card-thumb img').getAttribute('src'),/thumb=320x0/);
+ const thumbBox=await card.locator('.crew-card-thumb').boundingBox();
+ assert.ok(thumbBox&&thumbBox.height>=90&&thumbBox.height<=100,'fixed-size card thumbnail');
+ await snapView('attachments-board-thumbnail-1440');
+ await card.click();
+ await allLoaded('.crew-dialog .crew-inline-image img');
+ const inline=dialog().locator('.crew-inline-image img');
+ assert.equal(await inline.count(),2,'two inline images');
+ assert.match(await inline.first().getAttribute('src'),/thumb=1600x0&token=/);
+ assert.equal(await inline.first().getAttribute('width'),'1200');
+ assert.equal(await inline.first().getAttribute('height'),'700');
+ await allLoaded('.crew-dialog .crew-attachment-thumb img');
+ await snapView('attachments-task-inline-1440');
+ await dialog().locator('.crew-attachments').scrollIntoViewIfNeeded();
+ await snapView('attachments-task-files-1440');
+ await dialog().getByRole('button',{name:/^Open image: screenshot-.*-1\.png$/}).click();
+ const viewer=page.getByRole('dialog',{name:'Image viewer'});
+ await viewer.waitFor();
+ await allLoaded('.crew-lightbox-stage img');
+ assert.doesNotMatch(await viewer.locator('.crew-lightbox-stage img').getAttribute('src'),/thumb=/,'the lightbox shows the original');
+ await page.keyboard.press('ArrowRight');
+ await page.waitForFunction(()=>/-2\.png$/.test(document.querySelector('.crew-lightbox-stage img')?.alt||''));
+ await allLoaded('.crew-lightbox-stage img');
+ await snapView('attachments-lightbox-1440');
+ await page.keyboard.press('Escape');
+ await viewer.waitFor({state:'hidden'});
+ assert.equal(await page.getByRole('dialog').count(),1,'Escape closes only the viewer');
+ // Phone width: the dialog, inline images and lightbox fit without sideways scrolling.
+ await page.setViewportSize({width:390,height:844});
+ await allLoaded('.crew-dialog .crew-inline-image img');
+ assert.equal(await dialog().evaluate(d=>d.scrollWidth<=d.clientWidth+1),true,'no sideways scroll at 390');
+ const inlineWidth=await inline.first().evaluate(i=>i.getBoundingClientRect().width);
+ assert.ok(inlineWidth<=390,'inline image fits the phone');
+ await snapView('attachments-task-inline-390');
+ await dialog().locator('.crew-attachments').scrollIntoViewIfNeeded();
+ await snapView('attachments-task-files-390');
+ await dialog().getByRole('button',{name:/^Open image: screenshot-.*-2\.png$/}).click();
+ await viewer.waitFor();await allLoaded('.crew-lightbox-stage img');
+ const shown=await viewer.locator('.crew-lightbox-stage img').boundingBox();
+ assert.ok(shown&&shown.width<=390&&shown.height<=844,'lightbox image fits the phone');
+ await snapView('attachments-lightbox-390');
+ await viewer.getByRole('button',{name:'Close image viewer'}).click();
+ await viewer.waitFor({state:'hidden'});
+ await close();await dialog().waitFor({state:'hidden'});
+ await allLoaded('.crew-task-card .crew-card-thumb img');
+ await snapView('attachments-board-thumbnail-390');
+ await page.setViewportSize({width:1440,height:1000});
  await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');
- console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, global search 1440/390, responsive 1440/390/320, logout.');
+ console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, logout.');
 }catch(error){ console.error('Synthetic browser page:', (await page.locator('body').innerText()).slice(0,2500)); await snap('crew-failure'); throw error; }finally{await browser.close();}

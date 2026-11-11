@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CrewWorkspace from "./CrewWorkspace";
 import { crewApi, type Row } from "./crewApi";
+import { attachmentsApi } from "./attachmentsApi";
 const agent: Row = {
   id: "agent0000000001",
   revision: 1,
@@ -68,6 +69,8 @@ beforeEach(() => {
     ...review,
     status: "approved",
   });
+  vi.spyOn(attachmentsApi, "cardThumbnails").mockResolvedValue({});
+  vi.spyOn(attachmentsApi, "fileToken").mockResolvedValue("file-token");
 });
 afterEach(() => {
   cleanup();
