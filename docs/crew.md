@@ -150,7 +150,10 @@ archiving it (restorable). Nothing is purged.
 Limits: 20 MiB (20,971,520 bytes) per file, 20 active attachments per task or
 note (archived ones do not count), at most 20 files per request, and an
 instance storage limit (default 5 GiB) on the sum of all stored attachments,
-archived ones included. Thumbnails are not counted.
+archived ones included. Thumbnails are not counted. The reader checks the per-file
+size, the 20-file limit and, for files staged with a new task or note (sent in
+one request), 100 MiB in total before sending, with a message naming each
+refused file; the server enforces every limit regardless.
 
 Images are PNG, JPEG, GIF and WebP whose magic bytes and image header verify
 (`image: true`, with `width` and `height`). Only these are shown inline or
@@ -339,6 +342,34 @@ Work clients use these through two adapters:
 Thumbnails (`1600x0`, `320x0`, declared on the file field) are created on first
 request beside the original and are never created while the server is in
 maintenance (flush) mode.
+
+### Reader previews
+
+The reader shows every attachment without running anything from it. Bytes come
+from `GET /api/crew/attachment` on the same origin with a short-lived file
+token; nothing is framed or fetched from elsewhere.
+
+| Kind | How it is shown | Limits |
+| --- | --- | --- |
+| Verified images (PNG, JPEG, GIF, WebP) | Inline in Markdown (1600 px thumbnail), card thumbnails (320 px), lightbox with the original | Images over 40 megapixels are never thumbnailed |
+| Video and audio | The browser's own player from the protected URL | Whatever codecs the browser plays; no transcoding |
+| Text, logs, YAML, NDJSON and code or config by extension (including HTML, SVG and XML) | Plain text with a wrap toggle, never rendered or run | At most 2 MiB of strict UTF-8 |
+| JSON | Pretty-printed when valid, else the text as is | At most 2 MiB |
+| CSV and TSV | A table | The first 500 data rows of at most 2 MiB |
+| Markdown | Rendered; images show as `[Image: alt]` and are never loaded, links open in a new tab | At most 2 MiB |
+| PDF | One page at a time with page count, zoom and fit width (the default), through a bundled pdf.js loaded only when a PDF opens | At most 20 MiB; each page canvas at most about 16 megapixels |
+| Anything else | Name, size, type and Download | |
+
+Larger files, files that are not valid UTF-8 and documents that cannot be
+opened (including password-protected PDFs) show name, size, type and Download.
+
+PDF limits: pdf.js runs without its viewer, scripting, XFA forms or links, with
+eval off, and the reader serves it no standard font data, CMaps, ICC profiles or
+WebAssembly decoders (the asset route serves only `.js`, `.css`, `.woff2` and
+`.svg`). Missing standard fonts fall back to system fonts; text in fonts that
+are not embedded and need CMaps (common in CJK documents) may be missing, and
+JPEG 2000 and JBIG2 images may not render. Download the file to see it
+exactly.
 
 ### Reviews
 

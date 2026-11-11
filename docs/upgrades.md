@@ -31,7 +31,18 @@ limit (default 5 GiB) plus thumbnails.
 The public route allowlist on a domain adds `GET /api/crew/attachment` (signed-in
 file reads), `POST /api/crew/attachment-read`, `POST /api/files/token` and the
 upload-link endpoints `POST /api/crew/upload-link/info` and
-`POST /api/crew/upload-link/upload`.
+`POST /api/crew/upload-link/upload`. A reverse proxy in front of Crew must allow request bodies of at
+least 101 MiB on `/api/crew/write`, `/api/crew/agent-write` and
+`/api/crew/upload-link/upload`, and pass the `X-Crew-Upload-Token` header
+unchanged (the native HTTPS listener caps requests at 110 MiB and passes
+headers through).
+
+New for agents and the CLI: the read-only MCP tool `crew_attachment` and
+`crew_write` file operations (refresh connector tool schemas, step 3), and the
+CLI commands `attach` and `attachment` (installed with the new binary and
+`skill`). Without a domain, upload links work only for devices that can reach
+the local server. See [attachments](crew.md#attachments) for limits, previews
+and upload-link rules.
 
 ## Crew 0.14.0 to 0.15.0
 

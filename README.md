@@ -32,8 +32,10 @@ SQL; [Crew 0.7.1](docs/releases/0.7.1.md) fixed remote client invitations.
   a task. The owner performs external actions and records completion separately.
 - Archive and restore, with history retained indefinitely. No purge endpoint.
 - Attachments on tasks and notes (20 MiB per file, 20 per item, 5 GiB instance
-  limit by default): immutable protected files, inline `attachment:` references,
-  review snapshots, and one-time upload links the owner can open on a phone.
+  limit by default): immutable protected files, pasted screenshots, inline
+  `attachment:` references, previews in the reader (images, video, audio, text,
+  JSON, CSV, Markdown and PDF), review snapshots, one-time upload links the
+  owner can open on a phone, and bounded reads for agents (`crew_attachment`).
 
 Work clients (MCP `crew_write` and the CLI `write` command) have the same
 operations as the owner's reader, except webhook URL and secret entry and
