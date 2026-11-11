@@ -577,17 +577,11 @@ function handle(app, e, b, actor, isAgent, files, h) {
 
 // --- Public upload-link endpoints (no sign-in; token-scoped, upload only) ---
 
-function limited(e) {
-  const wait = $pocketcontext.crewUploadAllow();
-  if (!wait) return false;
-  e.response.header().set("Retry-After", String(wait));
-  e.response.header().set("Cache-Control", "no-store");
-  e.json(429, {
-    status: 429,
-    message: "Too many upload requests. Try again shortly.",
-    data: { rate_limit: { limit: "upload_link", retry_after_seconds: wait } },
-  });
-  return true;
+// Rate limits, the multipart-only rule, the in-flight cap and body limits run
+// in Go before these handlers ($pocketcontext.crewUploadGuard in crew.pb.js).
+// The token arrives in the X-Crew-Upload-Token header, never in the URL.
+function tokenOf(e) {
+  return String(e.request.header.get("X-Crew-Upload-Token") || "");
 }
 function findLink(app, token) {
   if (typeof token !== "string" || !TOKEN.test(token))
@@ -622,13 +616,9 @@ function findLink(app, token) {
     throw new ApiError(410, "This upload link no longer accepts files", {});
   return { link, parent };
 }
-// POST /api/crew/upload-link/info {token}: only what the upload page shows.
+// POST /api/crew/upload-link/info: only what the upload page shows.
 function uploadInfo(e) {
-  if (limited(e)) return;
-  e.response.header().set("Cache-Control", "no-store");
-  const b = e.requestInfo().body;
-  only(b, ["token"]);
-  const found = findLink(e.app, b.token);
+  const found = findLink(e.app, tokenOf(e));
   return e.json(200, {
     parent_kind: found.link.getString("parent_kind"),
     title: found.parent.getString("title"),
@@ -638,20 +628,17 @@ function uploadInfo(e) {
     max_request_bytes: MAX_REQUEST_BYTES - 1048576,
   });
 }
-// POST /api/crew/upload-link/upload, multipart: token + files parts. One
+// POST /api/crew/upload-link/upload, multipart file parts named files. One
 // batch: the first request that attaches at least one file uses the link up.
 // Requests where every file fails do not use it; five such requests revoke it.
 function uploadFiles(e, h) {
-  if (limited(e)) return;
-  e.response.header().set("Cache-Control", "no-store");
-  const b = e.requestInfo().body;
-  only(b, ["token"]);
-  // Refuse unknown, used, expired and revoked links before inspecting any
-  // file, and hash files outside the write transaction so a large batch never
-  // holds the database writer. The transaction checks the link again: of
-  // simultaneous batches only the first to commit uses it.
-  const max = findLink(e.app, b.token).link.getInt("max_files");
-  const files = $pocketcontext.crewAttachmentFiles(e, []);
+  const token = tokenOf(e);
+  // Refuse unknown, used, expired and revoked links before reading the body
+  // or inspecting any file, and hash files outside the write transaction so a
+  // large batch never holds the database writer. The transaction checks the
+  // link again: of simultaneous batches only the first to commit uses it.
+  const max = findLink(e.app, token).link.getInt("max_files");
+  const files = $pocketcontext.crewUploadLinkFiles(e);
   if (files.error) bad(files.error);
   if (!files.files.length) bad("Add at least one file");
   if (files.files.length > max)
@@ -659,7 +646,7 @@ function uploadFiles(e, h) {
   let status = 200,
     body = null;
   e.app.runInTransaction((app) => {
-    const found = findLink(app, b.token),
+    const found = findLink(app, token),
       link = found.link;
     if (files.files.length > link.getInt("max_files"))
       bad("This link accepts at most " + link.getInt("max_files") + " files");

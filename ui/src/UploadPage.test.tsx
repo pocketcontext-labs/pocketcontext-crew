@@ -106,7 +106,9 @@ describe("routing", () => {
     expect(url).toBe("/api/crew/upload-link/info");
     expect(init.credentials).toBe("omit");
     expect(JSON.stringify(init.headers)).not.toContain("owner-session-token");
-    expect(JSON.parse(init.body)).toEqual({ token });
+    expect(init.headers["X-Crew-Upload-Token"]).toBe(token);
+    expect(url).not.toContain(token);
+    expect(init.body).not.toContain(token);
   });
 });
 
@@ -215,7 +217,7 @@ describe("upload page", () => {
     expect(revoked).toContain("blob:local-1");
     expect(JSON.stringify({ ...localStorage })).not.toContain(token);
   });
-  it("builds one multipart request with the token and every file, without credentials", async () => {
+  it("builds one multipart request with every file and the token in a header, without credentials", async () => {
     const sent: {
       url: string;
       body: FormData;
@@ -262,7 +264,8 @@ describe("upload page", () => {
     expect(out.added).toBe(2);
     expect(sent).toHaveLength(1);
     expect(sent[0].url).toBe("/api/crew/upload-link/upload");
-    expect(sent[0].body.get("token")).toBe(token);
+    expect(sent[0].headers["X-Crew-Upload-Token"]).toBe(token);
+    expect(sent[0].body.get("token")).toBeNull();
     expect(sent[0].body.getAll("files")).toHaveLength(2);
     expect(sent[0].headers.Authorization).toBeUndefined();
     expect(sent[0].withCredentials).toBe(false);
@@ -316,6 +319,20 @@ describe("upload page", () => {
     fireEvent.click(sendButton());
     await screen.findByRole("heading", { name: "Done" });
     expect(send).toHaveBeenCalledTimes(2);
+  });
+  it("asks to wait while another upload is in progress (503)", async () => {
+    vi.spyOn(uploadLinkApi, "info").mockResolvedValue(info);
+    vi.spyOn(uploadLinkApi, "send").mockRejectedValueOnce(
+      new UploadLinkError("busy", 503, 1),
+    );
+    await ready();
+    choose([file("a.png")]);
+    fireEvent.click(sendButton());
+    expect(
+      await screen.findByText(/Another upload is in progress/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("a.png")).toBeInTheDocument();
+    expect(sendButton()).toBeDisabled();
   });
   it("keeps the staged files after a network error so a retry sends them", async () => {
     vi.spyOn(uploadLinkApi, "info").mockResolvedValue(info);

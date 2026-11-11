@@ -30,10 +30,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/apis"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/filesystem"
-	"ganigeorgiev.com/pocketbase/pocketbase/tools/router"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/hook"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/security"
 	_ "golang.org/x/image/webp"
 	"golang.org/x/sync/singleflight"
@@ -257,7 +258,7 @@ func crewAttachmentFiles(e *core.RequestEvent, list []any) map[string]any {
 	var headers []*multipart.FileHeader
 	if e != nil && e.Request != nil && strings.HasPrefix(strings.ToLower(e.Request.Header.Get("Content-Type")), "multipart/form-data") {
 		if e.Request.MultipartForm == nil {
-			if err := e.Request.ParseMultipartForm(router.DefaultMaxMemory); err != nil {
+			if err := e.Request.ParseMultipartForm(uploadMultipartMemory); err != nil {
 				return fail("Invalid multipart request")
 			}
 		}
@@ -320,32 +321,44 @@ func crewAttachmentFiles(e *core.RequestEvent, list []any) map[string]any {
 	return map[string]any{"files": files}
 }
 
-// uploadBucket rate-limits the unauthenticated upload-link endpoints for the
-// whole endpoint (hosted mode sees one proxy address, so per-IP keys would not
-// separate callers). Valid tokens are unguessable; this bounds abuse cost.
-type uploadBucket struct {
-	mu     sync.Mutex
-	tokens float64
-	last   time.Time
-	now    func() time.Time
-}
-
+// The unauthenticated upload-link endpoints are guarded in Go before any
+// JavaScript runs or any body is read. Hosted mode sees one proxy address, so
+// limits are keyed by what the request presents, not by IP:
+//   - a missing, malformed or unknown token takes from one shared "bad"
+//     bucket, so random-token traffic is cheap to refuse and never spends the
+//     allowance of a request holding a real link;
+//   - a known token (any state) takes from that link's own bucket;
+//   - uploads must be multipart/form-data (checked before the body is read),
+//     at most uploadInFlight run at once (503 with Retry-After otherwise), and
+//     file parts beyond 1 MiB stream to temporary files.
+// Tokens travel in the X-Crew-Upload-Token header, never in the URL.
 const (
-	uploadBurst  = 20
-	uploadRefill = 3 * time.Second
+	uploadTokenHeader     = "X-Crew-Upload-Token"
+	uploadBadBurst        = 20
+	uploadLinkBurst       = 10
+	uploadRefill          = 3 * time.Second
+	uploadInFlight        = 2
+	uploadBusyRetry       = 5 // seconds
+	uploadInfoBodyLimit   = 4096
+	uploadMultipartMemory = 1 << 20
+	uploadLinkBucketsMax  = 1024 // full buckets are pruned beyond this
 )
 
-var uploadLimiter = &uploadBucket{tokens: uploadBurst, now: time.Now}
+var uploadTokenPattern = regexp.MustCompile(`^[A-Za-z0-9]{43}$`)
 
-// allow takes one token, returning 0, or the whole seconds until one is available.
-func (b *uploadBucket) allow() int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	now := b.now()
-	if !b.last.IsZero() {
+type rateBucket struct {
+	tokens float64
+	last   time.Time
+}
+
+// take refills, then takes one token: 0, or whole seconds until one is available.
+func (b *rateBucket) take(now time.Time, burst float64) int {
+	if b.last.IsZero() {
+		b.tokens = burst
+	} else {
 		b.tokens += float64(now.Sub(b.last)) / float64(uploadRefill)
-		if b.tokens > uploadBurst {
-			b.tokens = uploadBurst
+		if b.tokens > burst {
+			b.tokens = burst
 		}
 	}
 	b.last = now
@@ -357,10 +370,116 @@ func (b *uploadBucket) allow() int {
 	return int((wait + time.Second - 1) / time.Second)
 }
 
-func (b *uploadBucket) reset() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.tokens, b.last = uploadBurst, time.Time{}
+type uploadGuardState struct {
+	mu       sync.Mutex
+	now      func() time.Time
+	bad      rateBucket
+	links    map[string]*rateBucket
+	inflight chan struct{}
+}
+
+func newUploadGuard() *uploadGuardState {
+	return &uploadGuardState{now: time.Now, links: map[string]*rateBucket{}, inflight: make(chan struct{}, uploadInFlight)}
+}
+
+var uploadGuard = newUploadGuard()
+
+// allow charges the link's bucket for a known link id, else the bad bucket.
+func (g *uploadGuardState) allow(linkID string) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	now := g.now()
+	if linkID == "" {
+		return g.bad.take(now, uploadBadBurst)
+	}
+	b := g.links[linkID]
+	if b == nil {
+		if len(g.links) >= uploadLinkBucketsMax {
+			for id, x := range g.links {
+				if now.Sub(x.last) >= uploadLinkBurst*uploadRefill {
+					delete(g.links, id)
+				}
+			}
+		}
+		b = &rateBucket{}
+		g.links[linkID] = b
+	}
+	return b.take(now, uploadLinkBurst)
+}
+
+func (g *uploadGuardState) reset() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.bad = rateBucket{}
+	g.links = map[string]*rateBucket{}
+}
+
+func uploadRefusal(e *core.RequestEvent, status int, retry int, message string, data map[string]any) error {
+	if retry > 0 {
+		e.Response.Header().Set("Retry-After", strconv.Itoa(retry))
+	}
+	if data == nil {
+		data = map[string]any{}
+	}
+	return e.JSON(status, map[string]any{"status": status, "message": message, "data": data})
+}
+
+// uploadLinkID returns the id of the link a well-formed token names, or "".
+func uploadLinkID(app core.App, token string) string {
+	if !uploadTokenPattern.MatchString(token) {
+		return ""
+	}
+	rec, err := app.FindFirstRecordByFilter("crew_upload_links", "token_hash={:h}", dbx.Params{"h": security.SHA256(token)})
+	if err != nil {
+		return ""
+	}
+	return rec.Id
+}
+
+// crewUploadGuard is the middleware for POST /api/crew/upload-link/{info,upload}.
+func crewUploadGuard(kind string) *hook.Handler[*core.RequestEvent] {
+	upload := kind == "upload"
+	return &hook.Handler[*core.RequestEvent]{Func: func(e *core.RequestEvent) error {
+		e.Response.Header().Set("Cache-Control", "no-store")
+		if upload {
+			mediaType, _, _ := mime.ParseMediaType(e.Request.Header.Get("Content-Type"))
+			if mediaType != "multipart/form-data" {
+				return uploadRefusal(e, http.StatusUnsupportedMediaType, 0, "Send files as multipart/form-data", nil)
+			}
+		} else if e.Request.ContentLength > uploadInfoBodyLimit {
+			return uploadRefusal(e, http.StatusRequestEntityTooLarge, 0, "Request body too large", nil)
+		}
+		linkID := uploadLinkID(e.App, e.Request.Header.Get(uploadTokenHeader))
+		if wait := uploadGuard.allow(linkID); wait > 0 {
+			return uploadRefusal(e, http.StatusTooManyRequests, wait, "Too many upload requests. Try again shortly.",
+				map[string]any{"rate_limit": map[string]any{"limit": "upload_link", "retry_after_seconds": wait}})
+		}
+		if !upload {
+			e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, uploadInfoBodyLimit)
+			return e.Next()
+		}
+		select {
+		case uploadGuard.inflight <- struct{}{}:
+			defer func() { <-uploadGuard.inflight }()
+		default:
+			return uploadRefusal(e, http.StatusServiceUnavailable, uploadBusyRetry, "Another upload is in progress. Try again shortly.", nil)
+		}
+		return e.Next()
+	}}
+}
+
+// crewUploadLinkFiles parses an upload-link request (file parts named files,
+// no other fields) with little memory and inspects its files.
+func crewUploadLinkFiles(e *core.RequestEvent) map[string]any {
+	if e.Request.MultipartForm == nil {
+		if err := e.Request.ParseMultipartForm(uploadMultipartMemory); err != nil {
+			return map[string]any{"error": "Invalid multipart request", "files": []map[string]any{}}
+		}
+	}
+	for key := range e.Request.MultipartForm.Value {
+		return map[string]any{"error": "Unsupported field: " + key, "files": []map[string]any{}}
+	}
+	return crewAttachmentFiles(e, nil)
 }
 
 // attachmentAuth accepts the owner's auth header or a short-lived PocketBase

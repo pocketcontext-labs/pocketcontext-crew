@@ -344,16 +344,26 @@ route (`upload_link.revoke`). Reads (`crew_read {collection: "upload_links",
 parent}`) return `state` (`active`, `used`, `revoked` or `expired`), never the
 token or hash.
 
-The upload page uses two unauthenticated endpoints, both public on a domain and
-rate-limited for the whole endpoint (burst 20, one request per 3 seconds; 429
-with `Retry-After` and `data.rate_limit`):
+The upload page uses two unauthenticated endpoints, both public on a domain.
+The token travels in the `X-Crew-Upload-Token` request header (never in a URL,
+so it stays out of request logs). A guard runs before any body is read:
 
-- `POST /api/crew/upload-link/info` with `{"token": "…"}` returns only
+- Rate limits are keyed by what the request presents, not by address (hosted
+  mode sees one proxy): a missing, malformed or unknown token takes from one
+  shared bucket (burst 20, one request per 3 seconds), and a known token (in
+  any state) from its own link's bucket (burst 10, one per 3 seconds), so
+  random-token traffic never uses up a real link's allowance. Both answer 429
+  with `Retry-After` and `data.rate_limit`.
+- `POST /api/crew/upload-link/info` (body ignored, at most 4 KiB) returns only
   `{parent_kind, title, expires_at, max_files, max_file_bytes,
   max_request_bytes}`.
-- `POST /api/crew/upload-link/upload`, multipart: field `token` and file parts
-  named `files` (at most `max_files`). Returns `{added, results: [{index, name,
-  ok, error?}]}` without IDs. The normal size, count and storage limits apply.
+- `POST /api/crew/upload-link/upload` must be `multipart/form-data` (anything
+  else is 415 before the body is read) with only file parts named `files` (at
+  most `max_files`; any other field is a 400). At most two uploads run at once
+  (503 with `Retry-After` otherwise), the link is checked before the body is
+  read, and file parts stream to temporary files beyond 1 MiB of memory.
+  Returns `{added, results: [{index, name, ok, error?}]}` without IDs. The
+  normal size, count and storage limits apply.
 
 The first upload that adds at least one file uses the link up (one batch). A
 batch in which every file fails returns 400 with `results` and does not use the

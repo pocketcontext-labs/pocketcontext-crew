@@ -75,7 +75,8 @@ func hookBindings() map[string]any {
 		"webhookUUID":             webhookUUID,
 		"crewRecordLink":          crewRecordLink,
 		"crewAttachmentFiles":     crewAttachmentFiles,
-		"crewUploadAllow":         uploadLimiter.allow,
+		"crewUploadGuard":         crewUploadGuard,
+		"crewUploadLinkFiles":     crewUploadLinkFiles,
 	}
 }
 

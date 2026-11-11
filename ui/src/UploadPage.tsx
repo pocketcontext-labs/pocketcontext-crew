@@ -1,8 +1,9 @@
 /**
  * The one-time upload page at `#/upload/<token>`: no sign-in, no Crew data
  * beyond the task or note title, one batch in one request. The token is read
- * from the fragment and sent only in request bodies; it is never stored, and
- * the owner's session (if this browser has one) is never sent.
+ * from the fragment and sent only in the `X-Crew-Upload-Token` request header
+ * (never in a URL); it is never stored, and the owner's session (if this
+ * browser has one) is never sent.
  */
 import {
   useCallback,
@@ -32,7 +33,7 @@ export type UploadFileResult = {
 };
 export type UploadOutcome = { added: number; results: UploadFileResult[] };
 
-/** A refused request: `retryAfter` (seconds) on 429, `results` on 400. */
+/** A refused request: `retryAfter` (seconds) on 429/503, `results` on 400. */
 export class UploadLinkError extends Error {
   status: number;
   retryAfter: number;
@@ -56,6 +57,8 @@ const retryAfterOf = (value: string | null) => {
   return Number.isFinite(n) && n > 0 ? Math.ceil(n) : 0;
 };
 
+export const TOKEN_HEADER = "X-Crew-Upload-Token";
+
 /** One object, so tests can replace either call. */
 export const uploadLinkApi = {
   async info(token: string): Promise<UploadInfo> {
@@ -68,8 +71,9 @@ export const uploadLinkApi = {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
+          [TOKEN_HEADER]: token,
         },
-        body: JSON.stringify({ token }),
+        body: "{}",
       });
     } catch {
       throw new UploadLinkError("Network error");
@@ -96,13 +100,13 @@ export const uploadLinkApi = {
   ): Promise<UploadOutcome> {
     return new Promise((resolve, reject) => {
       const form = new FormData();
-      form.append("token", token);
       for (const file of files) form.append("files", file, file.name);
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/crew/upload-link/upload");
       xhr.withCredentials = false;
       xhr.responseType = "text";
       xhr.setRequestHeader("Accept", "application/json");
+      xhr.setRequestHeader(TOKEN_HEADER, token);
       if (onProgress)
         xhr.upload.onprogress = (e) =>
           onProgress(e.loaded, e.lengthComputable ? e.total : 0);
@@ -342,6 +346,9 @@ export default function UploadPage({ token }: { token: string }) {
       } else if (e.status === 429) {
         setWait(e.retryAfter || 5);
         setError("Too many upload requests right now.");
+      } else if (e.status === 503) {
+        setWait(e.retryAfter || 5);
+        setError("Another upload is in progress right now.");
       } else if (e.status === 413) {
         setError("These files are too large to send together. Remove some.");
       } else if (e.results.length) {

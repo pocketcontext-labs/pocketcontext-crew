@@ -86,13 +86,16 @@ def attachment_scenario(pc, headers, write, read):
     # Upload links: reader only; the token uploads once and reads nothing.
     write('upload_link.create', {'task': task['id']}, expected=403)
     link = write('upload_link.create', {'task': task['id'], 'max_files': 2}, agent=False)
-    status, _, data = raw_http(pc, 'POST', '/api/crew/upload-link/info', json.dumps({'token': link['token']}).encode(), {'Content-Type': 'application/json'})
+    link_header = {'X-Crew-Upload-Token': link['token']}
+    status, _, data = raw_http(pc, 'POST', '/api/crew/upload-link/info', b'{}', {**link_header, 'Content-Type': 'application/json'})
     assert status == 200 and json.loads(data)['title'] == 'Synthetic attachment bug', (status, data)
-    content_type, body = multipart({'token': link['token']}, [('phone.png', shot)])
-    status, _, data = raw_http(pc, 'POST', '/api/crew/upload-link/upload', body, {'Content-Type': content_type})
+    # Only multipart reaches the upload handler; the body is refused unread.
+    assert raw_http(pc, 'POST', '/api/crew/upload-link/upload', b'{}', {**link_header, 'Content-Type': 'application/json'})[0] == 415
+    content_type, body = multipart({}, [('phone.png', shot)])
+    status, _, data = raw_http(pc, 'POST', '/api/crew/upload-link/upload', body, {**link_header, 'Content-Type': content_type})
     assert status == 200 and json.loads(data)['added'] == 1, (status, data)
-    content_type, body = multipart({'token': link['token']}, [('again.png', shot)])
-    assert raw_http(pc, 'POST', '/api/crew/upload-link/upload', body, {'Content-Type': content_type})[0] == 410
+    content_type, body = multipart({}, [('again.png', shot)])
+    assert raw_http(pc, 'POST', '/api/crew/upload-link/upload', body, {**link_header, 'Content-Type': content_type})[0] == 410
     assert raw_http(pc, 'POST', '/api/crew/read', json.dumps({'collection': 'tasks'}).encode(),
                     {'Content-Type': 'application/json', 'Authorization': link['token']})[0] == 401
     phone = [a for a in read('attachments', parent=task['id']) if a['name'] == 'phone.png']

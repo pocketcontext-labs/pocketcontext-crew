@@ -108,7 +108,6 @@ func uploadLinkRequest(t *testing.T, a *testApp, token string, extra map[string]
 	t.Helper()
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
-	w.WriteField("token", token)
 	for k, v := range extra {
 		w.WriteField(k, v)
 	}
@@ -119,6 +118,7 @@ func uploadLinkRequest(t *testing.T, a *testApp, token string, extra map[string]
 	w.Close()
 	req := httptest.NewRequest("POST", "/api/crew/upload-link/upload", &body)
 	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set(uploadTokenHeader, token)
 	res := httptest.NewRecorder()
 	a.handler.ServeHTTP(res, req)
 	if res.Code != want {
@@ -596,8 +596,8 @@ func TestAttachmentChangesWithdrawReviewWithoutWakes(t *testing.T) {
 }
 
 func TestUploadLinkLifecycle(t *testing.T) {
-	uploadLimiter.reset()
-	t.Cleanup(uploadLimiter.reset)
+	uploadGuard.reset()
+	t.Cleanup(uploadGuard.reset)
 	a := newTestApp(t)
 	task := newTask(t, a, map[string]any{"title": "Phone screenshots"})
 	id := task["id"].(string)
@@ -627,12 +627,15 @@ func TestUploadLinkLifecycle(t *testing.T) {
 	if strings.Contains(fmt.Sprint(listed), token) || strings.Contains(fmt.Sprint(listed), stored.GetString("token_hash")) {
 		t.Fatal("listing leaked the token")
 	}
-	info := a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+token+`"}`, 200)
+	info := uploadInfo(t, a, token, 200)
 	if info["title"] != "Phone screenshots" || info["parent_kind"] != "task" || info["max_files"] != float64(2) || len(info) != 6 {
 		t.Fatal("info", info)
 	}
-	a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+strings.Repeat("A", 43)+`"}`, 404)
-	a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+token+`","task":"`+id+`"}`, 400)
+	uploadInfo(t, a, strings.Repeat("A", 43), 404)
+	// The info body is ignored but bounded.
+	if res := uploadInfoRaw(a, token, strings.Repeat(" ", uploadInfoBodyLimit+1)); res.Code != http.StatusRequestEntityTooLarge {
+		t.Fatal("info body limit", res.Code, res.Body)
+	}
 	// Upload only: no read access with the token.
 	a.request(t, "POST", "/api/crew/read", token, `{"collection":"tasks"}`, 401)
 	// The token names its parent; a request cannot pick another.
@@ -657,7 +660,7 @@ func TestUploadLinkLifecycle(t *testing.T) {
 	}
 	// Single use.
 	uploadLinkRequest(t, a, token, nil, []testFile{{"again.png", tinyPNG(t, 3, 3)}}, 410)
-	a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+token+`"}`, 410)
+	uploadInfo(t, a, token, 410)
 	used := apiWebhookRecord(t, a, "upload_links", link["id"].(string))
 	if used.GetInt("files_added") != 1 || used.GetString("used_at") == "" {
 		t.Fatal("link usage", used.PublicExport())
@@ -686,12 +689,34 @@ func TestUploadLinkLifecycle(t *testing.T) {
 	note := crewWrite(t, a, false, "note.create", "", 0, map[string]any{"bucket": bucket["id"], "title": "Note upload"}, 200)
 	nl := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"note": note["id"], "expires_in_minutes": 1440}, 200)
 	crewWrite(t, a, false, "bucket.update", bucket["id"].(string), 1, map[string]any{"archived": true}, 200)
-	a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+nl["token"].(string)+`"}`, 410)
+	uploadInfo(t, a, nl["token"].(string), 410)
+}
+
+func uploadInfoRaw(a *testApp, token, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest("POST", "/api/crew/upload-link/info", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set(uploadTokenHeader, token)
+	}
+	res := httptest.NewRecorder()
+	a.handler.ServeHTTP(res, req)
+	return res
+}
+
+func uploadInfo(t *testing.T, a *testApp, token string, want int) map[string]any {
+	t.Helper()
+	res := uploadInfoRaw(a, token, "")
+	if res.Code != want {
+		t.Fatalf("info: %d %s; want %d", res.Code, res.Body, want)
+	}
+	var out map[string]any
+	json.Unmarshal(res.Body.Bytes(), &out)
+	return out
 }
 
 func TestUploadLinkRateLimitAndNoWake(t *testing.T) {
-	uploadLimiter.reset()
-	t.Cleanup(uploadLimiter.reset)
+	uploadGuard.reset()
+	t.Cleanup(uploadGuard.reset)
 	a, _, task, _ := webhookFixture(t)
 	before := len(apiWebhookDeliveries(t, a, task.Id))
 	link := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": task.Id}, 200)
@@ -700,16 +725,107 @@ func TestUploadLinkRateLimitAndNoWake(t *testing.T) {
 	if len(apiWebhookDeliveries(t, a, task.Id)) != before || apiWebhookRecord(t, a, "tasks", task.Id).GetInt("wake_generation") != generation {
 		t.Fatal("upload link woke the task")
 	}
-	for i := 0; i < uploadBurst-1; i++ {
-		a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+strings.Repeat("B", 43)+`"}`, 404)
+}
+
+// Random-token traffic exhausts only the shared bad bucket: a request holding
+// a real link keeps its own allowance, which is itself bounded.
+func TestUploadLinkRateBucketsSeparateUnknownTokens(t *testing.T) {
+	uploadGuard.reset()
+	t.Cleanup(uploadGuard.reset)
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{"title": "Buckets"})
+	link := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": task["id"]}, 200)
+	token := link["token"].(string)
+	for i := 0; i < uploadBadBurst; i++ {
+		uploadInfo(t, a, strings.Repeat("B", 43), 404)
 	}
-	req := httptest.NewRequest("POST", "/api/crew/upload-link/info", strings.NewReader(`{"token":"x"}`))
-	req.Header.Set("Content-Type", "application/json")
+	for _, bad := range []string{strings.Repeat("B", 43), "x", ""} {
+		res := uploadInfoRaw(a, bad, "")
+		if res.Code != http.StatusTooManyRequests || res.Header().Get("Retry-After") == "" {
+			t.Fatal("bad bucket", bad, res.Code, res.Header())
+		}
+	}
+	if c := uploadLinkCode(a, strings.Repeat("D", 43), []testFile{{"x.png", tinyPNG(t, 3, 3)}}); c != http.StatusTooManyRequests {
+		t.Fatal("unknown upload token not limited", c)
+	}
+	// The real link is unaffected by the flood...
+	for i := 0; i < uploadLinkBurst-1; i++ {
+		uploadInfo(t, a, token, 200)
+	}
+	uploadLinkRequest(t, a, token, nil, []testFile{{"ok.png", tinyPNG(t, 3, 3)}}, 200)
+	// ...but has its own bounded allowance (used or not).
+	res := uploadInfoRaw(a, token, "")
+	if res.Code != http.StatusTooManyRequests || res.Header().Get("Retry-After") == "" {
+		t.Fatal("link bucket", res.Code, res.Body)
+	}
+	// Buckets refill with time.
+	later := time.Now().Add(time.Minute)
+	uploadGuard.mu.Lock()
+	uploadGuard.now = func() time.Time { return later }
+	uploadGuard.mu.Unlock()
+	t.Cleanup(func() { uploadGuard.mu.Lock(); uploadGuard.now = time.Now; uploadGuard.mu.Unlock() })
+	uploadInfo(t, a, token, 410)
+	uploadInfo(t, a, strings.Repeat("B", 43), 404)
+}
+
+type watchedBody struct{ read bool }
+
+func (w *watchedBody) Read([]byte) (int, error) { w.read = true; return 0, fmt.Errorf("body must not be read") }
+
+// Non-multipart uploads are refused before the body is read; uploads beyond
+// the in-flight cap get 503 with Retry-After while info still answers.
+func TestUploadLinkMultipartOnlyAndInFlightCap(t *testing.T) {
+	uploadGuard.reset()
+	t.Cleanup(uploadGuard.reset)
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{"title": "Guard"})
+	link := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": task["id"]}, 200)
+	token := link["token"].(string)
+	inspected := 0
+	inspectHook = func() { inspected++ }
+	t.Cleanup(func() { inspectHook = nil })
+	for _, ct := range []string{"application/json", "application/octet-stream", "text/plain", ""} {
+		body := &watchedBody{}
+		req := httptest.NewRequest("POST", "/api/crew/upload-link/upload", body)
+		req.ContentLength = 100 << 20
+		if ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		req.Header.Set(uploadTokenHeader, token)
+		res := httptest.NewRecorder()
+		a.handler.ServeHTTP(res, req)
+		if res.Code != http.StatusUnsupportedMediaType || body.read || inspected != 0 {
+			t.Fatal("non-multipart upload", ct, res.Code, body.read, inspected)
+		}
+	}
+	// Fill the in-flight slots.
+	for i := 0; i < uploadInFlight; i++ {
+		uploadGuard.inflight <- struct{}{}
+	}
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	part, _ := w.CreateFormFile("files", "busy.png")
+	part.Write(tinyPNG(t, 3, 3))
+	w.Close()
+	req := httptest.NewRequest("POST", "/api/crew/upload-link/upload", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set(uploadTokenHeader, token)
 	res := httptest.NewRecorder()
 	a.handler.ServeHTTP(res, req)
-	if res.Code != http.StatusTooManyRequests || res.Header().Get("Retry-After") == "" {
-		t.Fatal("rate limit", res.Code, res.Header())
+	if res.Code != http.StatusServiceUnavailable || res.Header().Get("Retry-After") == "" || inspected != 0 {
+		t.Fatal("in-flight cap", res.Code, res.Header(), inspected)
 	}
+	uploadInfo(t, a, token, 200)
+	for i := 0; i < uploadInFlight; i++ {
+		<-uploadGuard.inflight
+	}
+	uploadLinkRequest(t, a, token, nil, []testFile{{"free.png", tinyPNG(t, 3, 3)}}, 200)
+	if len(uploadGuard.inflight) != 0 {
+		t.Fatal("slot not released")
+	}
+	// Form fields other than file parts are refused.
+	other := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": task["id"]}, 200)
+	uploadLinkRequest(t, a, other["token"].(string), map[string]string{"token": other["token"].(string)}, []testFile{{"x.png", tinyPNG(t, 3, 3)}}, 400)
 }
 
 func attachmentGet(t *testing.T, a *testApp, query, token string, want int) *httptest.ResponseRecorder {
@@ -910,7 +1026,6 @@ func TestAttachmentArchiveRetryReplays(t *testing.T) {
 func uploadLinkCode(a *testApp, token string, files []testFile) int {
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
-	w.WriteField("token", token)
 	for _, f := range files {
 		part, _ := w.CreateFormFile("files", f.name)
 		part.Write(f.data)
@@ -918,6 +1033,7 @@ func uploadLinkCode(a *testApp, token string, files []testFile) int {
 	w.Close()
 	req := httptest.NewRequest("POST", "/api/crew/upload-link/upload", &body)
 	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set(uploadTokenHeader, token)
 	res := httptest.NewRecorder()
 	a.handler.ServeHTTP(res, req)
 	return res.Code
@@ -926,8 +1042,8 @@ func uploadLinkCode(a *testApp, token string, files []testFile) int {
 // Simultaneous batches with one token: exactly one uses the link; the others
 // see it used, so the link never adds more than max_files.
 func TestUploadLinkConcurrentBatchesUseItOnce(t *testing.T) {
-	uploadLimiter.reset()
-	t.Cleanup(uploadLimiter.reset)
+	uploadGuard.reset()
+	t.Cleanup(uploadGuard.reset)
 	a := newTestApp(t)
 	task := newTask(t, a, map[string]any{"title": "Race"})
 	id := task["id"].(string)
@@ -944,19 +1060,21 @@ func TestUploadLinkConcurrentBatchesUseItOnce(t *testing.T) {
 		}()
 	}
 	close(start)
-	ok, gone := 0, 0
+	ok, gone, busy := 0, 0, 0
 	for i := 0; i < n; i++ {
 		switch c := <-codes; c {
 		case 200:
 			ok++
 		case 410:
 			gone++
+		case 503: // beyond the in-flight cap
+			busy++
 		default:
 			t.Fatalf("unexpected status %d", c)
 		}
 	}
-	if ok != 1 || gone != n-1 {
-		t.Fatalf("ok=%d gone=%d", ok, gone)
+	if ok != 1 || gone+busy != n-1 {
+		t.Fatalf("ok=%d gone=%d busy=%d", ok, gone, busy)
 	}
 	if got := len(attachmentsOf(t, a, id, false)); got != 2 {
 		t.Fatalf("attachments %d, want 2", got)
@@ -970,8 +1088,8 @@ func TestUploadLinkConcurrentBatchesUseItOnce(t *testing.T) {
 // inspected or stored; per-file names are sanitized; info shows nothing but
 // the title and limits, and upload never echoes record ids or storage names.
 func TestUploadLinkRefusesBeforeFilesAndSanitizes(t *testing.T) {
-	uploadLimiter.reset()
-	t.Cleanup(uploadLimiter.reset)
+	uploadGuard.reset()
+	t.Cleanup(uploadGuard.reset)
 	a := newTestApp(t)
 	task := newTask(t, a, map[string]any{"title": "Names", "description": "secret description"})
 	id := task["id"].(string)
@@ -988,7 +1106,7 @@ func TestUploadLinkRefusesBeforeFilesAndSanitizes(t *testing.T) {
 		t.Fatal("files inspected for an unknown token")
 	}
 	link := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": id}, 200)
-	info := a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+link["token"].(string)+`"}`, 200)
+	info := uploadInfo(t, a, link["token"].(string), 200)
 	if strings.Contains(fmt.Sprint(info), "secret") || strings.Contains(fmt.Sprint(info), id) {
 		t.Fatal("info leaked", info)
 	}

@@ -27,8 +27,12 @@ func TestPublicAttachmentReadsRequireSignIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	public := server.Public()
+	uploadToken := ""
 	send := func(method, path, contentType string, body io.Reader, auth string) *httptest.ResponseRecorder {
 		r := server.MarkPublic(httptest.NewRequest(method, "https://"+syntheticDomain+path, body))
+		if uploadToken != "" {
+			r.Header.Set("X-Crew-Upload-Token", uploadToken)
+		}
 		if contentType != "" {
 			r.Header.Set("Content-Type", contentType)
 		}
@@ -99,14 +103,16 @@ func TestPublicAttachmentReadsRequireSignIn(t *testing.T) {
 	if linked["url"] != "https://"+syntheticDomain+"/#/upload/"+linked["token"].(string) {
 		t.Fatal("upload link url", linked["url"])
 	}
-	info := send("POST", "/api/crew/upload-link/info", "application/json", strings.NewReader(`{"token":"`+linked["token"].(string)+`"}`), "")
+	uploadToken = linked["token"].(string)
+	info := send("POST", "/api/crew/upload-link/info", "application/json", strings.NewReader(`{}`), "")
 	if info.Code != 200 || decode(info)["title"] != "Public attachment task" {
 		t.Fatal("public info", info.Code, info.Body)
 	}
-	contentType, body = multipartBody(map[string]string{"token": linked["token"].(string)}, "phone.txt", []byte("from the phone"))
+	contentType, body = multipartBody(nil, "phone.txt", []byte("from the phone"))
 	if w := send("POST", "/api/crew/upload-link/upload", contentType, body, ""); w.Code != 200 {
 		t.Fatal("public upload", w.Code, w.Body)
 	}
+	uploadToken = ""
 	// The link token is not a sign-in.
 	if w := send("GET", "/api/crew/attachment?id="+id+"&token="+linked["token"].(string), "", nil, ""); w.Code != http.StatusUnauthorized {
 		t.Fatal("link token read a file", w.Code)
