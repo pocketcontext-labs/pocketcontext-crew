@@ -6,15 +6,32 @@ routerAdd(
   (e) => require(`${__hooks}/crew.js`).read(e),
   $apis.requireAuth("users"),
 );
+// Writes accept JSON, or multipart (an @jsonPayload envelope plus file parts
+// named "files") for attachment.add, task.create and note.create. 101 MiB
+// covers a batch of files; the public HTTPS listener caps requests at 110 MiB.
 routerAdd(
   "POST",
   "/api/crew/write",
   (e) => require(`${__hooks}/crew.js`).write(e, false),
   $apis.requireAuth("users"),
+  $apis.bodyLimit(105906176),
 );
 routerAdd(
   "POST",
   "/api/crew/agent-write",
   (e) => require(`${__hooks}/crew.js`).write(e, true),
   $apis.requireAuth("users"),
+  $apis.bodyLimit(105906176),
+);
+// The only unauthenticated Crew writes: a one-time upload link adds files to
+// its one task or note. Token-scoped, upload only, expiring, single batch and
+// rate-limited; nothing is readable except the parent title on info.
+routerAdd("POST", "/api/crew/upload-link/info", (e) =>
+  require(`${__hooks}/crew.js`).uploadInfo(e),
+);
+routerAdd(
+  "POST",
+  "/api/crew/upload-link/upload",
+  (e) => require(`${__hooks}/crew.js`).uploadFiles(e),
+  $apis.bodyLimit(105906176),
 );

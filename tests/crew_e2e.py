@@ -1,12 +1,115 @@
 #!/usr/bin/env python3
 """Synthetic Crew workflow and API-boundary checks; no production data."""
 import argparse
+import base64
+import hashlib
+import http.client
 import json
 from pathlib import Path
+import struct
+import uuid
+import zlib
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from e2e import Project, PASSWORD, IDENTITY
+
+
+def synthetic_png(width, height):
+    """A valid RGB PNG built with the standard library."""
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    raw = b''.join(b'\x00' + b''.join(bytes((x % 256, y % 256, 90)) for x in range(width)) for y in range(height))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) +
+            chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
+
+
+def multipart(fields, files):
+    boundary = 'crew' + uuid.uuid4().hex
+    body = b''
+    for name, value in fields.items():
+        body += f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n'.encode() + value.encode() + b'\r\n'
+    for name, data in files:
+        body += (f'--{boundary}\r\nContent-Disposition: form-data; name="files"; filename="{name}"\r\n'
+                 'Content-Type: application/octet-stream\r\n\r\n').encode() + data + b'\r\n'
+    return f'multipart/form-data; boundary={boundary}', body + f'--{boundary}--\r\n'.encode()
+
+
+def raw_http(pc, method, path, body=None, headers=None):
+    connection = http.client.HTTPConnection('127.0.0.1', pc.port, timeout=10)
+    try:
+        connection.request(method, path, body=body, headers=headers or {})
+        response = connection.getresponse()
+        return response.status, dict(response.getheaders()), response.read()
+    finally:
+        connection.close()
+
+
+def attachment_scenario(pc, headers, write, read):
+    """Attach, list and read files over HTTP; upload links; SQL and search."""
+    task = write('task.create', {'title': 'Synthetic attachment bug'})
+    shot, log = synthetic_png(64, 40), b'synthetic log line\n'
+    content_type, body = multipart({'@jsonPayload': json.dumps({'action': 'attachment.add', 'reported_agent': 'Network',
+                                                                'data': {'task': task['id']}})},
+                                   [('screenshot.png', shot), ('run.log', log)])
+    status, _, data = raw_http(pc, 'POST', '/api/crew/write', body, {**headers, 'Content-Type': content_type})
+    assert status == 200, (status, data)
+    added = json.loads(data)['attachments']
+    image, text = added
+    assert image['image'] is True and image['width'] == 64 and image['sha256'] == hashlib.sha256(shot).hexdigest(), image
+    assert text['image'] is False and text['media_type'] == 'text/plain', text
+    assert [a['id'] for a in read('attachments', parent=task['id'])] == [image['id'], text['id']]
+    # Bytes need sign-in; non-images download with nosniff.
+    assert raw_http(pc, 'GET', '/api/crew/attachment?id=' + image['id'])[0] == 401
+    status, got, data = raw_http(pc, 'GET', '/api/crew/attachment?id=' + image['id'], headers=headers)
+    assert status == 200 and data == shot and got['Content-Type'] == 'image/png', (status, got)
+    status, got, data = raw_http(pc, 'GET', '/api/crew/attachment?id=' + text['id'], headers=headers)
+    assert status == 200 and data == log and got['Content-Disposition'].startswith('attachment') and got['X-Content-Type-Options'] == 'nosniff', got
+    status, _, data = raw_http(pc, 'POST', '/api/crew/attachment-read', json.dumps({'id': text['id'], 'variant': 'text'}).encode(),
+                               {**headers, 'Content-Type': 'application/json'})
+    assert status == 200 and json.loads(data)['text'] == log.decode(), (status, data)
+    status, _, data = raw_http(pc, 'POST', '/api/crew/attachment-read', json.dumps({'id': image['id'], 'variant': 'card'}).encode(),
+                               {**headers, 'Content-Type': 'application/json'})
+    assert status == 200 and base64.b64decode(json.loads(data)['content_base64']) == shot, status
+    # Work clients attach base64 JSON; task.create resolves placeholders.
+    agent = write('attachment.add', {'task': task['id'], 'files': [{'name': 'agent.md', 'content_base64': base64.b64encode(b'# Agent').decode()}]})
+    assert agent['attachments'][0]['actor'].startswith('mcp:')
+    content_type, body = multipart({'@jsonPayload': json.dumps({'action': 'task.create', 'reported_agent': 'Network',
+                                                                'data': {'title': 'Created with a screenshot', 'description': 'Step\n\n![shot](attachment:new-1)'}})},
+                                   [('step.png', shot)])
+    status, _, data = raw_http(pc, 'POST', '/api/crew/write', body, {**headers, 'Content-Type': content_type})
+    created = json.loads(data)
+    assert status == 200 and created['description'] == 'Step\n\n![shot](attachment:%s)' % created['attachments'][0]['id'], (status, data)
+    write('task.update', {'description': '![foreign](attachment:%s)' % image['id']}, created, expected=400)
+    archived = write('attachment.archive', {}, text)
+    assert archived['archived'] and read('attachments', parent=task['id'], archived=True)[0]['id'] == text['id']
+    # Upload links: reader only; the token uploads once and reads nothing.
+    write('upload_link.create', {'task': task['id']}, expected=403)
+    link = write('upload_link.create', {'task': task['id'], 'max_files': 2}, agent=False)
+    status, _, data = raw_http(pc, 'POST', '/api/crew/upload-link/info', json.dumps({'token': link['token']}).encode(), {'Content-Type': 'application/json'})
+    assert status == 200 and json.loads(data)['title'] == 'Synthetic attachment bug', (status, data)
+    content_type, body = multipart({'token': link['token']}, [('phone.png', shot)])
+    status, _, data = raw_http(pc, 'POST', '/api/crew/upload-link/upload', body, {'Content-Type': content_type})
+    assert status == 200 and json.loads(data)['added'] == 1, (status, data)
+    content_type, body = multipart({'token': link['token']}, [('again.png', shot)])
+    assert raw_http(pc, 'POST', '/api/crew/upload-link/upload', body, {'Content-Type': content_type})[0] == 410
+    assert raw_http(pc, 'POST', '/api/crew/read', json.dumps({'collection': 'tasks'}).encode(),
+                    {'Content-Type': 'application/json', 'Authorization': link['token']})[0] == 401
+    phone = [a for a in read('attachments', parent=task['id']) if a['name'] == 'phone.png']
+    assert phone and phone[0]['actor'] == 'upload_link:' + link['id'], phone
+    # Metadata only in SQL; names in search.
+    rows = request_json(pc, headers, '/api/crew/query', {'sql': "SELECT name, size FROM attachments WHERE parent = '%s' ORDER BY position" % task['id']})['rows']
+    assert ['screenshot.png', len(shot)] in rows, rows
+    assert raw_http(pc, 'POST', '/api/crew/query', json.dumps({'sql': 'SELECT file FROM attachments'}).encode(), {**headers, 'Content-Type': 'application/json'})[0] == 400
+    hits = request_json(pc, headers, '/api/crew/search', {'query': 'screenshot'})['items']
+    assert task['id'] in [h['id'] for h in hits], hits
+    print('Crew attachments: multipart and base64 add, protected reads, placeholders, upload link, SQL and search passed.')
+
+
+def request_json(pc, headers, path, body):
+    status, data = pc.http('POST', path, body, headers)
+    assert status == 200, (path, status, data)
+    return json.loads(data)
 
 
 def scenario(pc):
@@ -278,6 +381,7 @@ def scenario(pc):
     assert len(read('note_revisions', parent=note['id'])) == 5
     assert read('webhook_routing')[0]['epoch'] == old_epoch, 'Ordinary restart preserves delivery epoch'
     assert current('webhook_configs', changed)['secret_configured'] is False
+    attachment_scenario(pc, headers, write, read)
     print('Crew end-to-end workflow, conflicts, archive/restore and authorization checks passed.')
 
 

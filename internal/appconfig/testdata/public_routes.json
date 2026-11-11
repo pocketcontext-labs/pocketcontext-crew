@@ -1401,6 +1401,111 @@
  },
  {
   "method": "DELETE",
+  "path": "/api/crew/attachment",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/crew/attachment",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/api/crew/attachment",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/api/crew/attachment",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/crew/attachment",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/api/crew/attachment",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/api/crew/attachment",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/crew/attachment-read",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/crew/attachment-read",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/api/crew/attachment-read",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/api/crew/attachment-read",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/crew/attachment-read",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/api/crew/attachment-read",
+  "allow": true
+ },
+ {
+  "method": "PUT",
+  "path": "/api/crew/attachment-read",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/crew/attachment/abc",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/crew/attachment/abc",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/api/crew/attachment/abc",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/api/crew/attachment/abc",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/crew/attachment/abc",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/api/crew/attachment/abc",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/api/crew/attachment/abc",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
   "path": "/api/crew/decide",
   "allow": false
  },
@@ -1681,6 +1786,146 @@
  },
  {
   "method": "DELETE",
+  "path": "/api/crew/upload-link",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/crew/upload-link",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/api/crew/upload-link",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/api/crew/upload-link",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/crew/upload-link",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/api/crew/upload-link",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/api/crew/upload-link",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/crew/upload-link/info",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/crew/upload-link/info",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/api/crew/upload-link/info",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/api/crew/upload-link/info",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/crew/upload-link/info",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/api/crew/upload-link/info",
+  "allow": true
+ },
+ {
+  "method": "PUT",
+  "path": "/api/crew/upload-link/info",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/crew/upload-link/info/",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/crew/upload-link/info/",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/api/crew/upload-link/info/",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/api/crew/upload-link/info/",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/crew/upload-link/info/",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/api/crew/upload-link/info/",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/api/crew/upload-link/info/",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/crew/upload-link/upload",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/crew/upload-link/upload",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/api/crew/upload-link/upload",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/api/crew/upload-link/upload",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/crew/upload-link/upload",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/api/crew/upload-link/upload",
+  "allow": true
+ },
+ {
+  "method": "PUT",
+  "path": "/api/crew/upload-link/upload",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
   "path": "/api/crew/webhook",
   "allow": false
  },
@@ -1847,7 +2092,7 @@
  {
   "method": "POST",
   "path": "/api/files/token",
-  "allow": false
+  "allow": true
  },
  {
   "method": "PUT",

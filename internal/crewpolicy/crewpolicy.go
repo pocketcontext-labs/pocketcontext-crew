@@ -94,8 +94,8 @@ func Policy() appserver.Policy {
 	return appserver.Policy{
 		PublicRoute: func(core.App) func(method, path string) bool { return PublicRoute },
 		Maintenance: maintenance.Policy{
-			ReadPosts: map[string]bool{"/api/crew/read": true, "/api/crew/search": true, "/api/crew/query": true},
-			ReadGets:  map[string]bool{"/api/crew/schema": true},
+			ReadPosts: map[string]bool{"/api/crew/read": true, "/api/crew/search": true, "/api/crew/query": true, "/api/crew/attachment-read": true, "/api/files/token": true},
+			ReadGets:  map[string]bool{"/api/crew/schema": true, "/api/crew/attachment": true},
 		},
 		Observe:          Observe,
 		AllowPublicUIDev: true,
@@ -105,7 +105,7 @@ func Policy() appserver.Policy {
 // Observe lists the diagnostic labels; anything else is reported as unknown.
 var Observe = mcpobserve.Policy{
 	Tools:     []string{"crew_read", "crew_search", "crew_schema", "crew_query", "crew_write"},
-	APIRoutes: []string{"/api/crew/read", "/api/crew/search", "/api/crew/schema", "/api/crew/query", "/api/crew/agent-write"},
+	APIRoutes: []string{"/api/crew/read", "/api/crew/search", "/api/crew/schema", "/api/crew/query", "/api/crew/agent-write", "/api/crew/attachment-read"},
 }
 
 // PublicRoute is deliberately an allowlist. A future local API does not become
@@ -118,12 +118,17 @@ func PublicRoute(method, p string) bool {
 	if read && strings.HasPrefix(p, "/assets/") && appserver.ReaderAssetName(strings.TrimPrefix(p, "/assets/")) {
 		return true
 	}
-	if read && (p == "/api/realtime" || p == "/api/crew/schema") {
+	// /api/crew/attachment checks the sign-in itself (auth header or a
+	// short-lived file token from /api/files/token).
+	if read && (p == "/api/realtime" || p == "/api/crew/schema" || p == "/api/crew/attachment") {
 		return true
 	}
 	if method == http.MethodPost {
 		switch p {
-		case "/api/crew/read", "/api/crew/search", "/api/crew/query", "/api/crew/write", "/api/crew/agent-write", "/api/bundle/redeem", "/api/collections/users/auth-with-password", "/api/collections/users/auth-refresh", "/api/realtime":
+		case "/api/crew/read", "/api/crew/search", "/api/crew/query", "/api/crew/write", "/api/crew/agent-write", "/api/crew/attachment-read", "/api/files/token", "/api/bundle/redeem", "/api/collections/users/auth-with-password", "/api/collections/users/auth-refresh", "/api/realtime":
+			return true
+		// The one-time upload link endpoints: token-scoped, upload only.
+		case "/api/crew/upload-link/info", "/api/crew/upload-link/upload":
 			return true
 		}
 	}

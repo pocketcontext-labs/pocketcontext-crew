@@ -1,9 +1,11 @@
 const capabilities = require(`${__hooks}/crew_capabilities.js`);
 const webhooks = require(`${__hooks}/crew_webhooks.js`);
 const execution = require(`${__hooks}/crew_execution.js`);
+const attachments = require(`${__hooks}/crew_attachments.js`);
 const names = [
   ...webhooks.collections,
   ...execution.collections,
+  ...attachments.collections,
   "agents",
   "buckets",
   "notes",
@@ -181,6 +183,8 @@ const derivedFields = {
   webhook_bridges: ["overdue"],
   tasks: ["path", "url"],
   notes: ["path", "url"],
+  upload_links: ["state"],
+  settings: ["storage_used_bytes", "max_file_bytes", "max_active_attachments"],
 };
 const redactedFields = ["url", "secret", "secret_ciphertext"];
 const taskStatuses = ["todo", "in_progress", "needs_review", "done"];
@@ -341,13 +345,15 @@ function read(e) {
         "webhook_bridges",
         "webhook_attempts",
         "webhook_executions",
+        "attachments",
+        "upload_links",
       ].includes(col)
     )
       bad("Invalid parent filter");
     clauses.push(key + "={:parent}");
     params.parent = b.parent;
   }
-  if (["agents", "buckets", "tasks"].includes(col)) {
+  if (["agents", "buckets", "tasks", "attachments"].includes(col)) {
     clauses.push(b.archived ? "archived=true" : "archived=false");
     sql.push(b.archived ? "[[archived]]=TRUE" : "[[archived]]=FALSE");
   }
@@ -364,7 +370,7 @@ function read(e) {
         ? ["title", "body"]
         : col === "tasks"
           ? ["title", "description", "draft"]
-          : ["agents", "buckets"].includes(col)
+          : ["agents", "buckets", "attachments"].includes(col)
             ? ["name"]
             : [];
     if (!searchFields.length) bad("Search not supported here");
@@ -399,7 +405,11 @@ function read(e) {
     rows = e.app.findRecordsByFilter(
       "crew_" + col,
       clauses.join(" && "),
-      col === "note_revisions" ? "-revision" : "-created",
+      col === "note_revisions"
+        ? "-revision"
+        : col === "attachments"
+          ? "position"
+          : "-created",
       limit + 1,
       offset,
       params,
@@ -413,11 +423,13 @@ function read(e) {
             ? webhooks.exported(r, e.app)
             : execution.collections.includes(col)
               ? execution.exported(r)
-              : col === "tasks" || col === "notes"
-                ? webhooks.linkedExport(e.app, col, r)
-                : keep
-                  ? r.publicExport()
-                  : r;
+              : attachments.collections.includes(col)
+                ? attachments.exported(r, e.app)
+                : col === "tasks" || col === "notes"
+                  ? webhooks.linkedExport(e.app, col, r)
+                  : keep
+                    ? r.publicExport()
+                    : r;
       return keep ? pick(value, keep) : value;
     }),
     has_more: rows.length > limit,
@@ -425,6 +437,18 @@ function read(e) {
   });
 }
 function write(e, isAgent) {
+  // The route allows 101 MiB for multipart files; JSON keeps PocketBase's
+  // default 32 MiB so a large JSON body is never decoded in memory.
+  const type = String(e.request.header.get("Content-Type") || "").toLowerCase();
+  if (
+    !type.startsWith("multipart/form-data") &&
+    e.request.contentLength > 33554432
+  )
+    throw new ApiError(
+      413,
+      "JSON writes are limited to 32 MiB; send files as multipart",
+      {},
+    );
   const b = capabilities.normalizeEnvelope(e.requestInfo().body);
   only(b, [
     "action",
@@ -446,9 +470,17 @@ function write(e, isAgent) {
     bad("Invalid attribution");
   const d = b.data || {};
   if (typeof d !== "object" || Array.isArray(d)) bad("data must be an object");
+  // Owner-browser-only, like webhook credentials: refused before idempotency.
+  if (isAgent && b.action === "upload_link.create")
+    throw new ForbiddenError("Create upload links in the owner UI");
+  const files = attachments.collect(e, b);
   const actor = (isAgent ? "mcp:" : "owner:") + e.auth.id;
   let result;
   e.app.runInTransaction((app) => {
+    if (attachments.ACTIONS.includes(b.action)) {
+      result = attachments.handle(app, e, b, actor, isAgent, files, helpers);
+      return;
+    }
     if (b.action.startsWith("execution.")) {
       result = execution.handle(app, b, actor);
       return;
@@ -592,6 +624,17 @@ function write(e, isAgent) {
           assigned_agent: resolveAgent(app, values.assigned_agent),
         };
       validateData(app, col, values, r);
+      let staged = [];
+      if (op === "create" && files.length)
+        staged = attachments.stageCreate(app, kind, r, values, files, {
+          b,
+          actor,
+          isAgent,
+          ownerTouch: !isAgent,
+          link: null,
+        });
+      if (kind === "task" || kind === "note")
+        attachments.checkRefs(app, kind, r, values, op);
       if (op === "create") {
         r.set("revision", 1);
         if (kind === "task") {
@@ -690,6 +733,8 @@ function write(e, isAgent) {
           new: r.getString("responsible_agent"),
         };
       event(app, r, b.action, b, actor, changes);
+      if (staged.length)
+        attachments.recordCreated(app, kind, r, staged, { b, actor });
       if (selfStarted)
         event(
           app,
@@ -714,6 +759,8 @@ function write(e, isAgent) {
           : kind === "task" || kind === "note"
             ? webhooks.linkedExport(app, col, r)
             : r;
+      if (staged.length)
+        result.attachments = staged.map((a) => a.publicExport());
       return;
     }
     if (kind === "review" && op === "request") {
@@ -728,6 +775,7 @@ function write(e, isAgent) {
       const r = new Record(app.findCollectionByNameOrId("crew_reviews"));
       r.set("task", t.id);
       r.set("draft", t.getString("draft"));
+      r.set("attachments", attachments.snapshot(app, t.id));
       r.set("status", "pending");
       r.set("revision", 1);
       r.set("requested_by", actor);
@@ -760,6 +808,8 @@ function write(e, isAgent) {
           bad("Invalid decision");
         if (t.getString("draft") !== r.getString("draft"))
           bad("Draft changed; request a new review");
+        if (!attachments.snapshotMatches(app, r))
+          bad("Attachments changed; request a new review");
         r.set("status", d.decision);
         r.set("decision_note", d.note || "");
         r.set("decided_by", actor);
@@ -786,4 +836,13 @@ function write(e, isAgent) {
   });
   return e.json(200, result);
 }
-module.exports = { read, write };
+// Shared with attachment operations so a review withdrawal is recorded the
+// same way as a draft edit's.
+const helpers = { pending, withdraw, ownerTouch };
+function uploadInfo(e) {
+  return attachments.uploadInfo(e);
+}
+function uploadFiles(e) {
+  return attachments.uploadFiles(e, helpers);
+}
+module.exports = { read, write, uploadInfo, uploadFiles };

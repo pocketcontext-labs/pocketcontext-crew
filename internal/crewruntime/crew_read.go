@@ -35,7 +35,10 @@ const (
 //   - crew_webhook_idempotency (hidden fingerprints, replay results that may
 //     hold legacy receiver URLs), users and every other auth collection,
 //     PocketBase internal tables (_*), OAuth state (outside this database)
-//     and retired knowledge collections.
+//     and retired knowledge collections;
+//   - crew_attachments.file (storage file name) and crew_upload_links
+//     entirely (token hashes; link metadata is read through crew_read);
+//     crew_settings is read through crew_read.
 //
 // SQL sees archived records; callers filter archived explicitly.
 var crewSQLViews = func() []sqlread.View {
@@ -56,7 +59,8 @@ var crewSQLViews = func() []sqlread.View {
 		{Name: "note_revisions", Table: "crew_note_revisions", Columns: cols(f("note title body links actor reported_agent reason"))},
 		{Name: "tasks", Table: "crew_tasks", Columns: cols(f("title description assigned_agent created_by_agent labels status draft links readiness waiting_reason wake_generation execution_required_generation bot_handoffs handoff_limited comment_wake_generation comment_wake_event"), archive)},
 		{Name: "events", Table: "crew_events", Columns: cols(f("parent action body actor reported_agent reason changes"))},
-		{Name: "reviews", Table: "crew_reviews", Columns: cols(f("task draft status decision_note decided_by decided_at requested_by reported_agent"))},
+		{Name: "reviews", Table: "crew_reviews", Columns: cols(f("task draft attachments status decision_note decided_by decided_at requested_by reported_agent"))},
+		{Name: "attachments", Table: "crew_attachments", Columns: cols(f("parent_kind parent name media_type image width height size sha256 position actor reported_agent via_upload_link"), archive)},
 		{Name: "webhook_configs", Table: "crew_webhook_configs", Columns: cols(f("agent adapter subscriptions enabled destination_version scope sync_status routine_ref dispatch_mode instructions role_instructions reporting_instructions previous_instructions instruction_revision applied_revision managed_hash applied_hash test_event_id runtime_event_id runtime_epoch runtime_context runtime_reported_at runtime_destination_version runtime_instruction_revision runtime_native_handoff runtime_execution_protocol runtime_parent_wake"))},
 		{Name: "webhook_mappings", Table: "crew_webhook_mappings", Columns: cols(f("agent bot_ref bot_name"))},
 		{Name: "webhook_routing", Table: "crew_webhook_routing", Columns: cols(f("singleton instance_id epoch triage_agent paused max_bot_handoffs"))},
@@ -114,6 +118,7 @@ func registerCrewReads(app core.App) {
 		e.Router.POST("/api/crew/search", func(re *core.RequestEvent) error {
 			return crewSearch(re, search)
 		}).Bind(apis.RequireAuth("users"))
+		registerAttachmentRoutes(e)
 		return e.Next()
 	})
 }
@@ -186,6 +191,7 @@ func crewSchema(re *core.RequestEvent, engine *sqlread.Engine) error {
 			"JSON columns (links, labels, changes, payload, subscriptions) are text; use json_each or ->>.",
 			"Timestamps are UTC text 'YYYY-MM-DD HH:MM:SS.sssZ'. Booleans are 0/1.",
 			"Webhook URLs, credentials and execution fencing handles are not readable.",
+			"attachments holds file metadata only (never bytes, storage names or tokens); sizes are bytes. Upload links are not in SQL.",
 		},
 	})
 }

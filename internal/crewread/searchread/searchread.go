@@ -8,7 +8,10 @@
 // Crew content or archive change increments revision and updates the autodate,
 // so the fingerprint of these rows changes whenever indexed content or archive
 // visibility changes, including bucket archival (which changes the effective
-// state of its notes). The fingerprint is the exposed generation and the cache
+// state of its notes). Attachment names are indexed with their task or note;
+// attachment writes leave the parent's revision alone, so the attachment rows
+// (id, parent, revision, updated, archived) enter the fingerprint too. The
+// fingerprint is the exposed generation and the cache
 // key; on a mismatch the index is rebuilt from the same transaction. Hit
 // metadata (status, assignment, bucket) is taken from that fresh read.
 package searchread
@@ -42,7 +45,7 @@ const (
 	MaxOffset            = 10000
 	excerptRunes         = 240
 	// Bump when tokenization, ranking or fingerprint semantics change.
-	contractVersion = "crew-search-v1"
+	contractVersion = "crew-search-v2"
 )
 
 var (
@@ -106,6 +109,7 @@ type row struct {
 	key, collection    string
 	archived           bool
 	title, body, draft string
+	files              string // names of the item's active attachments
 }
 
 type index struct {
@@ -306,14 +310,38 @@ FROM crew_tasks t LEFT JOIN crew_agents a ON a.id=t.assigned_agent ORDER BY t.id
 	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
 		return nil, "", err
 	}
+	// Attachment adds, archives and restores change their own rows, not the
+	// parent's revision, so they enter the fingerprint separately.
+	attachments := [][]any{}
+	rows, err = tx.QueryContext(ctx, `SELECT id, parent, CAST(revision AS INTEGER), updated, COALESCE(archived,0)!=0 FROM crew_attachments ORDER BY id`)
+	if err != nil {
+		return nil, "", err
+	}
+	for rows.Next() {
+		var id, parent, updated string
+		var revision int64
+		var archived bool
+		if err := rows.Scan(&id, &parent, &revision, &updated, &archived); err != nil {
+			rows.Close()
+			return nil, "", err
+		}
+		attachments = append(attachments, []any{"attachments", id, parent, revision, updated, archived})
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return nil, "", err
+	}
 	version, number, source := sqlite3.Version()
 	h := sha256.New()
-	header, _ := json.Marshal([]any{contractVersion, version, number, source, len(list)})
+	header, _ := json.Marshal([]any{contractVersion, version, number, source, len(list), len(attachments)})
 	h.Write(header)
 	for _, m := range list {
 		line, _ := json.Marshal([]any{m.collection, m.id, m.revision, m.updated, m.archived})
 		h.Write(line)
 		out[m.collection+":"+m.id] = m
+	}
+	for _, a := range attachments {
+		line, _ := json.Marshal(a)
+		h.Write(line)
 	}
 	return out, fmt.Sprintf("%x", h.Sum(nil))[:32], nil
 }
@@ -321,8 +349,27 @@ FROM crew_tasks t LEFT JOIN crew_agents a ON a.id=t.assigned_agent ORDER BY t.id
 func (e *Engine) readRows(ctx context.Context, tx *sql.Tx, metas map[string]meta) ([]row, error) {
 	out := []row{}
 	size := 0
+	files := map[string]string{}
+	names, err := tx.QueryContext(ctx, `SELECT parent, name FROM crew_attachments WHERE COALESCE(archived,0)=0 ORDER BY parent, position`)
+	if err != nil {
+		return nil, err
+	}
+	for names.Next() {
+		var parent, name string
+		if err := names.Scan(&parent, &name); err != nil {
+			names.Close()
+			return nil, err
+		}
+		if files[parent] != "" {
+			files[parent] += "\n"
+		}
+		files[parent] += name
+	}
+	if err := errors.Join(names.Err(), names.Close()); err != nil {
+		return nil, err
+	}
 	add := func(r row) error {
-		size += len(r.key) + len(r.title) + len(r.body) + len(r.draft)
+		size += len(r.key) + len(r.title) + len(r.body) + len(r.draft) + len(r.files)
 		if size > e.cfg.MaxIndexBytes {
 			return ErrIndexLimit
 		}
@@ -349,7 +396,7 @@ func (e *Engine) readRows(ctx context.Context, tx *sql.Tx, metas map[string]meta
 				rows.Close()
 				return nil, ErrIndexInvalid
 			}
-			r.key, r.archived = id, m.archived
+			r.key, r.archived, r.files = id, m.archived, files[id]
 			if err := add(r); err != nil {
 				rows.Close()
 				return nil, err
@@ -392,13 +439,13 @@ func (e *Engine) buildIndex(ctx context.Context, key string, rows []row) (*index
 	if _, err = conn.ExecContext(ctx, fmt.Sprintf("PRAGMA page_size=4096; PRAGMA max_page_count=%d; PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA temp_store=MEMORY", pages), nil); err != nil {
 		return fail(err)
 	}
-	if _, err = conn.ExecContext(ctx, `CREATE VIRTUAL TABLE search USING fts5(key UNINDEXED, collection UNINDEXED, archived UNINDEXED, title, body, draft, tokenize='unicode61 remove_diacritics 2')`, nil); err != nil {
+	if _, err = conn.ExecContext(ctx, `CREATE VIRTUAL TABLE search USING fts5(key UNINDEXED, collection UNINDEXED, archived UNINDEXED, title, body, draft, files, tokenize='unicode61 remove_diacritics 2')`, nil); err != nil {
 		return fail(err)
 	}
 	if _, err = conn.ExecContext(ctx, "BEGIN", nil); err != nil {
 		return fail(err)
 	}
-	stmt, err := conn.Prepare("INSERT INTO search(key, collection, archived, title, body, draft) VALUES (?, ?, ?, ?, ?, ?)")
+	stmt, err := conn.Prepare("INSERT INTO search(key, collection, archived, title, body, draft, files) VALUES (?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return fail(err)
 	}
@@ -408,7 +455,7 @@ func (e *Engine) buildIndex(ctx context.Context, key string, rows []row) (*index
 		if r.archived {
 			archived = 1
 		}
-		if _, err = insert.ExecContext(ctx, []driver.NamedValue{{Ordinal: 1, Value: r.key}, {Ordinal: 2, Value: r.collection}, {Ordinal: 3, Value: archived}, {Ordinal: 4, Value: r.title}, {Ordinal: 5, Value: r.body}, {Ordinal: 6, Value: r.draft}}); err != nil {
+		if _, err = insert.ExecContext(ctx, []driver.NamedValue{{Ordinal: 1, Value: r.key}, {Ordinal: 2, Value: r.collection}, {Ordinal: 3, Value: archived}, {Ordinal: 4, Value: r.title}, {Ordinal: 5, Value: r.body}, {Ordinal: 6, Value: r.draft}, {Ordinal: 7, Value: r.files}}); err != nil {
 			stmt.Close()
 			return fail(err)
 		}
@@ -463,8 +510,9 @@ func queryIndex(ctx context.Context, idx *index, match string, req Request) ([]H
 		args = append(args, driver.NamedValue{Ordinal: len(args) + 1, Value: c})
 	}
 	args = append(args, driver.NamedValue{Ordinal: len(args) + 1, Value: int64(req.Limit + 1)}, driver.NamedValue{Ordinal: len(args) + 2, Value: int64(req.Offset)})
-	// Title matches weigh most; drafts least. Ties order by ID for stable pages.
-	query := `SELECT key, collection, bm25(search, 0, 0, 0, 5.0, 1.0, 0.5) AS rank, title, snippet(search, -1, '«', '»', '…', 12)
+	// Title matches weigh most; drafts least; attachment names like the body.
+	// Ties order by ID for stable pages.
+	query := `SELECT key, collection, bm25(search, 0, 0, 0, 5.0, 1.0, 0.5, 1.0) AS rank, title, snippet(search, -1, '«', '»', '…', 12)
 FROM search WHERE search MATCH ? AND archived = ? AND collection IN (` + placeholders + `)
 ORDER BY rank, collection, key LIMIT ? OFFSET ?`
 	rows, err := idx.conn.QueryContext(ctx, query, args)

@@ -5,6 +5,7 @@ Pass --previous-binary for a verified 0.8.0 executable; otherwise the pinned
 release archive is fetched and its checksum verified. Standard library only.
 """
 import argparse
+import base64
 from contextlib import closing
 import hashlib
 import json
@@ -22,7 +23,7 @@ import upgrades
 
 PREVIOUS = '0.8.0'
 # Migrations added by releases after PREVIOUS; nothing else may change the ledger.
-LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js'}
+LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js', '1801000000_crew_attachments.js'}
 
 
 def settled(operation, *args):
@@ -117,6 +118,16 @@ def rehearse(target, previous, root):
     assert any(p.get('instance') == instance for p in registry.get('profiles', registry if isinstance(registry, list) else [])) or isinstance(registry, dict)
     notes = data('read', '{"collection":"notes"}')
     assert any(n['id'] == note['id'] and n['body'] == 'After revision' for n in notes['items']), notes
+    # 0.16.0 attachments work on the upgraded database, with the default limit.
+    payload = b'synthetic upgrade attachment\n'
+    added = data('write', json.dumps({'action': 'attachment.add', 'reported_agent': 'Synthetic upgrade',
+                                      'data': {'note': note['id'], 'files': [{'name': 'upgrade.txt', 'content_base64': base64.b64encode(payload).decode()}]}}))
+    attachment = added['attachments'][0]
+    assert attachment['sha256'] == hashlib.sha256(payload).hexdigest() and attachment['parent'] == note['id'], added
+    listed = data('read', json.dumps({'collection': 'attachments', 'parent': note['id']}))['items']
+    assert [a['id'] for a in listed] == [attachment['id']], listed
+    settings = data('read', '{"collection":"settings"}')['items'][0]
+    assert settings['storage_limit_bytes'] == 5 * 1024 ** 3 and settings['storage_used_bytes'] == len(payload), settings
     run('stop')
 
     # Identity alone did not rewrite the configuration format or lose the data.
@@ -124,7 +135,8 @@ def rehearse(target, previous, root):
     assert config_after['instance'] == instance and config_after['port'] == port
     assert set(config_after) >= set(json.loads(config_before))
     # No migration added by the identity change: the ledger gains only the later
-    # releases' own migrations (0.12.0's managed instruction revision).
+    # releases' own migrations (0.12.0's managed instruction revision and
+    # 0.16.0's attachments).
     def migrations(path):
         with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
             return set(row[0] for row in db.execute('SELECT file FROM _migrations'))

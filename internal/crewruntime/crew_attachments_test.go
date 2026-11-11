@@ -1,0 +1,908 @@
+package crewruntime
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"image"
+	"image/color"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+)
+
+type testFile struct {
+	name string
+	data []byte
+}
+
+func syntheticImage(w, h int) image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for x := 0; x < w; x++ {
+		for y := 0; y < h; y++ {
+			img.Set(x, y, color.RGBA{uint8(x), uint8(y), 120, 255})
+		}
+	}
+	return img
+}
+
+func tinyPNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	if err := png.Encode(&b, syntheticImage(w, h)); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+func tinyJPEG(t *testing.T) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	if err := jpeg.Encode(&b, syntheticImage(8, 6), nil); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+func tinyGIF(t *testing.T) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	if err := gif.Encode(&b, syntheticImage(5, 4), nil); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+func digest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// multipartRequest sends an envelope (as @jsonPayload, or as plain fields when
+// fields is set) with file parts named "files".
+func multipartRequest(t *testing.T, a *testApp, path, token string, envelope map[string]any, files []testFile, want int) map[string]any {
+	t.Helper()
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	if envelope != nil {
+		raw, _ := json.Marshal(envelope)
+		if err := w.WriteField("@jsonPayload", string(raw)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range files {
+		part, err := w.CreateFormFile("files", f.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		part.Write(f.data)
+	}
+	w.Close()
+	req := httptest.NewRequest("POST", path, &body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	if token != "" {
+		req.Header.Set("Authorization", token)
+	}
+	res := httptest.NewRecorder()
+	a.handler.ServeHTTP(res, req)
+	if res.Code != want {
+		t.Fatalf("POST %s: %d %s; want %d", path, res.Code, res.Body, want)
+	}
+	var out map[string]any
+	json.Unmarshal(res.Body.Bytes(), &out)
+	return out
+}
+
+func uploadLinkRequest(t *testing.T, a *testApp, token string, extra map[string]string, files []testFile, want int) (map[string]any, *httptest.ResponseRecorder) {
+	t.Helper()
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	w.WriteField("token", token)
+	for k, v := range extra {
+		w.WriteField(k, v)
+	}
+	for _, f := range files {
+		part, _ := w.CreateFormFile("files", f.name)
+		part.Write(f.data)
+	}
+	w.Close()
+	req := httptest.NewRequest("POST", "/api/crew/upload-link/upload", &body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	res := httptest.NewRecorder()
+	a.handler.ServeHTTP(res, req)
+	if res.Code != want {
+		t.Fatalf("upload: %d %s; want %d", res.Code, res.Body, want)
+	}
+	var out map[string]any
+	json.Unmarshal(res.Body.Bytes(), &out)
+	return out, res
+}
+
+func crewWrite(t *testing.T, a *testApp, agent bool, action, id string, revision int, data map[string]any, want int) map[string]any {
+	t.Helper()
+	b := map[string]any{"action": action, "data": data, "reported_agent": "synthetic-bot", "reason": "synthetic"}
+	if id != "" {
+		b["id"] = id
+		b["expected_revision"] = revision
+	}
+	raw, _ := json.Marshal(b)
+	route := "/api/crew/write"
+	if agent {
+		route = "/api/crew/agent-write"
+	}
+	return a.request(t, "POST", route, a.token, string(raw), want)
+}
+
+func envelope(action string, data map[string]any) map[string]any {
+	return map[string]any{"action": action, "data": data, "reported_agent": "synthetic-bot"}
+}
+
+func attachmentsOf(t *testing.T, a *testApp, parent string, archived bool) []map[string]any {
+	t.Helper()
+	raw, _ := json.Marshal(map[string]any{"collection": "attachments", "parent": parent, "archived": archived})
+	out := a.request(t, "POST", "/api/crew/read", a.token, string(raw), 200)
+	items := []map[string]any{}
+	for _, x := range out["items"].([]any) {
+		items = append(items, x.(map[string]any))
+	}
+	return items
+}
+
+func eventsOf(t *testing.T, a *testApp, parent, action string) []*core.Record {
+	t.Helper()
+	rows, err := a.app.FindRecordsByFilter("crew_events", "parent={:p} && action={:a}", "created", 0, 0, map[string]any{"p": parent, "a": action})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rows
+}
+
+func newTask(t *testing.T, a *testApp, data map[string]any) map[string]any {
+	t.Helper()
+	if data["title"] == nil {
+		data["title"] = "Synthetic attachment task"
+	}
+	return crewWrite(t, a, false, "task.create", "", 0, data, 200)
+}
+
+func fileErrors(out map[string]any) map[string]any {
+	data, _ := out["data"].(map[string]any)
+	return data
+}
+
+func TestAttachmentAddMultipartBase64AndRead(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	shot := tinyPNG(t, 40, 30)
+	out := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}),
+		[]testFile{{"screenshot 1.png", shot}, {"run.log", []byte("line one\nline two\n")}}, 200)
+	added := out["attachments"].([]any)
+	if len(added) != 2 || out["review_withdrawn"] != false {
+		t.Fatal("bad add result", out)
+	}
+	png := added[0].(map[string]any)
+	if png["image"] != true || png["media_type"] != "image/png" || png["width"] != float64(40) || png["height"] != float64(30) ||
+		png["sha256"] != digest(shot) || png["size"] != float64(len(shot)) || png["name"] != "screenshot 1.png" ||
+		png["parent_kind"] != "task" || png["parent"] != task["id"] || png["position"] != float64(1) || !strings.HasPrefix(png["actor"].(string), "owner:") {
+		t.Fatal("bad image metadata", png)
+	}
+	if _, leaked := png["file"]; leaked {
+		t.Fatal("storage file name exported", png)
+	}
+	log := added[1].(map[string]any)
+	if log["image"] != false || log["media_type"] != "text/plain" || log["position"] != float64(2) {
+		t.Fatal("bad log metadata", log)
+	}
+	// Base64 through the work-client route (MCP shape).
+	note := []byte("# Notes\nSynthetic markdown")
+	agentOut := crewWrite(t, a, true, "attachment.add", "", 0, map[string]any{"task": task["id"], "files": []any{
+		map[string]any{"name": "notes.md", "content_base64": base64.StdEncoding.EncodeToString(note)},
+	}}, 200)
+	md := agentOut["attachments"].([]any)[0].(map[string]any)
+	if md["media_type"] != "text/markdown" || !strings.HasPrefix(md["actor"].(string), "mcp:") || md["reported_agent"] != "synthetic-bot" || md["position"] != float64(3) {
+		t.Fatal("bad base64 attachment", md)
+	}
+	listed := attachmentsOf(t, a, task["id"].(string), false)
+	if len(listed) != 3 || listed[0]["id"] != png["id"] || listed[2]["id"] != md["id"] {
+		t.Fatal("listing not ordered by position", listed)
+	}
+	if n := len(eventsOf(t, a, task["id"].(string), "attachment.add")); n != 3 {
+		t.Fatal("attachment.add events", n)
+	}
+	ev := eventsOf(t, a, task["id"].(string), "attachment.add")[0]
+	var changes map[string]any
+	json.Unmarshal([]byte(ev.GetString("changes")), &changes)
+	if changes["attachment"] != png["id"] || changes["name"] != "screenshot 1.png" || changes["sha256"] != digest(shot) {
+		t.Fatal("bad event changes", changes)
+	}
+	// Projection never selects the hidden file field.
+	raw, _ := json.Marshal(map[string]any{"collection": "attachments", "parent": task["id"], "fields": []string{"file"}})
+	a.request(t, "POST", "/api/crew/read", a.token, string(raw), 400)
+	// The task itself is untouched by attachment writes.
+	if apiWebhookRecord(t, a, "tasks", task["id"].(string)).GetInt("revision") != int(task["revision"].(float64)) {
+		t.Fatal("attachment add changed the task revision")
+	}
+	// Files on other actions are refused.
+	multipartRequest(t, a, "/api/crew/write", a.token, map[string]any{"action": "task.update", "id": task["id"], "expected_revision": task["revision"], "data": map[string]any{"title": "x"}},
+		[]testFile{{"x.txt", []byte("x")}}, 400)
+	crewWrite(t, a, true, "attachment.add", "", 0, map[string]any{"task": task["id"]}, 400)
+	crewWrite(t, a, true, "attachment.add", "", 0, map[string]any{"task": task["id"], "note": task["id"], "files": []any{map[string]any{"name": "a.txt", "content_base64": "YQ=="}}}, 400)
+}
+
+func TestAttachmentMagicBytesDecideImages(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	files := []testFile{
+		{"fake.png", []byte("this is not a png")},
+		{"real.txt", tinyPNG(t, 3, 3)},
+		{"photo.jpeg", tinyJPEG(t)},
+		{"anim.gif", tinyGIF(t)},
+		{"page.html", []byte("<script>alert(1)</script>")},
+		{"truncated.png", []byte("\x89PNG\r\n\x1a\ngarbage")},
+	}
+	out := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}), files, 200)
+	got := map[string]map[string]any{}
+	for _, x := range out["attachments"].([]any) {
+		m := x.(map[string]any)
+		got[m["name"].(string)] = m
+	}
+	for name, want := range map[string][2]any{
+		"fake.png":      {false, "application/octet-stream"},
+		"real.txt":      {true, "image/png"},
+		"photo.jpeg":    {true, "image/jpeg"},
+		"anim.gif":      {true, "image/gif"},
+		"page.html":     {false, "text/html"},
+		"truncated.png": {false, "application/octet-stream"},
+	} {
+		if got[name]["image"] != want[0] || got[name]["media_type"] != want[1] {
+			t.Errorf("%s: image=%v type=%v", name, got[name]["image"], got[name]["media_type"])
+		}
+	}
+}
+
+func TestAttachmentLimitsAndPartialFailure(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	id := task["id"].(string)
+	// One good file, one empty and one oversized: each fails on its own.
+	big := bytes.Repeat([]byte("x"), attachmentMaxBytes+1)
+	out := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": id}),
+		[]testFile{{"ok.txt", []byte("fine")}, {"empty.txt", nil}, {"big.bin", big}}, 200)
+	results := out["results"].([]any)
+	if len(out["attachments"].([]any)) != 1 || len(results) != 3 {
+		t.Fatal("partial add", out)
+	}
+	codes := []string{}
+	for _, r := range results {
+		m := r.(map[string]any)
+		if m["ok"] == true {
+			codes = append(codes, "ok")
+		} else {
+			codes = append(codes, m["error"].(map[string]any)["code"].(string))
+		}
+	}
+	if fmt.Sprint(codes) != "[ok empty_file file_too_large]" {
+		t.Fatal("per-file results", codes)
+	}
+	// Every file failing is a 400 that names each file.
+	failed := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": id}), []testFile{{"empty.txt", nil}}, 400)
+	if e := fileErrors(failed)["files.1"].(map[string]any); e["code"] != "empty_file" {
+		t.Fatal("all-failed add", failed)
+	}
+	// Twenty active attachments per item; archived ones do not count.
+	many := []testFile{}
+	for i := 0; i < 19; i++ {
+		many = append(many, testFile{fmt.Sprintf("f%02d.txt", i), []byte{byte('a' + i)}})
+	}
+	multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": id}), many, 200)
+	over := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": id}), []testFile{{"21.txt", []byte("z")}}, 400)
+	if fileErrors(over)["files.1"].(map[string]any)["code"] != "attachment_limit" {
+		t.Fatal("count limit", over)
+	}
+	first := attachmentsOf(t, a, id, false)[0]
+	crewWrite(t, a, false, "attachment.archive", first["id"].(string), int(first["revision"].(float64)), map[string]any{}, 200)
+	multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": id}), []testFile{{"21.txt", []byte("z")}}, 200)
+	// Restoring would exceed twenty active.
+	archived := attachmentsOf(t, a, id, true)[0]
+	crewWrite(t, a, false, "attachment.restore", archived["id"].(string), int(archived["revision"].(float64)), map[string]any{}, 400)
+	// More than twenty files in one request is refused outright.
+	tooMany := append(many, many[:2]...)
+	multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": id}), tooMany, 400)
+}
+
+func TestAttachmentStorageLimit(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	read := a.request(t, "POST", "/api/crew/read", a.token, `{"collection":"settings"}`, 200)
+	s := read["items"].([]any)[0].(map[string]any)
+	if s["storage_limit_bytes"] != float64(5<<30) || s["storage_used_bytes"] != float64(0) || s["max_file_bytes"] != float64(attachmentMaxBytes) {
+		t.Fatal("default settings", s)
+	}
+	crewWrite(t, a, true, "storage.update", s["id"].(string), int(s["revision"].(float64)), map[string]any{"storage_limit_bytes": 1000}, 400)
+	updated := crewWrite(t, a, true, "storage.update", s["id"].(string), int(s["revision"].(float64)), map[string]any{"storage_limit_bytes": 1 << 20}, 200)
+	if updated["storage_limit_bytes"] != float64(1<<20) || updated["revision"] != float64(2) {
+		t.Fatal("storage.update", updated)
+	}
+	crewWrite(t, a, true, "storage.update", s["id"].(string), 1, map[string]any{"storage_limit_bytes": 2 << 20}, 409)
+	if len(eventsOf(t, a, s["id"].(string), "storage.update")) != 1 {
+		t.Fatal("storage.update event")
+	}
+	chunk := bytes.Repeat([]byte("s"), 600<<10)
+	out := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}),
+		[]testFile{{"one.bin", chunk}, {"two.bin", chunk}}, 200)
+	results := out["results"].([]any)
+	if results[1].(map[string]any)["error"].(map[string]any)["code"] != "storage_limit" {
+		t.Fatal("storage limit", out)
+	}
+	// Archived files still count toward the limit.
+	one := out["attachments"].([]any)[0].(map[string]any)
+	crewWrite(t, a, false, "attachment.archive", one["id"].(string), 1, map[string]any{}, 200)
+	multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}), []testFile{{"two.bin", chunk}}, 400)
+	read = a.request(t, "POST", "/api/crew/read", a.token, `{"collection":"settings"}`, 200)
+	if read["items"].([]any)[0].(map[string]any)["storage_used_bytes"] != float64(len(chunk)) {
+		t.Fatal("storage used", read)
+	}
+}
+
+func TestAttachmentBase64Limits(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	big := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte("b"), (attachmentBase64MaxBytes/2)+10))
+	crewWrite(t, a, true, "attachment.add", "", 0, map[string]any{"task": task["id"], "files": []any{
+		map[string]any{"name": "a.bin", "content_base64": big}, map[string]any{"name": "b.bin", "content_base64": big},
+	}}, 400)
+	out := crewWrite(t, a, true, "attachment.add", "", 0, map[string]any{"task": task["id"], "files": []any{
+		map[string]any{"name": "ok.txt", "content_base64": "b2s="},
+		map[string]any{"name": "bad.txt", "content_base64": "%%%"},
+		map[string]any{"name": "extra.txt", "content_base64": "b2s=", "media_type": "text/html"},
+	}}, 200)
+	codes := []any{}
+	for _, r := range out["results"].([]any) {
+		m := r.(map[string]any)
+		if e, ok := m["error"].(map[string]any); ok {
+			codes = append(codes, e["code"])
+		} else {
+			codes = append(codes, "ok")
+		}
+	}
+	if fmt.Sprint(codes) != "[ok invalid_base64 invalid_file]" {
+		t.Fatal("base64 per-file results", codes)
+	}
+}
+
+func TestAttachmentIdempotentAdd(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	body := func(content string) string {
+		raw, _ := json.Marshal(map[string]any{"action": "attachment.add", "reported_agent": "synthetic-bot", "idempotency_key": "retry-1",
+			"data": map[string]any{"task": task["id"], "files": []any{map[string]any{"name": "a.txt", "content_base64": base64.StdEncoding.EncodeToString([]byte(content))}}}})
+		return string(raw)
+	}
+	first := a.request(t, "POST", "/api/crew/agent-write", a.token, body("same"), 200)
+	again := a.request(t, "POST", "/api/crew/agent-write", a.token, body("same"), 200)
+	if fmt.Sprint(first["attachments"]) != fmt.Sprint(again["attachments"]) || len(attachmentsOf(t, a, task["id"].(string), false)) != 1 {
+		t.Fatal("replay duplicated the attachment")
+	}
+	a.request(t, "POST", "/api/crew/agent-write", a.token, body("different"), 409)
+}
+
+func TestTaskAndNoteCreateWithFiles(t *testing.T) {
+	a := newTestApp(t)
+	shot1, shot2 := tinyPNG(t, 12, 10), tinyPNG(t, 14, 9)
+	created := multipartRequest(t, a, "/api/crew/write", a.token, envelope("task.create", map[string]any{
+		"title":       "Bug with screenshots",
+		"description": "Step 1\n\n![first](attachment:new-1)\n\nStep 2\n\n![second](attachment:new-2)",
+		"draft":       "See ![again](attachment:new-1)",
+	}), []testFile{{"screenshot-1.png", shot1}, {"screenshot-2.png", shot2}}, 200)
+	files := created["attachments"].([]any)
+	if len(files) != 2 || created["revision"] != float64(1) {
+		t.Fatal("create with files", created)
+	}
+	id1, id2 := files[0].(map[string]any)["id"].(string), files[1].(map[string]any)["id"].(string)
+	if created["description"] != "Step 1\n\n![first](attachment:"+id1+")\n\nStep 2\n\n![second](attachment:"+id2+")" || created["draft"] != "See ![again](attachment:"+id1+")" {
+		t.Fatal("placeholders not resolved", created["description"], created["draft"])
+	}
+	if files[0].(map[string]any)["parent"] != created["id"] || len(eventsOf(t, a, created["id"].(string), "attachment.add")) != 2 || len(eventsOf(t, a, created["id"].(string), "task.create")) != 1 {
+		t.Fatal("parent or events")
+	}
+	countTasks := func() int {
+		n, _ := a.app.CountRecords("crew_tasks")
+		return int(n)
+	}
+	countFiles := func() int {
+		n, _ := a.app.CountRecords("crew_attachments")
+		return int(n)
+	}
+	tasks, stored := countTasks(), countFiles()
+	// A refused file creates nothing.
+	failed := multipartRequest(t, a, "/api/crew/write", a.token, envelope("task.create", map[string]any{"title": "Half made", "description": "![x](attachment:new-2)"}),
+		[]testFile{{"ok.png", shot1}, {"empty.png", nil}}, 400)
+	if fileErrors(failed)["files.2"].(map[string]any)["code"] != "empty_file" || countTasks() != tasks || countFiles() != stored {
+		t.Fatal("failed create left records", failed)
+	}
+	// A placeholder beyond the uploaded files refuses the create.
+	multipartRequest(t, a, "/api/crew/write", a.token, envelope("task.create", map[string]any{"title": "Bad ref", "description": "![x](attachment:new-3)"}),
+		[]testFile{{"ok.png", shot1}}, 400)
+	// Placeholders without files are refused.
+	crewWrite(t, a, false, "task.create", "", 0, map[string]any{"title": "No files", "description": "![x](attachment:new-1)"}, 400)
+	if countTasks() != tasks || countFiles() != stored {
+		t.Fatal("refused creates left records")
+	}
+	// Storage limit failure also creates nothing.
+	s := a.request(t, "POST", "/api/crew/read", a.token, `{"collection":"settings"}`, 200)["items"].([]any)[0].(map[string]any)
+	crewWrite(t, a, false, "storage.update", s["id"].(string), 1, map[string]any{"storage_limit_bytes": 1 << 20}, 200)
+	multipartRequest(t, a, "/api/crew/write", a.token, envelope("task.create", map[string]any{"title": "Too big"}),
+		[]testFile{{"big.bin", bytes.Repeat([]byte("q"), 2<<20)}}, 400)
+	if countTasks() != tasks || countFiles() != stored {
+		t.Fatal("storage-refused create left records")
+	}
+	// Notes too, via base64 on the work-client route.
+	bucket := crewWrite(t, a, true, "bucket.create", "", 0, map[string]any{"name": "SYNTH"}, 200)
+	note := crewWrite(t, a, true, "note.create", "", 0, map[string]any{"bucket": bucket["id"], "title": "Note with image", "body": "![n](attachment:new-1)",
+		"files": []any{map[string]any{"name": "n.png", "content_base64": base64.StdEncoding.EncodeToString(shot1)}}}, 200)
+	nid := note["attachments"].([]any)[0].(map[string]any)["id"].(string)
+	if note["body"] != "![n](attachment:"+nid+")" {
+		t.Fatal("note placeholder", note["body"])
+	}
+	rev, _ := a.app.FindFirstRecordByFilter("crew_note_revisions", "note={:n}", map[string]any{"n": note["id"]})
+	if rev.GetString("body") != note["body"] {
+		t.Fatal("note snapshot keeps placeholder", rev.GetString("body"))
+	}
+}
+
+func TestAttachmentReferenceRules(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	other := newTask(t, a, map[string]any{"title": "Other"})
+	mine := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}), []testFile{{"a.png", tinyPNG(t, 4, 4)}}, 200)["attachments"].([]any)[0].(map[string]any)
+	theirs := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": other["id"]}), []testFile{{"b.png", tinyPNG(t, 4, 4)}}, 200)["attachments"].([]any)[0].(map[string]any)
+	id := task["id"].(string)
+	rev := func() int { return apiWebhookRecord(t, a, "tasks", id).GetInt("revision") }
+	for _, text := range []string{
+		"![x](attachment:" + theirs["id"].(string) + ")",
+		"![x](attachment:zzzzzzzzzzzzzzz)",
+		"![x](attachment:nope)",
+		"[file](attachment:" + theirs["id"].(string) + ")",
+		"[ref]: attachment:" + theirs["id"].(string),
+		"<attachment:" + theirs["id"].(string) + ">",
+		"![x](data:image/png;base64,iVBORw0KGgo=)",
+		"![x](attachment:new-1)",
+	} {
+		crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"description": text}, 400)
+		crewWrite(t, a, true, "task.update", id, rev(), map[string]any{"draft": text}, 400)
+	}
+	ref := "Before\n\n![shot](attachment:" + mine["id"].(string) + ")\n\nattachment: plain prose is fine"
+	crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"description": ref}, 200)
+	// Archived: an existing reference may stay, a new one is refused.
+	crewWrite(t, a, false, "attachment.archive", mine["id"].(string), 1, map[string]any{}, 200)
+	crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"description": ref + "\n\nmore"}, 200)
+	crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"draft": "![again](attachment:" + mine["id"].(string) + ")"}, 400)
+	crewWrite(t, a, false, "attachment.restore", mine["id"].(string), 2, map[string]any{}, 200)
+	crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"draft": "![again](attachment:" + mine["id"].(string) + ")"}, 200)
+	// Notes: the same rules, and note.restore may bring back its own archived reference.
+	bucket := crewWrite(t, a, true, "bucket.create", "", 0, map[string]any{"name": "REFS"}, 200)
+	note := crewWrite(t, a, true, "note.create", "", 0, map[string]any{"bucket": bucket["id"], "title": "Refs", "body": "plain"}, 200)
+	shot := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"note": note["id"]}), []testFile{{"n.png", tinyPNG(t, 4, 4)}}, 200)["attachments"].([]any)[0].(map[string]any)
+	crewWrite(t, a, true, "note.update", note["id"].(string), 1, map[string]any{"body": "![x](attachment:" + mine["id"].(string) + ")"}, 400)
+	withRef := crewWrite(t, a, true, "note.update", note["id"].(string), 1, map[string]any{"body": "![x](attachment:" + shot["id"].(string) + ")"}, 200)
+	first, _ := a.app.FindFirstRecordByFilter("crew_note_revisions", "note={:n} && revision=2", map[string]any{"n": note["id"]})
+	plain := crewWrite(t, a, true, "note.update", note["id"].(string), int(withRef["revision"].(float64)), map[string]any{"body": "plain again"}, 200)
+	crewWrite(t, a, true, "attachment.archive", shot["id"].(string), 1, map[string]any{}, 200)
+	restored := crewWrite(t, a, true, "note.restore", note["id"].(string), int(plain["revision"].(float64)), map[string]any{"revision_id": first.Id}, 200)
+	if !strings.Contains(restored["body"].(string), shot["id"].(string)) {
+		t.Fatal("note.restore lost its reference", restored)
+	}
+}
+
+func TestAttachmentArchiveRestoreAndEvents(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	att := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}), []testFile{{"r.txt", []byte("r")}}, 200)["attachments"].([]any)[0].(map[string]any)
+	aid := att["id"].(string)
+	crewWrite(t, a, true, "attachment.archive", aid, 5, map[string]any{}, 409)
+	archived := crewWrite(t, a, true, "attachment.archive", aid, 1, map[string]any{}, 200)
+	if archived["archived"] != true || archived["revision"] != float64(2) || !strings.HasPrefix(archived["archived_by"].(string), "mcp:") || archived["archived_at"] == "" {
+		t.Fatal("archive", archived)
+	}
+	crewWrite(t, a, true, "attachment.archive", aid, 2, map[string]any{}, 400)
+	if len(attachmentsOf(t, a, task["id"].(string), false)) != 0 || len(attachmentsOf(t, a, task["id"].(string), true)) != 1 {
+		t.Fatal("archived listing")
+	}
+	restored := crewWrite(t, a, false, "attachment.restore", aid, 2, map[string]any{}, 200)
+	if restored["archived"] != false || restored["archived_at"] != "" || restored["revision"] != float64(3) {
+		t.Fatal("restore", restored)
+	}
+	for _, action := range []string{"attachment.add", "attachment.archive", "attachment.restore"} {
+		if n := len(eventsOf(t, a, task["id"].(string), action)); n != 1 {
+			t.Fatalf("%s events: %d", action, n)
+		}
+	}
+	// Archived parents refuse attachment changes.
+	current := apiWebhookRecord(t, a, "tasks", task["id"].(string))
+	crewWrite(t, a, false, "task.update", task["id"].(string), current.GetInt("revision"), map[string]any{"archived": true}, 200)
+	crewWrite(t, a, false, "attachment.archive", aid, 3, map[string]any{}, 400)
+	multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}), []testFile{{"x.txt", []byte("x")}}, 400)
+}
+
+func TestAttachmentChangesWithdrawReviewWithoutWakes(t *testing.T) {
+	a, _, task, first := webhookFixture(t)
+	webhookOperation(t, a, "task.update", task.Id, task.GetInt("revision"), map[string]any{"draft": "Synthetic draft"}, "")
+	current := apiWebhookRecord(t, a, "tasks", task.Id)
+	add := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task.Id}), []testFile{{"before.png", tinyPNG(t, 6, 6)}}, 200)
+	before := add["attachments"].([]any)[0].(map[string]any)
+	after := apiWebhookRecord(t, a, "tasks", task.Id)
+	deliveries := apiWebhookDeliveries(t, a, task.Id)
+	if after.GetInt("revision") != current.GetInt("revision") || after.GetInt("wake_generation") != current.GetInt("wake_generation") || after.GetString("readiness") != "ready" {
+		t.Fatal("attachment add without review changed the task")
+	}
+	// Ready tasks keep their pending wake; attachments emit none.
+	if apiWebhookRecord(t, a, "webhook_deliveries", first.Id).GetString("state") != "pending" {
+		t.Fatal("attachment add cancelled the pending wake")
+	}
+	review := crewWrite(t, a, true, "review.request", task.Id, after.GetInt("revision"), map[string]any{}, 200)
+	var snap []map[string]any
+	json.Unmarshal([]byte(apiWebhookRecord(t, a, "reviews", review["id"].(string)).GetString("attachments")), &snap)
+	if len(snap) != 1 || snap[0]["id"] != before["id"] || snap[0]["sha256"] != before["sha256"] {
+		t.Fatal("review snapshot", snap)
+	}
+	reviewed := apiWebhookRecord(t, a, "tasks", task.Id)
+	withdrawn := crewWrite(t, a, true, "attachment.add", "", 0, map[string]any{"task": task.Id, "files": []any{
+		map[string]any{"name": "after.txt", "content_base64": "YWZ0ZXI="}}}, 200)
+	if withdrawn["review_withdrawn"] != true {
+		t.Fatal("review not withdrawn", withdrawn)
+	}
+	if apiWebhookRecord(t, a, "reviews", review["id"].(string)).GetString("status") != "withdrawn" {
+		t.Fatal("review status")
+	}
+	changed := apiWebhookRecord(t, a, "tasks", task.Id)
+	if changed.GetString("status") != "in_progress" || changed.GetString("readiness") != "waiting" || changed.GetInt("revision") != reviewed.GetInt("revision")+1 {
+		t.Fatal("task after withdrawal", changed.PublicExport())
+	}
+	if len(apiWebhookDeliveries(t, a, task.Id)) != len(deliveries) {
+		t.Fatal("attachment change emitted a wake")
+	}
+	if len(eventsOf(t, a, review["id"].(string), "review.withdraw")) != 1 {
+		t.Fatal("withdraw event")
+	}
+	// Archive and restore withdraw a new pending review too, never waking.
+	webhookOperation(t, a, "task.update", task.Id, changed.GetInt("revision"), map[string]any{"readiness": "ready"}, "")
+	ready := apiWebhookRecord(t, a, "tasks", task.Id)
+	wakes := len(apiWebhookDeliveries(t, a, task.Id))
+	again := crewWrite(t, a, false, "review.request", task.Id, ready.GetInt("revision"), map[string]any{}, 200)
+	crewWrite(t, a, false, "attachment.archive", before["id"].(string), 1, map[string]any{}, 200)
+	if apiWebhookRecord(t, a, "reviews", again["id"].(string)).GetString("status") != "withdrawn" || len(apiWebhookDeliveries(t, a, task.Id)) != wakes {
+		t.Fatal("archive did not withdraw quietly")
+	}
+	// A review with an outdated snapshot cannot be approved.
+	third := apiWebhookRecord(t, a, "tasks", task.Id)
+	pending := crewWrite(t, a, false, "review.request", task.Id, third.GetInt("revision"), map[string]any{}, 200)
+	row := apiWebhookRecord(t, a, "reviews", pending["id"].(string))
+	row.Set("attachments", []map[string]any{{"id": "aaaaaaaaaaaaaaa", "sha256": "x"}})
+	if err := a.app.Save(row); err != nil {
+		t.Fatal(err)
+	}
+	crewWrite(t, a, false, "review.decide", row.Id, row.GetInt("revision"), map[string]any{"decision": "approved"}, 400)
+}
+
+func TestUploadLinkLifecycle(t *testing.T) {
+	uploadLimiter.reset()
+	t.Cleanup(uploadLimiter.reset)
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{"title": "Phone screenshots"})
+	id := task["id"].(string)
+	// Owner browser only; refused for work clients before anything else.
+	crewWrite(t, a, true, "upload_link.create", "", 0, map[string]any{"task": id}, 403)
+	raw, _ := json.Marshal(map[string]any{"action": "upload_link.create", "data": map[string]any{"task": id}, "idempotency_key": "k"})
+	a.request(t, "POST", "/api/crew/write", a.token, string(raw), 400)
+	crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": id, "expires_in_minutes": 1441}, 400)
+	link := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": id, "max_files": 2}, 200)
+	token := link["token"].(string)
+	if len(token) != 43 || link["path"] != "#/upload/"+token || link["state"] != "active" || link["max_files"] != float64(2) {
+		t.Fatal("link", link)
+	}
+	if _, leaked := link["token_hash"]; leaked {
+		t.Fatal("hash exported")
+	}
+	stored := apiWebhookRecord(t, a, "upload_links", link["id"].(string))
+	if stored.GetString("token_hash") != digest([]byte(token)) || strings.Contains(fmt.Sprint(stored.PublicExport()), token) {
+		t.Fatal("only the hash is stored")
+	}
+	expires, _ := time.Parse(time.RFC3339, link["expires_at"].(string))
+	if d := time.Until(expires); d < 14*time.Minute || d > 16*time.Minute {
+		t.Fatal("default expiry", d)
+	}
+	// The listing never returns the token.
+	listed := a.request(t, "POST", "/api/crew/read", a.token, `{"collection":"upload_links","parent":"`+id+`"}`, 200)
+	if strings.Contains(fmt.Sprint(listed), token) || strings.Contains(fmt.Sprint(listed), stored.GetString("token_hash")) {
+		t.Fatal("listing leaked the token")
+	}
+	info := a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+token+`"}`, 200)
+	if info["title"] != "Phone screenshots" || info["parent_kind"] != "task" || info["max_files"] != float64(2) || len(info) != 6 {
+		t.Fatal("info", info)
+	}
+	a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+strings.Repeat("A", 43)+`"}`, 404)
+	a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+token+`","task":"`+id+`"}`, 400)
+	// Upload only: no read access with the token.
+	a.request(t, "POST", "/api/crew/read", token, `{"collection":"tasks"}`, 401)
+	// The token names its parent; a request cannot pick another.
+	uploadLinkRequest(t, a, token, map[string]string{"task": id}, []testFile{{"x.png", tinyPNG(t, 3, 3)}}, 400)
+	uploadLinkRequest(t, a, token, nil, []testFile{{"1.png", tinyPNG(t, 3, 3)}, {"2.png", tinyPNG(t, 3, 3)}, {"3.png", tinyPNG(t, 3, 3)}}, 400)
+	// A batch where every file fails does not use the link.
+	failed, _ := uploadLinkRequest(t, a, token, nil, []testFile{{"empty.png", nil}}, 400)
+	if failed["results"].([]any)[0].(map[string]any)["error"].(map[string]any)["code"] != "empty_file" {
+		t.Fatal("failed batch", failed)
+	}
+	done, _ := uploadLinkRequest(t, a, token, nil, []testFile{{"phone.png", tinyPNG(t, 9, 9)}, {"empty.png", nil}}, 200)
+	if done["added"] != float64(1) || strings.Contains(fmt.Sprint(done), "id") {
+		t.Fatal("upload result", done)
+	}
+	files := attachmentsOf(t, a, id, false)
+	if len(files) != 1 || files[0]["actor"] != "upload_link:"+link["id"].(string) || files[0]["via_upload_link"] != link["id"] {
+		t.Fatal("attribution", files)
+	}
+	ev := eventsOf(t, a, id, "attachment.add")[0]
+	if ev.GetString("actor") != "upload_link:"+link["id"].(string) || !strings.Contains(ev.GetString("reason"), link["id"].(string)) || !strings.Contains(ev.GetString("changes"), "via_upload_link") {
+		t.Fatal("event attribution", ev.PublicExport())
+	}
+	// Single use.
+	uploadLinkRequest(t, a, token, nil, []testFile{{"again.png", tinyPNG(t, 3, 3)}}, 410)
+	a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+token+`"}`, 410)
+	used := apiWebhookRecord(t, a, "upload_links", link["id"].(string))
+	if used.GetInt("files_added") != 1 || used.GetString("used_at") == "" {
+		t.Fatal("link usage", used.PublicExport())
+	}
+	// Revoke.
+	second := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": id}, 200)
+	revoked := crewWrite(t, a, true, "upload_link.revoke", second["id"].(string), 1, map[string]any{}, 200)
+	if revoked["state"] != "revoked" {
+		t.Fatal("revoke", revoked)
+	}
+	uploadLinkRequest(t, a, second["token"].(string), nil, []testFile{{"r.png", tinyPNG(t, 3, 3)}}, 410)
+	// Expiry.
+	third := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": id}, 200)
+	row := apiWebhookRecord(t, a, "upload_links", third["id"].(string))
+	row.Set("expires_at", time.Now().Add(-time.Second).UTC().Format(time.RFC3339))
+	a.app.Save(row)
+	uploadLinkRequest(t, a, third["token"].(string), nil, []testFile{{"e.png", tinyPNG(t, 3, 3)}}, 410)
+	// Five failed batches revoke the link.
+	fourth := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": id}, 200)
+	for i := 0; i < 5; i++ {
+		uploadLinkRequest(t, a, fourth["token"].(string), nil, []testFile{{"empty.png", nil}}, 400)
+	}
+	uploadLinkRequest(t, a, fourth["token"].(string), nil, []testFile{{"ok.png", tinyPNG(t, 3, 3)}}, 410)
+	// Notes work too; archived parents stop links.
+	bucket := crewWrite(t, a, false, "bucket.create", "", 0, map[string]any{"name": "LINKS"}, 200)
+	note := crewWrite(t, a, false, "note.create", "", 0, map[string]any{"bucket": bucket["id"], "title": "Note upload"}, 200)
+	nl := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"note": note["id"], "expires_in_minutes": 1440}, 200)
+	crewWrite(t, a, false, "bucket.update", bucket["id"].(string), 1, map[string]any{"archived": true}, 200)
+	a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+nl["token"].(string)+`"}`, 410)
+}
+
+func TestUploadLinkRateLimitAndNoWake(t *testing.T) {
+	uploadLimiter.reset()
+	t.Cleanup(uploadLimiter.reset)
+	a, _, task, _ := webhookFixture(t)
+	before := len(apiWebhookDeliveries(t, a, task.Id))
+	link := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": task.Id}, 200)
+	generation := apiWebhookRecord(t, a, "tasks", task.Id).GetInt("wake_generation")
+	uploadLinkRequest(t, a, link["token"].(string), nil, []testFile{{"w.png", tinyPNG(t, 3, 3)}}, 200)
+	if len(apiWebhookDeliveries(t, a, task.Id)) != before || apiWebhookRecord(t, a, "tasks", task.Id).GetInt("wake_generation") != generation {
+		t.Fatal("upload link woke the task")
+	}
+	for i := 0; i < uploadBurst-1; i++ {
+		a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+strings.Repeat("B", 43)+`"}`, 404)
+	}
+	req := httptest.NewRequest("POST", "/api/crew/upload-link/info", strings.NewReader(`{"token":"x"}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	a.handler.ServeHTTP(res, req)
+	if res.Code != http.StatusTooManyRequests || res.Header().Get("Retry-After") == "" {
+		t.Fatal("rate limit", res.Code, res.Header())
+	}
+}
+
+func attachmentGet(t *testing.T, a *testApp, query, token string, want int) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/api/crew/attachment?"+query, nil)
+	if token != "" {
+		req.Header.Set("Authorization", token)
+	}
+	res := httptest.NewRecorder()
+	a.handler.ServeHTTP(res, req)
+	if res.Code != want {
+		t.Fatalf("GET attachment %s: %d %s; want %d", query, res.Code, res.Body, want)
+	}
+	return res
+}
+
+func TestAttachmentFileServing(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	shot := tinyPNG(t, 400, 200)
+	out := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}),
+		[]testFile{{"wide.png", shot}, {"notes.txt", []byte("plain text")}, {"x.html", []byte("<script>1</script>")}, {"résumé \"quoted\".pdf", []byte("%PDF-1.4 synthetic")}}, 200)
+	ids := []string{}
+	for _, x := range out["attachments"].([]any) {
+		ids = append(ids, x.(map[string]any)["id"].(string))
+	}
+	attachmentGet(t, a, "id="+ids[0], "", 401)
+	attachmentGet(t, a, "id="+ids[0]+"&token=bogus", "", 401)
+	// An auth token is not a file token and vice versa.
+	attachmentGet(t, a, "id="+ids[0]+"&token="+a.token, "", 401)
+	attachmentGet(t, a, "id=zzzzzzzzzzzzzzz", a.token, 404)
+	res := attachmentGet(t, a, "id="+ids[0], a.token, 200)
+	if !bytes.Equal(res.Body.Bytes(), shot) || res.Header().Get("Content-Type") != "image/png" || !strings.HasPrefix(res.Header().Get("Content-Disposition"), "inline") ||
+		res.Header().Get("X-Content-Type-Options") != "nosniff" || !strings.Contains(res.Header().Get("Content-Security-Policy"), "sandbox") {
+		t.Fatal("image headers", res.Header())
+	}
+	if !strings.HasPrefix(attachmentGet(t, a, "id="+ids[0]+"&download=1", a.token, 200).Header().Get("Content-Disposition"), "attachment") {
+		t.Fatal("download disposition")
+	}
+	// File token (what <img src> uses).
+	fileToken := a.request(t, "POST", "/api/files/token", a.token, "", 200)["token"].(string)
+	thumb := attachmentGet(t, a, "id="+ids[0]+"&thumb=320x0&token="+fileToken, "", 200)
+	config, _, err := image.DecodeConfig(bytes.NewReader(thumb.Body.Bytes()))
+	if err != nil || config.Width != 320 || config.Height != 160 || thumb.Header().Get("Content-Type") != "image/png" {
+		t.Fatal("thumb", config, err, thumb.Header())
+	}
+	// No upscaling: a 1600 preview of a 400px image is the original.
+	if !bytes.Equal(attachmentGet(t, a, "id="+ids[0]+"&thumb=1600x0", a.token, 200).Body.Bytes(), shot) {
+		t.Fatal("preview upscaled")
+	}
+	attachmentGet(t, a, "id="+ids[0]+"&thumb=100x100", a.token, 400)
+	attachmentGet(t, a, "id="+ids[1]+"&thumb=320x0", a.token, 400)
+	text := attachmentGet(t, a, "id="+ids[1], a.token, 200)
+	if text.Header().Get("Content-Type") != "text/plain; charset=utf-8" || !strings.HasPrefix(text.Header().Get("Content-Disposition"), "attachment") {
+		t.Fatal("text headers", text.Header())
+	}
+	html := attachmentGet(t, a, "id="+ids[2], a.token, 200)
+	if html.Header().Get("Content-Type") != "application/octet-stream" || !strings.HasPrefix(html.Header().Get("Content-Disposition"), "attachment") {
+		t.Fatal("html served actively", html.Header())
+	}
+	pdf := attachmentGet(t, a, "id="+ids[3], a.token, 200)
+	if pdf.Header().Get("Content-Type") != "application/pdf" || !strings.Contains(pdf.Header().Get("Content-Disposition"), "filename*=") {
+		t.Fatal("pdf headers", pdf.Header())
+	}
+	// Range requests (video seeking) work.
+	req := httptest.NewRequest("GET", "/api/crew/attachment?id="+ids[1], nil)
+	req.Header.Set("Authorization", a.token)
+	req.Header.Set("Range", "bytes=0-4")
+	res = httptest.NewRecorder()
+	a.handler.ServeHTTP(res, req)
+	if res.Code != http.StatusPartialContent || res.Body.String() != "plain" {
+		t.Fatal("range", res.Code, res.Body.String())
+	}
+}
+
+func TestAttachmentReadForWorkClients(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	shot := tinyPNG(t, 700, 350)
+	text := strings.Repeat("é", 10) + "end"
+	out := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}),
+		[]testFile{{"big.png", shot}, {"t.txt", []byte(text)}, {"b.bin", []byte{0xff, 0xfe, 0x00}}}, 200)
+	ids := []string{}
+	for _, x := range out["attachments"].([]any) {
+		ids = append(ids, x.(map[string]any)["id"].(string))
+	}
+	read := func(body map[string]any, want int) map[string]any {
+		raw, _ := json.Marshal(body)
+		return a.request(t, "POST", "/api/crew/attachment-read", a.token, string(raw), want)
+	}
+	a.request(t, "POST", "/api/crew/attachment-read", "", `{"id":"`+ids[0]+`"}`, 401)
+	card := read(map[string]any{"id": ids[0], "variant": "card"}, 200)
+	data, _ := base64.StdEncoding.DecodeString(card["content_base64"].(string))
+	if card["width"] != float64(320) || card["height"] != float64(160) || card["media_type"] != "image/png" || card["encoding"] != "base64" || len(data) != int(card["length"].(float64)) {
+		t.Fatal("card", card["width"], card["height"], card["media_type"])
+	}
+	if _, ok := card["url"]; ok || card["attachment"].(map[string]any)["file"] != nil {
+		t.Fatal("read leaked a URL or storage name")
+	}
+	preview := read(map[string]any{"id": ids[0], "variant": "preview"}, 200)
+	if preview["width"] != float64(700) {
+		t.Fatal("preview of a small image is the original", preview["width"])
+	}
+	// Original bytes page with offset/next_offset.
+	page := read(map[string]any{"id": ids[0], "variant": "original", "max_bytes": 100}, 200)
+	if page["next_offset"] != float64(100) || page["total_size"] != float64(len(shot)) {
+		t.Fatal("original page", page["next_offset"], page["total_size"])
+	}
+	rest := read(map[string]any{"id": ids[0], "offset": 100, "max_bytes": 4 << 20}, 200)
+	b1, _ := base64.StdEncoding.DecodeString(page["content_base64"].(string))
+	b2, _ := base64.StdEncoding.DecodeString(rest["content_base64"].(string))
+	if !bytes.Equal(append(b1, b2...), shot) || rest["next_offset"] != nil {
+		t.Fatal("paged original differs")
+	}
+	read(map[string]any{"id": ids[0], "max_bytes": (4 << 20) + 1}, 400)
+	read(map[string]any{"id": ids[0], "variant": "text"}, 415)
+	read(map[string]any{"id": ids[1], "variant": "card"}, 400)
+	// Text pages cut on character boundaries.
+	first := read(map[string]any{"id": ids[1], "variant": "text", "max_bytes": 5}, 200)
+	if first["text"] != "éé" || first["next_offset"] != float64(4) {
+		t.Fatal("text page", first)
+	}
+	read(map[string]any{"id": ids[1], "variant": "text", "offset": 1}, 400)
+	whole := read(map[string]any{"id": ids[1], "variant": "text"}, 200)
+	if whole["text"] != text || whole["next_offset"] != nil {
+		t.Fatal("whole text", whole)
+	}
+	read(map[string]any{"id": ids[2], "variant": "text"}, 415)
+	read(map[string]any{"id": ids[0], "variant": "thumbnail"}, 400)
+}
+
+func TestAttachmentSearchAndSQL(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{"title": "Unrelated title"})
+	out := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}), []testFile{{"zebra-crossing.png", tinyPNG(t, 3, 3)}}, 200)
+	att := out["attachments"].([]any)[0].(map[string]any)
+	hits := crewPost(t, a, "/api/crew/search", map[string]any{"query": "zebra"}, 200)["items"].([]any)
+	if len(hits) != 1 || hits[0].(map[string]any)["id"] != task["id"] {
+		t.Fatal("search by attachment name", hits)
+	}
+	crewWrite(t, a, false, "attachment.archive", att["id"].(string), 1, map[string]any{}, 200)
+	if hits := crewPost(t, a, "/api/crew/search", map[string]any{"query": "zebra"}, 200)["items"].([]any); len(hits) != 0 {
+		t.Fatal("archived attachment name still found", hits)
+	}
+	crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": task["id"]}, 200)
+	stored, _ := a.app.FindRecordById("crew_attachments", att["id"].(string))
+	result := crewSQL(t, a, "SELECT * FROM attachments", 200)
+	raw, _ := json.Marshal(result)
+	if strings.Contains(string(raw), stored.GetString("file")) || !strings.Contains(string(raw), att["sha256"].(string)) {
+		t.Fatal("attachments view", string(raw))
+	}
+	for _, sql := range []string{"SELECT file FROM attachments", "SELECT file FROM crew_attachments", "SELECT * FROM upload_links", "SELECT token_hash FROM crew_upload_links", "SELECT * FROM crew_settings"} {
+		crewSQL(t, a, sql, 400)
+	}
+}
+
+func TestAttachmentCapabilities(t *testing.T) {
+	a := newTestApp(t)
+	doc := capabilitiesItem(t, a, `{"collection":"capabilities"}`)
+	ops := doc["operations"].(map[string]any)
+	for _, name := range []string{"attachment.add", "attachment.archive", "attachment.restore", "upload_link.create", "upload_link.revoke", "storage.update"} {
+		if ops[name] == nil {
+			t.Fatal("missing operation", name)
+		}
+	}
+	if ops["upload_link.create"].(map[string]any)["authority"] != "owner_browser" || ops["storage.update"].(map[string]any)["authority"] != "shared_mcp" {
+		t.Fatal("authority", ops["upload_link.create"], ops["storage.update"])
+	}
+	create := ops["task.create"].(map[string]any)["data_schema"].(map[string]any)["properties"].(map[string]any)
+	if create["files"] == nil || ops["task.update"].(map[string]any)["data_schema"].(map[string]any)["properties"].(map[string]any)["files"] != nil {
+		t.Fatal("files only on create")
+	}
+	att := doc["attachments"].(map[string]any)
+	if att["limits"].(map[string]any)["max_file_bytes"] != float64(attachmentMaxBytes) || att["limits"].(map[string]any)["max_base64_bytes_per_request"] != float64(attachmentBase64MaxBytes) {
+		t.Fatal("limits drifted from the server", att["limits"])
+	}
+	defs := doc["$defs"].(map[string]any)
+	if defs["attachments"] == nil || defs["upload_links"] == nil || defs["settings"] == nil {
+		t.Fatal("collection definitions")
+	}
+	if _, ok := defs["attachments"].(map[string]any)["properties"].(map[string]any)["file"]; ok {
+		t.Fatal("storage name documented as readable")
+	}
+}
+
+func TestAttachmentArchiveRetryReplays(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	att := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}), []testFile{{"k.txt", []byte("k")}}, 200)["attachments"].([]any)[0].(map[string]any)
+	raw, _ := json.Marshal(map[string]any{"action": "attachment.archive", "id": att["id"], "expected_revision": 1, "data": map[string]any{}, "idempotency_key": "archive-once"})
+	first := a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
+	again := a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
+	if first["revision"] != float64(2) || again["revision"] != float64(2) || len(eventsOf(t, a, task["id"].(string), "attachment.archive")) != 1 {
+		t.Fatal("archive retry did not replay", first, again)
+	}
+}

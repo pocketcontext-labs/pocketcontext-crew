@@ -32,7 +32,7 @@ func TestCrewSQLSchemaMatchesAllowlist(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	if fmt.Sprint(names) != "[agents buckets events note_revisions notes reviews tasks webhook_attempts webhook_bridges webhook_configs webhook_deliveries webhook_executions webhook_mappings webhook_routing]" {
+	if fmt.Sprint(names) != "[agents attachments buckets events note_revisions notes reviews tasks webhook_attempts webhook_bridges webhook_configs webhook_deliveries webhook_executions webhook_mappings webhook_routing]" {
 		t.Fatalf("schema views: %v", names)
 	}
 	if schema["limits"].(map[string]any)["max_rows"] != float64(crewSQLMaxRows) {
@@ -42,6 +42,7 @@ func TestCrewSQLSchemaMatchesAllowlist(t *testing.T) {
 		"webhook_configs":    {"url", "secret_ciphertext"},
 		"webhook_executions": {"worker_id", "dispatch_worker_id", "fence", "dispatch_fence"},
 		"webhook_bridges":    {"wake_worker_id"},
+		"attachments":        {"file"},
 	} {
 		for _, c := range excluded {
 			if columns[view][c] {

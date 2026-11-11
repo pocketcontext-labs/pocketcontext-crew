@@ -312,10 +312,11 @@ func TestCapabilitiesDescribeCommentWakeAndHandoffLimit(t *testing.T) {
 	if _, ok := op["owner_only_fields"]; ok || op["authority"] != "shared_mcp" {
 		t.Fatal("limit still owner-only in capabilities", op)
 	}
-	// Work clients share every operation except credential entry.
+	// Work clients share every operation except credential entry and
+	// upload-link creation.
 	for name, raw := range ops {
 		want := "shared_mcp"
-		if name == "webhook.credentials.update" {
+		if name == "webhook.credentials.update" || name == "upload_link.create" {
 			want = "owner_browser"
 		}
 		if authority := raw.(map[string]any)["authority"]; authority != want {
