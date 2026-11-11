@@ -13,7 +13,10 @@ reporting (see [SQL reads](#bounded-read-only-sql)).
 | note_revisions | Immutable snapshots, version, actor, reported agent and reason              |
 | tasks          | Board status, assignment, creator attribution, labels, draft and note links |
 | events         | Immutable changes/comments, actor and reported attribution                  |
-| reviews        | Immutable draft snapshot with monotonic decision state                      |
+| reviews        | Immutable draft and attachment snapshot with monotonic decision state       |
+| attachments    | Immutable files on a task or note: metadata, archive state; bytes in storage/ |
+| upload_links   | One-time owner upload links: parent, expiry, usage; never the token          |
+| settings       | Instance settings: storage limit (with derived usage)                       |
 
 `POST /api/crew/read` accepts collection, optional id/parent/query/archived/offset and responsible_agent for buckets.
 It returns items, has_more and next_offset (100 records per page). Default note
@@ -35,7 +38,8 @@ write results) include `path`, and `url` when the install has a domain; see
 [item links](#item-links). Both can be requested in `fields`.
 
 `POST /api/crew/search` ranks notes (title, body) and tasks (title, description,
-draft) with SQLite FTS5 BM25. It takes query (all terms must match; a trailing
+draft) with SQLite FTS5 BM25; the names of each item's active attachments are
+indexed with it, so a search for a file name finds its task or note. It takes query (all terms must match; a trailing
 `*` is a prefix), optional collections (notes, tasks), limit (default 10, at most
 50), offset and archived with crew_read's archive semantics. Hits are compact:
 collection, id, title, path, url (with a domain), a short highlighted excerpt,
@@ -43,7 +47,8 @@ revision, updated, score and the note bucket or the task status, readiness and a
 token identifies the indexed content; pass it when following next_offset, and
 restart on 409 when content changed. The index is in memory, rebuilt from the
 application's own database connection whenever a change fingerprint (id,
-revision, updated and effective archive state of every note and task) changes,
+revision, updated and effective archive state of every note, task and
+attachment) changes,
 so edits, restores and archive changes, including bucket archival, are visible
 immediately. Indexed text is bounded (64 MiB). Webhook, event, review and
 revision records are never indexed or returned.
@@ -75,12 +80,14 @@ the same authentication as crew_read (owner token or MCP OAuth caller) and are
 the MCP tools crew_schema and crew_query.
 
 Views: agents, buckets, notes, note_revisions, tasks, events, reviews,
-webhook_configs, webhook_mappings, webhook_routing, webhook_deliveries,
-webhook_attempts, webhook_executions and webhook_bridges. Each view selects an
+attachments, webhook_configs, webhook_mappings, webhook_routing,
+webhook_deliveries, webhook_attempts, webhook_executions and webhook_bridges. Each view selects an
 explicit column allowlist, and every column is one crew_read already returns.
 Excluded: webhook_configs url and secret_ciphertext; webhook_executions
 worker_id, dispatch_worker_id, fence and dispatch_fence and webhook_bridges
-wake_worker_id (fencing handles); the webhook idempotency table; users and other
+wake_worker_id (fencing handles); attachments.file (the storage name) and all
+file bytes; upload links (token hashes) and settings, which crew_read
+serves; the webhook idempotency table; users and other
 auth records; PocketBase internal tables; OAuth state; retired knowledge data.
 The underlying `crew_*` table names are not a supported interface and are limited
 to the same columns.
@@ -103,8 +110,10 @@ lookups; use SQL for counts, joins, aggregates and history.
 `POST /api/crew/write` carries reader writes (the owner browser). MCP and the
 CLI `write` command only forward to `POST /api/crew/agent-write`, the work-client
 route. Both accept the same operations with the same transaction and revision
-checks, except `webhook.credentials.update`: webhook URL and secret entry stays
-reader-only, and reads never return them. The routes otherwise differ only in
+checks, except `webhook.credentials.update` and `upload_link.create` (HTTP 403
+on the work-client route, before idempotency replay): webhook URL and secret
+entry and upload-link creation stay reader-only, and reads never return
+credentials or link tokens. The routes otherwise differ only in
 loop accounting and audit: work-client comments never wake (so bots cannot
 ping-pong), work-client reassignments count toward `max_bot_handoffs` while
 reader task writes reset the count, and events record an `owner:` or `mcp:`
@@ -124,6 +133,217 @@ reaches the reader route; internal owner-account tokens are never returned by
 MCP. Direct owner credentials carry owner authority and must not be shared with
 MCP or hosted agents; installs without a domain are the exception described
 below. Claimed agent names never grant authority.
+
+## Attachments
+
+Files on tasks and notes: bug screenshots, logs, PDFs, recordings. One
+`crew_attachments` record per file holds `parent_kind` (`task` or `note`),
+`parent`, `name` (display name), `media_type`, `image`, `width`, `height`,
+`size` (bytes), `sha256` (computed by the server), `position` (order added,
+1-based per item), `actor`, `reported_agent`, `via_upload_link`, archive state
+(`archived`, `archived_at`, `archived_by`), `revision` and timestamps. The
+bytes are a PocketBase protected file in the project's `storage/` folder under
+an ASCII storage name; neither the storage name nor any URL is ever returned.
+Bytes are immutable: a changed file is a new attachment, and removing one means
+archiving it (restorable). Nothing is purged.
+
+Limits: 20 MiB (20,971,520 bytes) per file, 20 active attachments per task or
+note (archived ones do not count), at most 20 files per request, and an
+instance storage limit (default 5 GiB) on the sum of all stored attachments,
+archived ones included. Thumbnails are not counted.
+
+Images are PNG, JPEG, GIF and WebP whose magic bytes and image header verify
+(`image: true`, with `width` and `height`). Only these are shown inline or
+thumbnailed. Every other file, whatever its extension (including SVG and HTML),
+gets `image: false` and a `media_type` from a fixed extension table (an image
+extension whose bytes fail verification becomes `application/octet-stream`).
+Types are never sniffed and client-supplied types are ignored.
+
+Attachments are untrusted content, like notes.
+
+### Operations
+
+All run on `POST /api/crew/write` (reader) and `POST /api/crew/agent-write`
+(work clients), in one transaction with the usual envelope (`action`, `id`,
+`expected_revision`, `reported_agent`, `reason`, `data`, `idempotency_key`,
+`execution`).
+
+| Action | id / revision | data | Result |
+| --- | --- | --- | --- |
+| `attachment.add` | none | `task` or `note` (exactly one), files | `{attachments: [record…], results: [{index, name, ok, id \| error: {code, message}}], review_withdrawn}` |
+| `attachment.archive` | attachment id, its revision | `{}` | attachment record plus `review_withdrawn` |
+| `attachment.restore` | attachment id, its revision | `{}` | attachment record plus `review_withdrawn` |
+| `task.create`, `note.create` | none | usual fields, optional files | task/note record plus `attachments: [record…]` |
+| `upload_link.create` | none | `task` or `note`, `expires_in_minutes` (1–1440, default 15), `max_files` (1–20, default 10) | link record plus `token`, `path` (`#/upload/<token>`) and `url` (with a domain); reader route only |
+| `upload_link.revoke` | link id, its revision | `{}` | link record |
+| `storage.update` | settings id, its revision | `storage_limit_bytes` (1 MiB to 1 TiB) | settings record |
+
+`attachment.add` saves each file independently: a file that fails (see codes
+below) is reported in `results` while the others are saved; HTTP 200 when at
+least one file was saved, HTTP 400 when every file failed, with
+`data["files.N"] = {code, message}` for each (N is the 1-based file position).
+The parent must be active (not archived, note bucket not archived). On tasks,
+work clients need execution proof only while another execution is live, as for
+`task.update`. `idempotency_key` is optional; its fingerprint names files by
+name, size and sha256, so a retry with the same files replays the first result
+and changed files conflict (409).
+
+`attachment.restore` refuses when the item already has 20 active attachments.
+Archive and restore of an already archived/active attachment is a 400.
+
+Events: each saved file appends `attachment.add` to its task's or note's
+history (`changes`: `attachment`, `name`, `size`, `media_type`, `image`,
+`sha256`, and `via_upload_link` when uploaded through a link); archive and
+restore append `attachment.archive` / `attachment.restore` (`attachment`,
+`name`). `upload_link.create` / `upload_link.revoke` append to the item too;
+`storage.update` appends to the settings record (`storage_limit_bytes: {old,
+new}`).
+
+Attachment writes do not change the task's or note's own revision, so an open
+edit form never conflicts with an upload. Read the attachments collection (or
+use `changed_since` on it) to see new files.
+
+### File transport
+
+- Multipart (reader, CLI): `multipart/form-data` to either write route, with a
+  text field `@jsonPayload` holding the JSON envelope and file parts named
+  `files` (the part's filename is the display name; directory parts are
+  dropped). Accepted only by `attachment.add`, `task.create` and `note.create`.
+  A multipart request may carry 101 MiB in total (the public HTTPS listener caps
+  requests at 110 MiB); split larger batches over several `attachment.add`
+  requests.
+- JSON base64 (MCP): `data.files: [{"name": "shot.png", "content_base64":
+  "<standard base64>"}]`, exactly those two keys per entry. At most 5 MiB of
+  decoded bytes per request (base64 text is about 6.7 MiB), within the MCP
+  input limit. JSON writes stay limited to 32 MiB.
+
+Sending both forms in one request, or files to any other action, is a 400.
+
+Per-file error codes: `invalid_name`, `empty_file`, `file_too_large`,
+`unreadable`, `invalid_file` (bad base64 entry shape), `invalid_base64`,
+`attachment_limit` (20 active), `storage_limit`.
+
+### Create with files and placeholders
+
+`task.create` and `note.create` take the same files and create the item and its
+attachments in one step (task revision 1). Text fields may reference files that
+do not exist yet as `attachment:new-N`, where N is the file's 1-based position
+in the request: `![first step](attachment:new-1)`. Placeholders in `description`
+and `draft` (tasks) or `body` (notes) are replaced by the real IDs before the
+item is validated and saved, so stored text and note revisions always carry real
+IDs. The create is atomic: if any file is refused (any per-file code above, or
+the storage limit for the batch) or a placeholder names no uploaded file,
+nothing is created and the 400 lists each refused file as `data["files.N"]`.
+Placeholders anywhere else are refused.
+
+### Markdown references
+
+Note `body`, task `description` and task `draft` reference attachments as
+`![alt](attachment:ID)` (images) or `[label](attachment:ID)`, also in reference
+definitions (`[x]: attachment:ID`) and autolinks (`<attachment:ID>`). On every
+create, update and restore:
+
+- each reference must name an existing attachment of the same task or note
+  (unknown or foreign IDs are refused with a message naming the reference);
+- a reference new to that field must name an active attachment; a reference
+  already saved in the field may stay after its attachment is archived (the
+  reader shows it as removed), and `note.restore` may bring back the note's own
+  archived references;
+- embedded `data:` images (Markdown images, reference definitions or `<img
+  src="data:…">`) are refused: attach the file instead.
+
+Prose such as `attachment: see below` is not a reference.
+
+### Reading
+
+- Metadata: `crew_read {collection: "attachments", parent: <task or note id>}`
+  lists active attachments in `position` order; `archived: true` lists archived
+  ones; `id`, `query` (name substring), `fields`, `limit` and `changed_since`
+  work as usual. `crew_read {collection: "settings"}` returns the storage limit
+  with derived `storage_used_bytes`, `max_file_bytes` and
+  `max_active_attachments`.
+- Bytes for work clients: `POST /api/crew/attachment-read` (signed in; MCP
+  proxy and CLI) with `{id, variant, offset?, max_bytes?}`:
+  - `original`: base64 bytes from `offset`; `max_bytes` defaults to 1 MiB, at
+    most 4 MiB; `next_offset` is set while more remain;
+  - `preview` (1600 px wide) and `card` (320 px wide): a downscaled image for
+    verified images only, returned whole (at most 4 MiB, else 413); an image
+    already that small is returned as is, never upscaled;
+  - `text`: strict UTF-8 text (`max_bytes` default 256 KiB, at most 2 MiB), cut
+    on character boundaries; 415 for images or non-UTF-8 bytes.
+
+  The result has `attachment` (metadata), `variant`, `media_type` (of the
+  returned bytes), `encoding` (`base64` or `utf-8`), `offset`, `length`,
+  `total_size`, `next_offset`, `content_base64` or `text`, and `width`/`height`
+  for previews. No URL or storage name is ever returned. Archived attachments
+  remain readable.
+- Bytes for the owner browser and CLI: `GET /api/crew/attachment?id=ID`
+  with optional `thumb=1600x0` or `thumb=320x0` (images only; the original when
+  the image is that small or thumbnailing fails) and `download=1`. It needs the
+  owner's `Authorization` header or `token=` holding a short-lived PocketBase
+  file token from `POST /api/files/token` (so `<img>`, `<video>` and `<audio>`
+  can load; refresh it every few minutes). Responses carry
+  `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src
+  'none'; sandbox`, `Cross-Origin-Resource-Policy: same-origin` and `private`
+  caching. Verified images are `inline` unless `download=1`; every other file
+  is `Content-Disposition: attachment` and keeps a passive type only (text,
+  Markdown, CSV, JSON and YAML as UTF-8, PDF, audio, video); HTML, SVG, XML,
+  scripts and unknown types are `application/octet-stream`. Range requests
+  work. PocketBase's generic `/api/files` route never serves Crew files (the
+  collection rules stay locked) and is not public on a domain.
+
+Thumbnails (`1600x0`, `320x0`, declared on the file field) are created on first
+request beside the original and are never created while the server is in
+maintenance (flush) mode.
+
+### Reviews
+
+`review.request` stores the task's active attachments as `attachments: [{id,
+sha256}]` on the review. Any `attachment.add`, `attachment.archive` or
+`attachment.restore` on a task with a pending review withdraws that review
+exactly like a draft edit: the review becomes `withdrawn`, the task leaves
+Needs review for In progress and becomes Waiting, its wake generation advances
+and nothing wakes. `review.decide` also refuses when the snapshot no longer
+matches. Approval therefore covers exactly the draft and files the owner saw.
+
+### Wakes
+
+Attachment writes, including uploads through a link, never wake anyone and do
+not change the wake generation, except through the review withdrawal above.
+
+### One-time upload links
+
+The owner creates a link for one task or note in the reader
+(`upload_link.create` on `/api/crew/write`; the work-client route returns 403
+before idempotency replay, and the action refuses `idempotency_key` so the
+token is never stored in a replay record). The 43-character token (about 256
+random bits) is returned once with `path` `#/upload/<token>` and, with a
+domain, `url`; only its SHA-256 is stored. Links expire after
+`expires_in_minutes` (default 15, at most 1440) and can be revoked by either
+route (`upload_link.revoke`). Reads (`crew_read {collection: "upload_links",
+parent}`) return `state` (`active`, `used`, `revoked` or `expired`), never the
+token or hash.
+
+The upload page uses two unauthenticated endpoints, both public on a domain and
+rate-limited for the whole endpoint (burst 20, one request per 3 seconds; 429
+with `Retry-After` and `data.rate_limit`):
+
+- `POST /api/crew/upload-link/info` with `{"token": "…"}` returns only
+  `{parent_kind, title, expires_at, max_files, max_file_bytes,
+  max_request_bytes}`.
+- `POST /api/crew/upload-link/upload`, multipart: field `token` and file parts
+  named `files` (at most `max_files`). Returns `{added, results: [{index, name,
+  ok, error?}]}` without IDs. The normal size, count and storage limits apply.
+
+The first upload that adds at least one file uses the link up (one batch). A
+batch in which every file fails returns 400 with `results` and does not use the
+link; five such batches revoke it. Unknown tokens are 404; used, revoked,
+expired links and links whose item was archived are 410. Files are attributed
+to actor `upload_link:<link id>` with `via_upload_link` set, and events carry
+reason `via upload link <id>`. A link token is not a sign-in: it cannot read
+anything, including the files it uploaded.
+
+Without a domain, only devices that can reach the local server can use a link.
 
 ## Command-line work commands
 

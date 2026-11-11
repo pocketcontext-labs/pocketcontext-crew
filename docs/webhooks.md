@@ -370,6 +370,12 @@ task must also be eligible exactly as for other wakes: Ready, todo/in_progress,
 no pending review, an active routed recipient with a mapping and an enabled
 integration subscribed to `comment`. Otherwise the comment is only recorded.
 
+Attachment writes (`attachment.add`, `attachment.archive`, `attachment.restore`
+and uploads through a one-time link) never wake and are not a wake reason. When
+one withdraws a pending review, the task moves to Waiting and its wake
+generation advances without a wake, exactly as a draft edit does; see
+[Attachments](crew.md#attachments).
+
 - No live execution: the comment advances `wake_generation`, cancels pending
   deliveries and enqueues one `comment` wake in the comment's transaction.
 - Live execution (current generation, `dispatching`/`running` with an unexpired

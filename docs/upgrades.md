@@ -1,5 +1,38 @@
 # Crew upgrades and rollback
 
+## Crew 0.15.0 to 0.16.0
+
+One data migration (`1801000000_crew_attachments.js`) adds the `crew_attachments`,
+`crew_upload_links` and `crew_settings` collections (storage limit 5 GiB) and an
+`attachments` snapshot field on reviews. Existing records, history and webhook
+settings are unchanged. There is no protocol version change and no new managed
+block (DEFAULT_INSTRUCTIONS is unchanged), so webhook delivery is not paused.
+
+1. Take a complete stopped backup first: `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` (when present), the matching 0.15.0 binary and,
+   with webhooks, the private webhook key. Hosted instances use the verified
+   complete backup that the deployment prepares.
+2. Replace the binary or image with the normal procedure
+   (`CREW_REPLACE_VERSION=0.15.0` for the installer) and upgrade paired clients
+   with the server. A client and server must report the same release.
+3. Run `skill` once on each computer with a Crew profile to install the new skill
+   files. Refresh MCP connector tool schemas.
+4. `capabilities_digest` changes (new attachment, upload-link and storage
+   operations and collections), so routines and agents reread `capabilities` once
+   at their next run; they need no other change.
+
+An older binary refuses the migrated database (unknown migration) and leaves it
+unchanged. Rollback means restoring the complete pre-upgrade backup with the 0.15.0
+binary or image; files attached after the upgrade are not in that backup. Hosted
+volumes keep attachments under `/storage/project/storage/`, which the complete S3
+backup includes and verifies by SHA-256. Allow room on the volume for the storage
+limit (default 5 GiB) plus thumbnails.
+
+The public route allowlist on a domain adds `GET /api/crew/attachment` (signed-in
+file reads), `POST /api/crew/attachment-read`, `POST /api/files/token` and the
+upload-link endpoints `POST /api/crew/upload-link/info` and
+`POST /api/crew/upload-link/upload`.
+
 ## Crew 0.14.0 to 0.15.0
 
 No data migration, protocol change or new managed block, so webhook delivery is not paused.

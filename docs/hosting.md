@@ -53,7 +53,8 @@ The volume layout is fixed:
 
 ```
 /storage/
-  project/                 database, project settings and immutable originals
+  project/                 database, project settings and immutable originals,
+                           including attachments under storage/
   private/
     cache/                 live working database, OAuth state and local controls
     config/                machine configuration
@@ -193,7 +194,8 @@ see [MCP callback policy](mcp.md#native-desktop-clients).
 
 Daily backups run every 24 hours after the latest successful backup; a new instance
 attempts its first backup after one minute. Each backup briefly stops the Go server,
-checks database integrity and every referenced original's SHA-256, and creates a
+checks database integrity and every referenced original's and attachment's SHA-256
+(thumbnails are included but not checked), and creates a
 complete local archive. It then restarts the same binary before uploading. **There
 is a reader/MCP outage while the local archive is created.** Large datasets need
 measured snapshot and restart times. Upload time does not extend the daily outage.

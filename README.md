@@ -31,10 +31,13 @@ SQL; [Crew 0.7.1](docs/releases/0.7.1.md) fixed remote client invitations.
   withdraw pending review. Approval never executes an external action or completes
   a task. The owner performs external actions and records completion separately.
 - Archive and restore, with history retained indefinitely. No purge endpoint.
+- Attachments on tasks and notes (20 MiB per file, 20 per item, 5 GiB instance
+  limit by default): immutable protected files, inline `attachment:` references,
+  review snapshots, and one-time upload links the owner can open on a phone.
 
 Work clients (MCP `crew_write` and the CLI `write` command) have the same
-operations as the owner's reader, except webhook URL and secret entry, which
-stay in the owner browser. Authorization for the rest is a set of owner-editable
+operations as the owner's reader, except webhook URL and secret entry and
+upload-link creation, which stay in the owner browser. Authorization for the rest is a set of owner-editable
 default rules in the skill and MCP instructions (for example: decide reviews
 only on explicit delegation); attribution (`actor`, `reported_agent`) is kept
 for audit and never used to block. Agent names are reported attribution, not

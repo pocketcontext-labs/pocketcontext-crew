@@ -12,9 +12,10 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   writes remain disabled. History is immutable. Archive, never purge.
 - MCP and the CLI work commands use only the work-client route
   (`/api/crew/agent-write`). It accepts every reader (`/api/crew/write`)
-  operation except `webhook.credentials.update`: webhook URL/credentials are
-  owner-browser-only and never returned by reads. Keep that 403 before
-  idempotency replay and keep `/api/crew/write` off the MCP proxy allowlist.
+  operation except `webhook.credentials.update` and `upload_link.create`:
+  webhook URL/credentials and upload links are owner-browser-only, and reads
+  never return credentials or link tokens. Keep those 403s before idempotency
+  replay and keep `/api/crew/write` off the MCP proxy allowlist.
   Authorization for everything else is owner-editable default rules in the skill
   and MCP instructions; attribution (`actor`, `reported_agent`) is audit only,
   never a gate. No per-bot tokens or policy engine. Loop prevention stays on the
@@ -25,7 +26,14 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   installs without a domain, CLI agents act with owner authority (local key on
   the host, saved session token on tunnel-paired computers); only the skill keeps
   them off the reader route and webhook credentials. Docs and skill say so plainly.
-  Reported names are not identity. No local MCP or unauthenticated endpoints.
+  Reported names are not identity. No local MCP or unauthenticated endpoints,
+  with one scoped exception: one-time upload links (`/api/crew/upload-link/*`)
+  add files to their one task or note; token hash only, upload only, expiring,
+  single batch, revocable, rate-limited, never readable.
+- Attachments are immutable protected files under storage/. Archive, never
+  purge; only `/api/crew/attachment` (signed in) serves bytes, with nosniff and
+  a download disposition for every non-image; work clients get bounded reads
+  from `/api/crew/attachment-read`, never URLs or storage names.
 - External platforms run agents. Crew never posts, sends or pays.
 - Keep runtime credentials and OAuth state private and out of Git and knowledge.
 - Tests: build ui/dist first; pnpm test/build in ui; CGO_ENABLED=1 go test with
