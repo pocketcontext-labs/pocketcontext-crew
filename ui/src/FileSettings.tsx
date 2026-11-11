@@ -59,6 +59,9 @@ function errorText(e: unknown, fallback: string) {
   return typeof message === "string" && message ? message : fallback;
 }
 
+/** The section `#/connect?section=files` scrolls to and focuses. */
+export const fileSettingsId = "crew-file-settings";
+
 export default function FileSettings({
   tasks,
   notes,
@@ -190,8 +193,10 @@ export default function FileSettings({
 
   return (
     <section
+      id={fileSettingsId}
       className="crew-file-settings"
       aria-labelledby="crew-file-settings-title"
+      tabIndex={-1}
     >
       <h2 id="crew-file-settings-title">Files</h2>
       {loadError && <p role="alert">{loadError}</p>}

@@ -217,6 +217,11 @@
 /* File settings (Connect page). */
 .crew-file-settings {
   margin-top: 36px;
+  scroll-margin-top: 16px;
+}
+/* Focused when "Manage upload links" opens it; no ring for that. */
+.crew-file-settings:focus:not(:focus-visible) {
+  outline: none;
 }
 .crew-file-settings h3 {
   margin: 22px 0 8px;

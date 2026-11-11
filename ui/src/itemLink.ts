@@ -48,6 +48,7 @@ export function viewFromHash(hash: string): View {
   if (/^#\/search(?:\?|$)/.test(hash)) return "search";
   if (/^#\/tasks\?/.test(hash)) return "board";
   if (/^#\/notes\?/.test(hash)) return "memory";
+  if (/^#\/connect\?/.test(hash)) return "connect";
   const link = parseItemHash(hash);
   if (link) return link.kind === "task" ? "board" : "memory";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
@@ -330,4 +331,20 @@ export function takeLoginReturn(): string | null {
   } catch {
     return null;
   }
+}
+
+export const connectSections = ["files"] as const;
+export type ConnectSection = (typeof connectSections)[number];
+/** The Connect page scrolled to one section (consumed once, then dropped). */
+export const connectSectionHash = (section: ConnectSection) =>
+  `${viewHashes.connect}?section=${section}`;
+/** The section of `#/connect?section=<name>`, or null. */
+export function connectSectionFromHash(hash: string): ConnectSection | null {
+  const query = /^#\/connect\?(.*)$/.exec(hash)?.[1];
+  if (query === undefined) return null;
+  const values = new URLSearchParams(query).getAll("section");
+  return values.length === 1 &&
+    (connectSections as readonly string[]).includes(values[0])
+    ? (values[0] as ConnectSection)
+    : null;
 }

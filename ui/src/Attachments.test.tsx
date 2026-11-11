@@ -7,7 +7,15 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import CrewWorkspace from "./CrewWorkspace";
 import { crewApi, type Row } from "./crewApi";
 import {
@@ -334,7 +342,25 @@ describe("Files section", () => {
     expect(attachmentsApi.createUploadLink).toHaveBeenCalledWith({
       kind: "task",
       id: taskId,
+    }); // Managing links opens the Files section of the Connect page.
+    expect(
+      dialog.getByRole("link", { name: "Manage upload links" }),
+    ).toHaveAttribute("href", "#/connect?section=files");
+  });
+  it("shows and focuses the Files section for #/connect?section=files, once", async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    onTestFinished(() => {
+      Element.prototype.scrollIntoView = original;
     });
+    history.replaceState(null, "", "/#/connect?section=files");
+    render(<CrewWorkspace />);
+    const section = await screen.findByRole("region", { name: "Files" });
+    await waitFor(() => expect(section).toHaveFocus());
+    expect(scroll).toHaveBeenCalled();
+    // The query is dropped, so a refresh or Back does not scroll again.
+    expect(location.hash).toBe("#/connect");
   });
   it("hides adding in read-only items", async () => {
     attachments = [att("img1")];

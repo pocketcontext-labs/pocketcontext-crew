@@ -67,6 +67,7 @@ import {
 } from "./attachmentsApi";
 import {
   boardColumnFromHash,
+  connectSectionFromHash,
   bucketSorts,
   isItemHash,
   itemPath,
@@ -669,6 +670,10 @@ export default function CrewWorkspace() {
     [pendingColumn, setPendingColumn] = useState(() =>
       boardColumnFromHash(location.hash),
     ),
+    // A Connect page section (#/connect?section=files) to show once.
+    [pendingSection, setPendingSection] = useState(() =>
+      connectSectionFromHash(location.hash),
+    ),
     [highlightColumn, setHighlightColumn] = useState(""),
     columnRefs = useRef<Record<string, HTMLElement | null>>({}),
     [ready, setReady] = useState(false),
@@ -762,6 +767,7 @@ export default function CrewWorkspace() {
       redirectLegacyAddress();
       setPendingLink(parseItemHash(location.hash));
       setPendingColumn(boardColumnFromHash(location.hash));
+      setPendingSection(connectSectionFromHash(location.hash));
       if (isItemHash(location.hash)) return;
       if (!discardOk()) {
         history.forward();
@@ -832,6 +838,12 @@ export default function CrewWorkspace() {
       open?.kind === kind && open.row?.id === id ? open : { kind, row },
     );
   }, [pendingLink, ready, data, archived]);
+  // The section query is consumed once: drop it from the address so a refresh
+  // or Back does not scroll again.
+  useEffect(() => {
+    if (pendingSection && view === "connect") setAddress(viewHashes.connect);
+  }, [pendingSection, view]);
+  const sectionShown = useCallback(() => setPendingSection(null), []);
   // Bring the asked-for column into view, focus it and highlight it briefly.
   // The address effect above has already dropped `column` from the address, so
   // a refresh or Back does not repeat this.
@@ -1319,6 +1331,8 @@ export default function CrewWorkspace() {
               notes={[...data.notes, ...archived.notes]}
               connection={connection}
               copyEndpoint={copyEndpoint}
+              section={pendingSection}
+              onSectionShown={sectionShown}
             />
           )}
           {view === "board" && (

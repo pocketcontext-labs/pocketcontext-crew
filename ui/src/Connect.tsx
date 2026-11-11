@@ -5,9 +5,9 @@ import {
   type ConnectionState,
   type Row,
 } from "./crewApi";
-import FileSettings from "./FileSettings";
+import FileSettings, { fileSettingsId } from "./FileSettings";
 import Help from "./Help";
-import { viewHashes } from "./itemLink";
+import { viewHashes, type ConnectSection } from "./itemLink";
 import WebhookStatus from "./WebhookStatus";
 
 export const skillCommand = "./pocketcontext-crew skill";
@@ -183,14 +183,32 @@ export default function Connect({
   notes = [],
   connection,
   copyEndpoint,
+  section = null,
+  onSectionShown,
 }: {
   agents: Row[];
   tasks: Row[];
   notes?: Row[];
   connection: ConnectionState;
   copyEndpoint: ReactNode;
+  /** A section to scroll to and focus once (from `#/connect?section=`). */
+  section?: ConnectSection | null;
+  onSectionShown?: () => void;
 }) {
   const local = connection.kind === "local";
+  useEffect(() => {
+    if (section !== "files") return;
+    const target = document.getElementById(fileSettingsId);
+    if (!target) return;
+    const reduce =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    target.scrollIntoView?.({
+      behavior: reduce ? "auto" : "smooth",
+      block: "start",
+    });
+    target.focus({ preventScroll: true });
+    onSectionShown?.();
+  }, [section, onSectionShown]);
   return (
     <>
       <section className="crew-connect">

@@ -37,7 +37,7 @@ import {
 } from "./attachmentsApi";
 import Lightbox, { type LightboxItem } from "./Lightbox";
 import type { Row } from "./crewApi";
-import { viewHashes } from "./itemLink";
+import { connectSectionHash } from "./itemLink";
 import "./upload.css";
 
 /** Shown after a file change (or a draft edit) withdrew a pending approval. */
@@ -793,7 +793,10 @@ function UploadLinkButton({ parent }: { parent: ParentRef }) {
               Could not copy automatically; copy it from above.
             </span>
           )}
-          <a className="crew-upload-link-manage" href={viewHashes.connect}>
+          <a
+            className="crew-upload-link-manage"
+            href={connectSectionHash("files")}
+          >
             Manage upload links
           </a>
         </div>

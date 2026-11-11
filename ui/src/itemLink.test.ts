@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   boardColumnFromHash,
   boardColumnHash,
+  connectSectionFromHash,
+  connectSectionHash,
   defaultViewState,
   isItemHash,
   legacyRedirect,
@@ -264,5 +266,20 @@ describe("board column address", () => {
       "#/tasks",
     );
     expect(loginReturnHash("#/tasks?column=todo")).toBe("#/tasks");
+  });
+});
+
+describe("Connect sections", () => {
+  it("reads and writes #/connect?section=files", () => {
+    expect(connectSectionHash("files")).toBe("#/connect?section=files");
+    expect(viewFromHash("#/connect?section=files")).toBe("connect");
+    expect(connectSectionFromHash("#/connect?section=files")).toBe("files");
+    for (const hash of [
+      "#/connect",
+      "#/connect?section=other",
+      "#/connect?section=files&section=files",
+      "#/tasks?section=files",
+    ])
+      expect(connectSectionFromHash(hash)).toBeNull();
   });
 });
