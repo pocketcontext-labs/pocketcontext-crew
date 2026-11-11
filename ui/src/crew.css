@@ -2686,6 +2686,16 @@ a.crew-logo:hover .product-brand span {
   background: transparent;
   cursor: zoom-in;
 }
+/* Inline images stay within 70% of the screen height: the box (aspect ratio
+   from --crew-ar, set with the reserved size) narrows instead, so it matches
+   the loaded image and nothing jumps. */
+.crew-inline-image .crew-image-box {
+  width: min(100%, calc(70vh * var(--crew-ar, 1000)));
+}
+.crew-inline-image .crew-image-box img {
+  max-height: 70vh;
+  object-fit: contain;
+}
 .crew-dialog .crew-inline-file {
   padding: 0;
   border: 0;

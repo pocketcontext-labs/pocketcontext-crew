@@ -8,6 +8,7 @@ import {
   useState,
   type ChangeEvent,
   type ClipboardEvent,
+  type CSSProperties,
   type DragEvent,
   type ReactNode,
   type SyntheticEvent,
@@ -85,6 +86,18 @@ export function fileReference(name: string, target: string, image: boolean) {
   return `${image ? "!" : ""}[${alt}](attachment:${target})`;
 }
 
+/**
+ * The reserved box of an image: its aspect ratio, at most its own width, and
+ * `--crew-ar` so CSS can cap inline images' height (crew.css) at the same
+ * ratio, before and after loading.
+ */
+const imageBox = (width: number, height: number) =>
+  ({
+    aspectRatio: `${width} / ${height}`,
+    maxWidth: `${width}px`,
+    "--crew-ar": String(width / height),
+  }) as CSSProperties;
+
 /** Image with a protected URL; keeps its box before loading and retries once. */
 export function ProtectedImage({
   id,
@@ -111,10 +124,7 @@ export function ProtectedImage({
   useEffect(() => {
     if (!src && token) setSrc(attachmentUrl(id, { thumb, token }));
   }, [src, token, id, thumb]);
-  const box =
-    width && height
-      ? { aspectRatio: `${width} / ${height}`, maxWidth: `${width}px` }
-      : undefined;
+  const box = width && height ? imageBox(width, height) : undefined;
   if (failed)
     return <span className="crew-image-missing">Image unavailable: {alt}</span>;
   return (
@@ -234,7 +244,7 @@ export function ProseImage({ src, alt }: { src?: unknown; alt?: string }) {
           className="crew-image-box"
           style={
             file.width && file.height
-              ? { aspectRatio: `${file.width} / ${file.height}` }
+              ? { ...imageBox(file.width, file.height), maxWidth: undefined }
               : undefined
           }
         >
