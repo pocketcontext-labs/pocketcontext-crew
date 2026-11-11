@@ -34,8 +34,9 @@ const (
 )
 
 // crewMultipartBudget is the file bytes per multipart request; the server
-// accepts 101 MiB in total. A variable so tests can force batching.
-var crewMultipartBudget int64 = 100 << 20
+// accepts 90 MiB in total (under Cloudflare's 100 MB request limit), leaving
+// 1 MiB for the envelope. A variable so tests can force batching.
+var crewMultipartBudget int64 = 89 << 20
 
 var crewAttachmentVariants = map[string]bool{"original": true, "preview": true, "card": true, "text": true}
 
@@ -161,7 +162,7 @@ func prepareAttach(a *args) (*attachCommand, error) {
 	return &attachCommand{kind: kind, parent: parent, envelope: envelope, files: files}, nil
 }
 
-// batches splits files into requests of at most 20 files and 100 MiB.
+// batches splits files into requests of at most 20 files and 89 MiB.
 func (a *attachCommand) batches() [][]crewFile {
 	var out [][]crewFile
 	var current []crewFile

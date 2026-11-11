@@ -194,7 +194,7 @@ func writeFiles(in crewWrite, paths []string) ([]crewFile, error) {
 		total += f.size
 	}
 	if total > crewMultipartBudget {
-		return nil, fail(2, "write: the files exceed 100 MiB in one request; create first, then use attach")
+		return nil, fail(2, "write: the files exceed 89 MiB in one request; create first, then use attach")
 	}
 	return files, nil
 }

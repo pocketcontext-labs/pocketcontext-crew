@@ -32,10 +32,12 @@ The public route allowlist on a domain adds `GET /api/crew/attachment` (signed-i
 file reads), `POST /api/crew/attachment-read`, `POST /api/files/token` and the
 upload-link endpoints `POST /api/crew/upload-link/info` and
 `POST /api/crew/upload-link/upload`. A reverse proxy in front of Crew must allow request bodies of at
-least 101 MiB on `/api/crew/write`, `/api/crew/agent-write` and
+least 90 MiB (94,371,840 bytes) on `/api/crew/write`, `/api/crew/agent-write` and
 `/api/crew/upload-link/upload`, and pass the `X-Crew-Upload-Token` header
-unchanged (the native HTTPS listener caps requests at 110 MiB and passes
-headers through).
+unchanged. Crew caps multipart requests at 90 MiB so they fit under
+Cloudflare's 100 MB (100,000,000-byte) request body limit on standard plans,
+which would otherwise refuse larger requests with an opaque 413 (the native
+HTTPS listener caps requests at 110 MiB and passes headers through).
 
 New for agents and the CLI: the read-only MCP tool `crew_attachment` and
 `crew_write` file operations (refresh connector tool schemas, step 3), and the

@@ -89,6 +89,8 @@ def attachment_scenario(pc, headers, write, read):
     link_header = {'X-Crew-Upload-Token': link['token']}
     status, _, data = raw_http(pc, 'POST', '/api/crew/upload-link/info', b'{}', {**link_header, 'Content-Type': 'application/json'})
     assert status == 200 and json.loads(data)['title'] == 'Synthetic attachment bug', (status, data)
+    # One batch fits a 90 MiB request (under Cloudflare's 100 MB) with 1 MiB of room.
+    assert json.loads(data)['max_request_bytes'] == 89 * 1024 * 1024, data
     # Only multipart reaches the upload handler; the body is refused unread.
     assert raw_http(pc, 'POST', '/api/crew/upload-link/upload', b'{}', {**link_header, 'Content-Type': 'application/json'})[0] == 415
     content_type, body = multipart({}, [('phone.png', shot)])

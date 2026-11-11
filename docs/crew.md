@@ -152,7 +152,7 @@ note (archived ones do not count), at most 20 files per request, and an
 instance storage limit (default 5 GiB) on the sum of all stored attachments,
 archived ones included. Thumbnails are not counted. The reader checks the per-file
 size, the 20-file limit and, for files staged with a new task or note (sent in
-one request), 100 MiB in total before sending, with a message naming each
+one request), 89 MiB in total before sending, with a message naming each
 refused file; the server enforces every limit regardless.
 
 Images are PNG, JPEG, GIF and WebP whose magic bytes and image header verify
@@ -221,9 +221,10 @@ use `changed_since` on it) to see new files.
 - Multipart (reader, CLI): `multipart/form-data` to either write route, with a
   text field `@jsonPayload` holding the JSON envelope and file parts named
   `files` (the part's filename, as sent, is the name; see file names below). Accepted only by `attachment.add`, `task.create` and `note.create`.
-  A multipart request may carry 101 MiB in total (the public HTTPS listener caps
-  requests at 110 MiB); split larger batches over several `attachment.add`
-  requests.
+  A multipart request may carry 90 MiB in total (94,371,840 bytes, which stays
+  under Cloudflare's 100 MB request limit; the public HTTPS listener caps
+  requests at 110 MiB); clients send at most 89 MiB of files per request and
+  split larger batches over several `attachment.add` requests.
 - JSON base64 (MCP): `data.files: [{"name": "shot.png", "content_base64":
   "<standard base64>"}]`, exactly those two keys per entry. At most 5 MiB of
   decoded bytes per request (base64 text is about 6.7 MiB), within the MCP
@@ -452,7 +453,7 @@ request builders:
 `attach FILE… (--task ID | --note ID) --reported-agent NAME [--reason TEXT]
 [--execution JSON]` checks the files locally (regular, non-empty, at most 20 MiB,
 at most 20 per command; otherwise exit 2), sends multipart `attachment.add`
-requests of at most 100 MiB with the same JSON envelope as `crew_write`, and
+requests of at most 89 MiB of files with the same JSON envelope as `crew_write`, and
 prints `saved`, `failed`, `attachments` and per-file `results` (`index`, `file`,
 `name`, `ok`, `id` or `error`). It exits 1 when no file was saved, and stops at
 any other refusal (a missing or archived item, a conflict, a rate limit).

@@ -84,9 +84,9 @@ export const ATTACHMENT_LIMITS = {
   maxFileBytes: 20 * 1024 * 1024,
   maxActive: 20,
   maxFilesPerRequest: 20,
-  maxRequestBytes: 101 * 1024 * 1024,
+  maxRequestBytes: 90 * 1024 * 1024,
   /** Files saved together (create with files), leaving multipart room. */
-  maxBatchBytes: 100 * 1024 * 1024,
+  maxBatchBytes: 89 * 1024 * 1024,
 } as const;
 
 export type FileRefusal = { file: File; message: string };
@@ -115,7 +115,7 @@ export function checkFiles(
       batchBytes !== undefined &&
       bytes + file.size > ATTACHMENT_LIMITS.maxBatchBytes
     )
-      message = `${file.name} was not added: files saved with a new item are limited to 100 MB in total. Add it after saving.`;
+      message = `${file.name} was not added: files saved with a new item are limited to 89 MB in total. Add it after saving.`;
     if (message) {
       refused.push({ file, message });
       continue;

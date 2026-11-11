@@ -840,7 +840,7 @@ func TestUploadLinkMultipartOnlyAndInFlightCap(t *testing.T) {
 	for _, ct := range []string{"application/json", "application/octet-stream", "text/plain", ""} {
 		body := &watchedBody{}
 		req := httptest.NewRequest("POST", "/api/crew/upload-link/upload", body)
-		req.ContentLength = 100 << 20
+		req.ContentLength = 80 << 20 // large, under the 90 MiB route limit
 		if ct != "" {
 			req.Header.Set("Content-Type", ct)
 		}
@@ -849,6 +849,19 @@ func TestUploadLinkMultipartOnlyAndInFlightCap(t *testing.T) {
 		a.handler.ServeHTTP(res, req)
 		if res.Code != http.StatusUnsupportedMediaType || body.read || inspected != 0 {
 			t.Fatal("non-multipart upload", ct, res.Code, body.read, inspected)
+		}
+	}
+	// Requests stay under Cloudflare's 100 MB body limit: over 90 MiB is 413 unread.
+	{
+		body := &watchedBody{}
+		req := httptest.NewRequest("POST", "/api/crew/upload-link/upload", body)
+		req.ContentLength = 90<<20 + 1
+		req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+		req.Header.Set(uploadTokenHeader, token)
+		res := httptest.NewRecorder()
+		a.handler.ServeHTTP(res, req)
+		if res.Code != http.StatusRequestEntityTooLarge || body.read || inspected != 0 {
+			t.Fatal("oversized upload", res.Code, body.read, inspected)
 		}
 	}
 	// Fill the in-flight slots.
@@ -1149,7 +1162,7 @@ func TestAttachmentCapabilities(t *testing.T) {
 		t.Fatal("files only on create")
 	}
 	att := doc["attachments"].(map[string]any)
-	if att["limits"].(map[string]any)["max_file_bytes"] != float64(attachmentMaxBytes) || att["limits"].(map[string]any)["max_base64_bytes_per_request"] != float64(attachmentBase64MaxBytes) {
+	if att["limits"].(map[string]any)["max_file_bytes"] != float64(attachmentMaxBytes) || att["limits"].(map[string]any)["max_base64_bytes_per_request"] != float64(attachmentBase64MaxBytes) || att["limits"].(map[string]any)["max_multipart_request_bytes"] != float64(90<<20) {
 		t.Fatal("limits drifted from the server", att["limits"])
 	}
 	defs := doc["$defs"].(map[string]any)

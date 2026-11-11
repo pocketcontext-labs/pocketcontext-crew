@@ -180,17 +180,17 @@ describe("client-side limits", () => {
     );
   });
   it("limits the total of files staged for one create request", () => {
-    const files = [1, 2, 3, 4, 5, 6].map((n) => sized(`v${n}.mp4`, 18 * MB));
+    const files = [1, 2, 3, 4, 5, 6].map((n) => sized(`v${n}.mp4`, 17 * MB));
     const { accepted, refused } = checkFiles(files, {
       existing: 0,
       batchBytes: 0,
     });
     expect(accepted).toHaveLength(5);
     expect(refused.map((r) => r.file.name)).toEqual(["v6.mp4"]);
-    expect(refused[0].message).toMatch(/limited to 100 MB in total/);
+    expect(refused[0].message).toMatch(/limited to 89 MB in total/);
     // Already staged bytes count; uploads to an existing item do not batch.
     expect(
-      checkFiles([sized("a", 2 * MB)], { existing: 0, batchBytes: 99 * MB })
+      checkFiles([sized("a", 2 * MB)], { existing: 0, batchBytes: 88 * MB })
         .refused,
     ).toHaveLength(1);
     expect(checkFiles(files, { existing: 0 }).accepted).toHaveLength(6);

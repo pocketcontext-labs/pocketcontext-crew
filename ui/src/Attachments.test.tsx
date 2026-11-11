@@ -245,15 +245,15 @@ describe("Files section", () => {
     fireEvent.change(input, {
       target: {
         files: [
-          ...[1, 2, 3, 4, 5].map((n) => sized(`v${n}.mp4`, 18 * MB)),
-          sized("v6.mp4", 18 * MB),
+          ...[1, 2, 3, 4, 5].map((n) => sized(`v${n}.mp4`, 17 * MB)),
+          sized("v6.mp4", 17 * MB),
           sized("too-big.mov", 30 * MB),
         ],
       },
     });
     expect(
       await dialog.findByText(
-        /v6\.mp4 was not added: files saved with a new item are limited to 100 MB/,
+        /v6\.mp4 was not added: files saved with a new item are limited to 89 MB/,
       ),
     ).toBeInTheDocument();
     expect(

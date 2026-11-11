@@ -559,7 +559,7 @@ export function useStagedFiles() {
   );
   const [refused, setRefused] = useState<string[]>([]);
   /**
-   * Stages files within the limits (20 files, 20 MB each, 100 MB together);
+   * Stages files within the limits (20 files, 20 MB each, 89 MB together);
    * the others are reported in `refused` and returned with their reasons.
    */
   const stage = (incoming: File[]) => {

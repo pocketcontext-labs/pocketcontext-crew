@@ -437,7 +437,7 @@ function read(e) {
   });
 }
 function write(e, isAgent) {
-  // The route allows 101 MiB for multipart files; JSON keeps PocketBase's
+  // The route allows 90 MiB for multipart files; JSON keeps PocketBase's
   // default 32 MiB so a large JSON body is never decoded in memory.
   const type = String(e.request.header.get("Content-Type") || "").toLowerCase();
   if (

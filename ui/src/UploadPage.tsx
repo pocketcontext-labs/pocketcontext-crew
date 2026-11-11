@@ -310,7 +310,7 @@ export default function UploadPage({ token }: { token: string }) {
       problems.push("Remove the files marked below before sending.");
     if (total > info.max_request_bytes)
       problems.push(
-        `All files together must be at most ${formatBytes(info.max_request_bytes)}.`,
+        `All files together must be at most ${formatBytes(info.max_request_bytes)}. Remove some files to send fewer at once.`,
       );
   }
   const canSend = open && staged.length > 0 && !problems.length && wait === 0;

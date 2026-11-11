@@ -1053,7 +1053,7 @@ function attachmentsDiscovery() {
       max_active_per_item: 20,
       max_files_per_request: 20,
       max_base64_bytes_per_request: 5242880,
-      max_multipart_request_bytes: 105906176,
+      max_multipart_request_bytes: 94371840,
       storage_limit:
         "settings.storage_limit_bytes (default 5368709120); archived files count; storage.update changes it",
     },
