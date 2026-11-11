@@ -9,7 +9,7 @@ require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/modelcontextprotocol/go-sdk v1.7.0
-	github.com/pocketcontext-labs/pocketcontext-core v0.1.4
+	github.com/pocketcontext-labs/pocketcontext-core v0.2.0
 	github.com/tailscale/tailcat v0.7.0
 	github.com/yuin/goldmark v1.8.6
 	golang.org/x/image v0.47.0

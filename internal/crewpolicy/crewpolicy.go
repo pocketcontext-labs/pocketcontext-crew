@@ -47,6 +47,9 @@ var Text = appserver.Text{
 	OAuthConsent: appserver.OAuthConsentText{
 		ConnectionsHTML: `<p>These apps can read and change notes and tasks in every bucket, request human review, and record your review decisions when you delegate them. They cannot enter webhook credentials. Revoke access to disconnect an app.</p>`,
 		RequestHTML:     `<p><strong>{{.Name}}</strong> is asking to read and change notes and tasks in every bucket and request human review.</p><p>It can record review decisions you delegate to it, archive buckets and deactivate agents, following the rules in its instructions. It cannot enter or read webhook credentials, administer the server or get shell access.</p>`,
+		// Unused while Page.SignInPath and Page.ConnectionsPath replace both places
+		// Core would show it; kept so the plain pages still explain sign-in.
+		SignInHTML: `If you are not signed in, open your fresh {{.Product}} reader sign-in link in another tab of this browser, then return here. Your setup agent can issue one with <code>open --public</code>. You can also <a href="/" target="_blank" rel="noopener">open the reader</a> and use your password if you set one.`,
 		Page: appserver.OAuthPage{
 			CSS:             oauthPageCSS,
 			BrandHTML:       oauthBrandHTML,
@@ -57,6 +60,7 @@ var Text = appserver.Text{
 	BudgetExhausted: "Crew request budget exhausted. Retry after the indicated delay.",
 	OTPSubject:      "Log in to PocketContext",
 	OTPSenderName:   "PocketContext",
+	OTPLoginPath:    "/#/login", // the reader route in sign-in emails already sent
 }
 
 // The OAuth page's Content-Security-Policy loads no images or fonts, so the logo
@@ -98,8 +102,39 @@ func Policy() appserver.Policy {
 			ReadGets:  map[string]bool{"/api/crew/schema": true, "/api/crew/attachment": true},
 		},
 		Observe:          Observe,
+		OAuthScope:       OAuthScope,
+		PublicBodyLimit:  110 << 20, // above the 90 MiB multipart cap Crew applies itself
+		Legacy:           Legacy,
+		Hosted:           HostedBudget,
 		AllowPublicUIDev: true,
 	}
+}
+
+// OAuthScope is the one scope of the MCP endpoint, inherited from PocketContext.
+// Connected clients store it, so it must never change.
+const OAuthScope = "knowledge"
+
+// HostedBudget is one hosted account's request budget. Clients match the
+// inherited label in 429 responses, so it must never change.
+var HostedBudget = appserver.HostedBudget{Label: "authenticated_knowledge", Burst: 1200, PerSecond: 100}
+
+// Legacy identifies databases of the PocketContext releases before the
+// single-user schema (0.11.0), from which Crew derives and which it has always
+// refused to open. Never remove an entry.
+var Legacy = appserver.LegacySchema{
+	Migrations: []string{
+		"1790300000_users.js",
+		"1790300100_knowledge.js",
+		"1790300200_google_jit.js",
+		"1790500000_search.js",
+		"1790700000_home.js",
+		"1791400000_properties.js",
+		"1791500000_spaces.js",
+		"1792700000_project_policy.js",
+		"1792700100_space_management.js",
+	},
+	Tables:      []string{"space_members", "user_directory", "project_policy"},
+	Description: "multi-account spaces",
 }
 
 // Observe lists the diagnostic labels; anything else is reported as unknown.
