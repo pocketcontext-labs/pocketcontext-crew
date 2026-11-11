@@ -38,12 +38,16 @@ The skill tells the agent to call the absolute binary with `--db`:
 
 The commands `read`, `search`, `schema`, `query` and `write` take the same JSON
 as the MCP tools crew_read, crew_search, crew_schema, crew_query and crew_write
-and call the same routes; `write` uses only the work-client route. See
+and call the same routes; `write` uses only the work-client route. `attach FILE…
+--task ID --reported-agent NAME` uploads files (multipart, 20 MiB each) and
+`attachment ID --out FILE` downloads one, checking its sha256 and never
+overwriting a file. See
 [the contract](crew.md#command-line-work-commands) and `help COMMAND`.
 
 On an install without a domain, CLI agents act with owner authority: the local
 key on this computer, or the saved session token on a paired computer. The
-work-client route has every reader operation except webhook credential entry,
+work-client route has every reader operation except webhook credential entry
+and upload-link creation,
 and the skill's authorization rules say when an agent may decide a review (only
 on your explicit delegation), archive, deactivate or recover. An agent holding
 owner credentials could still reach the reader route with raw HTTP; the skill

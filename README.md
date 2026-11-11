@@ -49,7 +49,8 @@ without a domain are the exception below.
 Without a domain, run Crew on your own computer: the binary is both the localhost
 server and the CLI your coding agent calls through the installed skill (`skill`).
 The commands `read`, `search`, `schema`, `query` and `write` take the MCP tools'
-JSON and call the same routes, `write` only the work-client route; other computers
+JSON and call the same routes, `write` only the work-client route; `attach`
+uploads files to a task or note and `attachment` downloads one, sha256-verified; other computers
 join through `tunnel serve` and `tunnel invite`. CLI agents there act with owner
 authority (local key or a paired computer's saved session), so even webhook
 credential entry is kept from them only by the skill's rules, and cloud
@@ -60,7 +61,8 @@ for a hosted container. Connect
 an assistant to `https://YOUR_HOST/mcp` and authorize it in that
 signed-in browser. The Crew tools are `crew_read` (filtered, projected reads),
 `crew_search` (ranked full-text search over notes and tasks), `crew_schema` and
-`crew_query` (bounded read-only SQL for reporting) and `crew_write`; their
+`crew_query` (bounded read-only SQL for reporting), `crew_attachment`
+(screenshots as images, text files as text) and `crew_write`; their
 schemas describe collections, operations and revision requirements. The browser
 provides the same operations plus webhook credential entry.
 

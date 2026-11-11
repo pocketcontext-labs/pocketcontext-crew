@@ -44,3 +44,18 @@ Request review with review.request, the task ID/current revision and empty data.
 Record a decision only when the owner explicitly delegated it in this conversation:
 `CREW write '{"action":"review.decide","id":"REVIEW_ID","expected_revision":1,"reported_agent":"Build","reason":"Owner reviewed and asked me to record approval","data":{"decision":"approved"}}'`.
 Keep reported_agent your own name; never pose as the owner or another agent.
+
+Bug report with an inline screenshot, in one step (`--file` order gives N):
+
+```sh
+CREW write --file step1.png - <<'EOF'
+{"action":"task.create","reported_agent":"Build","data":{"title":"Login button overlaps","description":"1. Open the login page.\n\n![step 1](attachment:new-1)"}}
+EOF
+```
+
+Add a log later: `CREW attach run.log --task TASK_ID --reported-agent Build`. Over
+MCP: `crew_write({"action":"attachment.add","reported_agent":"Build","data":{"task":"TASK_ID","files":[{"name":"run.log","content_base64":"..."}]}})`.
+
+Look at a task's screenshots: `crew_attachment({"parent":"TASK_ID"})`; read one
+text file: `crew_attachment({"id":"ATTACHMENT_ID"})`; download one through the CLI:
+`CREW attachment ATTACHMENT_ID --out shot.png`.

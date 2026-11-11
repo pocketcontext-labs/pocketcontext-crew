@@ -116,10 +116,10 @@ approve access only when you intended to connect that app.
 
 ## Crew operations
 
-Five tools are exposed: crew_read, crew_search, crew_schema, crew_query and
-crew_write. Read collections are
-agents, buckets, notes, note_revisions, tasks, events and reviews, plus the
-non-secret webhook collections. Writes use custom revision-checked operations
+Six tools are exposed: crew_read, crew_search, crew_schema, crew_query,
+crew_attachment and crew_write. Read collections are
+agents, buckets, notes, note_revisions, tasks, events, reviews, attachments and
+settings, plus the non-secret webhook collections. Writes use custom revision-checked operations
 through the work-client route only. See [the contract](crew.md) for assignment and review.
 
 Retrieve compactly. crew_search finds notes and tasks by topic and returns short
@@ -131,6 +131,18 @@ assigned_agent, status, readiness, label or changed_since and set a small
 counts, joins, aggregates and history; SQL includes archived records, so filter
 `archived` explicitly. All four are read-only routes; none returns webhook URLs,
 credentials or redacted fields.
+
+Attachments: crew_attachment (read-only) returns a task's or note's screenshots
+as MCP image content (1600 px previews, at most 6 per call, follow
+`next_offset`), one text file as text, or on request paged base64 bytes; see
+[reading attachments](crew.md#reading). crew_write `attachment.add`,
+`task.create` and `note.create` take `data.files: [{name, content_base64}]`, at
+most 5 MiB decoded per call, and Markdown references files as
+`![alt](attachment:ID)` (`attachment:new-N` on create). An assistant that only
+sees an image in its chat cannot re-encode it: it files the task and asks the
+owner to paste the screenshots into it in the reader. Upload links are
+owner-browser-only, and agents change the storage limit only when the owner
+asks.
 
 Task and note responses carry `path` and, on an install with a domain, an absolute
 `url`; see [item links](crew.md#item-links). Agents cite items to humans as

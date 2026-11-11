@@ -292,6 +292,26 @@ Prose such as `attachment: see below` is not a reference.
   work. PocketBase's generic `/api/files` route never serves Crew files (the
   collection rules stay locked) and is not public on a domain.
 
+Work clients use these through two adapters:
+
+- MCP `crew_attachment` (read-only): `{parent}` returns a task's or note's
+  images as MCP image content, `preview` by default or `card`, at most 6 per
+  call and about 4 MiB of image bytes (at least one image), with metadata of its
+  other files and `next_offset` (an image index); `archived: true` pages
+  archived ones. `{id}` returns one file: an image as its preview (or `card`,
+  or `original` as image content when the file is at most 4 MiB); a non-image as
+  UTF-8 text by default (paged by `offset`/`max_bytes`), falling back to
+  metadata when the bytes are not UTF-8; `variant: "original"` returns paged
+  base64 bytes (at most 3 MiB per call through MCP). The first content block is
+  JSON metadata; no URL is returned.
+- CLI `attachment ID --out FILE|DIR [--variant …]`: pages through
+  `attachment-read` (4 MiB per request) into a temporary file beside the target,
+  verifies size and sha256 against the record for `original` and `text`, and
+  moves it into place without replacing an existing file (hard link, or a
+  checked rename where links are unsupported). With a directory it uses the
+  display name, stripped of separators, reserved characters and Windows device
+  names.
+
 Thumbnails (`1600x0`, `320x0`, declared on the file field) are created on first
 request beside the original and are never created while the server is in
 maintenance (flush) mode.
@@ -347,7 +367,8 @@ Without a domain, only devices that can reach the local server can use a link.
 
 ## Command-line work commands
 
-The binary's `read`, `search`, `schema`, `query` and `write` commands are the
+The binary's `read`, `search`, `schema`, `query`, `write`, `attach` and
+`attachment` commands are the
 work-client path for installs without a domain (see [local use](local.md)). They take
 the MCP tool's input as one JSON object (argument, or `-` for standard input),
 validate it against the same schema before any request, and share the MCP
@@ -360,6 +381,18 @@ request builders:
 | `schema` | crew_schema | `GET /api/crew/schema`       |
 | `query`  | crew_query  | `POST /api/crew/query`       |
 | `write`  | crew_write  | `POST /api/crew/agent-write` |
+| `attach` | crew_write `attachment.add` | `POST /api/crew/agent-write` (multipart) |
+| `attachment` | crew_attachment | `POST /api/crew/attachment-read` |
+
+`attach FILE… (--task ID | --note ID) --reported-agent NAME [--reason TEXT]
+[--execution JSON]` checks the files locally (regular, non-empty, at most 20 MiB,
+at most 20 per command; otherwise exit 2), sends multipart `attachment.add`
+requests of at most 100 MiB with the same JSON envelope as `crew_write`, and
+prints `saved`, `failed`, `attachments` and per-file `results` (`index`, `file`,
+`name`, `ok`, `id` or `error`). It exits 1 when no file was saved, and stops at
+any other refusal (a missing or archived item, a conflict, a rate limit).
+`write JSON|- --file PATH…` sends one multipart request for `attachment.add`,
+`task.create` or `note.create`; `attachment:new-N` names the Nth `--file`.
 
 They run locally with `--db` (the local key; the server starts if needed) or on
 a tunnel-paired computer with `--url` (its saved session token). `write` never
