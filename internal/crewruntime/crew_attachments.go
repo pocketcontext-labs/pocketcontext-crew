@@ -14,10 +14,12 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/draw"
 	_ "image/gif" // DecodeConfig for verified images
-	_ "image/jpeg"
+	"image/jpeg"
 	_ "image/png"
 	"io"
+	"math"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -36,6 +38,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/filesystem"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/hook"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/security"
+	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 	"golang.org/x/sync/singleflight"
 )
@@ -331,6 +334,7 @@ func crewAttachmentFiles(e *core.RequestEvent, list []any) map[string]any {
 //   - uploads must be multipart/form-data (checked before the body is read),
 //     at most uploadInFlight run at once (503 with Retry-After otherwise), and
 //     file parts beyond 1 MiB stream to temporary files.
+//
 // Tokens travel in the X-Crew-Upload-Token header, never in the URL.
 const (
 	uploadTokenHeader     = "X-Crew-Upload-Token"
@@ -524,7 +528,7 @@ func (t *thumbMaker) thumbnail(ctx context.Context, app core.App, fsys *filesyst
 	name := rec.GetString("file")
 	original := rec.BaseFilesPath() + "/" + name
 	width, _ := strconv.Atoi(strings.SplitN(size, "x", 2)[0])
-	if rec.GetInt("width") <= width || int64(rec.GetInt("width"))*int64(rec.GetInt("height")) > attachmentThumbMaxPixels {
+	if rec.GetInt("width") <= width || tooManyPixels(rec) {
 		return original, rec.GetString("media_type")
 	}
 	key := rec.BaseFilesPath() + "/thumbs_" + name + "/" + size + "_" + name
@@ -556,6 +560,96 @@ func (t *thumbMaker) thumbnail(ctx context.Context, app core.App, fsys *filesyst
 		}
 	}
 	return key, contentType
+}
+
+func tooManyPixels(rec *core.Record) bool {
+	return int64(rec.GetInt("width"))*int64(rec.GetInt("height")) > attachmentThumbMaxPixels
+}
+
+// previewUnavailable is the 413 work clients treat as "metadata only".
+func previewUnavailable(re *core.RequestEvent, message string) error {
+	return re.JSON(http.StatusRequestEntityTooLarge, map[string]any{"status": 413, "message": message,
+		"data": map[string]any{"code": "preview_unavailable"}})
+}
+
+// capped returns a JPEG of the image at most the requested width and at most
+// attachmentReadMaxBytes: an image whose original (or plain thumbnail) is
+// larger than a work-client read allows. Transparency is flattened on white
+// and only a GIF's first frame is kept. The result is cached beside the
+// thumbnails unless the instance is in read-only maintenance.
+func (t *thumbMaker) capped(ctx context.Context, app core.App, fsys *filesystem.System, rec *core.Record, size string) ([]byte, string, error) {
+	name := rec.GetString("file")
+	key := rec.BaseFilesPath() + "/thumbs_" + name + "/" + size + "_capped_" + strings.TrimSuffix(name, path.Ext(name)) + ".jpg"
+	readKey := func() ([]byte, error) {
+		r, err := fsys.GetReader(key)
+		if err != nil {
+			return nil, err
+		}
+		defer r.Close()
+		return io.ReadAll(io.LimitReader(r, attachmentReadMaxBytes+1))
+	}
+	if ok, _ := fsys.Exists(key); ok {
+		data, err := readKey()
+		return data, "image/jpeg", err
+	}
+	width, _ := strconv.Atoi(strings.SplitN(size, "x", 2)[0])
+	ch := t.pending.DoChan(key, func() (any, error) {
+		select {
+		case t.slots <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		defer func() { <-t.slots }()
+		r, err := fsys.GetReader(rec.BaseFilesPath() + "/" + name)
+		if err != nil {
+			return nil, err
+		}
+		src, _, err := image.Decode(io.LimitReader(r, attachmentMaxBytes+1))
+		r.Close()
+		if err != nil {
+			return nil, err
+		}
+		data, err := cappedJPEG(src, width, attachmentReadMaxBytes)
+		if err != nil {
+			return nil, err
+		}
+		if readOnly, _ := app.Store().Get("contextMaintenanceReadOnly").(bool); !readOnly {
+			_ = fsys.Upload(data, key) // a cache; serving does not depend on it
+		}
+		return data, nil
+	})
+	res := <-ch
+	if res.Err != nil {
+		return nil, "", res.Err
+	}
+	return res.Val.([]byte), "image/jpeg", nil
+}
+
+// cappedJPEG scales src to at most maxWidth (never up) and encodes JPEG,
+// shrinking further until the result is at most limit bytes.
+func cappedJPEG(src image.Image, maxWidth, limit int) ([]byte, error) {
+	b := src.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w > maxWidth {
+		h = max(1, int(int64(h)*int64(maxWidth)/int64(w)))
+		w = maxWidth
+	}
+	for attempt := 0; attempt < 8; attempt++ {
+		dst := image.NewRGBA(image.Rect(0, 0, w, h))
+		draw.Draw(dst, dst.Bounds(), image.White, image.Point{}, draw.Src)
+		xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, b, draw.Over, nil)
+		var out bytes.Buffer
+		if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 80}); err != nil {
+			return nil, err
+		}
+		if out.Len() <= limit {
+			return out.Bytes(), nil
+		}
+		// Bytes scale roughly with area; aim a little under the limit.
+		f := math.Sqrt(float64(limit)/float64(out.Len())) * 0.9
+		w, h = max(1, int(float64(w)*f)), max(1, int(float64(h)*f))
+	}
+	return nil, errors.New("image does not fit the preview limit")
 }
 
 // attachmentFile serves the protected bytes: GET /api/crew/attachment?id=ID
@@ -665,13 +759,20 @@ func attachmentRead(re *core.RequestEvent) error {
 		if body.Offset != 0 {
 			return re.BadRequestError("preview and card are returned whole; offset must be 0", nil)
 		}
+		if tooManyPixels(rec) {
+			return previewUnavailable(re, "Image is larger than 40 megapixels and has no preview; use its metadata, or read original bytes")
+		}
 		key, contentType := thumbs.thumbnail(re.Request.Context(), re.App, fsys, rec, attachmentThumbs[body.Variant])
 		data, err := readAll(key, attachmentReadMaxBytes+1)
 		if err != nil {
 			return re.NotFoundError("Attachment file missing.", nil)
 		}
 		if len(data) > attachmentReadMaxBytes {
-			return re.JSON(http.StatusRequestEntityTooLarge, map[string]any{"status": 413, "message": "Image exceeds 4 MiB at this size; read the card variant", "data": map[string]any{}})
+			// Already that small (or a large thumbnail): re-encode, capped.
+			data, contentType, err = thumbs.capped(re.Request.Context(), re.App, fsys, rec, attachmentThumbs[body.Variant])
+			if err != nil || len(data) > attachmentReadMaxBytes {
+				return previewUnavailable(re, "No preview of this image fits in 4 MiB; use its metadata, or read original bytes")
+			}
 		}
 		width, height := rec.GetInt("width"), rec.GetInt("height")
 		if config, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {

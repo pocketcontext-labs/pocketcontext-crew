@@ -19,6 +19,7 @@ type fakeAttachments struct {
 	t         *testing.T
 	imageSize int
 	reads     []map[string]any
+	oversized map[string]bool // ids whose preview/card is a 413
 }
 
 func (f *fakeAttachments) meta(id string) map[string]any {
@@ -61,6 +62,11 @@ func (f *fakeAttachments) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		switch body["variant"] {
 		case "preview", "card":
+			if f.oversized[id] {
+				w.WriteHeader(413)
+				_, _ = w.Write([]byte(`{"status":413,"message":"Image is larger than 40 megapixels and has no preview","data":{"code":"preview_unavailable"}}`))
+				return
+			}
 			out["media_type"], out["encoding"], out["width"], out["height"] = "image/png", "base64", 1600, 1000
 			out["content_base64"] = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("p", f.imageSize)))
 		case "text":
@@ -155,6 +161,32 @@ func TestCrewMCPAttachmentImagesPageAsImageContent(t *testing.T) {
 		{},
 	} {
 		mcpContentBlocks(t, h, bad, true)
+	}
+}
+
+// An image without a preview that fits (413) is listed as metadata under
+// other_files; the rest of the page still returns its images.
+func TestCrewMCPAttachmentOversizedImageIsMetadataOnly(t *testing.T) {
+	api := &fakeAttachments{t: t, imageSize: 1000, oversized: map[string]bool{"imgimgimgimgim2": true}}
+	h := mcpTestHandler(api)
+	blocks := mcpContentBlocks(t, h, map[string]any{"parent": "taskidtaskidtas"}, false)
+	head := headJSON(t, blocks)
+	if len(blocks) != 1+mcpImagesPerCall || head["next_offset"] != float64(7) {
+		t.Fatalf("page with an oversized image: %d blocks %v", len(blocks), head)
+	}
+	for _, img := range head["images"].([]any) {
+		if dig(img, "id") == "imgimgimgimgim2" {
+			t.Fatal("oversized image returned as image", img)
+		}
+	}
+	files := head["other_files"].([]any)
+	if len(files) != 3 || dig(files[2], "id") != "imgimgimgimgim2" || !strings.Contains(fmt.Sprint(dig(files[2], "note")), "No preview") {
+		t.Fatalf("other files: %v", files)
+	}
+	// One id: metadata, not an error.
+	out := mcpCall(t, h, "synthetic", "crew_attachment", map[string]any{"id": "imgimgimgimgim2"}, false)
+	if dig(out, "variant") != "metadata" || dig(out, "attachment", "name") != "shot2.png" || dig(out, "note") == nil {
+		t.Fatalf("one oversized image: %v", out)
 	}
 }
 

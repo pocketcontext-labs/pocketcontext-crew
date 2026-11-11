@@ -4,14 +4,17 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"math/rand/v2"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -770,7 +773,10 @@ func TestUploadLinkRateBucketsSeparateUnknownTokens(t *testing.T) {
 
 type watchedBody struct{ read bool }
 
-func (w *watchedBody) Read([]byte) (int, error) { w.read = true; return 0, fmt.Errorf("body must not be read") }
+func (w *watchedBody) Read([]byte) (int, error) {
+	w.read = true
+	return 0, fmt.Errorf("body must not be read")
+}
 
 // Non-multipart uploads are refused before the body is read; uploads beyond
 // the in-flight cap get 503 with Retry-After while info still answers.
@@ -955,6 +961,103 @@ func TestAttachmentReadForWorkClients(t *testing.T) {
 	}
 	read(map[string]any{"id": ids[2], "variant": "text"}, 415)
 	read(map[string]any{"id": ids[0], "variant": "thumbnail"}, 400)
+}
+
+// noisePNG is incompressible, so a small image still has many bytes.
+func noisePNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	rand.NewChaCha8([32]byte{1}).Read(img.Pix)
+	for i := 3; i < len(img.Pix); i += 4 {
+		img.Pix[i] = 255
+	}
+	var b bytes.Buffer
+	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// headerOnlyPNG has a valid signature and IHDR for a huge image: verified as
+// an image (DecodeConfig) without allocating its pixels.
+func headerOnlyPNG(w, h uint32) []byte {
+	ihdr := make([]byte, 13)
+	binary.BigEndian.PutUint32(ihdr[0:], w)
+	binary.BigEndian.PutUint32(ihdr[4:], h)
+	ihdr[8], ihdr[9] = 8, 2 // 8-bit RGB
+	chunk := func(kind string, data []byte) []byte {
+		out := binary.BigEndian.AppendUint32(nil, uint32(len(data)))
+		body := append([]byte(kind), data...)
+		out = append(out, body...)
+		return binary.BigEndian.AppendUint32(out, crc32.ChecksumIEEE(body))
+	}
+	out := append([]byte("\x89PNG\r\n\x1a\n"), chunk("IHDR", ihdr)...)
+	return append(out, chunk("IEND", nil)...)
+}
+
+// A preview always fits a work-client read: an image already narrower than
+// the preview but larger than 4 MiB is re-encoded under the cap, and an image
+// over 40 megapixels answers 413 preview_unavailable (metadata only).
+func TestAttachmentPreviewStaysUnderReadLimit(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{})
+	noisy := noisePNG(t, 1440, 1500)
+	if len(noisy) <= attachmentReadMaxBytes || len(noisy) > attachmentMaxBytes {
+		t.Fatalf("synthetic noise PNG is %d bytes", len(noisy))
+	}
+	huge := headerOnlyPNG(8000, 6000)
+	out := multipartRequest(t, a, "/api/crew/write", a.token, envelope("attachment.add", map[string]any{"task": task["id"]}),
+		[]testFile{{"tall.png", noisy}, {"huge.png", huge}}, 200)
+	atts := out["attachments"].([]any)
+	noisyID, hugeID := atts[0].(map[string]any)["id"].(string), atts[1].(map[string]any)["id"].(string)
+	if atts[1].(map[string]any)["image"] != true || atts[1].(map[string]any)["width"] != float64(8000) {
+		t.Fatal("header-only PNG not verified", atts[1])
+	}
+	read := func(body map[string]any, want int) map[string]any {
+		raw, _ := json.Marshal(body)
+		return a.request(t, "POST", "/api/crew/attachment-read", a.token, string(raw), want)
+	}
+	for _, variant := range []string{"preview", "preview", "card"} { // the second preview is cached
+		got := read(map[string]any{"id": noisyID, "variant": variant}, 200)
+		data, _ := base64.StdEncoding.DecodeString(got["content_base64"].(string))
+		if len(data) > attachmentReadMaxBytes || len(data) != int(got["length"].(float64)) {
+			t.Fatal(variant, "too large", len(data))
+		}
+		config, format, err := image.DecodeConfig(bytes.NewReader(data))
+		if err != nil || got["width"] != float64(config.Width) || config.Width > 1440 || (variant == "card" && config.Width != 320) {
+			t.Fatal(variant, format, config, err, got["width"])
+		}
+		if variant == "preview" && (got["media_type"] != "image/jpeg" || format != "jpeg") {
+			t.Fatal("capped preview type", got["media_type"], format)
+		}
+	}
+	for _, variant := range []string{"preview", "card"} {
+		got := read(map[string]any{"id": hugeID, "variant": variant}, 413)
+		if got["data"].(map[string]any)["code"] != "preview_unavailable" {
+			t.Fatal("huge image", variant, got)
+		}
+	}
+	// Metadata and original bytes stay readable.
+	page := read(map[string]any{"id": hugeID, "variant": "original", "max_bytes": 8}, 200)
+	if page["attachment"].(map[string]any)["height"] != float64(6000) {
+		t.Fatal("huge metadata", page)
+	}
+}
+
+func TestCappedJPEGShrinksUntilItFits(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 600, 400))
+	rand.NewChaCha8([32]byte{2}).Read(img.Pix)
+	data, err := cappedJPEG(img, 1600, 40<<10)
+	if err != nil || len(data) > 40<<10 {
+		t.Fatal(len(data), err)
+	}
+	config, _ := jpeg.DecodeConfig(bytes.NewReader(data))
+	if config.Width >= 600 || config.Width*400 > config.Height*600+600 {
+		t.Fatal("not shrunk proportionally", config)
+	}
+	if _, err := cappedJPEG(img, 1600, 10); err == nil {
+		t.Fatal("impossible cap accepted")
+	}
 }
 
 func TestAttachmentSearchAndSQL(t *testing.T) {

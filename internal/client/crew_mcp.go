@@ -180,6 +180,8 @@ const (
 	mcpAttachmentListPageSize = 100
 )
 
+const previewUnavailableNote = "No preview of this image fits the read limit (over 40 megapixels or still over 4 MiB when downscaled). Use its metadata; read original bytes by id only if you need them."
+
 // mcpContent is a tool result with its own content blocks.
 type mcpContent struct{ content []mcp.Content }
 
@@ -273,7 +275,16 @@ func (a crewAttachment) parentImages(c *Client) (any, error) {
 	returned := []map[string]any{}
 	used, next := 0, a.Offset
 	for next < len(images) && len(returned) < mcpImagesPerCall {
-		_, page, err := attachmentRead(c, map[string]any{"id": images[next]["id"], "variant": variant})
+		status, page, err := attachmentRead(c, map[string]any{"id": images[next]["id"], "variant": variant})
+		if status == http.StatusRequestEntityTooLarge {
+			// No preview fits (over 40 megapixels, or still over 4 MiB):
+			// metadata only, and the rest of the page continues.
+			entry := images[next]
+			entry["image"], entry["note"] = true, previewUnavailableNote
+			files = append(files, entry)
+			next++
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -356,7 +367,11 @@ func (a crewAttachment) one(c *Client) (any, error) {
 		if a.Offset != 0 {
 			return nil, mcpDiagnosticError("invalid_input", "images are returned whole; offset must be 0")
 		}
-		_, page, err := attachmentRead(c, map[string]any{"id": a.ID, "variant": variant})
+		status, page, err := attachmentRead(c, map[string]any{"id": a.ID, "variant": variant})
+		if status == http.StatusRequestEntityTooLarge {
+			summary["variant"], summary["note"] = "metadata", previewUnavailableNote
+			return summary, nil
+		}
 		if err != nil {
 			return nil, err
 		}

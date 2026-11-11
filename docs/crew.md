@@ -267,8 +267,13 @@ Prose such as `attachment: see below` is not a reference.
   - `original`: base64 bytes from `offset`; `max_bytes` defaults to 1 MiB, at
     most 4 MiB; `next_offset` is set while more remain;
   - `preview` (1600 px wide) and `card` (320 px wide): a downscaled image for
-    verified images only, returned whole (at most 4 MiB, else 413); an image
-    already that small is returned as is, never upscaled;
+    verified images only, returned whole and never upscaled. An image already
+    that small is returned as is when it fits in 4 MiB; otherwise (an original
+    or a thumbnail over 4 MiB) the server returns a JPEG re-encode of at most
+    that width, shrunk until it fits in 4 MiB (transparency on white, a GIF's
+    first frame), cached beside the thumbnails. Images over 40 megapixels
+    have no preview: 413 with `data.code` `preview_unavailable`, which work
+    clients treat as "metadata only";
   - `text`: strict UTF-8 text (`max_bytes` default 256 KiB, at most 2 MiB), cut
     on character boundaries; 415 for images or non-UTF-8 bytes.
 
@@ -297,9 +302,11 @@ Work clients use these through two adapters:
 - MCP `crew_attachment` (read-only): `{parent}` returns a task's or note's
   images as MCP image content, `preview` by default or `card`, at most 6 per
   call and about 4 MiB of image bytes (at least one image), with metadata of its
-  other files and `next_offset` (an image index); `archived: true` pages
-  archived ones. `{id}` returns one file: an image as its preview (or `card`,
-  or `original` as image content when the file is at most 4 MiB); a non-image as
+  other files and `next_offset` (an image index); an image without a preview
+  (`preview_unavailable`) is listed under `other_files` with a `note` and the
+  page continues; `archived: true` pages archived ones. `{id}` returns one
+  file: an image as its preview (or `card`, or `original` as image content when
+  the file is at most 4 MiB; metadata with a `note` when no preview exists); a non-image as
   UTF-8 text by default (paged by `offset`/`max_bytes`), falling back to
   metadata when the bytes are not UTF-8; `variant: "original"` returns paged
   base64 bytes (at most 3 MiB per call through MCP). The first content block is
