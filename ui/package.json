@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "pdfjs-dist": "6.4.299",
     "pocketbase": "^0.28.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -30,5 +31,10 @@
     "typescript": "^5.8.3",
     "vite": "^8.3.1",
     "vitest": "^5.0.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@napi-rs/canvas": "-"
+    }
   }
 }

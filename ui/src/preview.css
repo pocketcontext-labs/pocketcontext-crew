@@ -1,0 +1,308 @@
+/* File preview dialog (AttachmentPreview, PdfPreview). Full screen on phones. */
+.crew-file-preview {
+  width: min(1040px, calc(100vw - 30px));
+  height: min(88dvh, 1000px);
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid #d6dfcc;
+  border-radius: 12px;
+  background: #fafbf6;
+  color: #293e2c;
+  box-shadow: 0 25px 90px #0e201e35;
+  font:
+    14px/1.6 Inter,
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+  overflow: hidden;
+}
+.crew-file-preview[open] {
+  display: flex;
+  flex-direction: column;
+}
+.crew-file-preview-audio,
+.crew-file-preview-none {
+  height: auto;
+  width: min(620px, calc(100vw - 30px));
+}
+.crew-file-preview::backdrop {
+  background: #19271f80;
+}
+.crew-file-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px 20px;
+  border-bottom: 1px solid #e0e5d7;
+  flex: none;
+}
+.crew-file-preview-title {
+  min-width: 0;
+}
+.crew-file-preview-title h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 550;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.crew-file-preview-title p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #5f6f59;
+  overflow-wrap: anywhere;
+}
+.crew-file-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.crew-file-preview-download,
+.crew-file-preview button {
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  color: #293e2c;
+  background: #fff;
+  border: 1px solid #ccd6c2;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.crew-file-preview-download:hover,
+.crew-file-preview button:hover:not(:disabled) {
+  background: #eef2e8;
+}
+.crew-file-preview button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.crew-file-preview button[aria-pressed="true"] {
+  background: #e1ebdb;
+  border-color: #8aa883;
+}
+.crew-file-preview-download:focus-visible,
+.crew-file-preview button:focus-visible,
+.crew-file-preview [tabindex="0"]:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: 2px;
+}
+.crew-file-preview .crew-file-preview-close {
+  font-size: 22px;
+  line-height: 1;
+  padding: 3px 10px 5px;
+  border-color: transparent;
+  background: transparent;
+}
+.crew-file-preview-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 14px 20px 20px;
+}
+.crew-preview-note {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #5f6f59;
+}
+.crew-preview-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+}
+.crew-preview-unavailable p {
+  margin: 0;
+}
+.crew-preview-unavailable .crew-file-preview-download {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.crew-preview-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+/* Text, logs, code, JSON. */
+.crew-text-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.crew-text-preview pre {
+  flex: 1;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  background: #f1f4ec;
+  border: 1px solid #e0e5d7;
+  border-radius: 8px;
+  font:
+    12.5px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  color: #1f2f22;
+  white-space: pre;
+  tab-size: 4;
+}
+.crew-text-preview pre.crew-text-wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* CSV and TSV. */
+.crew-table-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.crew-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e0e5d7;
+  border-radius: 8px;
+  background: #fff;
+}
+.crew-table-scroll table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.crew-table-scroll th,
+.crew-table-scroll td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #e9ede3;
+  border-right: 1px solid #f0f2ec;
+  text-align: left;
+  vertical-align: top;
+  max-width: 28em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.crew-table-scroll th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eef2e8;
+  font-weight: 600;
+  border-bottom-color: #d6dfcc;
+}
+
+/* Markdown files. */
+.crew-markdown-preview {
+  max-width: 760px;
+}
+.crew-preview-image-alt {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #edf1e7;
+  color: #5f6f59;
+  font-size: 13px;
+}
+
+/* Video and audio. */
+.crew-preview-video {
+  display: block;
+  width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  flex: 1;
+  background: #111814;
+  border-radius: 8px;
+}
+.crew-preview-audio {
+  display: block;
+  width: 100%;
+}
+
+/* PDF. */
+.crew-file-preview-pdf .crew-file-preview-body {
+  padding: 0;
+}
+.crew-pdf {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.crew-pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e5d7;
+  background: #f4f6f0;
+  flex: none;
+  flex-wrap: wrap;
+}
+.crew-pdf-count,
+.crew-pdf-zoom {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.crew-pdf-count {
+  min-width: 7.5em;
+  text-align: center;
+}
+.crew-pdf-zoom {
+  min-width: 3.5em;
+  text-align: center;
+}
+.crew-pdf-spacer {
+  flex: 1;
+}
+.crew-pdf-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  background: #e6eae1;
+  text-align: center;
+}
+.crew-pdf-page {
+  display: inline-block;
+  max-width: none;
+  background: #fff;
+  box-shadow: 0 1px 6px #0e201e30;
+}
+
+@media (max-width: 680px) {
+  .crew-file-preview,
+  .crew-file-preview-audio,
+  .crew-file-preview-none {
+    width: 100%;
+    height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .crew-file-preview-header {
+    padding: max(10px, env(safe-area-inset-top)) 10px 10px 14px;
+  }
+  .crew-file-preview-body {
+    padding: 10px 12px max(14px, env(safe-area-inset-bottom));
+  }
+  .crew-pdf-stage {
+    padding: 6px;
+  }
+  .crew-pdf-toolbar {
+    padding: 6px 8px;
+  }
+}

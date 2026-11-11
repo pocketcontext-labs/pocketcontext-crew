@@ -563,6 +563,145 @@ try {
  await allLoaded('.crew-task-card .crew-card-thumb img');
  await snapView('attachments-board-thumbnail-390');
  await page.setViewportSize({width:1440,height:1000});
+ // File previews: a synthetic log, CSV, PDF (with JavaScript actions that must
+ // never run), WebM and WAV on the same task, previewed at 1440 and 390;
+ // pdf.js loads only when a PDF opens.
+ const scripts=[],cspErrors=[],jsDialogs=[];
+ page.on('request',r=>{if(r.resourceType()==='script'||/\/assets\/.*\.js$/.test(r.url()))scripts.push(r.url());});
+ page.on('console',m=>{if(m.type()==='error'&&/Content Security Policy|Refused to/i.test(m.text()))cspErrors.push(m.text());});
+ page.on('dialog',d=>{jsDialogs.push(d.message());void d.dismiss();});
+ const pdfFile=()=>{
+  const objects=[
+   '<< /Type /Catalog /Pages 2 0 R /OpenAction 6 0 R /Names << /JavaScript << /Names [(t) 6 0 R] >> >> >>',
+   '<< /Type /Pages /Kids [3 0 R 7 0 R] /Count 2 >>',
+   '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /AA << /O 6 0 R >> >>',
+   null,
+   '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+   "<< /S /JavaScript /JS (document.title='pdf script ran'; app.alert('pdf script ran');) >>",
+   '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 8 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+   null,
+  ];
+  const stream=text=>{const s=`BT /F1 28 Tf 72 700 Td (${text}) Tj ET\n0.2 0.45 0.3 rg 72 400 300 200 re f\n`;return `<< /Length ${s.length} >>\nstream\n${s}endstream`;};
+  objects[3]=stream('Synthetic PDF page 1');objects[7]=stream('Synthetic PDF page 2');
+  let out='%PDF-1.4\n';const offsets=[];
+  objects.forEach((o,i)=>{offsets.push(out.length);out+=`${i+1} 0 obj\n${o}\nendobj\n`;});
+  const xref=out.length;
+  out+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`+offsets.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('');
+  out+=`trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out,'latin1');
+ };
+ const wavFile=()=>{
+  const rate=8000,samples=rate/2,data=Buffer.alloc(samples*2);
+  for(let i=0;i<samples;i++)data.writeInt16LE(Math.round(Math.sin(i*2*Math.PI*440/rate)*8000),i*2);
+  const h=Buffer.alloc(44);h.write('RIFF',0);h.writeUInt32LE(36+data.length,4);h.write('WAVEfmt ',8);h.writeUInt32LE(16,16);h.writeUInt16LE(1,20);h.writeUInt16LE(1,22);
+  h.writeUInt32LE(rate,24);h.writeUInt32LE(rate*2,28);h.writeUInt16LE(2,32);h.writeUInt16LE(16,34);h.write('data',36);h.writeUInt32LE(data.length,40);
+  return Buffer.concat([h,data]);
+ };
+ // A short WebM recorded from a canvas in the page (skipped without MediaRecorder).
+ const webm=await page.evaluate(async()=>{
+  if(typeof MediaRecorder!=='function'||!MediaRecorder.isTypeSupported('video/webm;codecs=vp8'))return '';
+  const c=document.createElement('canvas');c.width=160;c.height=120;const g=c.getContext('2d');
+  const rec=new MediaRecorder(c.captureStream(15),{mimeType:'video/webm;codecs=vp8'});const parts=[];
+  rec.ondataavailable=e=>parts.push(e.data);rec.start(100);let i=0;
+  const timer=setInterval(()=>{g.fillStyle=`hsl(${i++*40},60%,45%)`;g.fillRect(0,0,160,120);},60);
+  await new Promise(r=>setTimeout(r,900));clearInterval(timer);await new Promise(r=>{rec.onstop=r;rec.stop();});
+  const bytes=new Uint8Array(await new Blob(parts).arrayBuffer());let s='';for(const b of bytes)s+=String.fromCharCode(b);return btoa(s);
+ });
+ const csvLines=['id,name,comment'];
+ csvLines.push('1,"Doe, Jane","said ""hi"""');
+ for(let i=2;i<=650;i++)csvLines.push(`${i},Person ${i},note ${i}`);
+ const files=[
+  {name:'server.log',mimeType:'text/plain',buffer:Buffer.from(Array.from({length:80},(_,i)=>`2026-11-11T10:${String(i%60).padStart(2,'0')}:00Z INFO synthetic worker ${i} handled request /api/example?with=a-very-long-query-string-that-should-wrap-in-the-preview-when-wrapping-is-on`).join('\n')+'\n')},
+  {name:'people.csv',mimeType:'text/csv',buffer:Buffer.from(csvLines.join('\r\n')+'\r\n')},
+  {name:'spec.pdf',mimeType:'application/pdf',buffer:pdfFile()},
+  {name:'tone.wav',mimeType:'audio/wav',buffer:wavFile()},
+  ...(webm?[{name:'clip.webm',mimeType:'video/webm',buffer:Buffer.from(webm,'base64')}]:[]),
+ ];
+ const taskDialog=page.locator('.crew-dialog');
+ await card.click();await taskDialog.waitFor();
+ const titleBefore=await page.title();
+ // Inline images stay within 70% of the screen height, and the reserved box
+ // keeps the image's own ratio (the 700x1000 portrait is narrowed, not cut).
+ await allLoaded('.crew-dialog .crew-inline-image img');
+ const boxes=await taskDialog.locator('.crew-inline-image .crew-image-box').evaluateAll(els=>els.map(e=>{const b=e.getBoundingClientRect(),i=e.querySelector('img').getBoundingClientRect(),img=e.querySelector('img');return {w:b.width,h:b.height,iw:i.width,ih:i.height,ratio:img.naturalWidth/img.naturalHeight,vh:innerHeight};}));
+ for(const b of boxes){
+  assert.ok(b.h<=b.vh*0.7+1,'inline image height is capped: '+JSON.stringify(b));
+  assert.ok(Math.abs(b.w-b.iw)<2&&Math.abs(b.h-b.ih)<2&&Math.abs(b.w/b.h-b.ratio)<0.02,'the reserved box matches the capped image: '+JSON.stringify(b));
+ }
+ assert.ok(boxes.some(b=>Math.abs(b.h-b.vh*0.7)<2),'the portrait screenshot is capped at 70vh: '+JSON.stringify(boxes));
+ await taskDialog.locator('input[type=file]').setInputFiles(files);
+ for(const f of files) await taskDialog.getByRole('button',{name:`Open ${f.name}`,exact:true}).waitFor({timeout:20000});
+ assert.equal(scripts.some(u=>/\/assets\/pdf-/.test(u)),false,'pdf.js is not loaded before a PDF opens');
+ const preview=page.getByRole('dialog',{name:/^File: /});
+ const openFile=async name=>{await taskDialog.getByRole('button',{name:`Open ${name}`,exact:true}).click();await preview.waitFor();};
+ const closePreview=async()=>{await page.keyboard.press('Escape');await preview.waitFor({state:'hidden'});};
+ const previewFits=async label=>{const b=await preview.boundingBox();const vw=page.viewportSize().width;assert.ok(b&&b.x>=0&&b.x+b.width<=vw+1,`${label}: the preview fits the width`);assert.equal(await preview.evaluate(d=>d.scrollWidth<=d.clientWidth+1),true,`${label}: no sideways scroll in the dialog`);};
+ // Text log.
+ await openFile('server.log');
+ await preview.locator('pre').filter({hasText:'synthetic worker 79'}).waitFor();
+ assert.equal(await preview.getByRole('button',{name:'Wrap lines'}).getAttribute('aria-pressed'),'true');
+ await previewFits('log 1440');await snapView('preview-log-1440');
+ await closePreview();
+ assert.equal(await page.getByRole('dialog').count(),1,'Escape closes only the preview');
+ // CSV.
+ await openFile('people.csv');
+ await preview.getByText('Showing first 500 of 650 rows.').waitFor();
+ assert.equal(await preview.locator('tbody tr').count(),500,'500 rows shown');
+ assert.equal(await preview.getByRole('cell',{name:'said "hi"',exact:true}).count(),1,'quoted CSV field');
+ await preview.locator('.crew-table-scroll').evaluate(e=>{e.scrollTop=600;});
+ const headTop=await preview.locator('thead th').first().boundingBox(),scrollTop=await preview.locator('.crew-table-scroll').boundingBox();
+ assert.ok(Math.abs(headTop.y-scrollTop.y)<3,'the header row stays on top');
+ await previewFits('csv 1440');await snapView('preview-csv-1440');
+ await closePreview();
+ // PDF: lazy pdf.js chunk and same-origin worker; its JavaScript never runs.
+ await openFile('spec.pdf');
+ await preview.getByText('Page 1 of 2').waitFor({timeout:20000});
+ await page.waitForFunction(()=>{const s=document.querySelector('.crew-pdf-stage');const c=document.querySelector('.crew-pdf-page');return s?.getAttribute('aria-busy')==='false'&&c&&c.width>0;},null,{timeout:20000});
+ const inked=await preview.locator('canvas.crew-pdf-page').evaluate(c=>{const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let n=0;for(let i=0;i<d.length;i+=4)if(d[i]<200)n++;return n;});
+ assert.ok(inked>1000,'the PDF page is drawn: '+inked);
+ const worker=scripts.find(u=>/\/assets\/pdf-worker-[A-Za-z0-9_-]+\.js$/.test(u));
+ assert.ok(worker&&worker.startsWith(base),'the pdf.js worker is a same-origin asset: '+scripts.filter(u=>/pdf/.test(u)).join(' '));
+ assert.ok(scripts.some(u=>/\/assets\/pdf-[A-Za-z0-9_-]+\.js$/.test(u)&&!/worker/.test(u)),'pdf.js is a lazily loaded chunk');
+ const canvasBox=await preview.locator('canvas.crew-pdf-page').boundingBox(),stageBox=await preview.locator('.crew-pdf-stage').boundingBox();
+ assert.ok(canvasBox.width<=stageBox.width&&canvasBox.width>=stageBox.width-40,'fit width by default');
+ await previewFits('pdf 1440');await snapView('preview-pdf-1440');
+ await preview.getByRole('button',{name:'Next page'}).click();
+ await preview.getByText('Page 2 of 2').waitFor();
+ await preview.getByRole('button',{name:'Zoom in'}).click();
+ await page.waitForFunction(()=>document.querySelector('.crew-pdf-stage')?.getAttribute('aria-busy')==='false');
+ assert.equal(await preview.locator('iframe, object, embed').count(),0,'no frames or plug-ins');
+ await snapView('preview-pdf-page2-zoom-1440');
+ await closePreview();
+ assert.equal(await page.title(),titleBefore,'PDF JavaScript did not run (title)');
+ assert.deepEqual(jsDialogs,[],'PDF JavaScript did not run (dialogs)');
+ // Media players.
+ await openFile('tone.wav');
+ await page.waitForFunction(()=>{const a=document.querySelector('.crew-file-preview audio');return a&&a.readyState>=1&&a.duration>0.4;},null,{timeout:15000});
+ await snapView('preview-audio-1440');
+ await closePreview();
+ if(webm){
+  await openFile('clip.webm');
+  await page.waitForFunction(()=>{const v=document.querySelector('.crew-file-preview video');return v&&v.readyState>=1&&v.videoWidth===160;},null,{timeout:15000});
+  await snapView('preview-video-1440');
+  await closePreview();
+ }
+ // Phone width: full-screen previews.
+ await page.setViewportSize({width:390,height:844});
+ for(const [name,ready,shot] of [['server.log','pre','preview-log-390'],['people.csv','table','preview-csv-390'],['spec.pdf','canvas.crew-pdf-page','preview-pdf-390']]){
+  await openFile(name);
+  await preview.locator(ready).waitFor();
+  if(name==='spec.pdf') await page.waitForFunction(()=>document.querySelector('.crew-pdf-stage')?.getAttribute('aria-busy')==='false'&&document.querySelector('.crew-pdf-page')?.width>0,null,{timeout:20000});
+  const b=await preview.boundingBox();
+  assert.deepEqual([b.x,b.y,b.width,b.height],[0,0,390,844],`${name}: the preview fills the phone screen`);
+  await previewFits(name+' 390');
+  if(name==='spec.pdf'){const c=await preview.locator('canvas.crew-pdf-page').boundingBox();assert.ok(c.width<=390,'the PDF fits the phone width');}
+  await snapView(shot);
+  await closePreview();
+ }
+ await page.setViewportSize({width:1440,height:1000});
+ await close();await dialog().waitFor({state:'hidden'});
+ assert.deepEqual(cspErrors,[],'No Content Security Policy violations');
+ assert.doesNotMatch(await page.title(),/pdf script ran/,'PDF JavaScript did not run');
  // One-time upload link: the owner creates it in a task dialog; a signed-out
  // phone opens it, sends two screenshots in one request, and the task shows
  // them. The token never appears in a request URL, a credential or storage,
@@ -650,5 +789,5 @@ try {
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');
- console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, logout.');
+ console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, file previews (log, CSV, PDF with inert JavaScript, audio, video) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, logout.');
 }catch(error){ console.error('Synthetic browser page:', (await page.locator('body').innerText()).slice(0,2500)); await snap('crew-failure'); throw error; }finally{await browser.close();}

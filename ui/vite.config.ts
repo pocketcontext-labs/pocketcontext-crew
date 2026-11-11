@@ -17,8 +17,27 @@ if (
   );
 }
 
+// The server's asset route serves only names like `name-hash.js` (letters,
+// digits, `_` and `-`; .js, .css, .woff2 or .svg). Chunk names from files such
+// as pdf.mjs lose their dots, and the pdf.js worker (.mjs) becomes a .js asset.
+const safeName = (name: string) =>
+  name.replace(/\.[cm]?js$/, "").replace(/[^A-Za-z0-9_-]+/g, "-") || "chunk";
+
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rolldownOptions: {
+      output: {
+        chunkFileNames: (chunk) => `assets/${safeName(chunk.name)}-[hash].js`,
+        assetFileNames: (asset) => {
+          const name = asset.names?.[0] ?? "";
+          if (/^pdf\.worker(\.min)?\.mjs$/.test(name))
+            return "assets/pdf-worker-[hash].js";
+          return "assets/[name]-[hash][extname]";
+        },
+      },
+    },
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,
