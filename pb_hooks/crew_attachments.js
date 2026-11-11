@@ -646,14 +646,21 @@ function uploadFiles(e, h) {
   e.response.header().set("Cache-Control", "no-store");
   const b = e.requestInfo().body;
   only(b, ["token"]);
+  // Refuse unknown, used, expired and revoked links before inspecting any
+  // file, and hash files outside the write transaction so a large batch never
+  // holds the database writer. The transaction checks the link again: of
+  // simultaneous batches only the first to commit uses it.
+  const max = findLink(e.app, b.token).link.getInt("max_files");
+  const files = $pocketcontext.crewAttachmentFiles(e, []);
+  if (files.error) bad(files.error);
+  if (!files.files.length) bad("Add at least one file");
+  if (files.files.length > max)
+    bad("This link accepts at most " + max + " files");
   let status = 200,
     body = null;
   e.app.runInTransaction((app) => {
     const found = findLink(app, b.token),
       link = found.link;
-    const files = $pocketcontext.crewAttachmentFiles(e, []);
-    if (files.error) bad(files.error);
-    if (!files.files.length) bad("Add at least one file");
     if (files.files.length > link.getInt("max_files"))
       bad("This link accepts at most " + link.getInt("max_files") + " files");
     const kind = link.getString("parent_kind");

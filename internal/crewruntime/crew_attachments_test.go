@@ -906,3 +906,113 @@ func TestAttachmentArchiveRetryReplays(t *testing.T) {
 		t.Fatal("archive retry did not replay", first, again)
 	}
 }
+
+func uploadLinkCode(a *testApp, token string, files []testFile) int {
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	w.WriteField("token", token)
+	for _, f := range files {
+		part, _ := w.CreateFormFile("files", f.name)
+		part.Write(f.data)
+	}
+	w.Close()
+	req := httptest.NewRequest("POST", "/api/crew/upload-link/upload", &body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	res := httptest.NewRecorder()
+	a.handler.ServeHTTP(res, req)
+	return res.Code
+}
+
+// Simultaneous batches with one token: exactly one uses the link; the others
+// see it used, so the link never adds more than max_files.
+func TestUploadLinkConcurrentBatchesUseItOnce(t *testing.T) {
+	uploadLimiter.reset()
+	t.Cleanup(uploadLimiter.reset)
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{"title": "Race"})
+	id := task["id"].(string)
+	link := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": id, "max_files": 2}, 200)
+	token := link["token"].(string)
+	files := []testFile{{"a.png", tinyPNG(t, 40, 40)}, {"b.png", tinyPNG(t, 41, 41)}}
+	const n = 6
+	codes := make(chan int, n)
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		go func() {
+			<-start
+			codes <- uploadLinkCode(a, token, files)
+		}()
+	}
+	close(start)
+	ok, gone := 0, 0
+	for i := 0; i < n; i++ {
+		switch c := <-codes; c {
+		case 200:
+			ok++
+		case 410:
+			gone++
+		default:
+			t.Fatalf("unexpected status %d", c)
+		}
+	}
+	if ok != 1 || gone != n-1 {
+		t.Fatalf("ok=%d gone=%d", ok, gone)
+	}
+	if got := len(attachmentsOf(t, a, id, false)); got != 2 {
+		t.Fatalf("attachments %d, want 2", got)
+	}
+	if row := apiWebhookRecord(t, a, "upload_links", link["id"].(string)); row.GetInt("files_added") != 2 {
+		t.Fatal("files_added", row.PublicExport())
+	}
+}
+
+// An unknown, used or archived-parent token is refused before any file is
+// inspected or stored; per-file names are sanitized; info shows nothing but
+// the title and limits, and upload never echoes record ids or storage names.
+func TestUploadLinkRefusesBeforeFilesAndSanitizes(t *testing.T) {
+	uploadLimiter.reset()
+	t.Cleanup(uploadLimiter.reset)
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{"title": "Names", "description": "secret description"})
+	id := task["id"].(string)
+	inspected := 0
+	inspectHook = func() { inspected++ }
+	t.Cleanup(func() { inspectHook = nil })
+	if c := uploadLinkCode(a, strings.Repeat("C", 43), []testFile{{"x.png", tinyPNG(t, 3, 3)}}); c != 404 {
+		t.Fatal("unknown token", c)
+	}
+	if c := uploadLinkCode(a, "short", []testFile{{"x.png", tinyPNG(t, 3, 3)}}); c != 404 {
+		t.Fatal("malformed token", c)
+	}
+	if inspected != 0 { // writes inspect too, so count only around uploads
+		t.Fatal("files inspected for an unknown token")
+	}
+	link := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": id}, 200)
+	info := a.request(t, "POST", "/api/crew/upload-link/info", "", `{"token":"`+link["token"].(string)+`"}`, 200)
+	if strings.Contains(fmt.Sprint(info), "secret") || strings.Contains(fmt.Sprint(info), id) {
+		t.Fatal("info leaked", info)
+	}
+	out, _ := uploadLinkRequest(t, a, link["token"].(string), nil, []testFile{{`..\..\evil` + "\u202e" + `/../../etc/passwd.png`, tinyPNG(t, 4, 4)}}, 200)
+	if strings.Contains(fmt.Sprint(out), "a_") || strings.Contains(fmt.Sprint(out), id) {
+		t.Fatal("upload response leaked ids or storage names", out)
+	}
+	files := attachmentsOf(t, a, id, false)
+	if len(files) != 1 || files[0]["name"] != "passwd.png" {
+		t.Fatal("sanitized name", files)
+	}
+	if got := cleanAttachmentName("report\u202egnp.exe"); got != "reportgnp.exe" {
+		t.Fatal("bidi override kept", got)
+	}
+	inspected = 0
+	if c := uploadLinkCode(a, link["token"].(string), []testFile{{"again.png", tinyPNG(t, 3, 3)}}); c != 410 || inspected != 0 {
+		t.Fatal("used link", c, inspected)
+	}
+	// Archived task: refused before inspection.
+	other := newTask(t, a, map[string]any{"title": "Archived later"})
+	l2 := crewWrite(t, a, false, "upload_link.create", "", 0, map[string]any{"task": other["id"]}, 200)
+	crewWrite(t, a, false, "task.update", other["id"].(string), 1, map[string]any{"archived": true}, 200)
+	inspected = 0
+	if c := uploadLinkCode(a, l2["token"].(string), []testFile{{"x.png", tinyPNG(t, 3, 3)}}); c != 410 || inspected != 0 {
+		t.Fatal("archived parent", c, inspected)
+	}
+}

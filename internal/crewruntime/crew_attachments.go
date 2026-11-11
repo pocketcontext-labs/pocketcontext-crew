@@ -130,7 +130,7 @@ func cleanAttachmentName(name string) string {
 		name = name[i+1:]
 	}
 	name = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || r == unicode.ReplacementChar {
+		if unicode.IsControl(r) || r == unicode.ReplacementChar || bidiControl(r) {
 			return -1
 		}
 		return r
@@ -148,6 +148,13 @@ func cleanAttachmentName(name string) string {
 		name = string(runes[:attachmentNameMaxRunes-utf8.RuneCountInString(ext)]) + ext
 	}
 	return name
+}
+
+// bidiControl reports the invisible direction marks and overrides that can
+// make a name display differently from its bytes ("report<RLO>gnp.exe" shows
+// as "reportexe.png").
+func bidiControl(r rune) bool {
+	return r == 0x061c || r == 0x200e || r == 0x200f || (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069)
 }
 
 var safeExtension = regexp.MustCompile(`^[a-z0-9]{1,10}$`)
@@ -228,6 +235,9 @@ func inspectAttachment(index int, original string, size int64, open func() (io.R
 	}
 }
 
+// inspectHook lets tests observe that file inspection ran; nil in production.
+var inspectHook func()
+
 type bytesSeekCloser struct{ *bytes.Reader }
 
 func (bytesSeekCloser) Close() error { return nil }
@@ -239,6 +249,9 @@ func (bytesSeekCloser) Close() error { return nil }
 // problems are entries with error_code/error_message so the caller can report
 // each file independently.
 func crewAttachmentFiles(e *core.RequestEvent, list []any) map[string]any {
+	if inspectHook != nil {
+		inspectHook()
+	}
 	files := []map[string]any{}
 	fail := func(message string) map[string]any { return map[string]any{"error": message, "files": files} }
 	var headers []*multipart.FileHeader
