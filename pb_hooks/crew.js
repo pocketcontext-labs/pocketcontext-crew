@@ -723,6 +723,12 @@ function write(e, isAgent) {
         webhooks.deactivate(app, r.id, b, actor);
       if (kind === "note") snapshot(app, r, b, actor);
       const changes = { ...d };
+      // A create with files records the resolved text, never the request's
+      // attachment:new-N placeholders (values may be a copy of d).
+      if (staged.length)
+        for (const f of ["description", "draft", "body"])
+          if (typeof d[f] === "string" && typeof values[f] === "string")
+            changes[f] = values[f];
       if (kind === "task") {
         changes.readiness = r.getString("readiness");
         changes.wake_generation = r.getInt("wake_generation");

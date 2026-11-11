@@ -462,6 +462,34 @@ func TestTaskAndNoteCreateWithFiles(t *testing.T) {
 	if rev.GetString("body") != note["body"] {
 		t.Fatal("note snapshot keeps placeholder", rev.GetString("body"))
 	}
+	if ev := eventsOf(t, a, note["id"].(string), "note.create"); len(ev) != 1 || strings.Contains(ev[0].GetString("changes"), "new-1") || !strings.Contains(ev[0].GetString("changes"), nid) {
+		t.Fatal("note.create event keeps placeholder", ev)
+	}
+}
+
+// The task.create event records resolved text even when assigned_agent makes
+// the hook copy the request values.
+func TestTaskCreateEventRecordsResolvedReferences(t *testing.T) {
+	a := newTestApp(t)
+	agent := crewWrite(t, a, false, "agent.create", "", 0, map[string]any{"name": "synthetic-assignee", "brief": "synthetic"}, 200)
+	for _, assignee := range []any{nil, agent["id"], "synthetic-assignee"} {
+		data := map[string]any{"title": "Assigned with files", "description": "![a](attachment:new-1)", "draft": "[b](attachment:new-1)",
+			"files": []any{map[string]any{"name": "a.png", "content_base64": base64.StdEncoding.EncodeToString(tinyPNG(t, 4, 4))}}}
+		if assignee != nil {
+			data["assigned_agent"] = assignee
+		}
+		created := crewWrite(t, a, true, "task.create", "", 0, data, 200)
+		fid := created["attachments"].([]any)[0].(map[string]any)["id"].(string)
+		ev := eventsOf(t, a, created["id"].(string), "task.create")
+		if len(ev) != 1 {
+			t.Fatal("events", ev)
+		}
+		var changes map[string]any
+		json.Unmarshal([]byte(ev[0].GetString("changes")), &changes)
+		if changes["description"] != "![a](attachment:"+fid+")" || changes["draft"] != "[b](attachment:"+fid+")" {
+			t.Fatal("event text", assignee, changes)
+		}
+	}
 }
 
 func TestAttachmentReferenceRules(t *testing.T) {
