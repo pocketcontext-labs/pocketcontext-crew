@@ -3,13 +3,17 @@ import { pb } from "./api";
 import { crewApi } from "./crewApi";
 import {
   AttachmentError,
+  ATTACHMENT_LIMITS,
   attachmentsApi,
   attachmentUrl,
+  checkFiles,
   formatBytes,
   mediaKind,
   parseChanges,
+  replaceUploadPlaceholder,
   screenshotName,
   uploadLinkAddress,
+  uploadPlaceholder,
 } from "./attachmentsApi";
 
 type Sent = {
@@ -139,6 +143,92 @@ describe("URLs and names", () => {
     expect(uploadLinkAddress({ path: "#/upload/x" })).toBe(
       `${location.origin}/#/upload/x`,
     );
+  });
+});
+
+/** A File reporting `size` bytes without allocating them. */
+const sized = (name: string, size: number) => {
+  const file = new File(["x"], name);
+  Object.defineProperty(file, "size", { value: size });
+  return file;
+};
+const MB = 1024 * 1024;
+
+describe("client-side limits", () => {
+  it("refuses empty and oversized files with a message each", () => {
+    const { accepted, refused } = checkFiles(
+      [sized("ok.png", 5), sized("empty.txt", 0), sized("big.mov", 21 * MB)],
+      { existing: 0 },
+    );
+    expect(accepted.map((f) => f.name)).toEqual(["ok.png"]);
+    expect(refused.map((r) => r.message)).toEqual([
+      "empty.txt is empty.",
+      "big.mov is larger than 20 MB (21 MB).",
+    ]);
+    expect(
+      checkFiles([sized("edge.bin", ATTACHMENT_LIMITS.maxFileBytes)], {
+        existing: 0,
+      }).accepted,
+    ).toHaveLength(1);
+  });
+  it("counts existing files toward the 20-file limit", () => {
+    const files = [1, 2, 3].map((n) => sized(`f${n}.txt`, 1));
+    const { accepted, refused } = checkFiles(files, { existing: 18 });
+    expect(accepted.map((f) => f.name)).toEqual(["f1.txt", "f2.txt"]);
+    expect(refused[0].message).toBe(
+      "f3.txt was not added: a task or note holds at most 20 files.",
+    );
+  });
+  it("limits the total of files staged for one create request", () => {
+    const files = [1, 2, 3, 4, 5, 6].map((n) => sized(`v${n}.mp4`, 18 * MB));
+    const { accepted, refused } = checkFiles(files, {
+      existing: 0,
+      batchBytes: 0,
+    });
+    expect(accepted).toHaveLength(5);
+    expect(refused.map((r) => r.file.name)).toEqual(["v6.mp4"]);
+    expect(refused[0].message).toMatch(/limited to 100 MB in total/);
+    // Already staged bytes count; uploads to an existing item do not batch.
+    expect(
+      checkFiles([sized("a", 2 * MB)], { existing: 0, batchBytes: 99 * MB })
+        .refused,
+    ).toHaveLength(1);
+    expect(checkFiles(files, { existing: 0 }).accepted).toHaveLength(6);
+  });
+});
+
+describe("inline upload placeholders", () => {
+  const ph = uploadPlaceholder("shot.png", "7-abcd");
+  it("replaces the placeholder found by its token", () => {
+    expect(ph).toBe("⏳ Uploading shot.png… (upload 7-abcd)");
+    expect(
+      replaceUploadPlaceholder(`A ${ph} B`, "7-abcd", "![s](attachment:x)"),
+    ).toBe("A ![s](attachment:x) B");
+  });
+  it("still finds it after edits around it and to its name", () => {
+    const edited = `Intro edited\n${ph.replace("shot.png", "renamed")} trailing\nmore`;
+    expect(replaceUploadPlaceholder(edited, "7-abcd", "REF")).toBe(
+      "Intro edited\nREF trailing\nmore",
+    );
+    // Without its glyph, only the token is replaced.
+    expect(
+      replaceUploadPlaceholder("x (upload 7-abcd) y", "7-abcd", "REF"),
+    ).toBe("x REF y");
+  });
+  it("tells placeholders apart and leaves text alone without its token", () => {
+    const other = uploadPlaceholder("shot.png", "8-efgh");
+    const text = `${ph}\n${other}`;
+    expect(replaceUploadPlaceholder(text, "8-efgh", "SECOND")).toBe(
+      `${ph}\nSECOND`,
+    );
+    expect(replaceUploadPlaceholder("deleted it", "7-abcd", "REF")).toBe(
+      "deleted it",
+    );
+  });
+  it("removes a failed placeholder with one line break", () => {
+    expect(replaceUploadPlaceholder(`a\n${ph}\nb`, "7-abcd", "")).toBe("a\nb");
+    expect(replaceUploadPlaceholder(`a\n${ph}`, "7-abcd", "")).toBe("a");
+    expect(replaceUploadPlaceholder(ph, "7-abcd", "")).toBe("");
   });
 });
 

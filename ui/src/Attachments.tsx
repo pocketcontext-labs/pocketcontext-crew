@@ -19,6 +19,7 @@ import {
   attachmentsApi,
   attachmentUrl,
   AttachmentError,
+  checkFiles,
   formatBytes,
   isAudio,
   isImage,
@@ -351,6 +352,8 @@ type Upload = {
   loaded: number;
   total: number;
   error?: string;
+  /** Refused before sending (a limit): no retry. */
+  refused?: boolean;
 };
 
 /**
@@ -447,9 +450,31 @@ export function useItemAttachments({
         ),
     );
   };
-  /** Adds files with a progress row each. */
-  const addFiles = (files: File[]) => {
+  /** Active files plus uploads still running: the item's 20-file budget. */
+  const used = () =>
+    attachments.filter((a) => !a.archived).length +
+    uploads.filter((u) => !u.error).length;
+  /**
+   * Adds files with a progress row each; files over a limit get a row with
+   * the reason and are not sent.
+   */
+  const addFiles = (incoming: File[]) => {
     setError("");
+    const { accepted: files, refused } = checkFiles(incoming, {
+      existing: used(),
+    });
+    if (refused.length)
+      setUploads((list) => [
+        ...list,
+        ...refused.map((r) => ({
+          key: nextKey.current++,
+          file: r.file,
+          loaded: 0,
+          total: r.file.size,
+          error: r.message,
+          refused: true,
+        })),
+      ]);
     for (const file of files) {
       const upload = {
         key: nextKey.current++,
@@ -500,6 +525,7 @@ export function useItemAttachments({
     uploads,
     withdrawn,
     reload,
+    used,
     addFiles,
     /** Uploads without a progress row (inline inserts show their own text). */
     upload: enqueue,
@@ -531,8 +557,18 @@ export function useStagedFiles() {
     },
     [],
   );
-  const stage = (files: File[]) => {
-    const entries = files.map((file) => {
+  const [refused, setRefused] = useState<string[]>([]);
+  /**
+   * Stages files within the limits (20 files, 20 MB each, 100 MB together);
+   * the others are reported in `refused` and returned with their reasons.
+   */
+  const stage = (incoming: File[]) => {
+    const checked = checkFiles(incoming, {
+      existing: staged.length,
+      batchBytes: staged.reduce((sum, s) => sum + s.file.size, 0),
+    });
+    setRefused(checked.refused.map((r) => r.message));
+    const entries = checked.accepted.map((file) => {
       const image = looksLikeImage(file);
       const url = image ? (URL.createObjectURL?.(file) ?? "") : "";
       if (url) urls.current.add(url);
@@ -556,7 +592,7 @@ export function useStagedFiles() {
           );
         probe.src = entry.url;
       }
-    return entries;
+    return { entries, refused: checked.refused };
   };
   const unstage = (key: number) => {
     setStaged((list) => {
@@ -594,7 +630,7 @@ export function useStagedFiles() {
       },
     };
   };
-  return { staged, errors, stage, unstage, prepare };
+  return { staged, errors, refused, stage, unstage, prepare };
 }
 export type StagedFiles = ReturnType<typeof useStagedFiles>;
 
@@ -900,6 +936,17 @@ export function AttachmentsSection({
           {item.error}
         </p>
       )}
+      {!!staged?.refused.length && (
+        <ul className="crew-uploads" aria-label="Files not added">
+          {staged.refused.map((m) => (
+            <li key={m} className="crew-upload-failed">
+              <span className="crew-upload-error" role="alert">
+                {m}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {!!item?.uploads.length && (
         <ul className="crew-uploads" aria-label="Uploads">
           {item.uploads.map((u) => (
@@ -910,13 +957,15 @@ export function AttachmentsSection({
                   <span className="crew-upload-error" role="alert">
                     {u.error}
                   </span>
-                  <button
-                    type="button"
-                    aria-label={`Retry ${u.file.name}`}
-                    onClick={() => item.retry(u.key)}
-                  >
-                    Retry
-                  </button>
+                  {!u.refused && (
+                    <button
+                      type="button"
+                      aria-label={`Retry ${u.file.name}`}
+                      onClick={() => item.retry(u.key)}
+                    >
+                      Retry
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="crew-quiet"

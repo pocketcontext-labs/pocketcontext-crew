@@ -27,6 +27,11 @@
  * - `useFileToken(enabled)`: React hook with a token kept fresh while mounted.
  * - `isImage`, `isVideo`, `isAudio`, `mediaKind`, `formatBytes`,
  *   `screenshotName`, `uploadLinkAddress`, `parseChanges`, `ATTACHMENT_LIMITS`.
+ * - `checkFiles(files, {existing, batchBytes})`: client-side limit check with
+ *   a message per refused file, before anything is staged or sent.
+ * - `uploadPlaceholder(name, token)` / `replaceUploadPlaceholder(text, token,
+ *   replacement)`: the "⏳ Uploading …" text of an inline upload, found again
+ *   by its unique token even after edits around it.
  */
 import { useEffect, useState } from "react";
 import { pb } from "./api";
@@ -80,7 +85,75 @@ export const ATTACHMENT_LIMITS = {
   maxActive: 20,
   maxFilesPerRequest: 20,
   maxRequestBytes: 101 * 1024 * 1024,
+  /** Files saved together (create with files), leaving multipart room. */
+  maxBatchBytes: 100 * 1024 * 1024,
 } as const;
+
+export type FileRefusal = { file: File; message: string };
+/**
+ * Splits files into those within the server's limits and per-file refusals.
+ * `existing` counts files the item already has (active, uploading or
+ * staged); `batchBytes`, when given, the bytes already staged for one create
+ * request (uploads to an existing item send one file per request).
+ */
+export function checkFiles(
+  files: File[],
+  { existing, batchBytes }: { existing: number; batchBytes?: number },
+): { accepted: File[]; refused: FileRefusal[] } {
+  const accepted: File[] = [];
+  const refused: FileRefusal[] = [];
+  let count = existing,
+    bytes = batchBytes ?? 0;
+  for (const file of files) {
+    let message = "";
+    if (file.size === 0) message = `${file.name} is empty.`;
+    else if (file.size > ATTACHMENT_LIMITS.maxFileBytes)
+      message = `${file.name} is larger than 20 MB (${formatBytes(file.size)}).`;
+    else if (count >= ATTACHMENT_LIMITS.maxActive)
+      message = `${file.name} was not added: a task or note holds at most 20 files.`;
+    else if (
+      batchBytes !== undefined &&
+      bytes + file.size > ATTACHMENT_LIMITS.maxBatchBytes
+    )
+      message = `${file.name} was not added: files saved with a new item are limited to 100 MB in total. Add it after saving.`;
+    if (message) {
+      refused.push({ file, message });
+      continue;
+    }
+    accepted.push(file);
+    count++;
+    bytes += file.size;
+  }
+  return { accepted, refused };
+}
+
+/** Inline upload text; the token finds it again after edits around it. */
+export const uploadPlaceholder = (name: string, token: string) =>
+  `⏳ Uploading ${name}… (upload ${token})`;
+/**
+ * Replaces the placeholder carrying `token` (from its ⏳ on the same line,
+ * when still there, through the token). An empty replacement also removes one
+ * adjacent line break. Text without the token (the user deleted it) is
+ * returned unchanged.
+ */
+export function replaceUploadPlaceholder(
+  text: string,
+  token: string,
+  replacement: string,
+) {
+  const marker = `(upload ${token})`;
+  const at = text.indexOf(marker);
+  if (at < 0) return text;
+  const lineStart = text.lastIndexOf("\n", at) + 1;
+  const glyph = text.lastIndexOf("⏳", at);
+  let start = glyph >= lineStart ? glyph : at;
+  let end = at + marker.length;
+  if (!replacement) {
+    if (text[end] === "\n") end++;
+    else if (start > 0 && text[start - 1] === "\n") start--;
+  }
+  return text.slice(0, start) + replacement + text.slice(end);
+}
 
 /** Raised by uploads and create-with-files; `fileErrors` keys are 1-based. */
 export class AttachmentError extends Error {

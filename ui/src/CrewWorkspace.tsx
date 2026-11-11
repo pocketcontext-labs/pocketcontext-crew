@@ -57,9 +57,13 @@ import {
 } from "./Attachments";
 import {
   attachmentsApi,
+  checkFiles,
   isImage,
+  replaceUploadPlaceholder,
+  uploadPlaceholder,
   useFileToken,
   type CardThumb,
+  type FileRefusal,
 } from "./attachmentsApi";
 import {
   boardColumnFromHash,
@@ -1944,56 +1948,78 @@ function Editor({
   });
   const staged = useStagedFiles();
   const [inlineErrors, setInlineErrors] = useState<Record<string, string>>({});
+  // Inline uploads still running: Save waits so no "⏳ Uploading" text is saved.
+  const [inlineUploads, setInlineUploads] = useState(0);
+  const uploadTokens = useRef(0);
   const takenNames = () => [
     ...item.attachments.map((a) => a.name),
     ...staged.staged.map((s) => s.file.name),
   ];
   /**
    * Pasted or dropped files in a Markdown field: an existing item uploads each
-   * and replaces an "Uploading…" line with its reference; a new item stages
-   * them and inserts `attachment:new-K` placeholders. Returns the inserted text.
+   * and replaces its "⏳ Uploading…" placeholder (found by a unique token) with
+   * its reference; a new item stages them and inserts `attachment:new-K`
+   * placeholders. Files over a limit are refused with a message. Returns the
+   * inserted text.
    */
   const insertFiles =
     (field: "body" | "draft", setText: (update: (text: string) => string) => void) =>
     (incoming: File[], [from, to]: [number, number], pasted: boolean) => {
       if (readOnly || !itemKind) return;
-      const files = pasted ? namePasted(incoming, takenNames()) : incoming;
+      const named = pasted ? namePasted(incoming, takenNames()) : incoming;
       onEdit();
-      setInlineErrors(({ [field]: _gone, ...rest }) => rest);
       const splice = (text: string) =>
         setText((value) => value.slice(0, from) + text + value.slice(to));
+      const report = (refused: FileRefusal[]) =>
+        setInlineErrors(({ [field]: _gone, ...rest }) =>
+          refused.length
+            ? { ...rest, [field]: refused.map((r) => r.message).join(" ") }
+            : rest,
+        );
       if (!row) {
-        const entries = staged.stage(files);
+        const { entries, refused } = staged.stage(named);
+        report(refused);
         const text = entries
           .map((e) => fileReference(e.file.name, `new-${e.key}`, e.image))
           .join("\n");
         splice(text);
         return text;
       }
-      const lines = files.map((f) => `⏳ Uploading ${f.name}…`);
-      const text = lines.join("\n");
+      const { accepted: files, refused } = checkFiles(named, {
+        existing: item.used() + inlineUploads,
+      });
+      report(refused);
+      if (!files.length) return "";
+      const tokens = files.map(
+        () =>
+          `${++uploadTokens.current}-${Math.random().toString(36).slice(2, 6)}`,
+      );
+      const text = files
+        .map((f, i) => uploadPlaceholder(f.name, tokens[i]))
+        .join("\n");
       splice(text);
+      setInlineUploads((n) => n + files.length);
       files.forEach((file, i) => {
-        const line = lines[i];
-        item.upload(file).then(
-          (a) =>
-            setText((value) =>
-              value.replace(line, fileReference(a.name, a.id, isImage(a))),
-            ),
-          (e) => {
-            setText((value) =>
-              value.includes(`${line}\n`)
-                ? value.replace(`${line}\n`, "")
-                : value.includes(`\n${line}`)
-                  ? value.replace(`\n${line}`, "")
-                  : value.replace(line, ""),
-            );
-            setInlineErrors((all) => ({
-              ...all,
-              [field]: `Could not attach ${file.name}: ${e instanceof Error ? e.message : "upload failed"}`,
-            }));
-          },
-        );
+        item
+          .upload(file)
+          .then(
+            (a) =>
+              setText((value) =>
+                replaceUploadPlaceholder(
+                  value,
+                  tokens[i],
+                  fileReference(a.name, a.id, isImage(a)),
+                ),
+              ),
+            (e) => {
+              setText((value) => replaceUploadPlaceholder(value, tokens[i], ""));
+              setInlineErrors((all) => ({
+                ...all,
+                [field]: `Could not attach ${file.name}: ${e instanceof Error ? e.message : "upload failed"}`,
+              }));
+            },
+          )
+          .finally(() => setInlineUploads((n) => n - 1));
       });
       return text;
     };
@@ -2085,7 +2111,7 @@ function Editor({
   );
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (readOnly) return;
+    if (readOnly || inlineUploads > 0) return;
     const fields =
       kind === "note"
         ? {
@@ -2654,10 +2680,10 @@ function Editor({
               // Always visible in Edit, so there is no guessing how to save.
               <button
                 className="crew-primary"
-                disabled={busy || (Boolean(row) && !dirty)}
+                disabled={busy || inlineUploads > 0 || (Boolean(row) && !dirty)}
                 title={row && !dirty ? "Change something to save" : undefined}
               >
-                Save {kind}
+                {inlineUploads > 0 ? "Waiting for uploads…" : `Save ${kind}`}
               </button>
             ),
           )}

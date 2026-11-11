@@ -46,6 +46,13 @@ const att = (id: string, extra: Partial<Attachment> = {}): Attachment => ({
 });
 let fixtures: Record<string, Row[]>;
 let attachments: Attachment[];
+const MB = 1024 * 1024;
+/** A File reporting `size` bytes without allocating them. */
+const sized = (name: string, size: number) => {
+  const file = new File(["x"], name);
+  Object.defineProperty(file, "size", { value: size });
+  return file;
+};
 const png = (name = "image.png") =>
   new File([new Uint8Array([137, 80, 78, 71, 1])], name, { type: "image/png" });
 const today = () => screenshotName([]).replace(/-1\.png$/, "");
@@ -182,6 +189,69 @@ describe("Files section", () => {
       await dialog.findByRole("button", { name: "Open image b.png" }),
     ).toBeInTheDocument();
     expect(dialog.queryByText("b.png is larger than 20 MiB")).toBeNull();
+  });
+  it("refuses files over a limit before sending, with a reason each", async () => {
+    attachments = Array.from({ length: 19 }, (_, i) =>
+      att(`f${i}`, { name: `f${i}.txt`, image: false, position: i + 1 }),
+    );
+    const upload = vi
+      .spyOn(attachmentsApi, "upload")
+      .mockImplementation(async (_p, file) => ({
+        attachment: att("new1", { name: file.name, image: false }),
+        review_withdrawn: false,
+      }));
+    const dialog = await openTask();
+    await dialog.findByText("19 of 20");
+    fireEvent.change(document.querySelector('input[type="file"]')!, {
+      target: {
+        files: [
+          sized("big.zip", 21 * MB),
+          sized("ok.txt", 3),
+          sized("one-more.txt", 3),
+        ],
+      },
+    });
+    expect(
+      await dialog.findByText("big.zip is larger than 20 MB (21 MB)."),
+    ).toBeInTheDocument();
+    expect(
+      dialog.getByText(
+        "one-more.txt was not added: a task or note holds at most 20 files.",
+      ),
+    ).toBeInTheDocument();
+    expect(dialog.queryByRole("button", { name: "Retry big.zip" })).toBeNull();
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+    expect(upload.mock.calls[0][1].name).toBe("ok.txt");
+  });
+  it("stages new-item files within the per-file and total limits", async () => {
+    vi.spyOn(attachmentsApi, "createWithFiles").mockResolvedValue({
+      id: "task2",
+      revision: 1,
+    });
+    render(<CrewWorkspace />);
+    fireEvent.click(await screen.findByRole("button", { name: /New task/ }));
+    const dialog = within(await screen.findByRole("dialog"));
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [
+          ...[1, 2, 3, 4, 5].map((n) => sized(`v${n}.mp4`, 18 * MB)),
+          sized("v6.mp4", 18 * MB),
+          sized("too-big.mov", 30 * MB),
+        ],
+      },
+    });
+    expect(
+      await dialog.findByText(
+        /v6\.mp4 was not added: files saved with a new item are limited to 100 MB/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      dialog.getByText("too-big.mov is larger than 20 MB (30 MB)."),
+    ).toBeInTheDocument();
+    expect(dialog.getByText("5 of 20")).toBeInTheDocument();
   });
   it("removes after confirming and restores", async () => {
     attachments = [att("img1")];
@@ -324,12 +394,48 @@ describe("paste and drop into Markdown", () => {
       clipboardData: { files: [png()], types: ["Files"] },
     });
     const name = `${today()}-1.png`;
-    await waitFor(() => expect(box.value).toBe(`Steps⏳ Uploading ${name}…`));
+    await waitFor(() =>
+      expect(box.value).toMatch(
+        new RegExp(`^Steps⏳ Uploading ${name}… \\(upload [\\w-]+\\)$`),
+      ),
+    );
     expect(upload.mock.calls[0][1].name).toBe(name);
+    // Save waits for the upload, so no placeholder is ever saved.
+    const save = dialog.getByRole("button", { name: "Waiting for uploads…" });
+    expect(save).toBeDisabled();
+    // Edits around the placeholder (and to its name) do not lose it.
+    fireEvent.change(box, {
+      target: {
+        value: `Intro\n${box.value.replace("Steps", "Steps ").replace(name, "renamed")}\nOutro`,
+      },
+    });
     finish({ attachment: att("shot1", { name }), review_withdrawn: false });
     await waitFor(() =>
-      expect(box.value).toBe(`Steps![${name}](attachment:shot1)`),
+      expect(box.value).toBe(
+        `Intro\nSteps ![${name}](attachment:shot1)\nOutro`,
+      ),
     );
+    expect(dialog.getByRole("button", { name: "Save task" })).toBeEnabled();
+  });
+  it("refuses an oversized pasted file without uploading it", async () => {
+    const upload = vi.spyOn(attachmentsApi, "upload");
+    const dialog = await openTask();
+    fireEvent.click(
+      within(
+        dialog.getByRole("tablist", { name: "Description view" }),
+      ).getByRole("tab", {
+        name: "Edit",
+      }),
+    );
+    const box = descriptionBox(dialog);
+    fireEvent.drop(box, {
+      dataTransfer: { files: [sized("huge.mov", 25 * MB)], types: ["Files"] },
+    });
+    expect(
+      await dialog.findByText("huge.mov is larger than 20 MB (25 MB)."),
+    ).toBeInTheDocument();
+    expect(box.value).toBe("Steps");
+    expect(upload).not.toHaveBeenCalled();
   });
   it("removes the placeholder and explains a failed upload", async () => {
     vi.spyOn(attachmentsApi, "upload").mockRejectedValue(
