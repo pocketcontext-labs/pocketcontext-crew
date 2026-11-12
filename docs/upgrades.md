@@ -1,5 +1,12 @@
 # Crew upgrades and rollback
 
+## Crew 0.18.0 to 0.18.1
+
+No data migration, protocol change or new managed block, so webhook delivery is not paused.
+Replace the binary or image with the normal procedure (`CREW_REPLACE_VERSION=0.18.0` for
+the installer) and upgrade paired clients with the server. A client and server must report
+the same release. From 0.17.0, first follow the 0.18.0 step below.
+
 ## Crew 0.17.0 to 0.18.0
 
 One data migration (`1801100000_crew_project_agents.js`) adds an agent `kind` (`bot`,
