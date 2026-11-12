@@ -3225,3 +3225,107 @@ a.crew-logo:hover .product-brand span {
 .crew-tags > .crew-claim-chip,
 .crew-tags > .crew-claim-expired { white-space: nowrap; }
 .crew-claim-details { display: block; margin-top: 4px; overflow-wrap: anywhere; }
+/* Tasks board: search, the agent filter and one Filters button; everything
+   else lives in the Filters panel and shows as removable chips. */
+.crew-filters {
+  position: relative;
+  flex: 0 0 auto;
+}
+.crew-app .crew-filters-button {
+  white-space: nowrap;
+}
+.crew-app .crew-filters-button.active {
+  border-color: #487d55;
+  color: #24412f;
+  font-weight: 600;
+}
+.crew-filters-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  padding: 16px 16px 12px;
+  background: #fffefb;
+  border: 1px solid #dce2d8;
+  border-radius: 9px;
+  box-shadow: 0 10px 28px rgba(39, 56, 42, 0.16);
+}
+.crew-filters-panel .crew-field {
+  margin-bottom: 12px;
+}
+.crew-filters-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 14px;
+  font-size: 12px;
+}
+.crew-app .crew-filters-done {
+  display: block;
+  margin-left: auto;
+}
+.crew-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -12px 0 20px;
+}
+.crew-filter-chip {
+  padding: 3px 6px 3px 10px;
+}
+.crew-app .crew-filter-chip button {
+  border: 0;
+  background: transparent;
+  padding: 0 4px;
+  margin-right: 0;
+  font-size: 14px;
+  border-radius: 999px;
+}
+.crew-filter-count {
+  font-size: 11px;
+  color: #77806a;
+}
+.crew-app .crew-clear-filters {
+  border: 0;
+  background: transparent;
+  padding: 3px 4px;
+  font-size: 12px;
+  text-decoration: underline;
+}
+.crew-app .crew-release-head button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 1px 4px;
+  margin-left: -4px;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.crew-app .crew-release-head button:hover,
+.crew-app .crew-release-head button[aria-pressed="true"] {
+  background: #edf2e9;
+  text-decoration: underline;
+}
+@media (max-width: 680px) {
+  .crew-toolbar {
+    position: relative;
+  }
+  .crew-filters {
+    position: static;
+  }
+  .crew-filters-panel {
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
+  }
+}

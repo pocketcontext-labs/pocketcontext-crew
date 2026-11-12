@@ -412,7 +412,7 @@ try {
  assert.equal(page.url(),filteredBoard,'reload keeps the board filter');
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('h2 span').innerText(),'1','column counts follow the filter');
  await snap('crew-board-agent-filter');
- await page.getByRole('button',{name:'Show all tasks',exact:true}).click();
+ await page.getByRole('button',{name:'Clear all',exact:true}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
  // Labels are independent keyboard controls; filtering combines with assignment and survives history/reload.
@@ -426,12 +426,43 @@ try {
  assert.equal(await dialog().count(),0,'label activation does not open the card');
  await page.waitForFunction(()=>location.hash==='#/tasks?label=Synthetic-board');
  await page.reload();await cards(1);
- assert.equal(await page.getByRole('combobox',{name:'Filter by label'}).inputValue(),'synthetic-board');
- await page.getByRole('button',{name:'Show all tasks',exact:true}).click();await cards(2);
+ // Panel filters show as removable chips and are counted on the one Filters button.
+ await page.getByRole('button',{name:'Remove filter Label Synthetic-board',exact:true}).waitFor();
+ const filtersButton=page.getByRole('button',{name:/^Filters/});
+ assert.equal(await filtersButton.innerText(),'Filters · 1');
+ await filtersButton.click();
+ const filtersPanel=page.getByRole('group',{name:'Task filters'});
+ assert.equal(await filtersPanel.getByRole('combobox',{name:'Filter by label'}).inputValue(),'synthetic-board');
+ assert.equal(await filtersPanel.getByRole('combobox',{name:'Sort tasks'}).inputValue(),'updated');
+ await page.keyboard.press('Escape');
+ await filtersPanel.waitFor({state:'hidden'});
+ await page.getByRole('button',{name:'Clear all',exact:true}).click();await cards(2);
+ assert.equal(await filtersButton.innerText(),'Filters');
  await page.goBack();await cards(1);
  await page.goForward();await cards(2);
+ // At 1024 the toolbar is one row: search, agent filter and Filters, nothing else.
+ await page.setViewportSize({width:1024,height:800});
+ const toolbar=await page.locator('.crew-toolbar').evaluate(t=>({
+  controls:[...t.querySelectorAll('input,select,button')].filter(e=>e.offsetParent!==null).map(e=>e.getAttribute('aria-label')||e.textContent.trim()),
+  oneRow:(r=>r.every(x=>x.top<r[0].bottom&&x.bottom>r[0].top))([...t.children].map(c=>c.getBoundingClientRect())),
+ }));
+ assert.deepEqual(toolbar,{controls:['Search tasks','Filter by assignment','Filters'],oneRow:true},'one toolbar row at 1024');
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'no horizontal scroll at 1024');
+ await filtersButton.click();
+ assert.equal(await filtersPanel.evaluate(p=>{const r=p.getBoundingClientRect();return r.left>=0&&r.right<=window.innerWidth;}),true,'Filters panel fits at 1024');
+ await snap('crew-board-filters-1024');
+ await page.getByRole('heading',{name:'Tasks',exact:true}).click();
+ await filtersPanel.waitFor({state:'hidden'});
  await page.setViewportSize({width:390,height:844});
+ await filtersButton.click();
+ assert.equal(await filtersPanel.evaluate(p=>{const r=p.getBoundingClientRect();return r.left>=0&&r.right<=window.innerWidth;}),true,'Filters panel fits at phone width');
+ await filtersPanel.getByRole('combobox',{name:'Sort tasks'}).selectOption('held');
+ await page.getByRole('button',{name:'Remove filter Sort: Oldest hold first'}).waitFor();
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'board filters fit at phone width');
+ await snap('crew-board-filters-390');
+ await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:'Remove filter Sort: Oldest hold first'}).click();
+ await page.waitForFunction(()=>location.hash==='#/tasks');
  await page.setViewportSize({width:1280,height:800});
  // Releases: Won't do and a release put a card in the Done column under its release group.
  await page.getByRole('button',{name:/Synthetic long description/}).click();
@@ -443,15 +474,40 @@ try {
  await dropped.getByText("Won't do",{exact:true}).waitFor();
  await dropped.getByText('Shipped in 0.19.0',{exact:true}).waitFor();
  assert.deepEqual(await doneColumn.getByRole('group').evaluateAll(gs=>gs.map(g=>g.getAttribute('aria-label'))),['0.19.0','No release'],'Done groups by release, newest first, No release last');
- const releaseFilter=page.getByRole('combobox',{name:'Filter by release'});
- await releaseFilter.selectOption({label:'Shipped in 0.19.0'});
+ // No release dropdown on the toolbar: the Done release header sets the release chip.
+ assert.equal(await page.locator('.crew-toolbar select[aria-label="Filter by release"]').count(),0);
+ await doneColumn.getByRole('button',{name:'Show only release 0.19.0'}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks?release=0.19.0');
  await cards(1);
+ const releaseChip=page.getByRole('button',{name:'Remove filter Release 0.19.0',exact:true});
+ await releaseChip.waitFor();
  await snap('crew-board-release-filter');
  await page.reload();
- await page.waitForFunction(()=>document.querySelector('select[aria-label="Filter by release"]')?.value==='0.19.0');
+ await releaseChip.waitFor();
  await cards(1);
- await page.getByRole('button',{name:'Show all tasks',exact:true}).click();
+ await filtersButton.click();
+ assert.equal(await filtersPanel.getByRole('combobox',{name:'Filter by release'}).inputValue(),'0.19.0');
+ await filtersPanel.getByRole('combobox',{name:'Filter by hold'}).selectOption('ready');
+ await page.waitForFunction(()=>location.hash==='#/tasks?hold=ready&release=0.19.0');
+ assert.equal(await filtersButton.innerText(),'Filters · 2');
+ await page.keyboard.press('Escape');
+ // Each chip removes on its own.
+ await releaseChip.click();
+ await page.waitForFunction(()=>location.hash==='#/tasks?hold=ready');
+ await page.getByRole('button',{name:'Remove filter Ready',exact:true}).click();
+ await page.waitForFunction(()=>location.hash==='#/tasks');
+ await cards(2);
+ // release:0.19.0 in the search filters like the release chip; Enter makes it one.
+ const taskSearch=page.getByRole('searchbox',{name:'Search tasks'});
+ await taskSearch.fill('release:0.19.0');
+ await cards(1);
+ assert.equal(await page.evaluate(()=>location.hash),'#/tasks');
+ await taskSearch.press('Enter');
+ await page.waitForFunction(()=>location.hash==='#/tasks?release=0.19.0');
+ await releaseChip.waitFor();
+ assert.equal(await taskSearch.inputValue(),'');
+ await cards(1);
+ await page.getByRole('button',{name:'Clear all',exact:true}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
  await page.getByRole('button',{name:/Synthetic long description/}).click();
@@ -897,7 +953,8 @@ try {
   await tile.waitFor();const count=Number(await tile.locator('b').innerText());
   await tile.click();await page.getByRole('heading',{name:'Tasks',exact:true}).waitFor();
   await cards(count);
-  if(name==='on hold over 3 days') await page.getByRole('button',{name:'Remove over 3 days filter'}).waitFor();
+  await page.getByRole('button',{name:name==='on hold over 3 days'?'Remove filter On hold · over 3 days':'Remove filter Status '+name,exact:true}).waitFor();
+  assert.equal(await page.locator('.crew-filter-count').innerText(),`${count} ${count===1?'task':'tasks'}`,`${name} tile count matches the board`);
  }
  // Review evidence and structured alternatives: only the frozen images, exact decisions.
  const reviewTask=await boardWrite('task.create',{title:'Synthetic review alternatives',draft:'Hook\nProblem\nSolution\n![First](attachment:new-1)\n![Second](attachment:new-2)',files:shotsBase64.map((content_base64,i)=>({name:`review-${i+1}.png`,content_base64}))});

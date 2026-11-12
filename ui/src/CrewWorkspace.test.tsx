@@ -77,6 +77,12 @@ afterEach(() => {
   history.replaceState(null, "", "/");
   vi.restoreAllMocks();
 });
+/** Opens the board's Filters panel (if closed) and returns it. */
+function openFilters() {
+  const button = screen.getByRole("button", { name: /^Filters/ });
+  if (button.getAttribute("aria-expanded") !== "true") fireEvent.click(button);
+  return within(screen.getByRole("group", { name: "Task filters" }));
+}
 async function openPage(name: string | RegExp) {
   const link = screen.getByRole("link", { name });
   fireEvent.click(link);
@@ -2215,11 +2221,11 @@ describe("board agent filter", () => {
     expect(columnCount("in_progress")).toBe("0");
     expect(columnCount("done")).toBe("1");
     expect(location.hash).toBe(`#/tasks?agent=${agent.id}`);
-    fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(filter()).toHaveValue("all");
     expect(cardTitles()).toHaveLength(5);
     expect(location.hash).toBe("#/tasks");
-    expect(screen.queryByRole("button", { name: "Show all tasks" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear all" })).toBeNull();
     fireEvent.change(filter(), { target: { value: design.id } });
     fireEvent.change(filter(), { target: { value: "all" } });
     expect(cardTitles()).toHaveLength(5);
@@ -2232,6 +2238,26 @@ describe("board agent filter", () => {
     });
     expect(cardTitles()).toEqual(["Network shipped"]);
     expect(location.hash).toBe(`#/tasks?agent=${agent.id}`);
+  });
+
+  it("reads agent: from the search and commits it to the agent filter on Enter", async () => {
+    await openBoard();
+    const search = screen.getByRole("searchbox", { name: "Search tasks" });
+    fireEvent.change(search, { target: { value: "agent:network" } });
+    expect(cardTitles()).toEqual(["Network draft", "Network shipped"]);
+    fireEvent.change(search, { target: { value: "agent:unassigned" } });
+    expect(cardTitles()).toEqual(["Nobody yet"]);
+    fireEvent.change(search, { target: { value: "agent:nobody" } });
+    expect(cardTitles()).toEqual([]);
+    // An unknown agent stays in the search on Enter.
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(search).toHaveValue("agent:nobody");
+    fireEvent.change(search, { target: { value: 'agent:"Design"' } });
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(search).toHaveValue("");
+    expect(filter()).toHaveValue(design.id);
+    expect(location.hash).toBe(`#/tasks?agent=${design.id}`);
+    expect(cardTitles()).toEqual(["Design palette"]);
   });
 
   it("restores the filter from the address and keeps it when a task closes", async () => {
@@ -2563,22 +2589,25 @@ describe("On hold", () => {
   it("filters the board by hold, combined with the agent filter, in the address", async () => {
     render(<CrewWorkspace />);
     await screen.findByRole("heading", { name: "Held draft" });
-    const hold = screen.getByRole("combobox", { name: "Filter by hold" });
+    const hold = openFilters().getByRole("combobox", { name: "Filter by hold" });
     expect(
       within(hold).getAllByRole("option").map((x) => x.textContent),
     ).toEqual(["On hold and Ready", "On hold (1)", "Ready (2)"]);
     fireEvent.change(hold, { target: { value: "on_hold" } });
     expect(cardTitles()).toEqual(["Held draft"]);
     expect(location.hash).toBe("#/tasks?hold=on_hold");
+    expect(screen.getByRole("button", { name: "Filters · 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove filter On hold" })).toBeInTheDocument();
     fireEvent.change(hold, { target: { value: "ready" } });
     expect(cardTitles()).toEqual(["Ready work", "Other agent"]);
+    expect(screen.getByRole("button", { name: "Remove filter Ready" })).toBeInTheDocument();
     fireEvent.change(
       screen.getByRole("combobox", { name: "Filter by assignment" }),
       { target: { value: agent.id } },
     );
     expect(cardTitles()).toEqual(["Ready work"]);
     expect(location.hash).toBe(`#/tasks?agent=${agent.id}&hold=ready`);
-    fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(cardTitles()).toHaveLength(4);
     expect(location.hash).toBe("#/tasks");
   });
@@ -2586,7 +2615,8 @@ describe("On hold", () => {
     history.replaceState(null, "", "/#/tasks?hold=on_hold");
     render(<CrewWorkspace />);
     await screen.findByRole("heading", { name: "Held draft" });
-    expect(screen.getByRole("combobox", { name: "Filter by hold" })).toHaveValue(
+    expect(screen.getByRole("button", { name: "Remove filter On hold" })).toBeInTheDocument();
+    expect(openFilters().getByRole("combobox", { name: "Filter by hold" })).toHaveValue(
       "on_hold",
     );
     expect(cardTitles()).toEqual(["Held draft"]);
@@ -2610,12 +2640,15 @@ describe("On hold", () => {
     });
     expect(tile).toHaveAttribute("href", "#/tasks?hold=on_hold&held_over=3d");
     fireEvent.click(tile);
-    await waitFor(() =>
-      expect(
-        screen.getByRole("combobox", { name: "Filter by hold" }),
-      ).toHaveValue("on_hold"),
-    );
+    const chip = await screen.findByRole("button", {
+      name: "Remove filter On hold · over 3 days",
+    });
     expect(cardTitles()).toEqual(["Old hold"]);
+    expect(document.querySelector(".crew-filter-count")?.textContent).toBe("1 task");
+    expect(openFilters().getByRole("checkbox", { name: /On hold over 3 days/ })).toBeChecked();
+    fireEvent.click(chip);
+    expect(location.hash).toBe("#/tasks");
+    expect(cardTitles()).toHaveLength(4);
   });
 });
 
@@ -3107,21 +3140,25 @@ describe("releases and Won't do on the board", () => {
   it("filters by release in the address and shows that release's older tasks", async () => {
     render(<CrewWorkspace />);
     await screen.findByRole("heading", { name: "Planned" });
-    const filter = screen.getByRole("combobox", { name: "Filter by release" });
+    // No release dropdown on the toolbar: release lives in the Filters panel.
+    expect(screen.queryByRole("combobox", { name: "Filter by release" })).toBeNull();
+    const filter = openFilters().getByRole("combobox", { name: "Filter by release" });
     expect(within(filter).getAllByRole("option").map((x) => x.textContent)).toEqual([
       "All releases",
-      "Shipped in 0.19.0",
-      "Shipped in 0.18.0",
-      "Shipped in 0.9.0",
+      "0.19.0",
+      "0.18.0",
+      "0.9.0",
       "No release",
     ]);
     fireEvent.change(filter, { target: { value: "0.9.0" } });
     expect(cardTitles()).toEqual(["Ancient work"]);
     expect(location.hash).toBe("#/tasks?release=0.9.0");
+    expect(screen.getByRole("button", { name: "Remove filter Release 0.9.0" })).toBeInTheDocument();
     fireEvent.change(filter, { target: { value: "none" } });
     expect(cardTitles()).toEqual(["Planned", "Dropped idea"]);
     expect(location.hash).toBe("#/tasks?release=none");
-    fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
+    expect(screen.getByRole("button", { name: "Remove filter No release" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(filter).toHaveValue("");
     expect(location.hash).toBe("#/tasks");
   });
@@ -3130,10 +3167,55 @@ describe("releases and Won't do on the board", () => {
     history.replaceState(null, "", "/#/tasks?release=0.18.0");
     render(<CrewWorkspace />);
     await screen.findByRole("heading", { name: "Shipped first" });
-    expect(screen.getByRole("combobox", { name: "Filter by release" })).toHaveValue(
+    expect(screen.getByRole("button", { name: "Filters · 1" })).toBeInTheDocument();
+    expect(openFilters().getByRole("combobox", { name: "Filter by release" })).toHaveValue(
       "0.18.0",
     );
     expect(cardTitles()).toEqual(["Shipped first"]);
+  });
+
+  it("filters to a release from its Done column header", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Planned" });
+    fireEvent.click(doneColumn().getByRole("button", { name: "Show only release 0.19.0" }));
+    expect(location.hash).toBe("#/tasks?release=0.19.0");
+    expect(cardTitles()).toEqual(["Shipped next", "Also next"]);
+    expect(doneColumn().getByRole("button", { name: "Show only release 0.19.0" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove filter Release 0.19.0" }));
+    expect(location.hash).toBe("#/tasks");
+    fireEvent.click(doneColumn().getByRole("button", { name: "Show only tasks without a release" }));
+    expect(location.hash).toBe("#/tasks?release=none");
+    expect(cardTitles()).toEqual(["Planned", "Dropped idea"]);
+  });
+
+  it("reads release:, status: and label: from the search like the filters, and Enter makes them chips", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Planned" });
+    const search = screen.getByRole("searchbox", { name: "Search tasks" });
+    fireEvent.change(search, { target: { value: "release:0.9.0" } });
+    expect(cardTitles()).toEqual(["Ancient work"]);
+    // The address only holds committed filters.
+    expect(location.hash).toBe("#/tasks");
+    fireEvent.change(search, { target: { value: "release:0.19.0 also" } });
+    expect(cardTitles()).toEqual(["Also next"]);
+    fireEvent.change(search, { target: { value: "status:wont-do" } });
+    expect(cardTitles()).toEqual(["Dropped idea"]);
+    // A key still being typed filters nothing.
+    fireEvent.change(search, { target: { value: "release:" } });
+    expect(cardTitles()).toHaveLength(5);
+    fireEvent.change(search, { target: { value: "release:0.19.0 next" } });
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(search).toHaveValue("next");
+    expect(location.hash).toBe("#/tasks?release=0.19.0");
+    expect(screen.getByRole("button", { name: "Remove filter Release 0.19.0" })).toBeInTheDocument();
+    expect(cardTitles()).toEqual(["Shipped next", "Also next"]);
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    expect(search).toHaveValue("");
+    expect(location.hash).toBe("#/tasks");
+    expect(screen.queryByRole("button", { name: "Clear all" })).toBeNull();
   });
 
   it("counts Done only on its Home tile, and Won't do never breaks the counts", async () => {
@@ -3201,17 +3283,18 @@ it("combines label filtering with assignment, keeps hidden assignee labels filte
   render(<CrewWorkspace />);
   const card = await screen.findByRole("button", { name: /Crew change/ });
   expect(within(card).queryByRole("button", { name: "Filter by label Network" })).toBeNull();
-  expect(within(screen.getByRole("combobox", { name: "Filter by label" })).getByRole("option", { name: "Network (2)" })).toBeInTheDocument();
+  expect(within(openFilters().getByRole("combobox", { name: "Filter by label" })).getByRole("option", { name: "Network (2)" })).toBeInTheDocument();
   fireEvent.change(screen.getByRole("combobox", { name: "Filter by assignment" }), { target: { value: agent.id } });
   fireEvent.click(within(card).getByRole("button", { name: "Filter by label Crew" }));
   expect(document.querySelectorAll(".crew-task-card")).toHaveLength(1);
   expect(location.hash).toBe(`#/tasks?agent=${agent.id}&label=Crew`);
+  expect(screen.getByRole("button", { name: "Remove filter Label Crew" })).toBeInTheDocument();
   expect(screen.queryByRole("dialog")).toBeNull();
   act(() => history.back());
   await waitFor(() => expect(document.querySelectorAll(".crew-task-card")).toHaveLength(2));
   act(() => history.forward());
   await waitFor(() => expect(document.querySelectorAll(".crew-task-card")).toHaveLength(1));
-  fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
+  fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
   expect(document.querySelectorAll(".crew-task-card")).toHaveLength(3);
   expect(location.hash).toBe("#/tasks");
 });

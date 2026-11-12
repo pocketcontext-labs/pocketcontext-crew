@@ -49,7 +49,20 @@ import {
   releaseMatches,
 } from "./taskReleases";
 import StartSession from "./StartSession";
-import { heldDuration, heldSince, isLongHeld, knownLabels, labelMatches, statusMatches } from "./boardFilters";
+import {
+  clearedBoard,
+  commitBoardSearch,
+  filterChips,
+  heldDuration,
+  heldSince,
+  isLongHeld,
+  knownLabels,
+  labelMatches,
+  longHolds,
+  parseBoardSearch,
+  statusMatches,
+  tokensMatch,
+} from "./boardFilters";
 import {
   agentKind,
   agentKindCardLabel,
@@ -962,8 +975,31 @@ export default function CrewWorkspace() {
   const setHoldFilter = (value: HoldFilter) => updateBoard({ hold: value, heldOver: "" });
   const releaseFilter = viewState.release;
   const setReleaseFilter = (value: string) => updateBoard({ release: value });
-  const boardFiltered = assignmentFilter !== "all" || holdFilter !== "all" || releaseFilter !== "" ||
-    !!viewState.label || !!viewState.status || !!viewState.heldOver || viewState.taskSort !== "updated";
+  // Panel filters show as chips under the toolbar; the Filters button counts them.
+  const chips = filterChips(viewState);
+  const boardFiltered = assignmentFilter !== "all" || chips.length > 0;
+  // `release:`, `label:`, `agent:` and `status:` in the search act as filters.
+  const boardSearch = parseBoardSearch(query);
+  const agentNames = data.agents.map((agent) => ({ id: agent.id, name: val(agent, "name") }));
+  const clearBoard = () => {
+    setQuery("");
+    updateBoard(clearedBoard);
+  };
+  // The Filters panel: closes on Escape (back to its button) or a click outside.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  const filtersButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const outside = (e: Event) => {
+      if (!filtersRef.current?.contains(e.target as Node)) setFiltersOpen(false);
+    };
+    document.addEventListener("mousedown", outside);
+    return () => document.removeEventListener("mousedown", outside);
+  }, [filtersOpen]);
+  useEffect(() => {
+    if (view !== "board") setFiltersOpen(false);
+  }, [view]);
   // Older closed tasks stay folded until asked for; not part of the address.
   const [showOlderDone, setShowOlderDone] = useState(false);
   const bucket = data.buckets.some((x) => x.id === viewState.bucket)
@@ -1165,7 +1201,23 @@ export default function CrewWorkspace() {
     ]
       .join(" ")
       .toLowerCase()
-      .includes(query.toLowerCase());
+      .includes(boardSearch.text.toLowerCase()) &&
+    tokensMatch(boardSearch.tokens, x, agentNames);
+  // Every filter but the column; the columns split these by status.
+  const boardTasks = data.tasks.filter(
+    (x) =>
+      matches(x) &&
+      assignmentMatches(assignmentFilter, x, invalidAssignment) &&
+      holdMatches(holdFilter, x) &&
+      releaseMatches(releaseFilter, x) &&
+      labelMatches(viewState.label, x) &&
+      statusMatches(viewState.status, x) &&
+      (!viewState.heldOver || isLongHeld(x)),
+  );
+  const boardSearched = boardSearch.text !== "" || boardSearch.tokens.length > 0;
+  // A release chosen by search shows that release's older tasks too.
+  const releaseChosen =
+    releaseFilter !== "" || boardSearch.tokens.some((t) => t.key === "release");
   // Note count and latest note update per bucket, for the cards and their sorts.
   const bucketStats = new Map<string, { count: number; latest: string }>();
   for (const note of data.notes) {
@@ -1430,9 +1482,18 @@ export default function CrewWorkspace() {
                 <input
                   type="search"
                   aria-label="Search tasks"
-                  placeholder="Search tasks, descriptions or labels…"
+                  placeholder="Search tasks, or release:0.20.0…"
+                  title="Search titles, descriptions and labels. release:, label:, agent: and status: filter; Enter turns them into filter chips."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    const { text, changes } = commitBoardSearch(query, agentNames);
+                    if (!Object.keys(changes).length) return;
+                    e.preventDefault();
+                    setQuery(text);
+                    updateBoard(changes);
+                  }}
                 />
               </label>
               <select
@@ -1458,59 +1519,168 @@ export default function CrewWorkspace() {
                   </optgroup>
                 )}
               </select>
-              <select
-                aria-label="Filter by hold"
-                value={holdFilter}
-                onChange={(e) => setHoldFilter(e.target.value as HoldFilter)}
+              <div
+                className="crew-filters"
+                ref={filtersRef}
+                onKeyDown={(e) => {
+                  if (e.key !== "Escape" || !filtersOpen) return;
+                  e.stopPropagation();
+                  setFiltersOpen(false);
+                  filtersButton.current?.focus();
+                }}
               >
-                {holdFilters.map((key) => (
-                  <option key={key} value={key}>
-                    {holdFilterLabels[key]}
-                    {key === "on_hold"
-                      ? ` (${onHoldCount})`
-                      : key === "ready"
-                        ? ` (${openTasks.length - onHoldCount})`
-                        : ""}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Filter by release"
-                value={releaseFilter}
-                onChange={(e) => setReleaseFilter(e.target.value)}
-              >
-                <option value="">All releases</option>
-                {releaseOptions.map((release) => (
-                  <option key={release} value={release}>
-                    Shipped in {release}
-                  </option>
-                ))}
-                <option value={noRelease}>No release</option>
-              </select>
-              <select aria-label="Filter by label" value={viewState.label.toLowerCase()}
-                onChange={(e) => updateBoard({ label: e.target.value })}>
-                <option value="">All labels</option>
-                {viewState.label && !labelsAvailable.some((x) => x.label.toLowerCase() === viewState.label.toLowerCase()) &&
-                  <option value={viewState.label.toLowerCase()}>{viewState.label} (0)</option>}
-                {labelsAvailable.map(({ label, count }) => <option key={label.toLowerCase()} value={label.toLowerCase()}>{label} ({count})</option>)}
-              </select>
-              <select aria-label="Filter by status" value={viewState.status}
-                onChange={(e) => updateBoard({ status: e.target.value })}>
-                <option value="">All statuses</option>
-                {boardStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-              <select aria-label="Sort tasks" value={viewState.taskSort}
-                onChange={(e) => updateBoard({ taskSort: e.target.value as ViewState["taskSort"] })}>
-                <option value="updated">Sort: Last updated</option>
-                <option value="held">Sort: Oldest hold first</option>
-              </select>
-              {viewState.heldOver && <button type="button" className="crew-hold-filter"
-                onClick={() => updateBoard({ heldOver: "" })} aria-label="Remove over 3 days filter">On hold · over 3 days ×</button>}
-              {boardFiltered && (
-                <button type="button" onClick={() => { setQuery(""); updateBoard({ assignment: "all", hold: "all", release: "", label: "", status: "", heldOver: "", taskSort: "updated" }); }}>
-                  Show all tasks
+                <button
+                  type="button"
+                  ref={filtersButton}
+                  className={chips.length ? "crew-filters-button active" : "crew-filters-button"}
+                  aria-expanded={filtersOpen}
+                  aria-controls="crew-filters-panel"
+                  onClick={() => setFiltersOpen((open) => !open)}
+                >
+                  Filters{chips.length ? ` · ${chips.length}` : ""}
                 </button>
-              )}
+                {filtersOpen && (
+                  <div
+                    id="crew-filters-panel"
+                    className="crew-filters-panel"
+                    role="group"
+                    aria-label="Task filters"
+                  >
+                    <label className="crew-field">
+                      <span>Readiness</span>
+                      <select
+                        aria-label="Filter by hold"
+                        value={holdFilter}
+                        onChange={(e) => setHoldFilter(e.target.value as HoldFilter)}
+                      >
+                        {holdFilters.map((key) => (
+                          <option key={key} value={key}>
+                            {holdFilterLabels[key]}
+                            {key === "on_hold"
+                              ? ` (${onHoldCount})`
+                              : key === "ready"
+                                ? ` (${openTasks.length - onHoldCount})`
+                                : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="crew-filters-check">
+                      <input
+                        type="checkbox"
+                        checked={!!viewState.heldOver}
+                        onChange={(e) =>
+                          updateBoard(
+                            e.target.checked
+                              ? { hold: "on_hold", heldOver: "3d" }
+                              : { heldOver: "" },
+                          )
+                        }
+                      />
+                      On hold over 3 days ({longHolds(data.tasks).length})
+                    </label>
+                    <label className="crew-field">
+                      <span>Label</span>
+                      <select
+                        aria-label="Filter by label"
+                        value={viewState.label.toLowerCase()}
+                        onChange={(e) => updateBoard({ label: e.target.value })}
+                      >
+                        <option value="">All labels</option>
+                        {viewState.label &&
+                          !labelsAvailable.some(
+                            (x) => x.label.toLowerCase() === viewState.label.toLowerCase(),
+                          ) && (
+                            <option value={viewState.label.toLowerCase()}>
+                              {viewState.label} (0)
+                            </option>
+                          )}
+                        {labelsAvailable.map(({ label, count }) => (
+                          <option key={label.toLowerCase()} value={label.toLowerCase()}>
+                            {label} ({count})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="crew-field">
+                      <span>Status</span>
+                      <select
+                        aria-label="Filter by status"
+                        value={viewState.status}
+                        onChange={(e) => updateBoard({ status: e.target.value })}
+                      >
+                        <option value="">All statuses</option>
+                        {boardStatuses.map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="crew-field">
+                      <span>Release</span>
+                      <select
+                        aria-label="Filter by release"
+                        value={releaseFilter}
+                        onChange={(e) => setReleaseFilter(e.target.value)}
+                      >
+                        <option value="">All releases</option>
+                        {releaseOptions.map((release) => (
+                          <option key={release} value={release}>
+                            {release}
+                          </option>
+                        ))}
+                        <option value={noRelease}>No release</option>
+                      </select>
+                    </label>
+                    <label className="crew-field">
+                      <span>Sort</span>
+                      <select
+                        aria-label="Sort tasks"
+                        value={viewState.taskSort}
+                        onChange={(e) =>
+                          updateBoard({ taskSort: e.target.value as ViewState["taskSort"] })
+                        }
+                      >
+                        <option value="updated">Last updated, newest first</option>
+                        <option value="held">Oldest hold first</option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="crew-filters-done"
+                      onClick={() => {
+                        setFiltersOpen(false);
+                        filtersButton.current?.focus();
+                      }}
+                    >
+                      Done
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {view === "board" && (boardFiltered || boardSearched) && (
+            <div className="crew-filter-chips" role="group" aria-label="Active filters">
+              {chips.map((chip) => (
+                <span className="crew-chip crew-filter-chip" key={chip.key}>
+                  {chip.label}
+                  <button
+                    type="button"
+                    aria-label={`Remove filter ${chip.label}`}
+                    onClick={() => updateBoard(chip.clear)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <span className="crew-filter-count" role="status">
+                {boardTasks.length} {boardTasks.length === 1 ? "task" : "tasks"}
+              </span>
+              <button type="button" className="crew-clear-filters" onClick={clearBoard}>
+                Clear all
+              </button>
             </div>
           )}
           {view === "home" && (
@@ -1564,17 +1734,8 @@ export default function CrewWorkspace() {
             <div className="crew-board">
               {boardStatuses.map(([status, label]) => {
                 // The Done column holds every closed task: Done and Won't do.
-                const tasks = data.tasks.filter(
-                  (x) =>
-                    (status === "done"
-                      ? isClosed(x)
-                      : val(x, "status") === status) &&
-                    matches(x) &&
-                    assignmentMatches(assignmentFilter, x, invalidAssignment) &&
-                    holdMatches(holdFilter, x) &&
-                    releaseMatches(releaseFilter, x) &&
-                    labelMatches(viewState.label, x) && statusMatches(viewState.status, x) &&
-                    (!viewState.heldOver || isLongHeld(x)),
+                const tasks = boardTasks.filter((x) =>
+                  status === "done" ? isClosed(x) : val(x, "status") === status,
                 );
                 tasks.sort((a, b) => viewState.taskSort === "held"
                   ? (onHold(a) && !isClosed(a) ? heldSince(a) || Infinity : Infinity) - (onHold(b) && !isClosed(b) ? heldSince(b) || Infinity : Infinity)
@@ -1583,7 +1744,7 @@ export default function CrewWorkspace() {
                 // is chosen or the owner asks for them.
                 const done =
                   status === "done"
-                    ? doneColumn(tasks, showOlderDone || releaseFilter !== "" || viewState.status === "done")
+                    ? doneColumn(tasks, showOlderDone || releaseChosen || viewState.status === "done")
                     : null;
                 const card = (x: Row) => (
                   <div
@@ -1690,8 +1851,15 @@ export default function CrewWorkspace() {
                             aria-label={group.release || "No release"}
                           >
                             <h3 className="crew-release-head">
-                              {group.release || "No release"}
-                              <span>{group.tasks.length}</span>
+                              <button
+                                type="button"
+                                aria-label={`Show only ${group.release ? `release ${group.release}` : "tasks without a release"}`}
+                                aria-pressed={releaseFilter === (group.release || noRelease)}
+                                onClick={() => updateBoard({ release: group.release || noRelease })}
+                              >
+                                {group.release || "No release"}
+                                <span>{group.tasks.length}</span>
+                              </button>
                             </h3>
                             {group.tasks.map(card)}
                           </div>
@@ -1709,7 +1877,7 @@ export default function CrewWorkspace() {
                     )}
                     {!tasks.length && (
                       <div className="crew-column-empty">
-                        {query || boardFiltered ? (
+                        {boardSearched || boardFiltered ? (
                           "No matching tasks"
                         ) : status === "todo" ? (
                           <>

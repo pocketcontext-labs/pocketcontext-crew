@@ -700,9 +700,10 @@ and, for an in-session approval, "Approved in session by <name>, <date>". The
 board keeps four columns: the Done column holds Done and Won't do tasks (Won't do
 cards carry a chip), grouped by release (newest release first, semantic versions
 compared numerically, "No release" last), showing tasks updated in the last 7 days
-with **Show older (N)** for the rest. Cards with a release show "Shipped in X", and
-the board filter bar has a release filter kept in the address
-(`#/tasks?release=<release>` or `release=none`).
+with **Show older (N)** for the rest. Cards with a release show "Shipped in X".
+Clicking a release header in the Done column filters the board to that release,
+kept in the address (`#/tasks?release=<release>` or `release=none`); the search
+token `release:<release>` and the Filters panel do the same.
 
 **Claims.** Tasks have `claimed_at` (the original start, unchanged by renewal),
 `claimed_by` (the claimer's reported session name; attribution, not identity), `claim_until` (ISO UTC lease end) and a derived
@@ -764,8 +765,15 @@ Home and the board share the same over-three-days rule, exclude terminal tasks
 from hold views, and keep the age filter in the address (`held_over=3d`).
 
 The board also supports a case-insensitive single label filter (`label=…`), combined
-with assignment, hold, status and release filters. Click a label chip to filter;
-Show all tasks clears the filters. The MCP `label` filter remains an exact match.
+with assignment, hold, status and release filters. Click a label chip to filter.
+The board toolbar shows only search, the agent filter and a **Filters** button
+(with a count); the button opens a panel with readiness (On hold, Ready, on hold
+over 3 days), label, status, release and sort. Each filter set there shows as a
+removable chip under the toolbar, with the number of matching tasks and **Clear
+all**. The search reads `release:`, `label:`, `agent:` and `status:` tokens
+(quote values with spaces, e.g. `agent:"Build bot"`) and applies them like the
+corresponding filter; Enter turns them into chips in the address. The MCP `label`
+filter remains an exact match.
 
 The wake rule: an on-hold task never wakes a bot, whatever changes. Creating it,
 assigning or reassigning it, reopening it, review outcomes and comments
