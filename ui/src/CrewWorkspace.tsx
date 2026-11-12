@@ -36,6 +36,18 @@ import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
 import LabelsInput from "./LabelsInput";
 import { strandedWakes } from "./wakes";
+import StartSession from "./StartSession";
+import {
+  agentKind,
+  agentKindCardLabel,
+  agentKindChoices,
+  agentKinds,
+  agentKindSuffix,
+  claimOf,
+  claimTitle,
+  webhookConfigured,
+  type AgentKind,
+} from "./projectAgents";
 import { GlobalSearch, SearchPage } from "./Search";
 import { searchHash, searchTextFromHash, type SearchHit } from "./searchApi";
 import "./crew.css";
@@ -244,6 +256,25 @@ function HoldChip({ task }: { task: Row }) {
     <span className="crew-hold-chip" title={reason || undefined}>
       On hold
       {reason && <span className="sr-only">: {reason}</span>}
+    </span>
+  );
+}
+/** A coding session's claim: live with its end time on hover, or expired. */
+function ClaimChip({ task }: { task: Row }) {
+  const claim = claimOf(task);
+  if (!claim.state) return null;
+  const title = claimTitle(claim) || undefined;
+  if (claim.state === "expired")
+    return (
+      <span className="crew-claim-expired" title={title}>
+        Claim expired
+        {title && <span className="sr-only">: {title}</span>}
+      </span>
+    );
+  return (
+    <span className="crew-claim-chip" title={title}>
+      Claimed by {claim.by || "a session"}
+      {title && <span className="sr-only"> {title}</span>}
     </span>
   );
 }
@@ -1337,7 +1368,8 @@ export default function CrewWorkspace() {
                   <optgroup label="By agent">
                     {agentOptions.map(({ agent, count }) => (
                       <option key={agent.id} value={agent.id}>
-                        {val(agent, "name")} ({count})
+                        {val(agent, "name")}
+                        {agentKindSuffix[agentKind(agent)]} ({count})
                       </option>
                     ))}
                   </optgroup>
@@ -1456,6 +1488,7 @@ export default function CrewWorkspace() {
                           {val(x, "status") !== "done" && (
                             <HoldChip task={x} />
                           )}
+                          <ClaimChip task={x} />
                           {wakeMissing.has(x.id) && <WakeMissingChip />}
                           {pending.some((r) => val(r, "task") === x.id) && (
                             <span className="crew-human">Human</span>
@@ -1767,20 +1800,32 @@ export default function CrewWorkspace() {
               )}
               <div className="crew-agents">
                 {data.agents.map((x) => (
-                  <button
-                    className="crew-agent-card"
-                    key={x.id}
-                    onClick={() => setDialog({ kind: "agent", row: x })}
-                  >
-                    <span className="crew-avatar">
-                      {agentInitials(val(x, "name"), data.agents)}
-                    </span>
-                    <h2>{val(x, "name")}</h2>
-                    {/* A preview: one paragraph clamped to whole lines. */}
-                    <p title={val(x, "brief") || undefined}>
-                      {val(x, "brief").replace(/\s+/g, " ").trim()}
-                    </p>
-                  </button>
+                  <div className="crew-agent-tile" key={x.id}>
+                    <button
+                      className="crew-agent-card"
+                      onClick={() => setDialog({ kind: "agent", row: x })}
+                    >
+                      <span className="crew-avatar">
+                        {agentInitials(val(x, "name"), data.agents)}
+                      </span>
+                      <h2>{val(x, "name")}</h2>
+                      {agentKindCardLabel[agentKind(x)] && (
+                        <small className="crew-agent-kind">
+                          {agentKindCardLabel[agentKind(x)]}
+                        </small>
+                      )}
+                      {/* A preview: one paragraph clamped to whole lines. */}
+                      <p title={val(x, "brief") || undefined}>
+                        {val(x, "brief").replace(/\s+/g, " ").trim()}
+                      </p>
+                    </button>
+                    {agentKind(x) === "external" && (
+                      <StartSession
+                        agent={x}
+                        markdown={(text) => <Prose>{text}</Prose>}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
               <a className="crew-agents-connect" href={viewHashes.connect}>
@@ -1923,6 +1968,10 @@ export default function CrewWorkspace() {
             close={closeDialog}
             refresh={() => void load({ silent: true })}
             onWithdrawn={(kind, id) => void refreshDialogRow(kind, id)}
+            refreshRow={() => {
+              if (dialog.row && (dialog.kind === "task" || dialog.kind === "note"))
+                void refreshDialogRow(dialog.kind, dialog.row.id);
+            }}
           />
         </Modal>
       )}
@@ -1953,6 +2002,8 @@ type EditorProps = {
   refresh?: () => void;
   /** A file change withdrew this item's pending approval. */
   onWithdrawn?: (kind: ItemKind, id: string) => void;
+  /** Rereads the open record after a change made outside the form. */
+  refreshRow?: () => void;
 };
 /** The form's field values for a record (or a new one). */
 function formValues(kind: Kind, row: Row | undefined, data: Data) {
@@ -1985,6 +2036,8 @@ function formValues(kind: Kind, row: Row | undefined, data: Data) {
     waitingReason: val(row, "waiting_reason"),
     // JSON, so the form compares and restores the exact chips.
     labels: JSON.stringify(list(row, "labels")),
+    // How an agent is started; a new one's default follows the webhook setup.
+    agentKind: agentKind(row) as string,
   };
 }
 function Editor({
@@ -2002,6 +2055,7 @@ function Editor({
   close,
   refresh,
   onWithdrawn,
+  refreshRow,
 }: EditorProps) {
   const readOnly = !!archiveNotice;
   const root = useRef<HTMLDivElement>(null);
@@ -2020,7 +2074,25 @@ function Editor({
     [status, setStatus] = useState(start.status),
     [readiness, setReadiness] = useState(start.readiness),
     [waitingReason, setWaitingReason] = useState(start.waitingReason),
-    [labels, setLabels] = useState(start.labels);
+    [labels, setLabels] = useState(start.labels),
+    [agentKindValue, setAgentKind] = useState(start.agentKind),
+    agentKindTouched = useRef(false);
+  // A new agent is started manually unless the webhook integration is set up;
+  // until that is known, or if it can't be read, it is a webhook bot.
+  useEffect(() => {
+    if (kind !== "agent" || row) return;
+    let alive = true;
+    void crewApi.read("webhook_configs").then(
+      (configs) => {
+        if (alive && !agentKindTouched.current && !webhookConfigured(configs))
+          setAgentKind("external");
+      },
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [kind, row]);
   // Files: an existing task or note's attachments, or files staged for a new one.
   const itemKind = kind === "task" || kind === "note" ? kind : null;
   const parent =
@@ -2186,6 +2258,7 @@ function Editor({
     readiness,
     waitingReason,
     labels,
+    agentKind: agentKindValue,
   };
   const setters: Record<keyof typeof current, (v: string) => void> = {
     title: setTitle,
@@ -2197,6 +2270,7 @@ function Editor({
     readiness: setReadiness,
     waitingReason: setWaitingReason,
     labels: setLabels,
+    agentKind: setAgentKind,
   };
   useEffect(() => {
     const before = baseRow.current;
@@ -2244,7 +2318,13 @@ function Editor({
             }
           : kind === "bucket"
             ? { name: title, purpose: body, responsible_agent: selection }
-            : { name: title, brief: body };
+            : {
+                name: title,
+                brief: body,
+                ...(!row || agentKindValue !== initial.agentKind
+                  ? { kind: agentKindValue }
+                  : {}),
+              };
     if (!row && itemKind && staged.staged.length) {
       // One atomic request: the item, its files and resolved placeholders.
       const prepared = staged.prepare();
@@ -2430,6 +2510,25 @@ function Editor({
     </button>
   );
   const buckets = data.buckets.find((x) => x.id === val(row, "bucket"));
+  // A coding session's claim; the owner may always release it (In progress goes back to To do).
+  const claim = claimOf(row);
+  const releaseClaim = async () => {
+    if (!row) return;
+    if (
+      claim.state === "live" &&
+      !window.confirm("A session is working on this. Release its claim?")
+    )
+      return;
+    if (
+      await perform(
+        () => crewApi.write("task.release", {}, row),
+        val(row, "status") === "in_progress"
+          ? "Claim released. The task is To do."
+          : "Claim released.",
+      )
+    )
+      refreshRow?.();
+  };
   // Controls inside a disabled fieldset can't open, so read-only forms have no help.
   const help = (topic: HelpTopic) => (readOnly ? undefined : topic);
   // Labels already used on other tasks, offered while typing a new one.
@@ -2595,6 +2694,41 @@ function Editor({
                 onChange={(e) => setTitle(e.target.value)}
               />
             </Field>
+            {kind === "agent" && (
+              <fieldset className="crew-agent-start">
+                <legend>
+                  How is it started?
+                  {!readOnly && <Help topic="agent-start" />}
+                </legend>
+                {agentKinds.map((key: AgentKind) => (
+                  <div key={key} className="crew-agent-start-option">
+                    <label>
+                      <input
+                        type="radio"
+                        name="agent-kind"
+                        value={key}
+                        checked={agentKindValue === key}
+                        // A click on the already chosen option is a choice too.
+                        onClick={() => {
+                          agentKindTouched.current = true;
+                        }}
+                        onChange={() => {
+                          agentKindTouched.current = true;
+                          setAgentKind(key);
+                        }}
+                      />
+                      {agentKindChoices[key]}
+                    </label>
+                    {key === "external" && agentKindValue === "external" && (
+                      <small className="crew-agent-start-hint">
+                        Name it after the project, e.g. pocketcontext-crew.
+                        Start sessions from its card.
+                      </small>
+                    )}
+                  </div>
+                ))}
+              </fieldset>
+            )}
             {!(kind === "note" && row) &&
               (kind === "note" || kind === "bucket" || kind === "task") && (
               <Field
@@ -2676,6 +2810,20 @@ function Editor({
             )}
             {kind === "task" && (
               <>
+                {row && claim.state && (
+                  <div className="crew-claim-row">
+                    <ClaimChip task={row} />
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void releaseClaim()}
+                      >
+                        Release claim
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="crew-form-grid">
                   <Field label="Status">
                     <select

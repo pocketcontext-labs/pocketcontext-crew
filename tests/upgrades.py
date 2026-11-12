@@ -230,6 +230,9 @@ def rehearse(target, previous, root):
                 assert rows == before[name], ('Crew rows/history changed during migration', name)
             assert current.execute("SELECT count(*) FROM crew_tasks WHERE readiness != 'waiting' OR wake_generation != 0").fetchone() == (0,)
             assert current.execute('SELECT count(*) FROM crew_webhook_deliveries').fetchone() == (0,)
+            # 0.18.0: every existing agent is a bot and no task carries a claim.
+            assert current.execute("SELECT kind, count(*) FROM crew_agents GROUP BY kind").fetchall() == [('bot', 2)]
+            assert current.execute("SELECT count(*) FROM crew_tasks WHERE claimed_by != '' OR claim_until != ''").fetchone() == (0,)
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()

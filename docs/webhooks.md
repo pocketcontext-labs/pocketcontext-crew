@@ -5,6 +5,15 @@ One application-wide webhook wakes its routine; explicit mappings identify the
 other Grok Bots. One shared MCP connection supplies notes, tasks and coordination.
 Agent names and worker handles are attribution and coordination, not identities.
 
+Only agents of kind `bot` (the default) take part: the dispatcher, the triage agent
+and every mapped recipient must be bots, `webhook.mapping.update` for an `external`
+or `human` agent is HTTP 400 (an empty `bot_ref` may still clear a leftover mapping),
+and routing never wakes a non-bot, even with a mapping. Setup checks ignore non-bots,
+so project coder agents (kind `external`, started by hand) never show as missing a
+mapping. Changing a bot to another kind cancels its queued wakes and, for the
+dispatcher, disables the integration. Task claims (`task.claim`, `task.claim_renew`,
+`task.release`) never wake anyone; see [project coder agents](crew.md#project-coder-agents).
+
 Crew supports two dispatch modes. `native` dispatches in a webhook run that actually
 has native messaging. `parent_bridge` uses the observed Grok path:
 
@@ -328,7 +337,7 @@ verification. Crew's synthetic tests do not certify Grok or its team policy.
 ## Governed tasks and atomic execution
 
 Tasks default to Waiting (On hold in the reader). Ready work in todo/in_progress, with no pending review,
-an active recipient, a mapping and an enabled subscribed integration can emit a
+an active bot recipient, a mapping and an enabled subscribed integration can emit a
 wake. The task and outbox record commit atomically. A persisted governance marker
 is set at enqueue, before any worker acquires the event.
 

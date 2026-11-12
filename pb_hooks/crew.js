@@ -2,6 +2,7 @@ const capabilities = require(`${__hooks}/crew_capabilities.js`);
 const webhooks = require(`${__hooks}/crew_webhooks.js`);
 const execution = require(`${__hooks}/crew_execution.js`);
 const attachments = require(`${__hooks}/crew_attachments.js`);
+const session = require(`${__hooks}/crew_session.js`);
 const names = [
   ...webhooks.collections,
   ...execution.collections,
@@ -15,7 +16,7 @@ const names = [
   "reviews",
 ];
 const fields = {
-  agents: ["name", "brief", "archived"],
+  agents: ["name", "brief", "archived", "kind"],
   buckets: ["name", "purpose", "responsible_agent", "archived"],
   notes: ["title", "body", "links", "archived"],
   tasks: [
@@ -33,6 +34,61 @@ const fields = {
 };
 function bad(m) {
   throw new BadRequestError(m);
+}
+// Advisory task claims (0.18.0). A claim records the claiming session's
+// reported name (attribution only) and a lease; it never wakes anyone.
+function claimUntil() {
+  return new Date(Date.now() + session.LEASE_MS).toISOString();
+}
+function claimer(b) {
+  const name = (b.reported_agent || "").trim();
+  if (!name) bad("reported_agent (your session name) is required to claim");
+  return name;
+}
+// Claim refusals are answered as HTTP 409 with data.reason.code plus the
+// current claim, so the loser can name the winner.
+function claimRefusal(t, code, message) {
+  return {
+    status: 409,
+    message,
+    data: {
+      reason: { code, message },
+      claimed_by: t.getString("claimed_by"),
+      claim_until: t.getString("claim_until"),
+    },
+  };
+}
+// A write by the live claimer renews its lease (the caller saves the record).
+function renewByClaimer(t, b) {
+  if (
+    webhooks.claimState(t) !== "live" ||
+    !(b.reported_agent || "").trim() ||
+    (b.reported_agent || "").trim() !== t.getString("claimed_by")
+  )
+    return false;
+  t.set("claim_until", claimUntil());
+  return true;
+}
+// Attachment writes on a claimed task renew the claimer's lease.
+function renewAfterAttachment(app, b) {
+  const d = b.data || {};
+  let id = "";
+  if (b.action === "attachment.add")
+    id = typeof d.task === "string" ? d.task : "";
+  else if (["attachment.archive", "attachment.restore"].includes(b.action)) {
+    try {
+      const a = app.findRecordById("crew_attachments", b.id);
+      if (a.getString("parent_kind") === "task") id = a.getString("parent");
+    } catch (_) {}
+  }
+  if (!/^[a-z0-9]{15}$/.test(id)) return;
+  let t;
+  try {
+    t = app.findRecordById("crew_tasks", id);
+  } catch (_) {
+    return;
+  }
+  if (renewByClaimer(t, b)) app.save(t);
 }
 function only(o, allowed) {
   for (const k of Object.keys(o))
@@ -117,6 +173,8 @@ function validateData(app, col, d, r) {
         d[k].some((x) => typeof x !== "string" || x.length > 500))
     )
       bad(k + " must contain at most 100 short strings");
+  if (d.kind !== undefined && !webhooks.AGENT_KINDS.includes(d.kind))
+    bad("kind must be bot, external or human");
   if (d.readiness !== undefined && !["waiting", "ready"].includes(d.readiness))
     bad("readiness must be ready, or on_hold (stored as waiting)");
   if (
@@ -181,7 +239,7 @@ const derivedFields = {
   ],
   webhook_executions: ["waiting_overdue", "lease_expired"],
   webhook_bridges: ["overdue"],
-  tasks: ["path", "url"],
+  tasks: ["path", "url", "claim_state"],
   notes: ["path", "url"],
   upload_links: ["state"],
   settings: ["storage_used_bytes", "max_file_bytes", "max_active_attachments"],
@@ -274,9 +332,17 @@ function read(e) {
     "label",
     "changed_since",
     "overdue",
+    "agent",
+    "claim_state",
   ]);
   if (b.collection === "capabilities")
     return e.json(200, capabilities.describe(b.id));
+  if (b.agent !== undefined && b.collection !== "session")
+    bad("agent is only supported for the session collection");
+  // One object: the agent, the short prompt the reader copies and the full
+  // session instructions.
+  if (b.collection === "session")
+    return e.json(200, session.describe(e.app, b.agent));
   if (!names.includes(b.collection)) bad("Unknown collection");
   const col = b.collection,
     params = {},
@@ -290,7 +356,13 @@ function read(e) {
     params.agent = resolveAgent(e.app, b.responsible_agent);
     clauses.push("responsible_agent={:agent}");
   }
-  for (const k of ["assigned_agent", "status", "readiness", "label"])
+  for (const k of [
+    "assigned_agent",
+    "status",
+    "readiness",
+    "label",
+    "claim_state",
+  ])
     if (b[k] !== undefined && col !== "tasks")
       bad(k + " filter is only supported for tasks");
   if (b.assigned_agent !== undefined) {
@@ -327,6 +399,26 @@ function read(e) {
     sql.push(
       "EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid([[labels]]) AND json_type([[labels]])='array' THEN [[labels]] ELSE '[]' END) AS label WHERE label.type='text' AND label.value={:label})",
     );
+  }
+  if (b.claim_state !== undefined) {
+    // claim_until is an ISO UTC timestamp, so text order is time order.
+    params.now = new Date().toISOString();
+    if (b.claim_state === "live") {
+      clauses.push("claim_until>{:now}");
+      sql.push("COALESCE([[claim_until]],'')>{:now}");
+    } else if (b.claim_state === "expired") {
+      clauses.push(
+        "((claimed_by!='' || claim_until!='') && claim_until<={:now})",
+      );
+      sql.push(
+        "((COALESCE([[claimed_by]],'')!='' OR COALESCE([[claim_until]],'')!='') AND COALESCE([[claim_until]],'')<={:now})",
+      );
+    } else if (b.claim_state === "") {
+      clauses.push("claimed_by='' && claim_until=''");
+      sql.push(
+        "COALESCE([[claimed_by]],'')='' AND COALESCE([[claim_until]],'')=''",
+      );
+    } else bad("claim_state must be live, expired or an empty string");
   }
   if (b.changed_since !== undefined) {
     params.since = sinceFilter(b.changed_since);
@@ -524,10 +616,11 @@ function write(e, isAgent) {
     throw new ForbiddenError("Create upload links in the owner UI");
   const files = attachments.collect(e, b);
   const actor = (isAgent ? "mcp:" : "owner:") + e.auth.id;
-  let result;
+  let result, refusal;
   e.app.runInTransaction((app) => {
     if (attachments.ACTIONS.includes(b.action)) {
       result = attachments.handle(app, e, b, actor, isAgent, files, helpers);
+      renewAfterAttachment(app, b);
       return;
     }
     if (b.action.startsWith("execution.")) {
@@ -550,12 +643,22 @@ function write(e, isAgent) {
     }[kind];
     if (
       col &&
-      ["create", "update", "restore", "claim", "comment", "assign"].includes(op)
+      [
+        "create",
+        "update",
+        "restore",
+        "claim",
+        "claim_renew",
+        "release",
+        "comment",
+        "assign",
+      ].includes(op)
     ) {
       if (
         (op === "restore" && kind !== "note") ||
         (op === "assign" && kind !== "bucket") ||
-        (["claim", "comment"].includes(op) && kind !== "task")
+        (["claim", "claim_renew", "release", "comment"].includes(op) &&
+          kind !== "task")
       )
         bad("Unsupported operation");
       // On hold is the reader's name for waiting; it is stored as waiting.
@@ -564,13 +667,30 @@ function write(e, isAgent) {
         op === "create"
           ? new Record(app.findCollectionByNameOrId("crew_" + col))
           : get(app, col, b.id);
+      // A live claim answers before the revision check, so the loser of
+      // two simultaneous claims learns who won instead of rereading.
+      if (
+        kind === "task" &&
+        op === "claim" &&
+        webhooks.claimState(r) === "live"
+      ) {
+        refusal = claimRefusal(
+          r,
+          "already_claimed",
+          "Task is already claimed by " +
+            r.getString("claimed_by") +
+            " until " +
+            r.getString("claim_until"),
+        );
+        return;
+      }
       if (op !== "create") check(r, b);
       // Any caller may put a task on hold during a live execution, without
       // proof, when the write changes nothing else; the execution is
       // cancelled below in the same transaction.
       const holdOnly =
         kind === "task" &&
-        op === "update" &&
+        ["update", "release"].includes(op) &&
         d.readiness === "waiting" &&
         Object.keys(d).every((k) =>
           ["readiness", "waiting_reason"].includes(k),
@@ -622,6 +742,9 @@ function write(e, isAgent) {
           if (out.saved.length)
             changes.attachments = out.saved.map((a) => a.id);
           const ev = event(app2, r, b.action, b, actor, changes);
+          // The live claimer's comment renews its lease (no revision change,
+          // like every comment).
+          if (renewByClaimer(r, b)) app2.save(r);
           return { ev, saved: out.saved, withdrawn: out.withdrawn };
         };
         const withFiles = (value, staged) => {
@@ -693,10 +816,101 @@ function write(e, isAgent) {
             "Task is no longer ready at the requested generation",
             {},
           );
-        if (r.getString("assigned_agent"))
-          throw new ApiError(409, "Task is already assigned", {});
         if (!d.assigned_agent) bad("Agent required");
-        values = { assigned_agent: d.assigned_agent, status: "in_progress" };
+        // A live claim by anyone wins; the loser learns who holds it.
+        if (webhooks.claimState(r) === "live") {
+          refusal = claimRefusal(
+            r,
+            "already_claimed",
+            "Task is already claimed by " +
+              r.getString("claimed_by") +
+              " until " +
+              r.getString("claim_until"),
+          );
+          return;
+        }
+        const assignee = r.getString("assigned_agent");
+        if (assignee) {
+          // The assigned agent claims its own task: Ready and To do, or
+          // In progress with an empty or expired claim.
+          if (resolveAgent(app, d.assigned_agent) !== assignee)
+            throw new ApiError(409, "Task is already assigned", {});
+          const status = r.getString("status");
+          if (!(
+            (r.getString("readiness") === "ready" && status === "todo") ||
+            status === "in_progress"
+          ))
+            throw new ApiError(
+              409,
+              "Only a Ready To do task, or an In progress task without a live claim, can be claimed",
+              {
+                reason: new ValidationError(
+                  "not_claimable",
+                  "Only a Ready To do task, or an In progress task without a live claim, can be claimed",
+                ),
+              },
+            );
+          values = {
+            status: "in_progress",
+            claimed_by: claimer(b),
+            claim_until: claimUntil(),
+          };
+        } else {
+          // Unassigned: assign and start, as before; record the claim under
+          // the reported name, or the agent's name when none was reported.
+          const id = resolveAgent(app, d.assigned_agent);
+          values = {
+            assigned_agent: d.assigned_agent,
+            status: "in_progress",
+            claimed_by:
+              (b.reported_agent || "").trim() ||
+              (id ? get(app, "agents", id).getString("name") : ""),
+            claim_until: claimUntil(),
+          };
+        }
+      } else if (op === "claim_renew") {
+        only(d, []);
+        const name = claimer(b);
+        if (webhooks.claimState(r) !== "live") {
+          refusal = claimRefusal(
+            r,
+            "claim_expired",
+            "No live claim to renew; claim the task again",
+          );
+          return;
+        }
+        if (r.getString("claimed_by") !== name) {
+          refusal = claimRefusal(
+            r,
+            "not_claimer",
+            "Task is claimed by " + r.getString("claimed_by"),
+          );
+          return;
+        }
+        values = { claim_until: claimUntil() };
+      } else if (op === "release") {
+        only(d, ["readiness", "waiting_reason"]);
+        // The claimer, the owner (reader) or anyone once the claim expired.
+        if (
+          isAgent &&
+          webhooks.claimState(r) === "live" &&
+          (b.reported_agent || "").trim() !== r.getString("claimed_by")
+        ) {
+          refusal = claimRefusal(
+            r,
+            "not_claimer",
+            "Task is claimed by " +
+              r.getString("claimed_by") +
+              " until " +
+              r.getString("claim_until"),
+          );
+          return;
+        }
+        values = { claimed_by: "", claim_until: "" };
+        if (r.getString("status") === "in_progress") values.status = "todo";
+        if (d.readiness !== undefined) values.readiness = d.readiness;
+        if (d.waiting_reason !== undefined)
+          values.waiting_reason = d.waiting_reason;
       } else
         only(
           d,
@@ -735,6 +949,20 @@ function write(e, isAgent) {
           r.set("created_by_agent", b.reported_agent || "");
         }
       } else r.set("revision", r.getInt("revision") + 1);
+      if (kind === "task" && op === "update") {
+        // Done ends the claim; otherwise the live claimer's update renews it.
+        if (
+          values.status === "done" &&
+          (r.getString("claimed_by") || r.getString("claim_until"))
+        )
+          values = { ...values, claimed_by: "", claim_until: "" };
+        else if (values.status !== "done" && renewByClaimer(r, b))
+          values = { ...values, claim_until: r.getString("claim_until") };
+      }
+      if (kind === "agent" && op === "create" && values.kind === undefined)
+        values = { ...values, kind: "bot" };
+      const oldKind =
+        kind === "agent" && op !== "create" ? r.getString("kind") || "bot" : "";
       if (kind === "task" && op !== "create") {
         if (values.status !== undefined && pending(app, r.id).length)
           bad(
@@ -818,7 +1046,11 @@ function write(e, isAgent) {
             isAgent && op === "create" ? b.reported_agent || "" : "",
         });
       // Setting Waiting releases execution governance for every caller.
-      if (kind === "task" && op === "update" && d.readiness === "waiting") {
+      if (
+        kind === "task" &&
+        ["update", "release"].includes(op) &&
+        d.readiness === "waiting"
+      ) {
         r.set("execution_required_generation", 0);
         app.save(r);
       }
@@ -838,6 +1070,16 @@ function write(e, isAgent) {
       if (kind === "task") execution.invalidateStale(app, r, b, actor);
       if (kind === "agent" && values.archived === true)
         webhooks.deactivate(app, r.id, b, actor);
+      // An agent that stops being a bot can no longer be woken: its queued
+      // wakes are cancelled and, as dispatcher, the integration is disabled.
+      else if (
+        kind === "agent" &&
+        oldKind === "bot" &&
+        values.kind !== undefined &&
+        values.kind !== "bot" &&
+        !r.getBool("archived")
+      )
+        webhooks.deactivate(app, r.id, b, actor);
       if (kind === "note") snapshot(app, r, b, actor);
       const changes = { ...d };
       // A create with files records the resolved text, never the request's
@@ -855,7 +1097,19 @@ function write(e, isAgent) {
         )
           changes.waiting_reason = r.getString("waiting_reason");
         if (holdCancelled.length) changes.cancelled_executions = holdCancelled;
+        if (["claim", "claim_renew", "release"].includes(op)) {
+          changes.status = r.getString("status");
+          changes.claimed_by = r.getString("claimed_by");
+          changes.claim_until = r.getString("claim_until");
+        } else if (
+          values.claim_until !== undefined &&
+          values.claim_until !== ""
+        )
+          changes.claim_until = r.getString("claim_until");
+        else if (values.claimed_by === "") changes.claim_cleared = true;
       }
+      if (kind === "agent" && values.kind !== undefined)
+        changes.kind = r.getString("kind");
       if (kind === "bucket" && values.responsible_agent !== undefined)
         changes.responsible_agent = {
           old: oldAgent,
@@ -977,6 +1231,7 @@ function write(e, isAgent) {
     }
     bad("Unknown action");
   });
+  if (refusal) return e.json(409, refusal);
   return e.json(200, result);
 }
 // Shared with attachment operations so a review withdrawal is recorded the

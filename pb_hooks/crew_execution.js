@@ -554,6 +554,9 @@ function handle(app, b, actor) {
           wh.check(info.task, d.task_revision);
           const before = wh.state(app, info.task);
           info.task.set("status", "done");
+          // Done ends any advisory claim, as task.update does.
+          info.task.set("claimed_by", "");
+          info.task.set("claim_until", "");
           info.task.set("revision", info.task.getInt("revision") + 1);
           app.save(info.task);
           wh.transition(app, info.task, before, {});

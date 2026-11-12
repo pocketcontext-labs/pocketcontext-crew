@@ -1,11 +1,14 @@
 # Crew operations
 
-Agents: name, brief, archived. Buckets: name, purpose, responsible_agent, archived.
+Agents: name, brief, archived, kind (bot, the default; external, a coder session
+the owner starts by hand; human). Only bots are woken or mapped. Buckets: name, purpose, responsible_agent, archived.
 Notes: bucket, title, body, links (note IDs), archived. Note revisions preserve
 immutable title/body/links snapshots. Tasks: title, description, assigned_agent,
 labels, status, draft, links, archived, readiness (waiting = on hold, the default,
 or ready; writes accept on_hold), waiting_reason (hold reason) and server-managed
-wake_generation, bot_handoffs, handoff_limited and comment wake markers. Reviews preserve exact draft snapshots and
+wake_generation, bot_handoffs, handoff_limited and comment wake markers, plus the
+advisory claim: claimed_by (reported session name), claim_until (ISO UTC lease end)
+and derived claim_state ("", live or expired; also a task read filter). Reviews preserve exact draft snapshots and
 review decisions. Events preserve action, actor, reported_agent, reason and changes.
 Attachments: parent_kind (task or note), parent, name, media_type, image, width,
 height, size, sha256, position, actor, reported_agent, archived; bytes come only
@@ -22,7 +25,7 @@ with `write` (crew_write), which uses only the work-client route; revisions are
 mandatory for changes. The server's tool schemas and collection capabilities
 are authoritative; CLI and MCP take the same JSON. Agents may create/update
 agents and buckets, assign buckets, create/update/restore notes, create/update/
-claim/comment on tasks, request/withdraw/decide review, add/archive/restore
+claim/claim_renew/release/comment on tasks, request/withdraw/decide review, add/archive/restore
 attachments, archive and restore, and recover executions: every reader
 operation except webhook credential entry and upload-link creation.
 The skill's Authorization rules say when (review decisions only on explicit owner
@@ -30,5 +33,16 @@ delegation; archival, deactivation and recovery when the owner asks).
 
 Assignment returns responsible_agent as an ID and responsible_agent_details as
 {id,name} or null. Names must resolve uniquely; use IDs to resolve ambiguity.
+
+Claims: `task.claim` (data.assigned_agent) assigns an unassigned task, or lets the
+assignee claim its own Ready To do task (or an In progress task without a live
+claim), with a 2-hour lease recorded under reported_agent. A live claim answers
+409 `already_claimed` with data.claimed_by and data.claim_until. `task.claim_renew`
+(claimer only, 409 `claim_expired` or `not_claimer`) extends it; the claimer's
+updates, comments and attachment writes renew it. `task.release` (claimer, owner,
+or anyone after expiry; optional readiness and waiting_reason) ends it and sets
+In progress back to To do. Done ends it. The session collection
+(`{"collection":"session","agent":NAME}`) returns `{agent, prompt, instructions,
+lease_hours}`.
 
 Webhook operations and receiver requirements: [webhooks](webhooks.md).

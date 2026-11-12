@@ -86,12 +86,17 @@ function withLinks(app, collection, out, title) {
   return out;
 }
 function linkedExport(app, collection, record) {
-  return withLinks(
-    app,
-    collection,
-    record.publicExport(),
-    record.getString("title"),
-  );
+  const out = record.publicExport();
+  if (collection === "tasks") out.claim_state = claimState(record);
+  return withLinks(app, collection, out, record.getString("title"));
+}
+// Advisory task claims: "" (none), "live" (claim_until in the future) or
+// "expired". claim_until is an ISO UTC timestamp written by Crew.
+function claimState(t) {
+  const until = t.getString("claim_until");
+  if (!t.getString("claimed_by") && !until) return "";
+  const ms = Date.parse(until);
+  return Number.isFinite(ms) && ms > Date.now() ? "live" : "expired";
 }
 // Old release idempotency results may contain receiver URLs. Redact on replay,
 // including nested results, without rewriting historical operation records.
@@ -207,18 +212,35 @@ function activeAgent(app, id) {
     return false;
   }
 }
+// Agent kinds: bot (a Grok bot woken by webhook; the default and every agent
+// before 0.18.0), external (a coder session started manually, never woken) and
+// human. Only bots are ever routed, mapped or woken.
+const AGENT_KINDS = ["bot", "external", "human"];
+function agentKind(agent) {
+  return agent.getString("kind") || "bot";
+}
+function botAgent(app, id) {
+  if (!id) return false;
+  try {
+    const agent = get(app, "agents", id);
+    return !agent.getBool("archived") && agentKind(agent) === "bot";
+  } catch (_) {
+    return false;
+  }
+}
 function route(app, t) {
   const s = state(app, t),
     rt = routing(app);
   if (!eligible(s) || rt.getBool("paused")) return null;
   const id = s.assigned || rt.getString("triage_agent");
-  if (!activeAgent(app, id)) return null;
+  // An external or human assignee is never woken, even with a mapping.
+  if (!botAgent(app, id)) return null;
   const config = globalConfig(app),
     mapping = mappingFor(app, id);
   if (
     !config ||
     !config.getBool("enabled") ||
-    !activeAgent(app, config.getString("agent")) ||
+    !botAgent(app, config.getString("agent")) ||
     !mapping ||
     !mapping.getString("bot_ref")
   )
@@ -492,7 +514,7 @@ function instructionsReady(c) {
 function setupStatus(app, c) {
   const test = [];
   const add = (code, message) => test.push({ code, message });
-  if (!activeAgent(app, c.getString("agent")))
+  if (!botAgent(app, c.getString("agent")))
     add("dispatcher_missing", "Choose an active dispatcher bot.");
   const mapping = mappingFor(app, c.getString("agent"));
   if (!mapping || !mapping.getString("bot_ref"))
@@ -548,7 +570,7 @@ function setupStatus(app, c) {
   const crossRequired = rows(app, "webhook_mappings", "agent!={:agent}", {
     agent: c.getString("agent"),
   }).some(
-    (m) => !!m.getString("bot_ref") && activeAgent(app, m.getString("agent")),
+    (m) => !!m.getString("bot_ref") && botAgent(app, m.getString("agent")),
   );
   const recipientAck =
     !!bridge &&
@@ -644,8 +666,8 @@ function setupStatus(app, c) {
   };
 }
 function requireReady(app, c) {
-  if (!activeAgent(app, c.getString("agent")))
-    bad("Active dispatcher required");
+  if (!botAgent(app, c.getString("agent")))
+    bad("Active dispatcher bot required");
   const mapping = mappingFor(app, c.getString("agent"));
   if (!mapping || !mapping.getString("bot_ref"))
     bad("Dispatcher bot mapping required");
@@ -690,7 +712,9 @@ function handle(app, b, actor, isAgent) {
     b,
     () => {
       if (b.action === "agent.ensure") {
-        only(d, ["name", "brief", "agent"]);
+        only(d, ["name", "brief", "agent", "kind"]);
+        if (d.kind !== undefined && !AGENT_KINDS.includes(d.kind))
+          bad("kind must be bot, external or human");
         let agent;
         if (d.agent) agent = get(app, "agents", d.agent);
         else {
@@ -714,9 +738,13 @@ function handle(app, b, actor, isAgent) {
         agent = new Record(app.findCollectionByNameOrId("crew_agents"));
         agent.set("name", d.name);
         agent.set("brief", d.brief || "");
+        agent.set("kind", d.kind || "bot");
         agent.set("revision", 1);
         app.save(agent);
-        audit(app, agent, b, actor, { name: d.name });
+        audit(app, agent, b, actor, {
+          name: d.name,
+          kind: agent.getString("kind"),
+        });
         return exported(agent, app);
       }
       if (b.action === "webhook.routing.update") {
@@ -738,7 +766,7 @@ function handle(app, b, actor, isAgent) {
         }
         if (d.triage_agent !== undefined) {
           const id = d.triage_agent || "";
-          if (id && !activeAgent(app, id)) bad("Active triage agent required");
+          if (id && !botAgent(app, id)) bad("Active triage bot required");
           if (rt.getString("triage_agent") !== id) {
             invalidateTriage(app, b, actor);
             cancel(app, "target_kind='triage'", {});
@@ -759,6 +787,13 @@ function handle(app, b, actor, isAgent) {
         )
           bad("Invalid bot display name");
         if (!activeAgent(app, d.agent)) bad("Active agent required");
+        // Only bots are woken by webhook. Clearing a mapping left from when
+        // the agent was a bot stays possible.
+        if (
+          !botAgent(app, d.agent) &&
+          !(typeof d.bot_ref === "string" && !d.bot_ref.trim())
+        )
+          bad("Only bot agents have a bot mapping; this agent is not a bot");
         if (
           typeof d.bot_ref !== "string" ||
           d.bot_ref.length > 500 ||
@@ -918,8 +953,8 @@ function handle(app, b, actor, isAgent) {
           }
         }
         if (d.agent !== undefined && d.agent !== c.getString("agent")) {
-          if (d.agent && !activeAgent(app, d.agent))
-            bad("Active dispatcher required");
+          if (d.agent && !botAgent(app, d.agent))
+            bad("Active dispatcher bot required");
           c.set("agent", d.agent || "");
           c.set("url", "");
           c.set("secret_ciphertext", "");
@@ -1098,7 +1133,7 @@ function handle(app, b, actor, isAgent) {
           bad("Cross-bot connection tests require parent bridge mode");
         const mapping = mappingFor(app, recipient);
         if (
-          !activeAgent(app, recipient) ||
+          !botAgent(app, recipient) ||
           !mapping ||
           !mapping.getString("bot_ref")
         )
@@ -1243,6 +1278,9 @@ function deactivate(app, agent, b, actor) {
   cancel(app, "agent={:agent}", { agent });
 }
 module.exports = {
+  AGENT_KINDS,
+  agentKind,
+  claimState,
   route,
   routing,
   get,

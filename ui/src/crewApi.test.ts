@@ -92,3 +92,23 @@ it("passes idempotency and an explicit zero create revision to owner writes", as
     },
   });
 });
+it("reads one agent's session prompt as a single object", async () => {
+  const session = {
+    agent: { id: "agent0000000009", name: "synthetic-repo", kind: "external" },
+    prompt: "Line one\nLine two",
+    instructions: "# Session\n\nClaim one task.",
+    lease_hours: 2,
+  };
+  const send = vi.spyOn(pb, "send").mockResolvedValue(session);
+  expect(await crewApi.session("agent0000000009")).toEqual(session);
+  expect(send).toHaveBeenCalledWith("/api/crew/read", {
+    method: "POST",
+    body: { collection: "session", agent: "agent0000000009" },
+  });
+  send.mockResolvedValue({ items: [session] });
+  expect((await crewApi.session("synthetic-repo")).prompt).toBe(
+    "Line one\nLine two",
+  );
+  send.mockResolvedValue({ items: [] });
+  await expect(crewApi.session("synthetic-repo")).rejects.toThrow();
+});

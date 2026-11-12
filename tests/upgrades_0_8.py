@@ -23,7 +23,8 @@ import upgrades
 
 PREVIOUS = '0.8.0'
 # Migrations added by releases after PREVIOUS; nothing else may change the ledger.
-LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js', '1801000000_crew_attachments.js'}
+LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js', '1801000000_crew_attachments.js',
+                    '1801100000_crew_project_agents.js'}
 
 
 def settled(operation, *args):
@@ -128,6 +129,16 @@ def rehearse(target, previous, root):
     assert [a['id'] for a in listed] == [attachment['id']], listed
     settings = data('read', '{"collection":"settings"}')['items'][0]
     assert settings['storage_limit_bytes'] == 5 * 1024 ** 3 and settings['storage_used_bytes'] == len(payload), settings
+    # 0.18.0: the existing agent became a bot; tasks start without a claim and
+    # its own assignee can claim one with a lease.
+    agents = data('read', json.dumps({'collection': 'agents', 'fields': ['name', 'kind']}))['items']
+    assert agents == [{'id': agent['id'], 'revision': agent['revision'], 'name': 'Build', 'kind': 'bot'}], agents
+    ticket = data('write', json.dumps({'action': 'task.create', 'reported_agent': 'Synthetic upgrade',
+                                       'data': {'title': 'Upgrade ticket', 'assigned_agent': agent['id'], 'readiness': 'ready'}}))
+    assert ticket['claim_state'] == '' and ticket['claimed_by'] == '' and ticket['claim_until'] == '', ticket
+    claimed = data('write', json.dumps({'action': 'task.claim', 'id': ticket['id'], 'expected_revision': ticket['revision'],
+                                        'reported_agent': 'Synthetic session', 'data': {'assigned_agent': 'Build'}}))
+    assert claimed['claim_state'] == 'live' and claimed['claimed_by'] == 'Synthetic session', claimed
     run('stop')
 
     # Identity alone did not rewrite the configuration format or lose the data.
@@ -135,8 +146,8 @@ def rehearse(target, previous, root):
     assert config_after['instance'] == instance and config_after['port'] == port
     assert set(config_after) >= set(json.loads(config_before))
     # No migration added by the identity change: the ledger gains only the later
-    # releases' own migrations (0.12.0's managed instruction revision and
-    # 0.16.0's attachments).
+    # releases' own migrations (0.12.0's managed instruction revision,
+    # 0.16.0's attachments and 0.18.0's agent kinds and task claims).
     def migrations(path):
         with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
             return set(row[0] for row in db.execute('SELECT file FROM _migrations'))

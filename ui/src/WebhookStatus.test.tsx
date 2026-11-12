@@ -1130,3 +1130,30 @@ it("shows no wake list when nothing is overdue or bridges cannot be read", async
   expect(screen.queryByRole("region", { name: "Wakes not received" })).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
 });
+it("leaves agents started manually and people out of bot mappings and their warnings", async () => {
+  completeSetup();
+  const withOthers: Row[] = [
+    ...agents,
+    { id: "repo", revision: 1, name: "synthetic-repo", kind: "external" },
+    { id: "person", revision: 1, name: "Reviewer", kind: "human" },
+  ];
+  render(<WebhookStatus agents={withOthers} />);
+  await screen.findByRole("heading", { name: "Grok setup" });
+  await waitFor(() =>
+    expect(screen.queryByText("Loading integration…")).toBeNull(),
+  );
+  // Setup stays complete: only the two bots need mappings.
+  expect(
+    screen.getByText("Automatic wake-ups: on").parentElement,
+  ).toHaveTextContent("Automatic wake-ups: on · 2 of 2 agents mapped");
+  fireEvent.click(screen.getByRole("button", { name: "Review setup" }));
+  fireEvent.click(screen.getByText("Advanced settings and recovery"));
+  expect(screen.getByRole("form", { name: "Learn routing" })).toBeInTheDocument();
+  expect(screen.queryByRole("form", { name: "synthetic-repo routing" })).toBeNull();
+  expect(screen.queryByRole("form", { name: "Reviewer routing" })).toBeNull();
+  expect(screen.queryByText(/Not mapped/)).toBeNull();
+  expect(screen.queryByText(/Unmapped agents/)).toBeNull();
+  expect(
+    screen.queryByRole("option", { name: "synthetic-repo" }),
+  ).toBeNull();
+});

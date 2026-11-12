@@ -10,6 +10,7 @@ import { crewApi, list, val, type Row } from "./crewApi";
 import Help, { HelpField } from "./Help";
 import type { HelpTopic } from "./helpContent";
 import { itemPath } from "./itemLink";
+import { isBot } from "./projectAgents";
 import { strandedSince, strandedWakes } from "./wakes";
 type WakeRule = {
   reason: string;
@@ -559,7 +560,9 @@ export default function WebhookStatus({
     }
   }
   const blocked = loading || busy;
-  const activeAgents = agents.filter((a) => !a.archived);
+  // Only webhook bots are dispatched, mapped or woken; agents started manually
+  // and people never need a bot mapping.
+  const activeAgents = agents.filter((a) => !a.archived && isBot(a));
   const currentAgent = activeAgents.find((a) => a.id === val(config, "agent"));
   const synced =
     !!config &&

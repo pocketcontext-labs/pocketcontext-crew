@@ -23,6 +23,12 @@ validated by custom operations rather than generic record writes. Every Crew
 record has revision and timestamps. Notes have immutable snapshots; events are
 append-only. Agents, buckets, notes and tasks archive without purging history.
 
+Agents have a `kind`: `bot` (default; Grok bots woken by webhook), `external`
+(coder sessions the owner starts by hand) or `human`. Only bots are woken. Tasks
+carry an advisory claim: `claimed_by` (reported session name, attribution only)
+and `claim_until` (ISO UTC lease end), both empty without a claim; responses add a
+derived `claim_state`. See [project coder agents](crew.md#project-coder-agents).
+
 Attachments carry `parent_kind` (task or note) and the parent ID as text, a
 protected single file (20 MiB, thumbs 1600x0 and 320x0, never exported), display
 name, media type, verified-image flag and dimensions, size, server-computed

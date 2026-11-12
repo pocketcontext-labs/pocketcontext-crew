@@ -454,8 +454,38 @@ def cli_scenario(pc):
     assert 'another request changed the record first' in stale, stale
     assert 'unknown' in cli('read', {'collection': 'notes', 'unknown': True}, expect=2)
     assert 'not valid JSON' in pc.run('write', '{"action":', expect=2).stderr
+    cli_session_scenario(cli, write)
     cli_attachment_scenario(pc)
     print('Crew CLI commands, work-client route, credential refusal and conflicts passed.')
+
+
+def cli_session_scenario(cli, write):
+    """A project coder agent: session instructions and leased claims via the CLI."""
+    project = write('agent.create', {'name': 'synthetic-cli-project', 'brief': 'Synthetic project brief.', 'kind': 'external'})
+    assert project['kind'] == 'external', project
+    session = cli('read', {'collection': 'session', 'agent': 'synthetic-cli-project'})
+    assert session['prompt'] == ('You are synthetic-cli-project in PocketContext Crew.\n'
+                                 'Read your session instructions with crew_read collection "session" agent "synthetic-cli-project" and follow them.'), session
+    assert session['agent'] == {'id': project['id'], 'name': 'synthetic-cli-project', 'kind': 'external'} and session['lease_hours'] == 2
+    assert session['instructions'].endswith('## Agent brief\n\nSynthetic project brief.'), session['instructions'][-200:]
+    assert 'HTTP 404' in cli('read', {'collection': 'session', 'agent': 'synthetic-missing'}, expect=1)
+    ticket = write('task.create', {'title': 'Synthetic ticket', 'assigned_agent': project['id'], 'readiness': 'ready'})
+    listed = cli('read', {'collection': 'tasks', 'assigned_agent': 'synthetic-cli-project', 'status': ['todo'], 'readiness': 'ready', 'claim_state': '', 'fields': ['title', 'claim_state']})['items']
+    assert listed == [{'id': ticket['id'], 'revision': ticket['revision'], 'title': 'Synthetic ticket', 'claim_state': ''}], listed
+    claimed = write('task.claim', {'assigned_agent': 'synthetic-cli-project'}, ticket, reported_agent='synthetic-cli-project · Codex · s/1 · aaaaaaaa')
+    assert claimed['status'] == 'in_progress' and claimed['claim_state'] == 'live' and claimed['claimed_by'].endswith('aaaaaaaa'), claimed
+    lost = write('task.claim', {'assigned_agent': project['id']}, claimed, expect=4, reported_agent='synthetic-cli-project · Codex · s/2 · bbbbbbbb')
+    assert 'already_claimed' in lost and 'aaaaaaaa' in lost and 'claim_until' in lost, lost
+    renewed = write('task.claim_renew', {}, claimed, reported_agent='synthetic-cli-project · Codex · s/1 · aaaaaaaa')
+    assert renewed['claim_state'] == 'live', renewed
+    refused = write('task.release', {}, renewed, expect=4, reported_agent='synthetic-cli-project · Codex · s/2 · bbbbbbbb')
+    assert 'not_claimer' in refused, refused
+    released = write('task.release', {'readiness': 'on_hold', 'waiting_reason': 'Synthetic stop'}, renewed, reported_agent='synthetic-cli-project · Codex · s/1 · aaaaaaaa')
+    assert released['status'] == 'todo' and released['readiness'] == 'waiting' and released['claimed_by'] == '' and released['claim_state'] == '', released
+    actions = [e['action'] for e in cli('read', {'collection': 'events', 'parent': ticket['id'], 'fields': ['action']})['items']]
+    assert {'task.claim', 'task.claim_renew', 'task.release'} <= set(actions), actions
+    rows = cli('query', {'sql': "SELECT kind FROM agents WHERE id = '%s'" % project['id']})['rows']
+    assert rows == [['external']], rows
 
 
 def cli_attachment_scenario(pc):

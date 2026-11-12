@@ -117,7 +117,8 @@ approve access only when you intended to connect that app.
 ## Crew operations
 
 Six tools are exposed: crew_read, crew_search, crew_schema, crew_query,
-crew_attachment and crew_write. Read collections are
+crew_attachment and crew_write. Read collections are session (one coder
+session's prompt and instructions; requires `agent`),
 agents, buckets, notes, note_revisions, tasks, events, reviews, attachments and
 settings, plus the non-secret webhook collections. Writes use custom revision-checked operations
 through the work-client route only. See [the contract](crew.md) for assignment and review.
@@ -154,6 +155,13 @@ completes its execution, so it is the last step of governed work.
 parent wakes ([overdue parent wakes](webhooks.md#overdue-parent-wakes)). These
 texts changed in Crew 0.17.0: run `skill` once after upgrading so installed
 skills match.
+
+Project coder agents (kind `external`) are started by hand: the session reads
+`crew_read {collection: "session", agent}` and follows it, claims one task at a time
+(`task.claim`, 2-hour lease renewed by its writes or `task.claim_renew`; 409
+`already_claimed` names the holder), and ends with Done or `task.release`. Only bot
+agents are woken. See [project coder agents](crew.md#project-coder-agents). These
+texts changed in Crew 0.18.0: run `skill` once after upgrading.
 
 Task and note responses carry `path` and, on an install with a domain, an absolute
 `url`; see [item links](crew.md#item-links). Agents cite items to humans as

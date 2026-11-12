@@ -214,6 +214,20 @@ const glossaryEntries = {
     action:
       "Write it here, then paste it into the agent that will use it. Crew doesn't send it there for you.",
   },
+  "agent-start": {
+    name: "How an agent is started",
+    question: "How is an agent started?",
+    what: "Webhook (bot): Crew wakes it over a webhook when a Ready task can be worked on. I start it myself: a project agent, such as one per code repository, whose coding sessions you start in Codex or Claude Code; it has no webhook. Person: someone who does the work by hand.",
+    action:
+      "For a project agent, name it after the project, for example pocketcontext-crew, then use Start a session on its card.",
+  },
+  claim: {
+    name: "Claim",
+    question: "What is a claim?",
+    what: "A coding session marks the one task it is working on as claimed for 2 hours, renewed while it works, so a second session can't take the same task. The claim names the session for your information; it isn't an identity.",
+    action:
+      "Nothing to do while it is live. Claim expired means the session stopped renewing it: release the claim to put the task back in To do.",
+  },
   mcp: {
     name: "MCP",
     question: "What is MCP?",

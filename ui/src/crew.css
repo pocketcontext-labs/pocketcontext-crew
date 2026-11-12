@@ -535,6 +535,35 @@ a.crew-logo:hover .product-brand span {
   background: #e3eee0;
   color: #3f6b48;
 }
+/* A coding session's claim: live is calm, expired is the amber of "a person decides". */
+.crew-claim-chip,
+.crew-tags > .crew-claim-chip {
+  background: #e4ecef;
+  color: #3d5f6b;
+}
+.crew-claim-expired,
+.crew-tags > .crew-claim-expired {
+  background: #f3e9c9;
+  color: #8b6a26;
+}
+.crew-claim-chip,
+.crew-claim-expired {
+  display: inline-block;
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+.crew-tags > .crew-claim-chip,
+.crew-tags > .crew-claim-expired {
+  font-size: 9px;
+  padding: 2px 7px;
+}
+.crew-claim-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
 .crew-wake-missing {
   display: flex;
   flex-wrap: wrap;
@@ -1024,6 +1053,87 @@ a.crew-logo:hover .product-brand span {
 .crew-agent-card small {
   color: #617c4d;
   font-size: 10px;
+}
+/* A card plus, for agents started manually, its Start a session control. */
+.crew-agent-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.crew-app .crew-agent-tile .crew-agent-card {
+  flex: 1;
+  width: 100%;
+}
+.crew-agent-card .crew-agent-kind {
+  margin: -4px 0 8px;
+  font-size: 11px;
+  color: #77806a;
+}
+.crew-session {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  font-size: 12px;
+}
+.crew-session-note {
+  margin: 0;
+  color: #5d6a52;
+}
+.crew-session-note p {
+  margin: 0 0 6px;
+}
+.crew-session-note textarea {
+  width: 100%;
+  min-height: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.crew-session-error {
+  color: #8b4a26;
+}
+.crew-session-instructions {
+  width: 100%;
+}
+.crew-session-instructions summary {
+  cursor: pointer;
+  color: #567257;
+}
+/* How an agent is started: three choices in the agent form. */
+.crew-agent-start {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.crew-agent-start legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.crew-agent-start-option label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.crew-agent-start-option input[type="radio"] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+.crew-agent-start-hint {
+  display: block;
+  margin: 2px 0 0 24px;
+  font-size: 12px;
+  color: #6c7a61;
 }
 .crew-connect {
   margin-top: 30px;

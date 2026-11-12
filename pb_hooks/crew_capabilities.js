@@ -101,7 +101,16 @@ function document() {
     properties: { id: str, revision: num },
     additionalProperties: true,
   };
-  const agent = { name: str, brief: str, archived: bool };
+  const agent = {
+    name: str,
+    brief: str,
+    archived: bool,
+    kind: {
+      enum: ["bot", "external", "human"],
+      description:
+        "bot (a Grok bot woken by webhook; the default), external (a coder session the owner starts by hand; never woken) or human. Only bots have a bot mapping or receive wakes. Changing a bot to another kind cancels its queued wakes and, for the dispatcher, disables the integration.",
+    },
+  };
   const bucket = {
     name: str,
     purpose: str,
@@ -154,7 +163,16 @@ function document() {
   }
   op("agent.create", agent, ["name"]);
   op("agent.update", agent, [], { revision: "record" });
-  op("agent.ensure", { name: str, brief: str, agent: str }, [], { key: true });
+  op(
+    "agent.ensure",
+    { name: str, brief: str, agent: str, kind: agent.kind },
+    [],
+    {
+      key: true,
+      description:
+        "Returns the agent by ID or exact name, or creates it (kind defaults to bot). An existing agent is returned unchanged.",
+    },
+  );
   op("bucket.create", bucket, ["name"]);
   op("bucket.update", bucket, [], { revision: "record" });
   op("bucket.assign", { agent: nullable }, ["agent"], { revision: "record" });
@@ -173,7 +191,29 @@ function document() {
     "task.claim",
     { assigned_agent: str, expected_generation: num },
     ["assigned_agent"],
-    { revision: "record" },
+    {
+      revision: "record",
+      description:
+        "Takes a task with a 2-hour advisory lease and sets In progress; claimed_by records reported_agent (your session name, attribution only). An unassigned task is assigned to assigned_agent. The task's own assignee (assigned_agent = its ID or exact name) may claim it when it is Ready and To do, or In progress with no live claim; reported_agent is then required. A live claim by anyone answers HTTP 409 already_claimed with data.claimed_by and data.claim_until, before the revision check. Never wakes anyone.",
+    },
+  );
+  op("task.claim_renew", {}, [], {
+    revision: "record",
+    description:
+      "Extends your live claim to 2 hours from now. Only while the claim is live and reported_agent equals claimed_by; otherwise HTTP 409 claim_expired or not_claimer. Any task.update, task.comment or attachment write on the task by the live claimer also renews it.",
+  });
+  op(
+    "task.release",
+    {
+      readiness: { enum: ["ready", "waiting", "on_hold"] },
+      waiting_reason: str,
+    },
+    [],
+    {
+      revision: "record",
+      description:
+        "Ends the claim (claimed_by and claim_until cleared), sets an In progress task back to To do and optionally sets readiness and the hold reason. Allowed for the claimer (reported_agent = claimed_by), the owner in the reader, or anyone once the claim expired; otherwise HTTP 409 not_claimer. Setting Done also ends a claim.",
+    },
   );
   op("task.comment", { body: str }, ["body"], {
     revision: "record",
@@ -535,6 +575,26 @@ function document() {
     upload_links: "task or note",
   }))
     collections[name].parent = parent;
+  collections.session = {
+    parameters: object({ agent: str }, ["agent"]),
+    result_schema: {
+      type: "object",
+      properties: {
+        agent: object({ id: str, name: str, kind: str }, [
+          "id",
+          "name",
+          "kind",
+        ]),
+        prompt: str,
+        instructions: str,
+        lease_hours: num,
+      },
+      required: ["agent", "prompt", "instructions", "lease_hours"],
+      additionalProperties: false,
+    },
+    description:
+      'crew_read {collection:"session", agent:<ID or exact name>} returns one object (not items): the agent, the two-line prompt the reader copies to start a coder session, the full session instructions (Crew template plus the agent brief) and the claim lease in hours. Unknown agent: 404.',
+  };
 
   const permanentLink = {
     path: {
@@ -564,6 +624,20 @@ function document() {
       handoff_limited: bool,
       comment_wake_generation: num,
       comment_wake_event: str,
+      claimed_by: {
+        type: "string",
+        description:
+          "Reported session name of the current or last claimer; attribution, not identity",
+      },
+      claim_until: {
+        type: "string",
+        description: "Claim lease end (ISO UTC); empty without a claim",
+      },
+      claim_state: {
+        enum: ["", "live", "expired"],
+        description:
+          "Derived: live while claim_until is in the future, expired after it, empty without a claim",
+      },
     },
     note_revisions: {
       note: str,
@@ -907,6 +981,10 @@ function document() {
         "Consecutive work-client assignment changes; any reader task write resets it. Exceeding webhook_routing.max_bot_handoffs applies the write but sets Waiting without a wake. A work client may set Ready again (when the owner asks or the loop is broken), but that keeps the count, so the next work-client reassignment stops it again.",
       attachments:
         "Attachment add, archive and restore (including through an upload link, or files sent with a comment) never wake. When one withdraws a pending review the task goes on hold (waiting_reason Review withdrawn) and its wake generation advances, exactly as a draft edit does (Draft edited).",
+      agent_kinds:
+        "Only bot agents are woken, mapped or chosen as dispatcher or triage. External (coder sessions) and human agents are never woken, even when assigned a Ready task.",
+      claims:
+        "Task claims (task.claim, task.claim_renew, task.release) never wake anyone and are advisory: other writes are not blocked by them.",
       on_hold:
         "An on-hold task (readiness waiting) never wakes a bot, whatever changes: creation, assignment, reassignment, reopening, review outcomes and comments are only recorded. Only Ready tasks wake: setting Ready, or a subscribed change or owner comment on a Ready task. Going on hold cancels unfinished executions (outcome put_on_hold, task event execution.cancel) and makes queued wakes stale.",
     },
@@ -1020,6 +1098,15 @@ function readDiscovery() {
           "webhook_bridges only, true: unresolved parent wakes past their deadline (task.wake, no parent receipt) for the task's current wake generation, on active tasks that are not done and were not created by their recipient. Rows are history; nothing retries.",
       },
       label: { type: "string", description: "Tasks with this exact label" },
+      claim_state: {
+        enum: ["", "live", "expired"],
+        description: "Tasks only: claim state (empty string: no claim)",
+      },
+      agent: {
+        type: "string",
+        description:
+          "session only: agent ID or exact name whose session instructions to read",
+      },
       changed_since: {
         type: "string",
         format: "date-time",

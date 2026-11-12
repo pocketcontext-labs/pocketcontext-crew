@@ -24,6 +24,15 @@ export type ConnectionState =
   | Connection
   | { kind: "checking" }
   | { kind: "unknown" };
+/** What `read session` returns for one agent started manually. */
+export type AgentSession = {
+  agent: { id: string; name: string; kind: string };
+  /** A short prompt to paste into a new Codex or Claude Code session. */
+  prompt: string;
+  /** The full session instructions, Markdown. */
+  instructions: string;
+  lease_hours: number;
+};
 export type ConnectedApp = { id: string; name: string; created: number };
 async function connectionsRequest<T>(body?: { id: string }): Promise<T> {
   const response = await fetch("/oauth/connections", {
@@ -104,6 +113,30 @@ export const crewApi = {
         throw new Error("Could not continue loading records.");
       offset = response.next_offset;
     }
+  },
+  /**
+   * The session prompt for one agent started manually (id or name). This read
+   * answers with one object rather than a page of items.
+   */
+  async session(agent: string): Promise<AgentSession> {
+    const response = await pb.send<Partial<AgentSession> & { items?: unknown }>(
+      "/api/crew/read",
+      { method: "POST", body: { collection: "session", agent } },
+    );
+    const session = (
+      Array.isArray(response?.items) && response.items.length === 1
+        ? response.items[0]
+        : response
+    ) as Partial<AgentSession> | undefined;
+    if (typeof session?.prompt !== "string" || !session.prompt.trim())
+      throw new Error("No session prompt was returned.");
+    return {
+      agent: session.agent ?? { id: agent, name: "", kind: "external" },
+      prompt: session.prompt,
+      instructions:
+        typeof session.instructions === "string" ? session.instructions : "",
+      lease_hours: Number(session.lease_hours) || 0,
+    };
   },
   async write(
     action: string,

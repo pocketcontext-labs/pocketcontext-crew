@@ -126,6 +126,35 @@ export default function Guide() {
           </li>
         </ul>
       </section>
+      <section aria-labelledby="guide-sessions">
+        <h2 id="guide-sessions">Project agents and coding sessions</h2>
+        <ul className="crew-guide-facts">
+          <li>
+            <strong>One agent per project.</strong> Create it with{" "}
+            <em>I start it myself</em> and name it after the project, for
+            example pocketcontext-crew. It needs no webhook.
+          </li>
+          <li>
+            <strong>Its queue is its Ready tasks.</strong> Assign tasks to it
+            and set them Ready; those are what its sessions work on.
+          </li>
+          <li>
+            <strong>Start a session from its card.</strong> Start a session
+            copies a short prompt to paste into a new Codex or Claude Code
+            session.
+          </li>
+          <li>
+            <strong>A session claims one task for 2 hours.</strong> It renews
+            the claim while it works, and a second session can't take the same
+            task.
+          </li>
+          <li>
+            <strong>An expired claim can be released.</strong> If a session
+            stops, its task shows Claim expired. Open it and use Release claim
+            to put it back in To do.
+          </li>
+        </ul>
+      </section>
       <section aria-labelledby="guide-pages">
         <h2 id="guide-pages">What each page is for</h2>
         <div className="crew-guide-entries">

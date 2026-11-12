@@ -2681,3 +2681,345 @@ describe("Wake not received", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+describe("project agents and coding sessions", () => {
+  const project: Row = {
+    id: "agent0000000007",
+    revision: 2,
+    name: "synthetic-repo",
+    kind: "external",
+    brief: "Work the synthetic repository's Ready tasks.",
+  };
+  const person: Row = {
+    id: "agent0000000008",
+    revision: 1,
+    name: "Reviewer",
+    kind: "human",
+    brief: "Checks things by hand.",
+  };
+  const session = {
+    agent: { id: project.id, name: "synthetic-repo", kind: "external" },
+    prompt: "Use the PocketContext Crew skill.\nWork as synthetic-repo.",
+    instructions: "## Session\n\nClaim **one** Ready task.",
+    lease_hours: 2,
+  };
+  beforeEach(() => {
+    fixtures.agents = [agent, project, person];
+    fixtures.reviews = [];
+  });
+  async function openNewAgent() {
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "synthetic-repo" });
+    fireEvent.click(screen.getByRole("button", { name: /New agent/ }));
+    return within(screen.getByRole("dialog"));
+  }
+  it("starts a new agent manually when no webhook is set up, and saves its kind", async () => {
+    const dialog = await openNewAgent();
+    const group = within(dialog.getByRole("group", { name: /How is it started/ }));
+    await waitFor(() =>
+      expect(
+        group.getByRole("radio", { name: "I start it myself (no webhook)" }),
+      ).toBeChecked(),
+    );
+    expect(
+      group.getByText(
+        "Name it after the project, e.g. pocketcontext-crew. Start sessions from its card.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.change(dialog.getByLabelText("Name"), {
+      target: { value: "another-repo" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Save agent" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "agent.create",
+        { name: "another-repo", brief: "", kind: "external" },
+        undefined,
+        "",
+      ),
+    );
+  });
+  it("defaults to a webhook bot once the integration is set up, and offers Person", async () => {
+    fixtures.webhook_configs = [
+      { id: "integration", revision: 1, scope: "global", url_configured: true },
+    ];
+    const dialog = await openNewAgent();
+    await waitFor(() =>
+      expect(crewApi.read).toHaveBeenCalledWith("webhook_configs"),
+    );
+    const group = within(dialog.getByRole("group", { name: /How is it started/ }));
+    expect(group.getByRole("radio", { name: "Webhook (bot)" })).toBeChecked();
+    expect(group.queryByText(/Name it after the project/)).toBeNull();
+    fireEvent.click(group.getByRole("radio", { name: "Person" }));
+    fireEvent.change(dialog.getByLabelText("Name"), {
+      target: { value: "Editor" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Save agent" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "agent.create",
+        expect.objectContaining({ name: "Editor", kind: "human" }),
+        undefined,
+        "",
+      ),
+    );
+  });
+  it("keeps the owner's choice when the webhook setup arrives later", async () => {
+    let answer: (rows: Row[]) => void = () => undefined;
+    vi.mocked(crewApi.read).mockImplementation((c, f = {}) =>
+      c === "webhook_configs"
+        ? new Promise((resolve) => (answer = resolve))
+        : Promise.resolve(f.archived ? [] : fixtures[c] || []),
+    );
+    const dialog = await openNewAgent();
+    const group = within(dialog.getByRole("group", { name: /How is it started/ }));
+    fireEvent.click(group.getByRole("radio", { name: "Webhook (bot)" }));
+    await act(async () => answer([]));
+    expect(group.getByRole("radio", { name: "Webhook (bot)" })).toBeChecked();
+  });
+  it("changes an existing agent's kind and sends kind only when it changed", async () => {
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      (await screen.findByRole("heading", { name: "Network" })).closest("button")!,
+    );
+    let dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByRole("radio", { name: "Webhook (bot)" })).toBeChecked();
+    fireEvent.change(dialog.getByLabelText("Agent brief"), {
+      target: { value: "New brief" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Save agent" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenLastCalledWith(
+        "agent.update",
+        { name: "Network", brief: "New brief" },
+        expect.objectContaining({ id: agent.id }),
+        "",
+      ),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(
+      screen.getByRole("heading", { name: "Network" }).closest("button")!,
+    );
+    dialog = within(screen.getByRole("dialog"));
+    fireEvent.click(
+      dialog.getByRole("radio", { name: "I start it myself (no webhook)" }),
+    );
+    fireEvent.click(dialog.getByRole("button", { name: "Save agent" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenLastCalledWith(
+        "agent.update",
+        expect.objectContaining({ kind: "external" }),
+        expect.objectContaining({ id: agent.id }),
+        "",
+      ),
+    );
+  });
+  it("labels manual and person cards, leaves bot cards as they were and offers sessions only to manual agents", async () => {
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    const tile = async (name: string) =>
+      within(
+        (await screen.findByRole("heading", { name })).closest(
+          ".crew-agent-tile",
+        ) as HTMLElement,
+      );
+    const manual = await tile("synthetic-repo");
+    expect(manual.getByText("Started manually · no webhook")).toBeInTheDocument();
+    expect(
+      manual.getByRole("button", { name: "Start a session for synthetic-repo" }),
+    ).toBeInTheDocument();
+    const human = await tile("Reviewer");
+    expect(human.getByText("Person")).toBeInTheDocument();
+    expect(human.queryByRole("button", { name: /Start a session/ })).toBeNull();
+    const bot = await tile("Network");
+    expect(bot.queryByText(/Started manually|Person/)).toBeNull();
+    expect(bot.queryByRole("button", { name: /Start a session/ })).toBeNull();
+    expect(
+      screen
+        .getByRole("heading", { name: "Network" })
+        .closest(".crew-agent-tile")!
+        .querySelector(".crew-agent-kind"),
+    ).toBeNull();
+  });
+  it("Start a session copies the prompt and can show the full instructions", async () => {
+    const session$ = vi.spyOn(crewApi, "session").mockResolvedValue(session);
+    const writeText = mockClipboard(async () => undefined);
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Start a session for synthetic-repo",
+      }),
+    );
+    expect(
+      await screen.findByText(
+        "Copied. Paste it into a new Codex or Claude Code session.",
+      ),
+    ).toBeInTheDocument();
+    expect(session$).toHaveBeenCalledWith(project.id);
+    expect(writeText).toHaveBeenCalledWith(session.prompt);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByText("Show full instructions"));
+    expect(screen.getByText("one").tagName).toBe("STRONG");
+  });
+  it("shows the prompt to copy by hand when the clipboard is unavailable", async () => {
+    vi.spyOn(crewApi, "session").mockResolvedValue(session);
+    mockClipboard(async () => {
+      throw new Error("denied");
+    });
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Start a session for synthetic-repo",
+      }),
+    );
+    expect(
+      await screen.findByLabelText("Session prompt for synthetic-repo"),
+    ).toHaveValue(session.prompt);
+  });
+  it("explains politely when the session prompt cannot be read", async () => {
+    vi.spyOn(crewApi, "session").mockRejectedValue(new Error("synthetic 500"));
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Start a session for synthetic-repo",
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not prepare the session prompt. Check your connection and try again.",
+    );
+    expect(screen.queryByText(/synthetic 500/)).toBeNull();
+  });
+  it("lists manual agents and people in the board filter with a muted kind", async () => {
+    render(<CrewWorkspace />);
+    const filter = await screen.findByRole("combobox", {
+      name: "Filter by assignment",
+    });
+    await waitFor(() =>
+      expect(
+        within(filter)
+          .getAllByRole("option")
+          .map((x) => x.textContent),
+      ).toEqual([
+        "All tasks",
+        "Unassigned (0)",
+        "Invalid assignments (0)",
+        "Network (1)",
+        "Reviewer · person (0)",
+        "synthetic-repo · manual (0)",
+      ]),
+    );
+  });
+  describe("claims", () => {
+    const future = new Date(Date.now() + 90 * 60_000).toISOString();
+    const liveTask: Row = {
+      ...task,
+      status: "in_progress",
+      readiness: "ready",
+      assigned_agent: project.id,
+      title: "Claimed work",
+      claimed_by: "codex-session-1",
+      claim_until: future,
+      claim_state: "live",
+    };
+    const expiredTask: Row = {
+      ...task,
+      id: "task00000000002",
+      status: "in_progress",
+      readiness: "ready",
+      assigned_agent: project.id,
+      title: "Stale work",
+      claimed_by: "claude-session-2",
+      claim_until: "2026-11-12T01:00:00Z",
+      claim_state: "expired",
+    };
+    beforeEach(() => {
+      fixtures.tasks = [liveTask, expiredTask];
+    });
+    it("marks a live claim with its end time on hover and an expired one with the previous claimer", async () => {
+      render(<CrewWorkspace />);
+      const live = await screen.findByRole("button", { name: /Claimed work/ });
+      const chip = within(live).getByText(/^Claimed by codex-session-1/);
+      expect(chip).toHaveClass("crew-claim-chip");
+      expect(chip.getAttribute("title")).toMatch(/^until \d{1,2}:\d{2}/);
+      const stale = screen.getByRole("button", { name: /Stale work/ });
+      const badge = within(stale).getByText(/^Claim expired/);
+      expect(badge).toHaveClass("crew-claim-expired");
+      expect(badge).toHaveAttribute(
+        "title",
+        "Previously claimed by claude-session-2",
+      );
+      expect(within(live).queryByText(/Claim expired/)).toBeNull();
+    });
+    it("asks before releasing a live claim and releases it with an empty payload", async () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<CrewWorkspace />);
+      fireEvent.click(await screen.findByRole("button", { name: /Claimed work/ }));
+      const dialog = within(screen.getByRole("dialog"));
+      expect(dialog.getByText(/^Claimed by codex-session-1/)).toBeInTheDocument();
+      expect(dialog.queryByRole("button", { name: /^Claim/ })).toBeNull();
+      fireEvent.click(dialog.getByRole("button", { name: "Release claim" }));
+      expect(confirm).toHaveBeenCalledWith(
+        "A session is working on this. Release its claim?",
+      );
+      expect(crewApi.write).not.toHaveBeenCalled();
+      confirm.mockReturnValue(true);
+      fireEvent.click(dialog.getByRole("button", { name: "Release claim" }));
+      await waitFor(() =>
+        expect(crewApi.write).toHaveBeenCalledWith(
+          "task.release",
+          {},
+          expect.objectContaining({ id: liveTask.id, revision: liveTask.revision }),
+        ),
+      );
+      expect(
+        await screen.findByText("Claim released. The task is To do."),
+      ).toBeInTheDocument();
+    });
+    it("releases an expired claim without asking", async () => {
+      const confirm = vi.spyOn(window, "confirm");
+      render(<CrewWorkspace />);
+      fireEvent.click(await screen.findByRole("button", { name: /Stale work/ }));
+      const dialog = within(screen.getByRole("dialog"));
+      expect(dialog.getByText(/^Claim expired/)).toBeInTheDocument();
+      fireEvent.click(dialog.getByRole("button", { name: "Release claim" }));
+      await waitFor(() =>
+        expect(crewApi.write).toHaveBeenCalledWith(
+          "task.release",
+          {},
+          expect.objectContaining({ id: expiredTask.id }),
+        ),
+      );
+      expect(confirm).not.toHaveBeenCalled();
+    });
+    it("shows no claim controls on an unclaimed task", async () => {
+      fixtures.tasks = [{ ...task, status: "todo", title: "Free work" }];
+      render(<CrewWorkspace />);
+      fireEvent.click(await screen.findByRole("button", { name: /Free work/ }));
+      const dialog = within(screen.getByRole("dialog"));
+      expect(dialog.queryByRole("button", { name: "Release claim" })).toBeNull();
+      expect(dialog.queryByText(/Claimed by|Claim expired/)).toBeNull();
+    });
+  });
+});
+it("explains project agents and coding sessions in the Guide", async () => {
+  history.replaceState(null, "", "/#/guide");
+  render(<CrewWorkspace />);
+  const section = within(
+    (
+      await screen.findByRole("heading", {
+        name: "Project agents and coding sessions",
+      })
+    ).closest("section")!,
+  );
+  expect(section.getByText(/One agent per project/)).toBeInTheDocument();
+  expect(section.getByText(/claims one task for 2 hours/)).toBeInTheDocument();
+  expect(section.getByText(/Claim expired/)).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "How an agent is started" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Claim" })).toBeInTheDocument();
+});

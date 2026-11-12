@@ -1,5 +1,40 @@
 # Crew upgrades and rollback
 
+## Crew 0.17.0 to 0.18.0
+
+One data migration (`1801100000_crew_project_agents.js`) adds an agent `kind` (`bot`,
+`external` or `human`) and the advisory task claim fields `claimed_by` and
+`claim_until`. Every existing agent becomes `bot`, so webhook routing is unchanged;
+existing tasks have no claim. Records, history and webhook settings are otherwise
+unchanged. There is no protocol version change and no new managed block
+(DEFAULT_INSTRUCTIONS is unchanged), so webhook delivery is not paused.
+
+1. Take a complete stopped backup first: `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` (when present), the matching 0.17.0 binary and,
+   with webhooks, the private webhook key. Hosted instances use the verified
+   complete backup that the deployment prepares.
+2. Replace the binary or image with the normal procedure
+   (`CREW_REPLACE_VERSION=0.17.0` for the installer) and upgrade paired clients
+   with the server. A client and server must report the same release.
+3. Run `skill` once on each computer with a Crew profile: the skill and MCP
+   instructions now describe project coder sessions and claims. Refresh MCP
+   connector tool schemas (`crew_read` gains `agent`, `claim_state` and the
+   `session` collection).
+4. `capabilities_digest` changes (agent `kind`, task claim fields, `task.claim_renew`,
+   `task.release` and the `session` collection), so routines and agents reread
+   `capabilities` once at their next run; they need no other change.
+
+An older binary refuses the migrated database (unknown migration) and leaves it
+unchanged. Rollback means restoring the complete pre-upgrade backup with the 0.17.0
+binary or image; agent kinds, claims and other changes made after the upgrade are
+not in that backup.
+
+Behavior changes: `task.claim` now also lets the assigned agent claim its own Ready
+To do task (or an In progress task without a live claim) with a 2-hour lease, and a
+live claim answers HTTP 409 `already_claimed` with `claimed_by` and `claim_until`
+in `data`. `webhook.mapping.update` for a non-bot agent is a 400; the dispatcher and
+triage agent must be bots. See [project coder agents](crew.md#project-coder-agents).
+
 ## Crew 0.16.0 to 0.17.0
 
 No data migration, no protocol version change and no new managed block, so webhook

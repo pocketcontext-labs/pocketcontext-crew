@@ -7,11 +7,11 @@ reporting (see [SQL reads](#bounded-read-only-sql)).
 
 | Collection     | Purpose                                                                     |
 | -------------- | --------------------------------------------------------------------------- |
-| agents         | Role metadata and brief; not auth accounts                                  |
+| agents         | Role metadata, brief and kind (bot, external, human); not auth accounts     |
 | buckets        | Name, purpose and responsible agent                                         |
 | notes          | One bucket, title, Markdown body, note-ID links, archive state              |
 | note_revisions | Immutable snapshots, version, actor, reported agent and reason              |
-| tasks          | Board status, assignment, creator attribution, labels, draft and note links |
+| tasks          | Board status, assignment, creator attribution, labels, draft, note links and advisory claim |
 | events         | Immutable changes/comments, actor and reported attribution                  |
 | reviews        | Immutable draft and attachment snapshot with monotonic decision state       |
 | attachments    | Immutable files on a task or note: metadata, archive state; bytes in storage/ |
@@ -30,7 +30,10 @@ top-level fields of the normal export (id and revision are always returned);
 unknown fields, and fields the export hides or redacts such as webhook URLs and
 secrets, are rejected. Task reads accept `assigned_agent` (ID or unique exact
 name, empty string for unassigned), `status` (one value or a list), `readiness`
-(`ready`, or `on_hold`/`waiting`) and `label` (exact element of labels).
+(`ready`, or `on_hold`/`waiting`), `label` (exact element of labels) and
+`claim_state` (`live`, `expired` or `""` for no claim). The `session` collection
+takes `agent` (ID or exact name) and returns one object instead of items; see
+[project coder agents](#project-coder-agents).
 `webhook_bridges` reads accept `overdue: true`; see
 [Overdue parent wakes](webhooks.md#overdue-parent-wakes). `changed_since` (RFC3339) selects records
 updated at or after that time in any collection. Archive semantics are unchanged.
@@ -501,9 +504,10 @@ a reason code such as `execution_required` (do not retry unchanged). There is no
 
 Writes have action, optional id/expected_revision/reported_agent/reason, and data.
 Actions: agent.create/update; bucket.create/update/assign; note.create/update/restore;
-task.create/update/claim/comment; review.request/decide/withdraw; plus the
+task.create/update/claim/claim_renew/release/comment; review.request/decide/withdraw; plus the
 webhook and execution operations in the [webhook guide](webhooks.md). A restore names
-revision_id and creates a new note revision. Claim requires an unassigned task.
+revision_id and creates a new note revision. Claim takes an unassigned task, or
+lets the assignee claim its own task; see [project coder agents](#project-coder-agents).
 Comments preserve task revision (unless files sent with them withdraw a pending
 review); append-only events record them. Link arrays hold
 note IDs. Human is reserved as a derived pending-review label, not editable data.
@@ -543,6 +547,73 @@ of full pages with compact reads, search and SQL, checking identical answers. Ho
 complete backup/restore, credential revocation on restore, one writer and clean
 shutdown. Actual owner inbox delivery and third-party client sign-in require a
 real user confirmation; automated checks must not be presented as that confirmation.
+
+## Project coder agents
+
+Besides Grok bots, the owner runs coding agents (Codex, Claude Code) in terminal
+sessions, one Crew agent per project, named exactly like the repository (for example
+`pocketcontext-crew`). Its brief holds the project's instructions.
+
+**Agent kinds.** `crew_agents.kind` is `bot` (a Grok bot woken by webhook, the
+default, and every agent created before 0.18.0), `external` (a coder session the
+owner starts by hand) or `human`. agent.create, agent.update and agent.ensure take
+an optional `kind` (default `bot`; agent.ensure applies it only when it creates the
+agent). Only bots are routed: Crew never wakes an external or human agent, even when
+it has a leftover mapping. `webhook.mapping.update` for a non-bot is HTTP 400
+(clearing a leftover mapping with an empty `bot_ref` stays possible), and the
+dispatcher and triage agent must be bots. Changing a bot to another kind cancels its
+queued wakes like deactivation and, if it was the dispatcher, disables the
+integration. Setup checks that look for mapped agents ignore non-bots.
+
+**Session instructions.** `crew_read {collection: "session", agent: "<ID or exact
+name>"}` (also CLI `read` and `/api/crew/read`) returns one object:
+`{agent: {id, name, kind}, prompt, instructions, lease_hours: 2}`. `prompt` is the
+two-line paste the reader copies to start a session:
+
+```text
+You are <name> in PocketContext Crew.
+Read your session instructions with crew_read collection "session" agent "<name>" and follow them.
+```
+
+`instructions` is Crew's fixed template (`pb_hooks/crew_session.js`) followed by
+the agent's brief under `## Agent brief`. It tells the session to build a session
+name once with one shell command (`$CREW_SESSION`, else
+`<name> · <tool> · <Zellij session>/<pane> · <session id 8>` from
+`CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID` and `ZELLIJ_SESSION_NAME`/`ZELLIJ_PANE_ID`)
+and use it as reported_agent; list the agent's Ready To do tasks; claim one only when
+the owner picks it; plan and wait for the owner's approval in the session (that
+approval is the review); implement and release per the repository's AGENTS.md;
+close with `Released in <version>: <what changed>, commit <sha>` and Done; or
+release with a hold reason when stopping early. An unknown agent is HTTP 404.
+
+**Claims.** Tasks have `claimed_by` (the claimer's reported session name;
+attribution, not identity), `claim_until` (ISO UTC lease end) and a derived
+`claim_state` (`""`, `live` or `expired`) in every task response.
+
+- `task.claim` with `data.assigned_agent`: on an unassigned task it assigns and sets
+  In progress, as before, and records the claim (under reported_agent, or the
+  agent's name). The task's own assignee (its ID or exact name) may claim it when it
+  is Ready and To do, or In progress with an empty or expired claim; reported_agent
+  is then required. Otherwise HTTP 409 (`not_claimable`, or "Task is already
+  assigned" for another agent). The lease is 2 hours.
+- A live claim by anyone answers HTTP 409 with `data.reason.code`
+  `already_claimed` and `data.claimed_by`/`data.claim_until`, checked before the
+  revision so the loser of two simultaneous claims learns who won. Writes are
+  serialized and revision-checked, so two sessions never hold the same task.
+- `task.claim_renew` (empty data) extends a live claim to 2 hours from now when
+  reported_agent equals claimed_by; otherwise 409 `claim_expired` or `not_claimer`.
+  The claimer's task.update, task.comment and attachment writes on the task renew
+  the lease too (a comment still keeps the task revision).
+- `task.release` (optional `readiness` and `waiting_reason`) clears the claim, sets
+  an In progress task back to To do and applies the readiness. The claimer, the owner
+  in the reader, or anyone after the claim expired may release; another work client
+  gets 409 `not_claimer`. Setting Done (task.update or execution.complete with
+  mark_done) also clears the claim.
+- Claims are advisory: they block no other write, owner edits included. They never
+  send a webhook; the Grok-bot execution protocol is unchanged. An expired claim
+  stays visible (`claim_state: "expired"`) until the task is claimed, released or
+  done. Every claim, renewal and release is a task event (`task.claim`,
+  `task.claim_renew`, `task.release`) with the claim in its changes.
 
 ## Bucket responsibility
 

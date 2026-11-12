@@ -94,7 +94,7 @@ Reported agent names are attribution, not authenticated identity.
 Read collection capabilities once (`read`, crew_read) for versioned operation
 schemas (wake runs use the compact execution subset below). If a cached
 connector omits execution/idempotency_key, use data._crew as documented there;
-never fall back to unfenced writes. Other read collections: agents, buckets, notes, note_revisions, tasks, events, reviews,
+never fall back to unfenced writes. Other read collections: session (one coder session's prompt and instructions; requires agent), agents, buckets, notes, note_revisions, tasks, events, reviews,
 attachments (file metadata; parent = task or note), settings (storage limit and usage),
 webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings,
 webhook_bridges and webhook_executions.
@@ -125,6 +125,24 @@ unless debugging. Wake payloads are title-free and carry no readable links, so r
 
 Read [schema](references/schema.md) and [examples](references/examples.md) when
 constructing operations. Administration commands are separate from agent work.
+
+## Project coder sessions
+
+One Crew agent per project (kind `external`, named like the repository) runs in
+coding sessions the owner starts by hand; it has no bot mapping and is never
+woken. Only `bot` agents (the default kind) are woken, mapped or chosen as
+dispatcher or triage. When the owner starts you with a Crew session prompt, read
+`{"collection":"session","agent":"<name>"}` (crew_read or `read`) and follow its
+instructions: build your session name once and use it as reported_agent, list the
+agent's Ready To do tasks without changing anything, and claim one
+(`task.claim` with `data.assigned_agent` = the agent) only when the owner picks it.
+A claim sets In progress with a 2-hour lease; your updates, comments and
+attachments renew it, `task.claim_renew` extends it, and `task.release` (optional
+readiness and waiting_reason) ends it. HTTP 409 `already_claimed` names
+`claimed_by` and `claim_until`: report the holder and pick another task. Setting
+Done ends the claim. Never set Done without the owner's explicit approval in the
+session, and never leave a task In progress without a live claim. Claims are
+advisory and never wake anyone.
 
 ## Files and screenshots
 
