@@ -1,5 +1,41 @@
 # Crew upgrades and rollback
 
+## Crew 0.18.x to 0.19.0
+
+One data migration (`1801200000_crew_task_release.js`) adds the task fields `release`,
+`review_mode`, `approved_by` and `approved_at`, and the status value `wont_do`. Existing
+tasks keep their status and get empty values (no release, a Crew review). Records,
+history and webhook settings are otherwise unchanged. There is no protocol version
+change and no new managed block (DEFAULT_INSTRUCTIONS is unchanged), so webhook
+delivery is not paused.
+
+1. Take a complete stopped backup first: `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` (when present), the matching 0.18.x binary and,
+   with webhooks, the private webhook key. Hosted instances use the verified
+   complete backup that the deployment prepares.
+2. Replace the binary or image with the normal procedure
+   (`CREW_REPLACE_VERSION=<the installed 0.18.x>` for the installer) and upgrade paired
+   clients with the server. A client and server must report the same release.
+3. Run `skill` once on each computer with a Crew profile: the skill and session
+   instructions now close tasks with a release and in-session approval and describe
+   Won't do. Refresh MCP connector tool schemas (`crew_read` gains `release` and
+   `wont_do`; `crew_write` documents the new task fields).
+4. `capabilities_digest` changes (task `release`, `review_mode`, `approved_by`,
+   `approved_at`, status `wont_do` and the `release` read filter), so routines and
+   agents reread `capabilities` once at their next run; they need no other change.
+
+An older binary refuses the migrated database (unknown migration) and leaves it
+unchanged. Rollback means restoring the complete pre-upgrade backup with the 0.18.x
+binary or image; releases, approvals, Won't do and other changes made after the
+upgrade are not in that backup.
+
+Behavior changes: `review_mode: "in_session"` is accepted only when the task is or
+becomes Done (HTTP 400 otherwise); Crew stamps `approved_at` and defaults
+`approved_by` to `owner`, and leaving Done clears them. `wont_do` is terminal like
+Done: it ends a claim, never wakes, is excluded from overdue wakes, and leaving it is
+a `reopened` wake cause. See [releases and in-session
+approval](crew.md#project-coder-agents).
+
 ## Crew 0.18.0 to 0.18.1
 
 No data migration, protocol change or new managed block, so webhook delivery is not paused.
