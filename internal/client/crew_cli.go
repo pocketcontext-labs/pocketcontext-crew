@@ -31,7 +31,7 @@ var crewCommandUsage = map[string]string{
 }
 
 // crewFileActions accept files (write --file).
-var crewFileActions = map[string]bool{"attachment.add": true, "task.create": true, "note.create": true}
+var crewFileActions = map[string]bool{"attachment.add": true, "task.create": true, "note.create": true, "task.comment": true}
 
 // prepareCrewCommand validates a work command's input before any server is
 // started or contacted, and returns the request to send.
@@ -177,10 +177,10 @@ func decodeCrewInput[T any](command string, raw []byte) (T, error) {
 
 // writeFiles checks write --file files: only for actions that take files,
 // never together with base64 data.files, and within one multipart request.
-// attachment:new-N in task.create/note.create names the Nth --file.
+// attachment:new-N in task.create/note.create/task.comment names the Nth --file.
 func writeFiles(in crewWrite, paths []string) ([]crewFile, error) {
 	if !crewFileActions[in.Action] {
-		return nil, fail(2, "write: --file works only with attachment.add, task.create and note.create")
+		return nil, fail(2, "write: --file works only with attachment.add, task.create, note.create and task.comment")
 	}
 	if _, ok := in.Data["files"]; ok {
 		return nil, fail(2, "write: use either --file or data.files, not both")

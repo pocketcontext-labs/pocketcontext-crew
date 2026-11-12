@@ -2,11 +2,27 @@ import { useState, type ReactNode } from "react";
 import { ConnectionPending, skillCommand } from "./Connect";
 import Help from "./Help";
 import { statuses, val, type ConnectionState, type Row } from "./crewApi";
-import { boardColumnHash, viewHashes, type ItemKind } from "./itemLink";
+import {
+  boardColumnHash,
+  boardOnHoldHash,
+  viewHashes,
+  type ItemKind,
+} from "./itemLink";
 
 type Data = Record<string, Row[]>;
 const connectedKey = "pocketcontext.crew.agent_connected";
 const hiddenKey = "pocketcontext.crew.get_started_hidden";
+/** A task on hold this long without a change is worth a look. */
+const longHoldMs = 3 * 24 * 60 * 60 * 1000;
+/** Open tasks on hold (`waiting` in the API) unchanged for over three days. */
+export function longHolds(tasks: Row[], now = Date.now()) {
+  return tasks.filter((x) => {
+    if (val(x, "status") === "done" || val(x, "readiness") === "ready")
+      return false;
+    const updated = Date.parse(val(x, "updated"));
+    return Number.isFinite(updated) && now - updated > longHoldMs;
+  });
+}
 
 // Per-browser conveniences: progress itself comes from the workspace data.
 function stored(key: string) {
@@ -168,6 +184,7 @@ export default function Home({
     .sort((a, b) => val(b.row, "updated").localeCompare(val(a.row, "updated")))
     .slice(0, 5);
   const nothingNeeded = !pending.length && !stuck.length;
+  const heldLong = longHolds(data.tasks).length;
 
   return (
     <div className="crew-home">
@@ -254,6 +271,15 @@ export default function Home({
               </a>
             );
           })}
+          <a
+            className="crew-home-hold"
+            href={boardOnHoldHash}
+            aria-label={`${heldLong} on hold over 3 days, show tasks on hold`}
+            title="Open tasks on hold with no change for more than 3 days"
+          >
+            <b>{heldLong}</b>
+            On hold over 3 days
+          </a>
         </div>
       </section>
       {recent.length > 0 && (

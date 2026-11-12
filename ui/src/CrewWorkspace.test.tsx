@@ -623,23 +623,31 @@ it("keeps bucket assignment conflicts visible for reassessment", async () => {
   expect(screen.queryByText("Saved.")).toBeNull();
 });
 
-it("defaults new tasks to waiting and explicitly creates assigned ready work", async () => {
+it("defaults new tasks to On hold and explicitly creates assigned ready work", async () => {
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
   fireEvent.click(screen.getByRole("button", { name: /New task/ }));
   const dialog = within(screen.getByRole("dialog"));
-  expect(dialog.getByLabelText("Readiness")).toHaveValue("waiting");
-  expect(dialog.getByLabelText("Waiting reason")).toBeInTheDocument();
+  expect(dialog.getByLabelText("Hold")).toHaveValue("waiting");
+  expect(
+    within(dialog.getByLabelText("Hold")).getByRole("option", { name: "On hold" }),
+  ).toBeInTheDocument();
+  expect(dialog.getByLabelText("Hold reason")).toBeInTheDocument();
+  expect(
+    dialog.getByText(
+      "On hold: nobody is woken; a person decides. Ready: the assigned bot may act.",
+    ),
+  ).toBeInTheDocument();
   fireEvent.change(dialog.getByLabelText("Title"), {
     target: { value: "Prepare research" },
   });
   fireEvent.change(dialog.getByLabelText("Assigned agent"), {
     target: { value: agent.id },
   });
-  fireEvent.change(dialog.getByLabelText("Readiness"), {
+  fireEvent.change(dialog.getByLabelText("Hold"), {
     target: { value: "ready" },
   });
-  expect(dialog.queryByLabelText("Waiting reason")).toBeNull();
+  expect(dialog.queryByLabelText("Hold reason")).toBeNull();
   fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
   await waitFor(() =>
     expect(crewApi.write).toHaveBeenCalledWith(
@@ -656,7 +664,7 @@ it("defaults new tasks to waiting and explicitly creates assigned ready work", a
   );
 });
 
-it("keeps assignment separate from readiness and saves the waiting reason", async () => {
+it("keeps assignment separate from the hold and saves the hold reason", async () => {
   fixtures.tasks = [
     {
       ...task,
@@ -674,7 +682,10 @@ it("keeps assignment separate from readiness and saves the waiting reason", asyn
   fireEvent.change(dialog.getByLabelText("Assigned agent"), {
     target: { value: agent.id },
   });
-  expect(dialog.getByLabelText("Readiness")).toHaveValue("waiting");
+  expect(dialog.getByLabelText("Hold")).toHaveValue("waiting");
+  expect(dialog.getByLabelText("Hold reason")).toHaveValue(
+    "Need source material",
+  );
   fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
   await waitFor(() =>
     expect(crewApi.write).toHaveBeenCalledWith(
@@ -1809,7 +1820,7 @@ describe("help and Guide", () => {
     await screen.findByRole("heading", { name: "Launch post" });
     fireEvent.click(screen.getByRole("button", { name: /Launch post/ }));
     const dialog = within(await screen.findByRole("dialog"));
-    const button = dialog.getByRole("button", { name: "What is readiness?" });
+    const button = dialog.getByRole("button", { name: "What do On hold and Ready mean?" });
     fireEvent.click(button);
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(dialog.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
@@ -2180,7 +2191,9 @@ describe("board agent filter", () => {
 
   it("extends the assignment filter with one option per active agent, with counts", async () => {
     await openBoard();
-    expect(screen.getAllByRole("combobox", { name: /Filter/ })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("combobox", { name: "Filter by assignment" }),
+    ).toHaveLength(1);
     const options = within(filter())
       .getAllByRole("option")
       .map((x) => x.textContent);
@@ -2383,5 +2396,288 @@ describe("Home tiles focus a board column", () => {
     expect(location.hash).toBe("#/tasks");
     expect(scroll).not.toHaveBeenCalled();
     expect(document.querySelector(".crew-column-highlight")).toBeNull();
+  });
+});
+
+const chipOf = (dialog: ReturnType<typeof within>, name: string) =>
+  dialog
+    .getByRole("button", { name: `Remove label ${name}` })
+    .closest(".crew-chip") as HTMLElement;
+describe("labels as chips", () => {
+  beforeEach(() => {
+    fixtures.reviews = [];
+    fixtures.tasks = [
+      { ...task, status: "todo", labels: ["Network", "Launch"] },
+      {
+        ...task,
+        id: "task00000000002",
+        title: "Other",
+        status: "todo",
+        labels: ["Research"],
+      },
+    ];
+  });
+  async function openLaunch() {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Launch post" });
+    fireEvent.click(screen.getByRole("button", { name: /Launch post/ }));
+    return within(screen.getByRole("dialog"));
+  }
+  it("shows the same chips on cards and saves exactly the chips", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Launch post" });
+    const card = screen.getByRole("button", { name: /Launch post/ });
+    expect(
+      [...card.querySelectorAll(".crew-chip")].map((x) => x.textContent),
+    ).toEqual(["Network", "Launch"]);
+    fireEvent.click(card);
+    const dialog = within(screen.getByRole("dialog"));
+    const input = dialog.getByRole("combobox", { name: "Labels" });
+    fireEvent.click(dialog.getByRole("button", { name: "Remove label Network" }));
+    fireEvent.change(input, { target: { value: "  Copy  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(input).toHaveValue("");
+    fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "task.update",
+        expect.objectContaining({ labels: ["Launch", "Copy"] }),
+        expect.objectContaining({ id: task.id }),
+        "",
+      ),
+    );
+  });
+  it("adds with comma or Tab, pastes several, and never duplicates", async () => {
+    const dialog = await openLaunch();
+    const input = dialog.getByRole("combobox", { name: "Labels" });
+    const chips = () =>
+      [...document.querySelectorAll(".crew-chip-input .crew-chip")].map(
+        (x) => x.firstChild?.textContent,
+      );
+    fireEvent.change(input, { target: { value: "One" } });
+    fireEvent.keyDown(input, { key: "," });
+    fireEvent.change(input, { target: { value: "Two" } });
+    fireEvent.keyDown(input, { key: "Tab" });
+    fireEvent.paste(input, {
+      clipboardData: { getData: () => "Three, ,four,launch" },
+    });
+    expect(chips()).toEqual(["Network", "Launch", "One", "Two", "Three", "four"]);
+    // "launch" matched the existing chip, which is highlighted instead.
+    expect(
+      chipOf(dialog, "Launch"),
+    ).toHaveClass("flash");
+    fireEvent.change(input, { target: { value: "NETWORK" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(chips()).toHaveLength(6);
+  });
+  it("removes with Backspace: the first selects the last chip, the second removes it", async () => {
+    const dialog = await openLaunch();
+    const input = dialog.getByRole("combobox", { name: "Labels" });
+    fireEvent.keyDown(input, { key: "Backspace" });
+    const last = chipOf(dialog, "Launch");
+    expect(last).toHaveClass("selected");
+    fireEvent.keyDown(input, { key: "Backspace" });
+    expect(
+      dialog.queryByRole("button", { name: "Remove label Launch" }),
+    ).toBeNull();
+    // A focused chip goes with Delete.
+    const chip = chipOf(dialog, "Network");
+    chip.focus();
+    expect(chip).toHaveFocus();
+    fireEvent.keyDown(chip, { key: "Delete" });
+    expect(
+      dialog.queryByRole("button", { name: "Remove label Network" }),
+    ).toBeNull();
+    expect(input).toHaveFocus();
+  });
+  it("suggests labels from other tasks, keeping their casing", async () => {
+    const dialog = await openLaunch();
+    const input = dialog.getByRole("combobox", { name: "Labels" });
+    fireEvent.change(input, { target: { value: "res" } });
+    const option = dialog.getByRole("option", { name: "Research" });
+    fireEvent.click(option);
+    expect(
+      dialog.getByRole("button", { name: "Remove label Research" }),
+    ).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "research" } });
+    expect(dialog.queryByRole("listbox")).toBeNull();
+    fireEvent.change(input, { target: { value: "netw" } });
+    expect(dialog.queryByRole("listbox")).toBeNull();
+  });
+  it("uses an existing label's casing when typed in another case", async () => {
+    fixtures.tasks[0] = { ...fixtures.tasks[0], labels: [] };
+    const dialog = await openLaunch();
+    const input = dialog.getByRole("combobox", { name: "Labels" });
+    fireEvent.change(input, { target: { value: "RESEARCH" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(
+      dialog.getByRole("button", { name: "Remove label Research" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("On hold", () => {
+  const boardTask = (id: string, title: string, extra: Partial<Row>): Row => ({
+    ...task,
+    id,
+    title,
+    status: "todo",
+    readiness: "waiting",
+    waiting_reason: "",
+    ...extra,
+  });
+  beforeEach(() => {
+    fixtures.reviews = [];
+    fixtures.tasks = [
+      boardTask("task00000000001", "Held draft", {
+        waiting_reason: "Draft edited",
+      }),
+      boardTask("task00000000002", "Ready work", { readiness: "ready" }),
+      boardTask("task00000000003", "Finished", {
+        status: "done",
+        readiness: "waiting",
+      }),
+      boardTask("task00000000004", "Other agent", {
+        readiness: "ready",
+        assigned_agent: "agent0000000002",
+      }),
+    ];
+    fixtures.agents = [
+      agent,
+      { id: "agent0000000002", revision: 1, name: "Design" },
+    ];
+  });
+  const card = (title: string) =>
+    screen.getByRole("button", { name: new RegExp(title) });
+  const cardTitles = () =>
+    [...document.querySelectorAll(".crew-task-card h3")].map((x) => x.textContent);
+  it("shows On hold with its reason, Ready, nothing for Done, and never Waiting", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Held draft" });
+    const held = within(card("Held draft")).getByText("On hold");
+    expect(held).toHaveAttribute("title", "Draft edited");
+    expect(within(card("Ready work")).getByText("Ready")).toBeInTheDocument();
+    expect(within(card("Finished")).queryByText(/On hold|Ready/)).toBeNull();
+    expect(screen.queryByText(/^Waiting/)).toBeNull();
+  });
+  it("filters the board by hold, combined with the agent filter, in the address", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Held draft" });
+    const hold = screen.getByRole("combobox", { name: "Filter by hold" });
+    expect(
+      within(hold).getAllByRole("option").map((x) => x.textContent),
+    ).toEqual(["On hold and Ready", "On hold (1)", "Ready (2)"]);
+    fireEvent.change(hold, { target: { value: "on_hold" } });
+    expect(cardTitles()).toEqual(["Held draft"]);
+    expect(location.hash).toBe("#/tasks?hold=on_hold");
+    fireEvent.change(hold, { target: { value: "ready" } });
+    expect(cardTitles()).toEqual(["Ready work", "Other agent"]);
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Filter by assignment" }),
+      { target: { value: agent.id } },
+    );
+    expect(cardTitles()).toEqual(["Ready work"]);
+    expect(location.hash).toBe(`#/tasks?agent=${agent.id}&hold=ready`);
+    fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
+    expect(cardTitles()).toHaveLength(4);
+    expect(location.hash).toBe("#/tasks");
+  });
+  it("restores the hold filter from the address", async () => {
+    history.replaceState(null, "", "/#/tasks?hold=on_hold");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Held draft" });
+    expect(screen.getByRole("combobox", { name: "Filter by hold" })).toHaveValue(
+      "on_hold",
+    );
+    expect(cardTitles()).toEqual(["Held draft"]);
+  });
+  it("counts tasks on hold over 3 days on Home and opens the board filtered to them", async () => {
+    const old = new Date(Date.now() - 4 * 86_400_000).toISOString();
+    const recent = new Date(Date.now() - 86_400_000).toISOString();
+    fixtures.tasks = [
+      boardTask("task00000000001", "Old hold", { updated: old }),
+      boardTask("task00000000002", "New hold", { updated: recent }),
+      boardTask("task00000000003", "Old ready", {
+        updated: old,
+        readiness: "ready",
+      }),
+      boardTask("task00000000004", "Old done", { updated: old, status: "done" }),
+    ];
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    const tile = await screen.findByRole("link", {
+      name: "1 on hold over 3 days, show tasks on hold",
+    });
+    expect(tile).toHaveAttribute("href", "#/tasks?hold=on_hold");
+    fireEvent.click(tile);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "Filter by hold" }),
+      ).toHaveValue("on_hold"),
+    );
+    expect(cardTitles()).toEqual(["Old hold", "New hold"]);
+  });
+});
+
+describe("Wake not received", () => {
+  beforeEach(() => {
+    fixtures.reviews = [];
+    fixtures.tasks = [
+      { ...task, status: "todo", readiness: "ready", title: "Stranded" },
+      {
+        ...task,
+        id: "task00000000002",
+        status: "todo",
+        readiness: "ready",
+        title: "Self filed",
+        created_by_agent: "Network",
+      },
+      {
+        ...task,
+        id: "task00000000003",
+        status: "todo",
+        readiness: "ready",
+        title: "On time",
+      },
+    ];
+    fixtures.webhook_bridges = [
+      { id: "bridge000000001", revision: 1, task_id: task.id, overdue: true },
+      {
+        id: "bridge000000002",
+        revision: 1,
+        task_id: "task00000000002",
+        overdue: true,
+      },
+      {
+        id: "bridge000000003",
+        revision: 1,
+        task_id: "task00000000003",
+        overdue: false,
+      },
+      { id: "bridge000000004", revision: 1, task_id: "", overdue: true },
+    ];
+  });
+  it("marks only open tasks whose overdue wake was dispatched to someone else, on the card and in the task", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "On time" });
+    await waitFor(() =>
+      expect(screen.getAllByText("Wake not received")).toHaveLength(1),
+    );
+    const stranded = screen.getByRole("button", { name: /Stranded/ });
+    expect(within(stranded).getByText("Wake not received")).toBeInTheDocument();
+    fireEvent.click(stranded);
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByRole("note")).toHaveTextContent("Wake not received");
+    expect(screen.queryByRole("button", { name: /Retry|Dismiss/ })).toBeNull();
+  });
+  it("keeps the board working when wake evidence cannot be read", async () => {
+    vi.mocked(crewApi.read).mockImplementation(async (c, f = {}) => {
+      if (c === "webhook_bridges") throw new Error("synthetic");
+      return f.archived ? [] : fixtures[c] || [];
+    });
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Stranded" });
+    expect(screen.queryByText("Wake not received")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

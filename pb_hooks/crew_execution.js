@@ -149,6 +149,65 @@ function invalidateStale(app, task, b, actor) {
     }
   }
 }
+const ACTIVE = "(state='dispatching' || state='handed_off' || state='running')";
+// review.request with the holder's proof is the normal last step of governed
+// work: it completes that execution instead of letting the review transition
+// invalidate it. The record keeps its worker and fence so the holder's final
+// fenced task.comment and a late execution.complete still match it.
+function completeForReview(app, task, b, actor) {
+  const p = b.execution;
+  if (!p) return null;
+  const r = wh.get(app, "webhook_executions", p.id);
+  if (r.getString("task") !== task.id || r.getString("state") !== "running")
+    return null;
+  r.set("state", "completed");
+  r.set("outcome_code", "review_requested");
+  r.set("completed_at", new Date().toISOString());
+  r.set("lease_until", "");
+  save(app, r, b, actor, {
+    state: "completed",
+    outcome_code: "review_requested",
+  });
+  return r;
+}
+function reviewCompleted(r) {
+  return (
+    r.getString("state") === "completed" &&
+    r.getString("outcome_code") === "review_requested"
+  );
+}
+// Putting a task on hold ends its executions at once, whoever holds them:
+// fence bumped, lease and worker cleared, outcome put_on_hold, and a
+// task-level execution.cancel event for the Activity history.
+function cancelForHold(app, task, b, actor) {
+  const out = [];
+  for (const r of rows(app, "task={:task} && " + ACTIVE, { task: task.id })) {
+    const previous = r.getString("state");
+    r.set("state", "invalidated");
+    r.set("outcome_code", "put_on_hold");
+    r.set("completed_at", new Date().toISOString());
+    r.set("fence", r.getInt("fence") + 1);
+    r.set("lease_until", "");
+    r.set("handoff_deadline_at", "");
+    r.set("worker_id", "");
+    r.set("dispatch_worker_id", "");
+    save(app, r, b, actor, { invalidated: true, outcome_code: "put_on_hold" });
+    wh.audit(
+      app,
+      task,
+      { ...b, action: "execution.cancel" },
+      actor,
+      {
+        execution: r.id,
+        previous_state: previous,
+        state: "invalidated",
+        outcome_code: "put_on_hold",
+      },
+    );
+    out.push(r.id);
+  }
+  return out;
+}
 function handle(app, b, actor) {
   const d = b.data || {};
   // Validation is a fresh read, never a cached idempotency result.
@@ -348,6 +407,23 @@ function handle(app, b, actor) {
         return begin ? beginResult(r, info) : result;
       }
       const r = wh.get(app, "webhook_executions", b.id);
+      // review.request already completed this execution for its holder. A
+      // later execution.complete from the same worker and fence is accepted
+      // as a no-op (no revision check: nothing changes), so wake runs that
+      // finish through execution.complete end cleanly.
+      if (b.action === "execution.complete" && reviewCompleted(r)) {
+        only(d, ["worker_id", "fence", "outcome", "mark_done", "task_revision"]);
+        worker(d);
+        if (r.getString("worker_id") !== d.worker_id || r.getInt("fence") !== d.fence)
+          fail("Execution lease expired or fenced");
+        if (!["completed", "failed"].includes(d.outcome))
+          bad("outcome must be completed or failed");
+        if (d.mark_done)
+          bad(
+            "review.request already completed this execution; a task in review cannot be marked done",
+          );
+        return Object.assign(exported(r), { already_completed: true });
+      }
       wh.check(r, b.expected_revision);
       if (b.action === "execution.dispatched") {
         only(d, ["worker_id", "fence", "sent", "message_ref"]);
@@ -554,23 +630,40 @@ function isLive(r) {
 // authoritative. A work client needs execution proof only while an execution
 // is live on the task, so a stale worker cannot write during another live run.
 // Supplied proof is always validated, never ignored.
-function guardTaskWrite(app, task, b, isAgent) {
+// options.hold: the write only puts the task on hold, which any caller may do
+// during a live execution; the execution is cancelled in the same transaction.
+function guardTaskWrite(app, task, b, isAgent, options) {
   if (!isAgent) return;
   invalidateStale(app, task, b, "system:execution-reconcile");
   const p = b.execution;
+  const live = () =>
+    rows(app, "task={:task} && " + ACTIVE, { task: task.id }).filter(isLive);
   if (!p) {
-    const live = rows(
-      app,
-      "task={:task} && (state='dispatching' || state='handed_off' || state='running')",
-      { task: task.id },
-    ).filter(isLive);
-    if (live.length) fail(executionRequiredMessage(live), "execution_required");
+    if (options && options.hold) return;
+    const holders = live();
+    if (holders.length)
+      fail(executionRequiredMessage(holders), "execution_required");
     return;
   }
   if (typeof p !== "object" || Array.isArray(p))
     bad("execution must be an object");
   only(p, ["id", "worker_id", "fence"]);
   const r = wh.get(app, "webhook_executions", p.id);
+  // The holder's final comment after its own review.request: its execution
+  // was completed by that request, and nobody else holds the task.
+  if (
+    b.action === "task.comment" &&
+    r.getString("task") === task.id &&
+    reviewCompleted(r)
+  ) {
+    worker(p);
+    if (r.getString("worker_id") !== p.worker_id || r.getInt("fence") !== p.fence)
+      fail("Execution lease expired or fenced");
+    const holders = live();
+    if (holders.length)
+      fail(executionRequiredMessage(holders), "execution_required");
+    return;
+  }
   if (r.getString("task") !== task.id || r.getString("state") !== "running")
     fail("Task execution proof does not match active work");
   proof(app, r, p);
@@ -582,4 +675,6 @@ module.exports = {
   handle,
   guardTaskWrite,
   invalidateStale,
+  completeForReview,
+  cancelForHold,
 };

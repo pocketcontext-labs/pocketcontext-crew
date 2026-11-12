@@ -124,8 +124,16 @@ function document() {
     draft: str,
     links: strings,
     archived: bool,
-    readiness: { enum: ["waiting", "ready"] },
-    waiting_reason: str,
+    readiness: {
+      enum: ["waiting", "on_hold", "ready"],
+      description:
+        "On hold (stored and read as waiting; on_hold is a write alias) or ready. An on-hold task never wakes a bot. Going on hold cancels any unfinished execution (outcome put_on_hold) and advances the wake generation.",
+    },
+    waiting_reason: {
+      type: "string",
+      description:
+        "Hold reason. Crew sets it on automatic holds (Draft edited, Review withdrawn, Bot hand-off limit reached); going Ready clears it unless the same write sets one.",
+    },
   };
   const worker = { worker_id: str, fence: num };
   const event = { event_id: str, epoch: str, generation: num };
@@ -159,7 +167,7 @@ function document() {
   op("task.update", task, [], {
     revision: "record",
     execution_proof:
-      "Required only while another execution is live on the task (lease or acknowledgment window not expired); supplied proof is always validated. Setting Waiting releases governance.",
+      "Required only while another execution is live on the task (lease or acknowledgment window not expired); supplied proof is always validated. Exception: an update that only puts the task on hold (readiness on_hold/waiting, optional waiting_reason) needs no proof and cancels the live execution. Setting on hold releases governance.",
   });
   op(
     "task.claim",
@@ -170,12 +178,14 @@ function document() {
   op("task.comment", { body: str }, ["body"], {
     revision: "record",
     execution_proof:
-      "Required only while another execution is live on the task; proof-bearing comments also require idempotency_key.",
+      "Required only while another execution is live on the task; proof-bearing comments also require idempotency_key. After your own review.request completed your execution, your proof still works for comments while nobody else holds the task.",
+    files:
+      "Optional data.files (or multipart parts named files) become attachments of the task, all or nothing; attachment:new-N in body names the Nth file. Every attachment:ID in body must name an active attachment of this task. Files on a task with a pending review withdraw it like attachment.add.",
   });
   op("review.request", {}, [], {
     revision: "task",
     execution_proof:
-      "Required only while another execution is live on the task",
+      "Required only while another execution is live on the task. With your proof, review.request completes your execution (outcome review_requested; result execution_completed) instead of invalidating it: make it your last step. Your fenced comment and execution.complete (outcome completed, no mark_done) afterwards are accepted as no-ops for the execution.",
   });
   op("review.withdraw", {}, [], {
     revision: "review",
@@ -478,7 +488,12 @@ function document() {
       task_revision: num,
     },
     ["worker_id", "fence", "outcome"],
-    { revision: "execution", key: true },
+    {
+      revision: "execution",
+      key: true,
+      description:
+        "Ends running work. When your own review.request already completed this execution (outcome_code review_requested), the same worker/fence gets the record back with already_completed:true and no revision check; mark_done is refused.",
+    },
   );
   op(
     "execution.recover",
@@ -891,7 +906,9 @@ function document() {
       bot_handoffs:
         "Consecutive work-client assignment changes; any reader task write resets it. Exceeding webhook_routing.max_bot_handoffs applies the write but sets Waiting without a wake. A work client may set Ready again (when the owner asks or the loop is broken), but that keeps the count, so the next work-client reassignment stops it again.",
       attachments:
-        "Attachment add, archive and restore (including through an upload link) never wake. When one withdraws a pending review the task moves to Waiting and its wake generation advances, exactly as a draft edit does.",
+        "Attachment add, archive and restore (including through an upload link, or files sent with a comment) never wake. When one withdraws a pending review the task goes on hold (waiting_reason Review withdrawn) and its wake generation advances, exactly as a draft edit does (Draft edited).",
+      on_hold:
+        "An on-hold task (readiness waiting) never wakes a bot, whatever changes: creation, assignment, reassignment, reopening, review outcomes and comments are only recorded. Only Ready tasks wake: setting Ready, or a subscribed change or owner comment on a Ready task. Going on hold cancels unfinished executions (outcome put_on_hold, task event execution.cancel) and makes queued wakes stale.",
     },
     setup_entry:
       "Read webhook_configs; follow the canonical managed routine instructions. Never request credentials through chat or MCP.",
@@ -993,7 +1010,15 @@ function readDiscovery() {
         ],
         description: "Tasks only",
       },
-      readiness: { enum: ["waiting", "ready"], description: "Tasks only" },
+      readiness: {
+        enum: ["waiting", "on_hold", "ready"],
+        description: "Tasks only; on_hold is an alias of waiting",
+      },
+      overdue: {
+        type: "boolean",
+        description:
+          "webhook_bridges only, true: unresolved parent wakes past their deadline (task.wake, no parent receipt) for the task's current wake generation, on active tasks that are not done and were not created by their recipient. Rows are history; nothing retries.",
+      },
       label: { type: "string", description: "Tasks with this exact label" },
       changed_since: {
         type: "string",
@@ -1060,10 +1085,10 @@ function attachmentsDiscovery() {
     transport: {
       json: "data.files [{name, content_base64}] on POST /api/crew/agent-write (MCP crew_write) or /api/crew/write; at most 5 MiB decoded per request.",
       multipart:
-        "multipart/form-data to the same write routes: field @jsonPayload holds the JSON write envelope, file parts are named files (filename = display name). For attachment.add, task.create and note.create only.",
+        "multipart/form-data to the same write routes: field @jsonPayload holds the JSON write envelope, file parts are named files (filename = display name). For attachment.add, task.create, note.create and task.comment only.",
     },
     references:
-      "Markdown in note body, task description and task draft may reference ![alt](attachment:ID) or [label](attachment:ID). A new reference must name an active attachment of the same task or note; a reference already saved in that field may stay after archiving (shown as removed). Embedded data: images are refused. attachment:new-N placeholders (N = 1-based file position) work only in task.create/note.create with files.",
+      "Markdown in note body, task description and task draft may reference ![alt](attachment:ID) or [label](attachment:ID). A new reference must name an active attachment of the same task or note; a reference already saved in that field may stay after archiving (shown as removed). Embedded data: images are refused. attachment:new-N placeholders (N = 1-based file position) work only in task.create/note.create/task.comment with files. Comment bodies follow the same rules; every reference in a comment is new, so it must name an active attachment of the task.",
     images:
       "PNG, JPEG, GIF and WebP verified by magic bytes are images (image:true, width, height). Every other type is metadata from the extension, never sniffed, and is served as a download.",
     read: {

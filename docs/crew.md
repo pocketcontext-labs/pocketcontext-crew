@@ -30,7 +30,9 @@ top-level fields of the normal export (id and revision are always returned);
 unknown fields, and fields the export hides or redacts such as webhook URLs and
 secrets, are rejected. Task reads accept `assigned_agent` (ID or unique exact
 name, empty string for unassigned), `status` (one value or a list), `readiness`
-and `label` (exact element of labels). `changed_since` (RFC3339) selects records
+(`ready`, or `on_hold`/`waiting`) and `label` (exact element of labels).
+`webhook_bridges` reads accept `overdue: true`; see
+[Overdue parent wakes](webhooks.md#overdue-parent-wakes). `changed_since` (RFC3339) selects records
 updated at or after that time in any collection. Archive semantics are unchanged.
 Task create, update and claim also accept an ID or unique exact name for
 `assigned_agent`, and store the agent ID. Task and note responses (reads, lists and
@@ -123,7 +125,7 @@ Authorization for everything else is a set of owner-editable default rules in th
 skill and MCP instructions, not a server gate: decide reviews only on explicit
 owner delegation; change `max_bot_handoffs`, archive or restore buckets, and
 deactivate or reactivate agents only when the owner asks; recover executions,
-set Waiting or set a hop-limited task Ready when the owner asks or work is stuck
+put a task on hold (Waiting) or set a hop-limited task Ready when the owner asks or work is stuck
 and the owner would otherwise do it in the reader. Attribution is kept for audit
 and never used to block. History is append-only, so every such write remains
 auditable through `actor` and `reported_agent`.
@@ -187,6 +189,7 @@ All run on `POST /api/crew/write` (reader) and `POST /api/crew/agent-write`
 | `attachment.archive` | attachment id, its revision | `{}` | attachment record plus `review_withdrawn` |
 | `attachment.restore` | attachment id, its revision | `{}` | attachment record plus `review_withdrawn` |
 | `task.create`, `note.create` | none | usual fields, optional files | task/note record plus `attachments: [record…]` |
+| `task.comment` | task id, its revision | `body`, optional files | task record; with files also `attachments: [record…]` and `review_withdrawn` |
 | `upload_link.create` | none | `task` or `note`, `expires_in_minutes` (1–1440, default 15), `max_files` (1–20, default 10) | link record plus `token`, `path` (`#/upload/<token>`) and `url` (with a domain); reader route only |
 | `upload_link.revoke` | link id, its revision | `{}` | link record |
 | `storage.update` | settings id, its revision | `storage_limit_bytes` (1 MiB to 1 TiB) | settings record |
@@ -212,7 +215,7 @@ restore append `attachment.archive` / `attachment.restore` (`attachment`,
 `storage.update` appends to the settings record (`storage_limit_bytes: {old,
 new}`).
 
-Attachment writes do not change the task's or note's own revision, so an open
+Attachment writes (other than a review withdrawal) do not change the task's or note's own revision, so an open
 edit form never conflicts with an upload. Read the attachments collection (or
 use `changed_since` on it) to see new files.
 
@@ -220,7 +223,7 @@ use `changed_since` on it) to see new files.
 
 - Multipart (reader, CLI): `multipart/form-data` to either write route, with a
   text field `@jsonPayload` holding the JSON envelope and file parts named
-  `files` (the part's filename, as sent, is the name; see file names below). Accepted only by `attachment.add`, `task.create` and `note.create`.
+  `files` (the part's filename, as sent, is the name; see file names below). Accepted only by `attachment.add`, `task.create`, `note.create` and `task.comment`.
   A multipart request may carry 90 MiB in total (94,371,840 bytes, which stays
   under Cloudflare's 100 MB request limit; the public HTTPS listener caps
   requests at 110 MiB); clients send at most 89 MiB of files per request and
@@ -247,11 +250,36 @@ item is validated and saved, so stored text and note revisions always carry real
 IDs. The create is atomic: if any file is refused (any per-file code above, or
 the storage limit for the batch) or a placeholder names no uploaded file,
 nothing is created and the 400 lists each refused file as `data["files.N"]`.
-Placeholders anywhere else are refused.
+Placeholders anywhere else are refused, except in comments (below).
+
+### Comments with files
+
+`task.comment` takes the same files (multipart parts named `files`, or JSON
+`data.files` within the 5 MiB base64 limit) and stores them as attachments of
+the task, so the per-item, per-file and storage limits and the archive rules
+apply; there is no separate comment storage. `attachment:new-N` in the comment
+`body` names the Nth file and is replaced by the real ID before the comment is
+stored, so the comment event's `body` always carries `attachment:ID`. The
+comment is atomic like a create: a refused file or an unmatched placeholder
+adds neither the comment nor any file (400 with `data["files.N"]`). Each saved
+file appends `attachment.add` to the task's history; the comment event's
+`changes` lists the new `attachments`.
+
+Every comment body (with or without files) follows the Markdown reference
+rules below: each `attachment:ID` must name an active attachment of the same
+task, and `data:` images are refused. The reader therefore has two equivalent
+paths: upload files first (`attachment.add` or an upload link) and post `{body}`
+referencing `![alt](attachment:ID)`, or send the files with the comment and
+use `attachment:new-N`. Files sent with a comment on a task with a pending
+review withdraw that review exactly like `attachment.add`, so the task's
+revision changes only in that case; a plain comment never changes the
+revision. Comments with files never wake anyone beyond the usual comment rule.
+Fenced (proof-bearing) comments with files fingerprint the files for
+idempotency like `attachment.add`.
 
 ### Markdown references
 
-Note `body`, task `description` and task `draft` reference attachments as
+Note `body`, task `description`, task `draft` and comment `body` reference attachments as
 `![alt](attachment:ID)` (images) or `[label](attachment:ID)`, also in reference
 definitions (`[x]: attachment:ID`, anywhere, including inside block quotes and
 lists) and autolinks (`<attachment:ID>`). The server finds them on a parsed
@@ -378,8 +406,8 @@ exactly.
 sha256}]` on the review. Any `attachment.add`, `attachment.archive` or
 `attachment.restore` on a task with a pending review withdraws that review
 exactly like a draft edit: the review becomes `withdrawn`, the task leaves
-Needs review for In progress and becomes Waiting, its wake generation advances
-and nothing wakes. `review.decide` also refuses when the snapshot no longer
+Needs review for In progress and goes on hold (`waiting`, hold reason
+`Review withdrawn`), its wake generation advances and nothing wakes. `review.decide` also refuses when the snapshot no longer
 matches. Approval therefore covers exactly the draft and files the owner saw.
 
 ### Wakes
@@ -458,7 +486,7 @@ prints `saved`, `failed`, `attachments` and per-file `results` (`index`, `file`,
 `name`, `ok`, `id` or `error`). It exits 1 when no file was saved, and stops at
 any other refusal (a missing or archived item, a conflict, a rate limit).
 `write JSON|- --file PATH…` sends one multipart request for `attachment.add`,
-`task.create` or `note.create`; `attachment:new-N` names the Nth `--file`.
+`task.create`, `note.create` or `task.comment`; `attachment:new-N` names the Nth `--file`.
 
 They run locally with `--db` (the local key; the server starts if needed) or on
 a tunnel-paired computer with `--url` (its saved session token). `write` never
@@ -476,11 +504,15 @@ Actions: agent.create/update; bucket.create/update/assign; note.create/update/re
 task.create/update/claim/comment; review.request/decide/withdraw; plus the
 webhook and execution operations in the [webhook guide](webhooks.md). A restore names
 revision_id and creates a new note revision. Claim requires an unassigned task.
-Comments preserve task revision; append-only events record them. Link arrays hold
+Comments preserve task revision (unless files sent with them withdraw a pending
+review); append-only events record them. Link arrays hold
 note IDs. Human is reserved as a derived pending-review label, not editable data.
 
 Creating a review snapshots the task draft and moves it to needs_review. Editing
-the draft or archiving the task withdraws its pending reviews atomically. A
+the draft (which puts the task on hold with hold reason `Draft edited`) or
+archiving the task withdraws its pending reviews atomically. A work client
+requesting review with its own execution proof completes that execution
+(outcome `review_requested`); see [webhooks](webhooks.md#governed-tasks-and-atomic-execution). A
 decision (by the owner, or by a work client the owner explicitly delegated)
 requires a still-pending request and matching current draft. It moves
 the task to in_progress, never done. Closed decisions cannot be rewritten. New
@@ -526,8 +558,26 @@ id/name or null. The optional filter accepts an ID or unique exact name.
 
 ## Ready tasks and global dispatcher integration
 
-Tasks expose readiness (waiting by default), waiting_reason and server-managed
-wake_generation. Ready work, assignment, review and invalidation changes share a
+Tasks expose readiness, waiting_reason and server-managed wake_generation.
+Readiness is `waiting` (the default), which the reader labels **On hold**, or
+`ready`. Writes accept `on_hold` as an alias and store `waiting`; reads and
+filters return `waiting` (the read filter accepts `on_hold` too).
+`waiting_reason` is the hold reason. Crew sets it on every automatic hold:
+`Draft edited` (a draft edit withdrew a pending review), `Review withdrawn` (an
+attachment change withdrew one) and `Bot hand-off limit reached`. Going Ready
+clears it unless the same write sets one.
+
+The wake rule: an on-hold task never wakes a bot, whatever changes. Creating it,
+assigning or reassigning it, reopening it, review outcomes and comments
+(including owner comments) are only recorded in its Activity. Only a Ready task
+wakes: setting Ready, or a subscribed change or opted-in owner comment on a Ready
+task. Putting a task on hold, by any route or automatically, cancels its
+unfinished executions at once (state `invalidated`, outcome `put_on_hold`,
+fence advanced, lease cleared), records a task `execution.cancel` event and
+advances the wake generation, so queued wakes are stale. A work client may put
+a task on hold during a live execution without proof when the update changes
+only `readiness` and `waiting_reason`; any other unproved write is still refused
+with `execution_required`. Ready work, assignment, review and invalidation changes share a
 transaction with durable outbox records. Shared MCP manages the global dispatcher, bot mappings and non-secret instructions
 through revision-checked operations; URL and secret entry is owner-browser-only; this does not expose
 general host administration. Read [webhooks](webhooks.md) for the operation and
@@ -538,10 +588,11 @@ integration opts into the `comment` reason; work-client comments never wake.
 This is loop prevention, not a privilege. A comment during live execution is
 deferred until `execution.complete`. Consecutive work-client reassignments are
 counted per task; exceeding `max_bot_handoffs` (default 4) applies the write but
-stops the task as Waiting without a wake. Any reader task write resets the count.
+puts the task on hold without a wake. Any reader task write resets the count.
 A work client may set the stopped task Ready (when the owner asks, or after
 breaking and reporting the loop), but that keeps the count, so the next
-work-client reassignment stops it again. The owner sets wake subscriptions
+work-client reassignment stops it again. The stopped task's hold reason is
+`Bot hand-off limit reached`. The owner sets wake subscriptions
 and the limit under Wake rules on the reader's Connect page.
 
 ## Capability discovery and cached tool schemas
@@ -555,7 +606,7 @@ payload's `capabilities_digest`. Conflicting top-level
 and nested metadata is refused. `execution.begin` atomically validates/acquires
 work. Work-client task writes need execution proof only while another execution
 is live on the task (its lease or acknowledgment window has not expired);
-supplied proof is always validated. Setting Waiting releases governance. Read the webhook guide for the full lifecycle.
+supplied proof is always validated. Putting a task on hold releases governance and cancels the live execution. Read the webhook guide for the full lifecycle.
 
 ## Parent bridge coordination
 

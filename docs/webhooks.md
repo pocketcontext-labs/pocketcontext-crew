@@ -117,6 +117,35 @@ the wake as reserved but not received: from Crew's side a deliberate decline and
 wake look the same. Ask the parent conversation before treating the stage as a delivery
 failure, and reconcile before a new test or Waiting→Ready retry.
 
+### Overdue parent wakes
+
+A task wake can stay `wake_prepared` forever: the routine reserved and (perhaps)
+called `WakeParent`, but no parent receipt arrived before the deadline. The task
+then looks dispatched while the work may never have reached its assignee. The
+reader shows these overdue bridges for tasks that are not done and not
+self-dispatched, so the owner can decide what to do with the task. Nothing
+retries automatically and there is no dismiss action: bridge rows stay as
+history, and a repeated wake could duplicate work.
+
+`crew_read {collection: "webhook_bridges", overdue: true}` (also
+`POST /api/crew/read`) returns exactly that list, newest first, with the usual
+`fields`, `limit` and `offset` (and `parent` for a config). A bridge is listed
+when all of these hold:
+
+- it is a `task.wake` bridge in `wake_prepared` with no parent or recipient
+  receipt, and its `deadline_at` has passed (`overdue: true` on the record);
+- it belongs to the task's current wake generation (a later Waiting→Ready, a
+  reassignment or any other generation change supersedes it);
+- the task exists, is not archived and is not done;
+- the task was not created by its own recipient (`created_by_agent` equals the
+  recipient agent's name), the self-dispatch case from before Crew 0.9.1.
+
+Each item carries `task_id`, `recipient_agent`, `generation`, `wake_prepared_at`,
+`deadline_at`, `state` and `overdue`. To act, inspect the parent conversation;
+then set the task on hold and Ready again to authorize a fresh wake, or leave
+it on hold. The setup check's `bridge_overdue` blocker for diagnostic tests is
+unchanged.
+
 ## Capability discovery and cached clients
 
 Read `crew_read` with `collection: "capabilities"`. The response contains protocol
@@ -298,7 +327,7 @@ verification. Crew's synthetic tests do not certify Grok or its team policy.
 
 ## Governed tasks and atomic execution
 
-Tasks default to Waiting. Ready work in todo/in_progress, with no pending review,
+Tasks default to Waiting (On hold in the reader). Ready work in todo/in_progress, with no pending review,
 an active recipient, a mapping and an enabled subscribed integration can emit a
 wake. The task and outbox record commit atomically. A persisted governance marker
 is set at enqueue, before any worker acquires the event.
@@ -309,10 +338,34 @@ while a live execution holds the task: `dispatching` or `running` with an unexpi
 lease, or `handed_off` before its acknowledgment deadline. Stale executions are
 invalidated first. Without a live execution the write applies without proof, even
 on a governed task whose `execution_required_generation` is still set, so a worker
-whose run ended (for example after its own `review.request`, which invalidates
-the execution) can still comment, edit, archive or restore the task. Supplied
+whose run ended can still comment, edit, archive or restore the task. Supplied
 proof is always validated, never ignored: obsolete or mismatched proof is refused
-with `execution_conflict`. Setting Waiting releases governance for any caller.
+with `execution_conflict`.
+
+Putting a task on hold (readiness `waiting`, or the alias `on_hold`) works for
+any caller even during a live execution: an update whose data has only
+`readiness` and optionally `waiting_reason` needs no proof. The hold cancels
+every unfinished execution of the task in the same transaction (state
+`invalidated`, `outcome_code` `put_on_hold`, `completed_at` set, fence advanced,
+lease and worker cleared), appends an `execution.cancel` event to the task
+(`changes`: `execution`, `previous_state`, `state`, `outcome_code`), advances the
+wake generation (pending deliveries are cancelled) and releases governance. Any
+other unproved write during a live execution is still refused. An on-hold task
+never wakes, whatever changes; see [Crew](crew.md#ready-tasks-and-global-dispatcher-integration).
+
+`review.request` is the normal last step of governed work. Sent by the worker
+holding the running execution, with its proof, it completes that execution in
+the same transaction: state `completed`, `outcome_code` `review_requested`,
+`completed_at` set, lease cleared. The review result carries
+`execution_completed: {id, revision, state, outcome_code}` and the task's
+`review.request` event names it. Post comments before the review request; a
+fenced `task.comment` from the same worker and fence afterwards is still
+accepted while no other execution is live, and a later `execution.complete`
+from that worker (outcome `completed` or `failed`, without `mark_done`) returns
+the record with `already_completed: true` and changes nothing (it skips the
+revision check). `mark_done` is refused because the task is in review. A review
+request by anyone else (the reader, or a work client without that proof)
+still invalidates the live execution with `work_no_longer_eligible`.
 Reader writes remain authoritative and never need proof. These rules keep a stale
 worker from writing during someone else's live run; they coordinate the shared
 principal, not independently authenticated bots.
@@ -352,8 +405,10 @@ A recipient may start before this report; the late report must not replace its l
 Renew during long work. Include proof on task writes and review requests. Use a
 stable key for proof-bearing comments so a lost response cannot create a second
 pong. Complete through `execution.complete`; `mark_done:true` plus task_revision
-commits task completion and execution outcome together. Review/Waiting/reassignment
-changes invalidate previous authority; later eligible work uses a new generation.
+commits task completion and execution outcome together. The holder's own
+`review.request` completes the execution instead (outcome `review_requested`).
+Other review, on-hold and reassignment changes invalidate previous authority
+(a hold records outcome `put_on_hold`); later eligible work uses a new generation.
 
 ## Reader comment wakes
 
@@ -370,11 +425,13 @@ task must also be eligible exactly as for other wakes: Ready, todo/in_progress,
 no pending review, an active routed recipient with a mapping and an enabled
 integration subscribed to `comment`. Otherwise the comment is only recorded.
 
-Attachment writes (`attachment.add`, `attachment.archive`, `attachment.restore`
-and uploads through a one-time link) never wake and are not a wake reason. When
-one withdraws a pending review, the task moves to Waiting and its wake
-generation advances without a wake, exactly as a draft edit does; see
-[Attachments](crew.md#attachments).
+Attachment writes (`attachment.add`, `attachment.archive`, `attachment.restore`,
+files sent with `task.comment` and uploads through a one-time link) never wake
+and are not a wake reason. When one withdraws a pending review, the task goes
+on hold (hold reason `Review withdrawn`) and its wake generation advances
+without a wake, exactly as a draft edit does (hold reason `Draft edited`); see
+[Attachments](crew.md#attachments). A comment on an on-hold task never wakes,
+whichever route wrote it.
 
 - No live execution: the comment advances `wake_generation`, cancels pending
   deliveries and enqueues one `comment` wake in the comment's transaction.
@@ -412,8 +469,9 @@ it with `webhook.routing.update`; the default authorization rules tell agents no
 to unless the owner asks. When a work-client assignment
 change would exceed the limit, the write still applies, but the task becomes
 Waiting in the same transaction with a waiting reason, `handoff_limited: true`
-and a `task.hop_limit` event with reason `hop_limit`. No wake is emitted and
-current execution authority is invalidated as for any Waiting transition.
+and a `task.hop_limit` event with reason `hop_limit`; its hold reason is
+`Bot hand-off limit reached`. No wake is emitted and current execution
+authority ends as for any hold.
 
 A work client may set the stopped task Ready (the rules allow it when the owner
 asks, or after the agent has clearly broken the loop and reported it). That wakes

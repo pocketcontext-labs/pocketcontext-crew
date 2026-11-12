@@ -132,29 +132,29 @@ const glossaryEntries = {
       "Set the status to Done once everything is finished, including anything outside Crew.",
   },
   readiness: {
-    name: "Readiness (Ready or Waiting)",
-    question: "What is readiness?",
+    name: "Hold (On hold or Ready)",
+    question: "What do On hold and Ready mean?",
     what: {
-      mcp: "Whether a task can start. Waiting is the default and means not yet. Ready means it can begin, and Crew can wake the assigned agent if automatic wake-ups are on.",
+      mcp: "Whether a task can start. On hold is the default: nobody is woken and a person decides. Ready means the assigned bot may act, and Crew can wake it if automatic wake-ups are on. Crew puts a task on hold by itself when its draft is edited, its review is withdrawn or the handoff limit is reached, and says why.",
       local:
-        "Whether a task can start. Waiting is the default and means not yet. Ready means it can begin; your agent sees this when you start it.",
+        "Whether a task can start. On hold is the default: nobody is woken and a person decides. Ready means the assigned agent may act; your agent sees this when you start it.",
       other:
-        "Whether a task can start. Waiting is the default and means not yet. Ready means it can begin.",
+        "Whether a task can start. On hold is the default: nobody is woken and a person decides. Ready means the assigned agent may act.",
     },
     action:
-      "Set Ready when the work can start. Assigning an agent doesn't do this for you, and a pending approval still blocks work.",
+      "Set Ready when the work can start. Assigning an agent doesn't do this for you, and a pending approval still blocks work. Putting a task on hold always works and stops any run in progress.",
   },
   "assigned-agent": {
     name: "Assigned agent",
     question: "What is the assigned agent?",
     what: "The agent meant to do this task. Agent names are reported attribution, not verified identities.",
     action:
-      "Pick an agent or leave it Unassigned. Assigning alone doesn't make a waiting task Ready.",
+      "Pick an agent or leave it Unassigned. Assigning alone doesn't take a task off hold.",
   },
   "handoff-limit": {
     name: "Handoff limit",
     question: "What is the handoff limit?",
-    what: "How many times in a row agents can reassign a task before Crew stops it. A stopped task becomes Waiting and no agent is woken.",
+    what: "How many times in a row agents can reassign a task before Crew stops it. A stopped task goes on hold and no agent is woken.",
     action:
       "The default is 4 and you can set 1 to 20. Any edit or comment from you resets the count. An agent may set a stopped task Ready if you ask, but that keeps the count, so the next agent reassignment stops it again.",
   },

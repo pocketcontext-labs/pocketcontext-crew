@@ -354,6 +354,15 @@ function transition(app, t, old, options) {
   }
   if (notify) wake(app, t, causes, options.outcome);
 }
+// Advances the wake generation without a wake: queued deliveries for the old
+// generation are cancelled and any deferred comment wake is dropped.
+function advanceGeneration(app, t) {
+  t.set("wake_generation", t.getInt("wake_generation") + 1);
+  t.set("comment_wake_generation", 0);
+  t.set("comment_wake_event", "");
+  app.save(t);
+  cancel(app, "task={:task}", { task: t.id });
+}
 // A live execution is current-generation work that may still be running or
 // about to start: an unexpired lease, or a prepared handoff before its deadline.
 function liveExecution(app, t) {
@@ -1252,6 +1261,7 @@ module.exports = {
   state,
   eligible,
   transition,
+  advanceGeneration,
   deactivate,
   ownerComment,
   deferredCommentWake,

@@ -15,7 +15,12 @@ const ID = /^[a-z0-9]{15}$/;
 const TOKEN = /^[A-Za-z0-9]{43}$/;
 const ALNUM = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const collections = ["attachments", "upload_links", "settings"];
-const FILE_ACTIONS = ["attachment.add", "task.create", "note.create"];
+const FILE_ACTIONS = [
+  "attachment.add",
+  "task.create",
+  "note.create",
+  "task.comment",
+];
 const ACTIONS = [
   "attachment.add",
   "attachment.archive",
@@ -173,7 +178,7 @@ function collect(e, b) {
   if (d && typeof d === "object" && d.files !== undefined) {
     if (!FILE_ACTIONS.includes(b.action))
       bad(
-        "Files are accepted only by attachment.add, task.create and note.create",
+        "Files are accepted only by attachment.add, task.create, note.create and task.comment",
       );
     if (!Array.isArray(d.files))
       bad("data.files must be an array of {name, content_base64}");
@@ -184,7 +189,7 @@ function collect(e, b) {
   if (result.error) bad(result.error);
   if (result.files.length && !FILE_ACTIONS.includes(b.action))
     bad(
-      "Files are accepted only by attachment.add, task.create and note.create",
+      "Files are accepted only by attachment.add, task.create, note.create and task.comment",
     );
   return result.files;
 }
@@ -278,12 +283,16 @@ function withdrawForChange(app, kind, t, ctx, h) {
   if (kind !== "task" || !h.pending(app, t.id).length) return false;
   const oldTask = webhooks.state(app, t);
   h.withdraw(app, t, ctx.b, ctx.actor);
+  const wasReady = t.getString("readiness") === "ready";
   t.set("readiness", "waiting");
+  t.set("waiting_reason", "Review withdrawn");
   if (t.getString("status") === "needs_review") t.set("status", "in_progress");
   if (ctx.ownerTouch) h.ownerTouch(t);
   t.set("revision", t.getInt("revision") + 1);
   app.save(t);
   webhooks.transition(app, t, oldTask, { autoWithdraw: true });
+  // Going on hold from Ready cancels unfinished executions like any hold.
+  if (wasReady) execution.cancelForHold(app, t, ctx.b, ctx.actor);
   execution.invalidateStale(app, t, ctx.b, ctx.actor);
   return true;
 }
@@ -367,7 +376,7 @@ function checkRefs(app, kind, r, values, op) {
         bad(
           "attachment:" +
             ref +
-            " placeholders work only in task.create or note.create with files",
+            " placeholders work only in task.create, note.create or task.comment with files",
         );
       let a = null;
       if (ID.test(ref))
@@ -420,15 +429,80 @@ function stageCreate(app, kind, r, values, files, ctx) {
   const ids = out.saved.map((x) => x.id);
   for (const f of TEXT_FIELDS[kind])
     if (typeof values[f] === "string")
-      values[f] = values[f].replace(PLACEHOLDER, (all, n) => {
-        const i = Number(n);
-        if (!Number.isInteger(i) || i < 1 || i > ids.length)
-          bad(
-            all + " does not match an uploaded file (1 to " + ids.length + ")",
-          );
-        return "attachment:" + ids[i - 1];
-      });
+      values[f] = resolvePlaceholders(values[f], ids);
   return out.saved;
+}
+// Replaces attachment:new-N (N = 1-based position among ids) in text.
+function resolvePlaceholders(text, ids) {
+  return text.replace(PLACEHOLDER, (all, n) => {
+    const i = Number(n);
+    if (!Number.isInteger(i) || i < 1 || i > ids.length)
+      bad(all + " does not match an uploaded file (1 to " + ids.length + ")");
+    return "attachment:" + ids[i - 1];
+  });
+}
+// task.comment: optional files become attachments of the task, all or
+// nothing, and attachment:new-N in the body becomes their IDs. Every
+// reference in the body must then name an active attachment of this task;
+// data: images are refused. Saving files on a task with a pending review
+// withdraws it exactly like attachment.add. d.body is rewritten in place.
+function stageComment(app, task, d, files, ctx, h) {
+  let saved = [],
+    withdrawn = false;
+  if (files.length) {
+    requireActiveParent(app, "task", task);
+    if (files.some((f) => f.error_code))
+      failFiles(
+        "No comment was added: a file was refused",
+        files.map((f) =>
+          f.error_code
+            ? failure(f, f.error_code, f.error_message)
+            : { index: f.index, name: f.name, ok: true },
+        ),
+      );
+    const out = addFiles(app, "task", task, files, ctx);
+    if (out.saved.length !== files.length)
+      failFiles("No comment was added: a file was refused", out.results);
+    saved = out.saved;
+    d.body = resolvePlaceholders(
+      d.body,
+      saved.map((x) => x.id),
+    );
+  }
+  checkCommentRefs(app, task, d.body);
+  if (saved.length) withdrawn = recordAdded(app, "task", task, saved, ctx, h);
+  return { saved, withdrawn };
+}
+function checkCommentRefs(app, task, text) {
+  const parsed = markdown(text);
+  if (parsed.dataImage || HTML_DATA_IMAGE.test(text))
+    bad(
+      "Comment embeds a data: image; attach the file and reference it as ![alt](attachment:ID)",
+    );
+  for (const ref of parsed.refs) {
+    if (/^new-\d+$/i.test(ref))
+      bad("attachment:" + ref + " does not match a file sent with this comment");
+    let a = null;
+    if (ID.test(ref))
+      try {
+        a = app.findRecordById("crew_attachments", ref);
+      } catch (_) {
+        a = null;
+      }
+    if (!a) bad("Unknown attachment reference attachment:" + ref);
+    if (a.getString("parent") !== task.id)
+      bad(
+        "attachment:" +
+          ref +
+          " belongs to another task or note; attach the file here first",
+      );
+    if (a.getBool("archived"))
+      bad("attachment:" + ref + " is archived; restore it before referencing it");
+  }
+}
+// Idempotency fingerprint of a file-carrying request (files by digest).
+function fingerprint(b, files) {
+  return { ...b, data: { ...(b.data || {}), files: digests(files) } };
 }
 function recordCreated(app, kind, r, saved, ctx) {
   for (const a of saved) audit(app, r.id, "attachment.add", ctx, describe(a));
@@ -692,6 +766,8 @@ module.exports = {
   snapshotMatches,
   checkRefs,
   stageCreate,
+  stageComment,
+  fingerprint,
   recordCreated,
   uploadInfo,
   uploadFiles,

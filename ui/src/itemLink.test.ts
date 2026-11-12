@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   boardColumnFromHash,
   boardColumnHash,
+  boardOnHoldHash,
+  isCanonicalViewStateHash,
   connectSectionFromHash,
   connectSectionHash,
   defaultViewState,
@@ -176,7 +178,25 @@ describe("Tasks and Notes address state", () => {
     }
     expect(viewStateHash("board", defaultViewState)).toBe("#/tasks");
   });
+  it("round-trips the board hold filter beside the agent filter", () => {
+    for (const value of ["on_hold", "ready"]) {
+      const state = viewStateFromHash(`#/tasks?agent=${agentId}&hold=${value}`);
+      expect(state).toEqual({
+        ...defaultViewState,
+        assignment: agentId,
+        hold: value,
+      });
+      expect(viewStateHash("board", state)).toBe(
+        `#/tasks?agent=${agentId}&hold=${value}`,
+      );
+      expect(isCanonicalViewStateHash(`#/tasks?hold=${value}`)).toBe(true);
+    }
+    expect(boardOnHoldHash).toBe("#/tasks?hold=on_hold");
+  });
   it.each([
+    ["unknown hold", "#/tasks?hold=waiting"],
+    ["explicit all hold", "#/tasks?hold=all"],
+    ["repeated hold", "#/tasks?hold=ready&hold=on_hold"],
     ["unknown sort", "#/notes?sort=random"],
     ["bad bucket id", "#/notes?bucket=../x"],
     ["repeated bucket", `#/notes?bucket=${bucketId}&bucket=${bucketId}`],

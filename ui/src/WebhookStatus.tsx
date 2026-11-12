@@ -9,6 +9,8 @@ import {
 import { crewApi, list, val, type Row } from "./crewApi";
 import Help, { HelpField } from "./Help";
 import type { HelpTopic } from "./helpContent";
+import { itemPath } from "./itemLink";
+import { strandedSince, strandedWakes } from "./wakes";
 type WakeRule = {
   reason: string;
   label: string;
@@ -40,7 +42,7 @@ const wakeRules: WakeRule[] = [
     reason: "ready",
     label: "Marked ready",
     recommended: true,
-    help: "Wakes the assigned bot when a Waiting task is set Ready, the normal way to release work. Off: setting Ready wakes no one.",
+    help: "Wakes the assigned bot when a task on hold is set Ready, the normal way to release work. Off: setting Ready wakes no one.",
   },
   {
     reason: "reopened",
@@ -308,6 +310,7 @@ export default function WebhookStatus({
   const [handoffLimit, setHandoffLimit] = useState("4");
   const [deliveries, setDeliveries] = useState<Row[]>([]);
   const [executions, setExecutions] = useState<Row[]>([]);
+  const [bridges, setBridges] = useState<Row[]>([]);
   const [legacyCount, setLegacyCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -345,6 +348,13 @@ export default function WebhookStatus({
     const ticket = ++loadTicket.current;
     loadsInFlight.current++;
     if (!silent) setLoading(true);
+    // Wake evidence is optional: a failure only hides the overdue list.
+    void crewApi.read("webhook_bridges", { overdue: true }).then(
+      (rows) => {
+        if (ticket === loadTicket.current) setBridges(rows);
+      },
+      () => undefined,
+    );
     try {
       const [cs, ms, ds, es, rs] = await Promise.all([
         crewApi.read("webhook_configs"),
@@ -742,6 +752,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
     : activity.filter(
         (x) => x.index < initialActivityEntries || x.warning === "current",
       );
+  const stranded = strandedWakes(bridges, tasks, agents);
   const savedSubscriptions = list(config, "subscriptions");
   const savedHandoffLimit = Number(routing?.max_bot_handoffs) || 4;
   const triageAgent = activeAgents.find(
@@ -767,7 +778,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
     config?.enabled ? "turns delivery off, " : ""
   }cancels queued wakes and interrupts bots working on Ready tasks.${
     config?.enabled ? " Turn delivery back on afterwards." : ""
-  } Ready tasks are not woken again until you set them Waiting, then Ready.`;
+  } Ready tasks are not woken again until you put them on hold, then set them Ready.`;
   // Fills the form only; nothing is saved until Save wake rules.
   function resetWakeRules() {
     setSubscriptions(recommendedSubscriptions);
@@ -1418,7 +1429,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     Recommended: {recommendedHandoffLimit}
                   </span>{" "}
                   How many times in a row bots can pass a task to each other (1
-                  to 20). When reached, the task stops as Waiting until you act.
+                  to 20). When reached, the task goes on hold until you act.
                   Any edit or comment from you resets the count; an agent
                   setting it Ready does not.
                 </p>
@@ -1441,6 +1452,47 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               </p>
             )}
           </form>
+          {stranded.length > 0 && (
+            <section
+              className="crew-webhook-card crew-stranded"
+              aria-label="Wakes not received"
+            >
+              <h3>Wakes not received</h3>
+              <p>
+                Crew woke these bots but they never confirmed receiving the
+                wake. Check each bot's conversation; Crew does not resend on
+                its own.
+              </p>
+              <ul>
+                {stranded.map(({ bridge, task }) => {
+                  const recipientId =
+                    val(bridge, "recipient_agent") || val(task, "assigned_agent");
+                  const recipient = agents.find((a) => a.id === recipientId);
+                  const since = strandedSince(bridge);
+                  return (
+                    <li key={bridge.id}>
+                      <a href={itemPath("task", task)}>
+                        {val(task, "title") || "Untitled task"}
+                      </a>
+                      <span>
+                        {recipient
+                          ? val(recipient, "name")
+                          : recipientId
+                            ? "Unavailable agent"
+                            : "The dispatcher"}
+                      </span>
+                      <small>
+                        Overdue since{" "}
+                        <time dateTime={since}>
+                          {since ? new Date(since).toLocaleString() : "unknown"}
+                        </time>
+                      </small>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
           <section
             className="crew-webhook-card"
             aria-label="Notification activity"

@@ -34,6 +34,8 @@ import Help, {
 } from "./Help";
 import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
+import LabelsInput from "./LabelsInput";
+import { strandedWakes } from "./wakes";
 import { GlobalSearch, SearchPage } from "./Search";
 import { searchHash, searchTextFromHash, type SearchHit } from "./searchApi";
 import "./crew.css";
@@ -69,6 +71,7 @@ import {
   boardColumnFromHash,
   connectSectionFromHash,
   bucketSorts,
+  holdFilters,
   isItemHash,
   itemPath,
   itemShareUrl,
@@ -76,6 +79,7 @@ import {
   noteSorts,
   parseItemHash,
   type BucketSort,
+  type HoldFilter,
   type ItemKind,
   type NoteSort,
   type View,
@@ -176,6 +180,19 @@ function assignmentMatches(
     return val(task, "status") !== "done" && invalid(task);
   return val(task, "assigned_agent") === filter;
 }
+const holdFilterLabels: Record<HoldFilter, string> = {
+  all: "On hold and Ready",
+  on_hold: "On hold",
+  ready: "Ready",
+};
+/** Whether a task shows under the board's hold filter; Done has no hold. */
+function holdMatches(filter: HoldFilter, task: Row) {
+  if (filter === "all") return true;
+  if (val(task, "status") === "done") return false;
+  return (val(task, "readiness") === "ready") === (filter === "ready");
+}
+/** Readiness as the reader names it: the API keeps `waiting` for On hold. */
+const onHold = (task: Row) => val(task, "readiness") !== "ready";
 const when = (raw: unknown) =>
   raw ? new Date(String(raw)).toLocaleString() : "Just now";
 /** Readable card text: Markdown markers would otherwise show, and could be cut in half. */
@@ -217,6 +234,26 @@ function Prose({ children }: { children: string }) {
         {children}
       </ReactMarkdown>
     </div>
+  );
+}
+/** On hold (with its reason on hover) or Ready; not shown for Done tasks. */
+function HoldChip({ task }: { task: Row }) {
+  if (!onHold(task)) return <span className="crew-ready-chip">Ready</span>;
+  const reason = val(task, "waiting_reason").trim();
+  return (
+    <span className="crew-hold-chip" title={reason || undefined}>
+      On hold
+      {reason && <span className="sr-only">: {reason}</span>}
+    </span>
+  );
+}
+const wakeMissingTitle =
+  "Crew woke the assigned bot but it never confirmed receiving the wake. Check the bot's conversation, then set the task On hold and Ready again if it should run.";
+function WakeMissingChip() {
+  return (
+    <span className="crew-human" title={wakeMissingTitle}>
+      Wake not received
+    </span>
   );
 }
 function Field({
@@ -628,7 +665,9 @@ export default function CrewWorkspace() {
     // Bumped after each save, so search results show the change.
     [saves, setSaves] = useState(0),
     // The first image of each task and note, for card thumbnails.
-    [thumbs, setThumbs] = useState<Record<string, CardThumb>>({});
+    [thumbs, setThumbs] = useState<Record<string, CardThumb>>({}),
+    // Wake bridges, for "Wake not received" on tasks whose wake is overdue.
+    [bridges, setBridges] = useState<Row[]>([]);
   const thumbToken = useFileToken(Object.keys(thumbs).length > 0);
   // "Saved." confirms an action; it should not linger on other pages.
   useEffect(() => {
@@ -708,6 +747,16 @@ export default function CrewWorkspace() {
       .then((next) => {
         if (ticket !== generation.current) return;
         setThumbs((current) =>
+          JSON.stringify(current) === JSON.stringify(next) ? current : next,
+        );
+      })
+      .catch(() => undefined);
+    // Wake evidence is optional: a failure only hides "Wake not received".
+    void crewApi
+      .read("webhook_bridges", { overdue: true })
+      .then((next) => {
+        if (ticket !== generation.current) return;
+        setBridges((current) =>
           JSON.stringify(current) === JSON.stringify(next) ? current : next,
         );
       })
@@ -807,6 +856,10 @@ export default function CrewWorkspace() {
     : "all";
   const setAssignmentFilter = (value: string) =>
     setViewState((state) => ({ ...state, assignment: value }));
+  const holdFilter = viewState.hold;
+  const setHoldFilter = (value: HoldFilter) =>
+    setViewState((state) => ({ ...state, hold: value }));
+  const boardFiltered = assignmentFilter !== "all" || holdFilter !== "all";
   const bucket = data.buckets.some((x) => x.id === viewState.bucket)
     ? viewState.bucket
     : "";
@@ -978,6 +1031,10 @@ export default function CrewWorkspace() {
     (task) => !val(task, "assigned_agent"),
   ).length;
   const invalidCount = openTasks.filter(invalidAssignment).length;
+  const onHoldCount = openTasks.filter(onHold).length;
+  const wakeMissing = new Set(
+    strandedWakes(bridges, data.tasks, data.agents).map((x) => x.task.id),
+  );
   // One filter option per active agent; its count is the cards it shows.
   const agentOptions = [...data.agents]
     .sort((a, b) => byName(val(a, "name"), val(b, "name")))
@@ -1286,10 +1343,32 @@ export default function CrewWorkspace() {
                   </optgroup>
                 )}
               </select>
-              {assignmentFilter !== "all" && (
+              <select
+                aria-label="Filter by hold"
+                value={holdFilter}
+                onChange={(e) => setHoldFilter(e.target.value as HoldFilter)}
+              >
+                {holdFilters.map((key) => (
+                  <option key={key} value={key}>
+                    {holdFilterLabels[key]}
+                    {key === "on_hold"
+                      ? ` (${onHoldCount})`
+                      : key === "ready"
+                        ? ` (${openTasks.length - onHoldCount})`
+                        : ""}
+                  </option>
+                ))}
+              </select>
+              {boardFiltered && (
                 <button
                   type="button"
-                  onClick={() => setAssignmentFilter("all")}
+                  onClick={() =>
+                    setViewState((state) => ({
+                      ...state,
+                      assignment: "all",
+                      hold: "all",
+                    }))
+                  }
                 >
                   Show all tasks
                 </button>
@@ -1342,7 +1421,8 @@ export default function CrewWorkspace() {
                   (x) =>
                     val(x, "status") === status &&
                     matches(x) &&
-                    assignmentMatches(assignmentFilter, x, invalidAssignment),
+                    assignmentMatches(assignmentFilter, x, invalidAssignment) &&
+                    holdMatches(holdFilter, x),
                 );
                 return (
                   <section
@@ -1373,6 +1453,10 @@ export default function CrewWorkspace() {
                         onClick={() => openItem("task", x)}
                       >
                         <div className="crew-tags">
+                          {val(x, "status") !== "done" && (
+                            <HoldChip task={x} />
+                          )}
+                          {wakeMissing.has(x.id) && <WakeMissingChip />}
                           {pending.some((r) => val(r, "task") === x.id) && (
                             <span className="crew-human">Human</span>
                           )}
@@ -1392,7 +1476,9 @@ export default function CrewWorkspace() {
                               </span>
                             )}
                           {list(x, "labels").map((l) => (
-                            <span key={l}>{l}</span>
+                            <span className="crew-chip" key={l}>
+                              {l}
+                            </span>
                           ))}
                         </div>
                         {thumbs[x.id] && (
@@ -1403,15 +1489,6 @@ export default function CrewWorkspace() {
                         )}
                         <h3>{val(x, "title")}</h3>
                         <p>{plainPreview(val(x, "description")).slice(0, 150)}</p>
-                        <p className="crew-readiness">
-                          {val(x, "readiness") === "ready"
-                            ? "Ready"
-                            : "Waiting"}
-                          {val(x, "readiness") !== "ready" &&
-                          val(x, "waiting_reason")
-                            ? ` · ${val(x, "waiting_reason")}`
-                            : ""}
-                        </p>
                         {invalidAssignment(x) && (
                           <p className="crew-assignment-warning">
                             Assigned agent is inactive or unavailable. Reassign
@@ -1428,7 +1505,7 @@ export default function CrewWorkspace() {
                     ))}
                     {!tasks.length && (
                       <div className="crew-column-empty">
-                        {query || assignmentFilter !== "all" ? (
+                        {query || boardFiltered ? (
                           "No matching tasks"
                         ) : status === "todo" ? (
                           <>
@@ -1836,6 +1913,9 @@ export default function CrewWorkspace() {
               edited.current = true;
             }}
             openNote={(note) => openItem("note", note)}
+            wakeMissing={
+              dialog.kind === "task" && !!dialog.row && wakeMissing.has(dialog.row.id)
+            }
             busy={busy}
             error={error}
             save={save}
@@ -1857,6 +1937,8 @@ type EditorProps = {
   archiveNotice?: string;
   onEdit: () => void;
   openNote: (note: Row) => void;
+  /** An overdue wake for this task was never received. */
+  wakeMissing?: boolean;
   busy: boolean;
   error: string;
   save: (
@@ -1898,9 +1980,11 @@ function formValues(kind: Kind, row: Row | undefined, data: Data) {
             : "assigned_agent",
       ) || (kind === "note" ? data.buckets[0]?.id || "" : ""),
     status: val(row, "status") || "todo",
-    readiness: val(row, "readiness") || "waiting",
+    // On hold is `waiting` in the API (`on_hold` is only a write alias).
+    readiness: val(row, "readiness") === "ready" ? "ready" : "waiting",
     waitingReason: val(row, "waiting_reason"),
-    labels: list(row, "labels").join(", "),
+    // JSON, so the form compares and restores the exact chips.
+    labels: JSON.stringify(list(row, "labels")),
   };
 }
 function Editor({
@@ -1910,6 +1994,7 @@ function Editor({
   archiveNotice = "",
   onEdit,
   openNote,
+  wakeMissing = false,
   busy,
   error,
   save,
@@ -1965,6 +2050,8 @@ function Editor({
   // Inline uploads still running: Save waits so no "⏳ Uploading" text is saved.
   const [inlineUploads, setInlineUploads] = useState(0);
   const uploadTokens = useRef(0);
+  const commentBox = useRef<HTMLTextAreaElement>(null);
+  const commentFiles = useRef<HTMLInputElement>(null);
   const takenNames = () => [
     ...item.attachments.map((a) => a.name),
     ...staged.staged.map((s) => s.file.name),
@@ -1977,7 +2064,10 @@ function Editor({
    * inserted text.
    */
   const insertFiles =
-    (field: "body" | "draft", setText: (update: (text: string) => string) => void) =>
+    (
+      field: "body" | "draft" | "comment",
+      setText: (update: (text: string) => string) => void,
+    ) =>
     (incoming: File[], [from, to]: [number, number], pasted: boolean) => {
       if (readOnly || !itemKind) return;
       const named = pasted ? namePasted(incoming, takenNames()) : incoming;
@@ -2037,7 +2127,7 @@ function Editor({
       });
       return text;
     };
-  const inlineStatus = (field: "body" | "draft") =>
+  const inlineStatus = (field: "body" | "draft" | "comment") =>
     inlineErrors[field] ? (
       <p className="crew-alert crew-inline-upload-error" role="alert">
         {inlineErrors[field]}
@@ -2144,12 +2234,9 @@ function Editor({
               draft,
               assigned_agent: selection,
               readiness,
-              waiting_reason: readiness === "waiting" ? waitingReason : "",
+              waiting_reason: readiness !== "ready" ? waitingReason : "",
               ...(status === "needs_review" ? {} : { status }),
-              labels: labels
-                .split(",")
-                .map((x) => x.trim())
-                .filter(Boolean),
+              labels: JSON.parse(labels) as string[],
               links: links
                 .split("\n")
                 .map((x) => x.trim())
@@ -2345,6 +2432,10 @@ function Editor({
   const buckets = data.buckets.find((x) => x.id === val(row, "bucket"));
   // Controls inside a disabled fieldset can't open, so read-only forms have no help.
   const help = (topic: HelpTopic) => (readOnly ? undefined : topic);
+  // Labels already used on other tasks, offered while typing a new one.
+  const labelSuggestions = [
+    ...new Set(data.tasks.flatMap((x) => list(x, "labels"))),
+  ];
   const filesSection = itemKind && (
     <AttachmentsSection
       parent={parent}
@@ -2602,26 +2693,28 @@ function Editor({
                       ))}
                     </select>
                   </Field>
-                  <Field label="Labels (comma separated)">
-                    <input
-                      value={labels}
-                      onChange={(e) => setLabels(e.target.value)}
-                      placeholder="Network, Launch"
-                    />
-                  </Field>
+                  <LabelsInput
+                    value={JSON.parse(labels) as string[]}
+                    disabled={readOnly}
+                    suggestions={labelSuggestions}
+                    onChange={(next) => {
+                      setLabels(JSON.stringify(next));
+                      onEdit();
+                    }}
+                  />
                 </div>
                 <div className="crew-form-grid">
-                  <Field label="Readiness" help={help("readiness")}>
+                  <Field label="Hold" help={help("readiness")}>
                     <select
-                      value={readiness}
+                      value={readiness === "ready" ? "ready" : "waiting"}
                       onChange={(e) => setReadiness(e.target.value)}
                     >
-                      <option value="waiting">Waiting</option>
+                      <option value="waiting">On hold</option>
                       <option value="ready">Ready</option>
                     </select>
                   </Field>
-                  {readiness === "waiting" && (
-                    <Field label="Waiting reason">
+                  {readiness !== "ready" && (
+                    <Field label="Hold reason">
                       <input
                         value={waitingReason}
                         onChange={(e) => setWaitingReason(e.target.value)}
@@ -2631,11 +2724,15 @@ function Editor({
                     </Field>
                   )}
                 </div>
-                <p className="crew-footnote">
-                  Ready tasks can wake their assigned agent. Assignment alone
-                  does not make a waiting task ready. Pending human review still
-                  blocks work.
+                <p className="crew-footnote crew-hold-explainer">
+                  On hold: nobody is woken; a person decides. Ready: the
+                  assigned bot may act.
                 </p>
+                {wakeMissing && (
+                  <p className="crew-wake-missing" role="note">
+                    <WakeMissingChip /> {wakeMissingTitle}
+                  </p>
+                )}
                 <MarkdownField
                   label="Draft for review"
                   help={help("draft")}
@@ -2790,9 +2887,11 @@ function Editor({
         <>
           {!readOnly && (
             <form
+              className="crew-comment-form"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (row)
+                // Waits for uploads, so no "Uploading" placeholder is posted.
+                if (row && inlineUploads === 0)
                   void perform(() =>
                     crewApi.write("task.comment", { body: comment }, row),
                   ).then(async (ok) => {
@@ -2805,16 +2904,55 @@ function Editor({
                   });
               }}
             >
-              <Field label="Add a comment">
+              <div className="crew-md-field">
+                <div className="crew-md-label">
+                  <label htmlFor={`comment-${row?.id}`}>Add a comment</label>
+                  <small>Markdown supported</small>
+                </div>
                 <textarea
+                  id={`comment-${row?.id}`}
+                  ref={commentBox}
                   required
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
+                  placeholder="Paste or drop screenshots here"
+                  {...fileInputHandlers(insertFiles("comment", setComment))}
                 />
-              </Field>
-              <button className="crew-primary" disabled={busy}>
-                Add comment
-              </button>
+                {inlineStatus("comment")}
+              </div>
+              <div className="crew-comment-actions">
+                <input
+                  ref={commentFiles}
+                  type="file"
+                  multiple
+                  hidden
+                  aria-label="Attach files to the comment"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (!files.length) return;
+                    const box = commentBox.current;
+                    const end = box?.value.length ?? comment.length;
+                    insertFiles("comment", setComment)(
+                      files,
+                      [box?.selectionStart ?? end, box?.selectionEnd ?? end],
+                      false,
+                    );
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => commentFiles.current?.click()}
+                >
+                  Attach files
+                </button>
+                <button
+                  className="crew-primary"
+                  disabled={busy || inlineUploads > 0}
+                >
+                  {inlineUploads > 0 ? "Waiting for uploads…" : "Add comment"}
+                </button>
+              </div>
             </form>
           )}
           <ol className="crew-timeline">
@@ -2826,7 +2964,15 @@ function Editor({
                   <small>
                     {when(x.created)} · {summary.by}
                   </small>
-                  {!summary.by.startsWith("via upload link") && (
+                  {summary.by.startsWith(
+                    "via upload link",
+                  ) ? null : val(x, "action") === "task.comment" &&
+                    val(x, "body") ? (
+                    // Sanitized Markdown: raw HTML is shown as text, never run.
+                    <div className="crew-comment-body">
+                      <Prose>{val(x, "body")}</Prose>
+                    </div>
+                  ) : (
                     <p>{val(x, "body") || val(x, "reason")}</p>
                   )}
                 </li>

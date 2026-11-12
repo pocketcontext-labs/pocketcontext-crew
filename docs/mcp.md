@@ -136,13 +136,24 @@ Attachments: crew_attachment (read-only) returns a task's or note's screenshots
 as MCP image content (1600 px previews, at most 6 per call, follow
 `next_offset`), one text file as text, or on request paged base64 bytes; see
 [reading attachments](crew.md#reading). crew_write `attachment.add`,
-`task.create` and `note.create` take `data.files: [{name, content_base64}]`, at
-most 5 MiB decoded per call, and Markdown references files as
-`![alt](attachment:ID)` (`attachment:new-N` on create). An assistant that only
+`task.create`, `note.create` and `task.comment` take `data.files: [{name,
+content_base64}]`, at most 5 MiB decoded per call, and Markdown references files
+as `![alt](attachment:ID)` (`attachment:new-N` on create or comment, where files
+become attachments of the task). An assistant that only
 sees an image in its chat cannot re-encode it: it files the task and asks the
 owner to paste the screenshots into it in the reader. Upload links are
 owner-browser-only, and agents change the storage limit only when the owner
 asks.
+
+Tasks are On hold (`readiness: "waiting"`, or the write alias `on_hold`) or
+Ready. The MCP instructions state the wake rule: an on-hold task never wakes a
+bot whatever changes, and only Ready tasks wake. Putting a task on hold cancels
+its live execution. A worker's own `review.request` with its execution proof
+completes its execution, so it is the last step of governed work.
+`crew_read {collection: "webhook_bridges", overdue: true}` lists stranded
+parent wakes ([overdue parent wakes](webhooks.md#overdue-parent-wakes)). These
+texts changed in Crew 0.17.0: run `skill` once after upgrading so installed
+skills match.
 
 Task and note responses carry `path` and, on an install with a domain, an absolute
 `url`; see [item links](crew.md#item-links). Agents cite items to humans as

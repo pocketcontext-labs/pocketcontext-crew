@@ -118,7 +118,7 @@ function validateData(app, col, d, r) {
     )
       bad(k + " must contain at most 100 short strings");
   if (d.readiness !== undefined && !["waiting", "ready"].includes(d.readiness))
-    bad("readiness must be waiting or ready");
+    bad("readiness must be ready, or on_hold (stored as waiting)");
   if (
     d.waiting_reason !== undefined &&
     (typeof d.waiting_reason !== "string" || d.waiting_reason.length > 2000)
@@ -232,6 +232,30 @@ function sinceFilter(value) {
   // PocketBase stores UTC autodates as "YYYY-MM-DD HH:MM:SS.mmmZ".
   return new Date(ms).toISOString().replace("T", " ");
 }
+function actionableOverdue(app, r) {
+  if (!require(`${__hooks}/crew_bridge.js`).exported(r).overdue) return false;
+  let t;
+  try {
+    t = get(app, "tasks", r.getString("task_id"));
+  } catch (_) {
+    return false;
+  }
+  if (
+    t.getBool("archived") ||
+    t.getString("status") === "done" ||
+    t.getInt("wake_generation") !== r.getInt("generation")
+  )
+    return false;
+  const created = t.getString("created_by_agent"),
+    recipient = r.getString("recipient_agent");
+  if (created && recipient) {
+    try {
+      if (get(app, "agents", recipient).getString("name") === created)
+        return false;
+    } catch (_) {}
+  }
+  return true;
+}
 function read(e) {
   const b = e.requestInfo().body;
   only(b, [
@@ -249,6 +273,7 @@ function read(e) {
     "readiness",
     "label",
     "changed_since",
+    "overdue",
   ]);
   if (b.collection === "capabilities")
     return e.json(200, capabilities.describe(b.id));
@@ -289,9 +314,9 @@ function read(e) {
     sql.push("[[status]] IN (" + keys.join(",") + ")");
   }
   if (b.readiness !== undefined) {
-    if (!["waiting", "ready"].includes(b.readiness))
-      bad("readiness must be waiting or ready");
-    params.readiness = b.readiness;
+    if (!["waiting", "on_hold", "ready"].includes(b.readiness))
+      bad("readiness must be on_hold (waiting) or ready");
+    params.readiness = b.readiness === "on_hold" ? "waiting" : b.readiness;
     clauses.push("readiness={:readiness}");
     sql.push("[[readiness]]={:readiness}");
   }
@@ -391,8 +416,32 @@ function read(e) {
     );
   }
   const offset = Number.isInteger(b.offset) && b.offset >= 0 ? b.offset : 0;
+  if (b.overdue !== undefined) {
+    if (col !== "webhook_bridges")
+      bad("overdue filter is only supported for webhook_bridges");
+    if (b.overdue !== true) bad("overdue must be true");
+    // Unresolved task wakes past their deadline, newest first, for tasks the
+    // owner can still act on: the bridge is the task's current wake
+    // generation, the task is active and not done, and the recipient did not
+    // create it for itself. Rows are history; nothing here retries a wake.
+    clauses.push(
+      "event_type='task.wake' && recipient_received_at='' && parent_received_at='' && (state='wake_prepared' || state='send_prepared')",
+    );
+  }
   let rows;
-  if (col === "tasks" && b.label !== undefined) {
+  if (b.overdue !== undefined) {
+    const all = e.app
+      .findRecordsByFilter(
+        "crew_webhook_bridges",
+        clauses.join(" && "),
+        "-created",
+        0,
+        0,
+        params,
+      )
+      .filter((r) => actionableOverdue(e.app, r));
+    rows = all.slice(offset, offset + limit + 1);
+  } else if (col === "tasks" && b.label !== undefined) {
     rows = arrayOf(new Record());
     let query = e.app.recordQuery("crew_tasks");
     for (const clause of sql) query = query.andWhere($dbx.exp(clause, params));
@@ -509,13 +558,25 @@ function write(e, isAgent) {
         (["claim", "comment"].includes(op) && kind !== "task")
       )
         bad("Unsupported operation");
+      // On hold is the reader's name for waiting; it is stored as waiting.
+      if (kind === "task" && d.readiness === "on_hold") d.readiness = "waiting";
       let r =
         op === "create"
           ? new Record(app.findCollectionByNameOrId("crew_" + col))
           : get(app, col, b.id);
       if (op !== "create") check(r, b);
+      // Any caller may put a task on hold during a live execution, without
+      // proof, when the write changes nothing else; the execution is
+      // cancelled below in the same transaction.
+      const holdOnly =
+        kind === "task" &&
+        op === "update" &&
+        d.readiness === "waiting" &&
+        Object.keys(d).every((k) =>
+          ["readiness", "waiting_reason"].includes(k),
+        );
       if (kind === "task" && op !== "create")
-        execution.guardTaskWrite(app, r, b, isAgent);
+        execution.guardTaskWrite(app, r, b, isAgent, { hold: holdOnly });
       const oldTask =
         kind === "task" && op !== "create" ? webhooks.state(app, r) : null;
       let autoWithdraw = false;
@@ -540,6 +601,36 @@ function write(e, isAgent) {
           d.body.length > 20000
         )
           bad("Comment required");
+        // Files become attachments of the task (all or nothing), and
+        // attachment:new-N in the body becomes their IDs before it is stored.
+        const commentFiles = (app2) => {
+          const out = attachments.stageComment(
+            app2,
+            r,
+            d,
+            files,
+            {
+              b,
+              actor,
+              isAgent,
+              ownerTouch: !isAgent,
+              link: null,
+            },
+            helpers,
+          );
+          const changes = { body: d.body };
+          if (out.saved.length)
+            changes.attachments = out.saved.map((a) => a.id);
+          const ev = event(app2, r, b.action, b, actor, changes);
+          return { ev, saved: out.saved, withdrawn: out.withdrawn };
+        };
+        const withFiles = (value, staged) => {
+          if (staged.saved.length) {
+            value.attachments = staged.saved.map((a) => a.publicExport());
+            value.review_withdrawn = staged.withdrawn;
+          }
+          return value;
+        };
         if (b.execution) {
           // Links are added after the idempotent step so the stored result
           // stays free of them and a replay reflects the current title.
@@ -548,17 +639,18 @@ function write(e, isAgent) {
             "tasks",
             webhooks.idempotent(
               app,
-              b,
+              files.length ? attachments.fingerprint(b, files) : b,
               () => {
-                event(app, r, b.action, b, actor);
-                return r.publicExport();
+                const staged = commentFiles(app);
+                return withFiles(r.publicExport(), staged);
               },
               true,
             ),
             r.getString("title"),
           );
         } else {
-          const comment = event(app, r, b.action, b, actor);
+          const staged = commentFiles(app),
+            comment = staged.ev;
           // Loop prevention, not a privilege: only reader comments wake.
           // Work-client comments never wake, so bots cannot ping-pong.
           if (!isAgent) {
@@ -567,7 +659,7 @@ function write(e, isAgent) {
             webhooks.ownerComment(app, r, comment.id);
             execution.invalidateStale(app, r, b, actor);
           }
-          result = webhooks.linkedExport(app, "tasks", r);
+          result = withFiles(webhooks.linkedExport(app, "tasks", r), staged);
         }
         return;
       }
@@ -658,7 +750,15 @@ function write(e, isAgent) {
             values.draft !== undefined &&
             values.draft !== r.getString("draft");
           withdraw(app, r, b, actor);
-          if (autoWithdraw) values = { ...values, readiness: "waiting" };
+          if (autoWithdraw)
+            values = {
+              ...values,
+              readiness: "waiting",
+              waiting_reason:
+                values.waiting_reason !== undefined
+                  ? values.waiting_reason
+                  : "Draft edited",
+            };
           if (
             r.getString("status") === "needs_review" &&
             values.status === undefined
@@ -688,18 +788,22 @@ function write(e, isAgent) {
             values = {
               ...values,
               readiness: "waiting",
-              waiting_reason:
-                "Bot handoff limit reached: " +
-                count +
-                " consecutive agent reassignments (limit " +
-                max +
-                "). Review, then set Ready.",
+              waiting_reason: "Bot hand-off limit reached",
             };
             r.set("handoff_limited", true);
             hopStop = { bot_handoffs: count, max_bot_handoffs: max };
           }
         }
       }
+      // A hold reason describes the current hold only: going Ready clears it
+      // unless the same write sets one.
+      if (
+        kind === "task" &&
+        values.readiness === "ready" &&
+        (op === "create" || r.getString("readiness") !== "ready") &&
+        values.waiting_reason === undefined
+      )
+        values = { ...values, waiting_reason: "" };
       for (const k of Object.keys(values)) r.set(k, values[k]);
       if (values.archived !== undefined) {
         r.set("archived_at", values.archived ? new Date().toISOString() : "");
@@ -718,6 +822,19 @@ function write(e, isAgent) {
         r.set("execution_required_generation", 0);
         app.save(r);
       }
+      // Going on hold (from Ready, by any route or automatically) cancels
+      // every unfinished execution and makes queued wakes stale.
+      let holdCancelled = [];
+      if (
+        kind === "task" &&
+        oldTask &&
+        oldTask.readiness === "ready" &&
+        r.getString("readiness") === "waiting"
+      ) {
+        if (r.getInt("wake_generation") === oldTask.generation)
+          webhooks.advanceGeneration(app, r);
+        holdCancelled = execution.cancelForHold(app, r, b, actor);
+      }
       if (kind === "task") execution.invalidateStale(app, r, b, actor);
       if (kind === "agent" && values.archived === true)
         webhooks.deactivate(app, r.id, b, actor);
@@ -732,6 +849,12 @@ function write(e, isAgent) {
       if (kind === "task") {
         changes.readiness = r.getString("readiness");
         changes.wake_generation = r.getInt("wake_generation");
+        if (
+          r.getString("readiness") === "waiting" &&
+          values.waiting_reason !== undefined
+        )
+          changes.waiting_reason = r.getString("waiting_reason");
+        if (holdCancelled.length) changes.cancelled_executions = holdCancelled;
       }
       if (kind === "bucket" && values.responsible_agent !== undefined)
         changes.responsible_agent = {
@@ -792,13 +915,27 @@ function write(e, isAgent) {
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
       webhooks.transition(app, t, oldTask, {});
+      // The holder's own review request completes its execution
+      // (outcome review_requested) instead of invalidating it.
+      const finished = isAgent
+        ? execution.completeForReview(app, t, b, actor)
+        : null;
       execution.invalidateStale(app, t, b, actor);
-      event(app, t, b.action, b, actor, {
+      const changes = {
         ...d,
         readiness: t.getString("readiness"),
         wake_generation: t.getInt("wake_generation"),
-      });
-      result = r;
+      };
+      if (finished) changes.execution_completed = finished.id;
+      event(app, t, b.action, b, actor, changes);
+      result = r.publicExport();
+      if (finished)
+        result.execution_completed = {
+          id: finished.id,
+          revision: finished.getInt("revision"),
+          state: finished.getString("state"),
+          outcome_code: finished.getString("outcome_code"),
+        };
       return;
     }
     if (kind === "review" && ["decide", "withdraw"].includes(op)) {

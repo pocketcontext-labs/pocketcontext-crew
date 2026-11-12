@@ -742,3 +742,103 @@ describe("cards and history", () => {
     expect(dialog.getByText(/· Build$/)).toBeInTheDocument();
   });
 });
+
+describe("comments", () => {
+  const openActivity = async () => {
+    const dialog = await openTask();
+    fireEvent.click(dialog.getByRole("tab", { name: "Activity" }));
+    return dialog;
+  };
+  it("renders comment Markdown with inline images that open the viewer, and never runs HTML", async () => {
+    attachments = [att("img1", { name: "bug.png" })];
+    fixtures.events = [
+      {
+        id: "ev1",
+        revision: 1,
+        action: "task.comment",
+        actor: "owner",
+        body: "**Bold** step\n\n![the bug](attachment:img1)\n\n<script>window.__pwned = 1</script><img src=x onerror=\"window.__pwned = 2\">",
+      },
+      {
+        id: "ev2",
+        revision: 1,
+        action: "task.update",
+        actor: "owner",
+        reason: "**not markdown**",
+      },
+    ];
+    const dialog = await openActivity();
+    expect(await dialog.findByText("Bold")).toContainHTML("<strong>Bold</strong>");
+    expect(document.querySelector(".crew-timeline script")).toBeNull();
+    expect(document.querySelector('.crew-timeline img[src="x"]')).toBeNull();
+    expect((window as { __pwned?: number }).__pwned).toBeUndefined();
+    // Other events keep their reason as plain text.
+    expect(dialog.getByText("**not markdown**")).toBeInTheDocument();
+    fireEvent.click(
+      await dialog.findByRole("button", { name: "Open image: the bug" }),
+    );
+    const viewer = await screen.findByRole("dialog", { name: "Image viewer" });
+    expect(within(viewer).getByRole("img")).toHaveAttribute(
+      "src",
+      "/api/crew/attachment?id=img1&token=tok",
+    );
+  });
+  it("uploads a pasted screenshot into the comment and waits for it before posting", async () => {
+    let finish: (v: {
+      attachment: Attachment;
+      review_withdrawn: boolean;
+    }) => void = () => {};
+    const upload = vi.spyOn(attachmentsApi, "upload").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const dialog = await openActivity();
+    const box = dialog.getByLabelText("Add a comment") as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: "See " } });
+    box.setSelectionRange(4, 4);
+    fireEvent.paste(box, {
+      clipboardData: { files: [png()], types: ["Files"] },
+    });
+    const name = `${today()}-1.png`;
+    await waitFor(() => expect(box.value).toMatch(/^See ⏳ Uploading /));
+    expect(upload.mock.calls[0][0]).toEqual({ kind: "task", id: taskId });
+    const post = dialog.getByRole("button", { name: "Waiting for uploads…" });
+    expect(post).toBeDisabled();
+    fireEvent.submit(box.closest("form")!);
+    expect(crewApi.write).not.toHaveBeenCalled();
+    finish({ attachment: att("shot1", { name }), review_withdrawn: false });
+    await waitFor(() =>
+      expect(box.value).toBe(`See ![${name}](attachment:shot1)`),
+    );
+    fireEvent.click(dialog.getByRole("button", { name: "Add comment" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "task.comment",
+        { body: `See ![${name}](attachment:shot1)` },
+        expect.objectContaining({ id: taskId }),
+      ),
+    );
+  });
+  it("accepts dropped files and the Attach files button", async () => {
+    let n = 0;
+    vi.spyOn(attachmentsApi, "upload").mockImplementation(async (_p, file) => ({
+      attachment: att(`up${++n}`, { name: file.name }),
+      review_withdrawn: false,
+    }));
+    const dialog = await openActivity();
+    const box = dialog.getByLabelText("Add a comment") as HTMLTextAreaElement;
+    fireEvent.drop(box, {
+      dataTransfer: { files: [png("drop.png")], types: ["Files"] },
+    });
+    await waitFor(() => expect(box.value).toBe("![drop.png](attachment:up1)"));
+    const picker = dialog.getByLabelText("Attach files to the comment");
+    const click = vi.spyOn(picker, "click");
+    fireEvent.click(dialog.getByRole("button", { name: "Attach files" }));
+    expect(click).toHaveBeenCalled();
+    fireEvent.change(picker, { target: { files: [png("picked.png")] } });
+    await waitFor(() => expect(box.value).toContain("(attachment:up2)"));
+    expect(box.value).toContain("![picked.png]");
+  });
+});

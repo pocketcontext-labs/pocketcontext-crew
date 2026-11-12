@@ -81,6 +81,19 @@ def attachment_scenario(pc, headers, write, read):
     created = json.loads(data)
     assert status == 200 and created['description'] == 'Step\n\n![shot](attachment:%s)' % created['attachments'][0]['id'], (status, data)
     write('task.update', {'description': '![foreign](attachment:%s)' % image['id']}, created, expected=400)
+    # Comments carry files too: the reader sends them with the comment (multipart,
+    # attachment:new-N) or references a file already on the task.
+    content_type, body = multipart({'@jsonPayload': json.dumps({'action': 'task.comment', 'reported_agent': 'Network', 'id': task['id'],
+                                                                'expected_revision': current_revision(read, task),
+                                                                'data': {'body': 'Repro ![now](attachment:new-1)'}})},
+                                   [('now.png', shot)])
+    status, _, data = raw_http(pc, 'POST', '/api/crew/write', body, {**headers, 'Content-Type': content_type})
+    commented = json.loads(data)
+    assert status == 200 and len(commented['attachments']) == 1, (status, data)
+    comment = [e for e in read('events', parent=task['id']) if e['action'] == 'task.comment'][0]
+    assert comment['body'] == 'Repro ![now](attachment:%s)' % commented['attachments'][0]['id'], comment
+    write('task.comment', {'body': 'Same as ![before](attachment:%s)' % image['id']}, {'id': task['id'], 'revision': current_revision(read, task)}, agent=False)
+    write('task.comment', {'body': '![x](attachment:new-1)'}, {'id': task['id'], 'revision': current_revision(read, task)}, expected=400)
     archived = write('attachment.archive', {}, text)
     assert archived['archived'] and read('attachments', parent=task['id'], archived=True)[0]['id'] == text['id']
     # Upload links: reader only; the token uploads once and reads nothing.
@@ -109,6 +122,10 @@ def attachment_scenario(pc, headers, write, read):
     hits = request_json(pc, headers, '/api/crew/search', {'query': 'screenshot'})['items']
     assert task['id'] in [h['id'] for h in hits], hits
     print('Crew attachments: multipart and base64 add, protected reads, placeholders, upload link, SQL and search passed.')
+
+
+def current_revision(read, record):
+    return [t for t in read('tasks') if t['id'] == record['id']][0]['revision']
 
 
 def request_json(pc, headers, path, body):
@@ -355,10 +372,14 @@ def scenario(pc):
     reviewed = current('tasks', ready)
     assert reviewed['wake_generation'] == ready['wake_generation'] + 1
     withdrawn = write('task.update', {'draft': 'Changed draft'}, reviewed)
-    assert withdrawn['readiness'] == 'waiting'
+    assert withdrawn['readiness'] == 'waiting' and withdrawn['waiting_reason'] == 'Draft edited', withdrawn
     assert withdrawn['wake_generation'] > reviewed['wake_generation']
     assert current('reviews', rev)['status'] == 'withdrawn'
     ready = write('task.update', {'readiness': 'ready'}, withdrawn)
+    assert ready['waiting_reason'] == '', 'Going Ready clears the hold reason'
+    held = write('task.update', {'readiness': 'on_hold'}, ready)
+    assert held['readiness'] == 'waiting' and held['wake_generation'] == ready['wake_generation'] + 1, held
+    ready = write('task.update', {'readiness': 'ready'}, held)
     done = write('task.update', {'status': 'done'}, ready)
     assert done['wake_generation'] == ready['wake_generation'] + 1
     reopened = write('task.update', {'status': 'todo'}, done)
@@ -462,6 +483,10 @@ def cli_attachment_scenario(pc):
     preview = pc.json('attachment', image['id'], '--out', str(out / 'preview.png'), '--variant', 'preview')
     assert not preview['verified'] and (out / 'preview.png').read_bytes()[:8] == b'\x89PNG\r\n\x1a\n', preview
     assert not [p for p in out.iterdir() if p.suffix == '.part']
+    commented = json.loads(pc.run('write', '--file', str(files / 'step 1.png'), '-', stdin=json.dumps(
+        {'action': 'task.comment', 'reported_agent': 'CLI agent', 'id': created['id'], 'expected_revision': created['revision'],
+         'data': {'body': 'Still there: ![again](attachment:new-1)'}})).stdout)
+    assert len(commented['attachments']) == 1 and commented['revision'] == created['revision'], commented
     assert 'missing.txt' in pc.run('attach', str(files / 'missing.txt'), '--task', created['id'], '--reported-agent', 'CLI agent', expect=2).stderr
     print('Crew CLI attach, write --file and verified attachment download passed.')
 

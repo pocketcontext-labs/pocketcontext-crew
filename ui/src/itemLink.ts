@@ -59,6 +59,9 @@ export const noteSorts = ["updated", "created", "title", "bucket"] as const;
 export const bucketSorts = ["name", "notes", "activity"] as const;
 export type NoteSort = (typeof noteSorts)[number];
 export type BucketSort = (typeof bucketSorts)[number];
+/** Board hold filter: every task, open tasks on hold, or open Ready tasks. */
+export const holdFilters = ["all", "on_hold", "ready"] as const;
+export type HoldFilter = (typeof holdFilters)[number];
 /** Tasks and Notes page state that lives in the address. */
 export type ViewState = {
   /** A bucket id, or "" for all buckets. */
@@ -67,19 +70,22 @@ export type ViewState = {
   bucketSort: BucketSort;
   /** "all", "unassigned", "invalid" or an agent id. */
   assignment: string;
+  /** On hold or Ready (open tasks only), or all. */
+  hold: HoldFilter;
 };
 export const defaultViewState: ViewState = {
   bucket: "",
   noteSort: "updated",
   bucketSort: "name",
   assignment: "all",
+  hold: "all",
 };
 const recordId = /^[a-z0-9]{15}$/;
 const assignments = ["unassigned", "invalid"];
 
 /**
  * Reads `#/notes?bucket=<id>&sort=<notes>&buckets=<buckets>` and
- * `#/tasks?agent=<id|unassigned|invalid>`, or their older `#/memory` and `#/team`
+ * `#/tasks?agent=<id|unassigned|invalid>&hold=<on_hold|ready>`, or their older `#/memory` and `#/team`
  * forms. A missing, repeated or invalid value falls back to its default; unknown
  * parameters are ignored. Whether an id still names an active record is for the
  * page to decide.
@@ -101,6 +107,8 @@ export function viewStateFromHash(hash: string): ViewState {
       assignment:
         one("agent", (v) => recordId.test(v) || assignments.includes(v)) ??
         defaultViewState.assignment,
+      hold: (one("hold", (v) => v !== "all" && (holdFilters as readonly string[]).includes(v)) ??
+        defaultViewState.hold) as HoldFilter,
     };
   return {
     ...defaultViewState,
@@ -118,6 +126,8 @@ export function viewStateHash(view: View, state: ViewState): string {
   const params = new URLSearchParams();
   if (view === "board" && state.assignment !== defaultViewState.assignment)
     params.set("agent", state.assignment);
+  if (view === "board" && state.hold !== defaultViewState.hold)
+    params.set("hold", state.hold);
   if (view === "memory") {
     if (state.bucket) params.set("bucket", state.bucket);
     if (state.noteSort !== defaultViewState.noteSort)
@@ -138,6 +148,9 @@ const boardColumns = ["todo", "in_progress", "needs_review", "done"];
  */
 export const boardColumnHash = (status: string) =>
   `${viewHashes.board}?column=${encodeURIComponent(status)}`;
+
+/** The Tasks board showing only open tasks on hold. */
+export const boardOnHoldHash = `${viewHashes.board}?hold=on_hold`;
 
 /** The status column a Tasks address asks for, or null. */
 export function boardColumnFromHash(hash: string): string | null {

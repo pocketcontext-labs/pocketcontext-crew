@@ -1065,3 +1065,68 @@ it("keeps an old entry prominent and listed while its task still waits on it", a
   expect(document.querySelectorAll(".crew-event")).toHaveLength(4);
   expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
 });
+it("lists wakes not received for open tasks dispatched to someone else, without retry or dismiss", async () => {
+  fixtures.webhook_bridges = [
+    {
+      id: "bridge-1",
+      revision: 1,
+      task_id: "task000000000aa",
+      recipient_agent: "learn",
+      overdue: true,
+      deadline_at: "2026-11-10T09:30:00.000Z",
+      created: "2026-11-10 09:00:00.000Z",
+    },
+    {
+      id: "bridge-self",
+      revision: 1,
+      task_id: "task000000000bb",
+      overdue: true,
+    },
+    {
+      id: "bridge-done",
+      revision: 1,
+      task_id: "task000000000cc",
+      overdue: true,
+    },
+    { id: "bridge-test", revision: 1, task_id: "", overdue: true },
+    {
+      id: "bridge-fine",
+      revision: 1,
+      task_id: "task000000000dd",
+      overdue: false,
+    },
+  ];
+  const tasks: Row[] = [
+    { id: "task000000000aa", revision: 1, title: "Stranded copy", status: "todo", assigned_agent: "learn" },
+    { id: "task000000000bb", revision: 1, title: "Self filed", status: "todo", assigned_agent: "build", created_by_agent: "Build" },
+    { id: "task000000000cc", revision: 1, title: "Done already", status: "done", assigned_agent: "learn" },
+    { id: "task000000000dd", revision: 1, title: "On time", status: "todo", assigned_agent: "learn" },
+  ];
+  render(<WebhookStatus agents={agents} tasks={tasks} />);
+  const section = await screen.findByRole("region", {
+    name: "Wakes not received",
+  });
+  const items = section.querySelectorAll("li");
+  expect(items).toHaveLength(1);
+  const link = screen.getByRole("link", { name: "Stranded copy" });
+  expect(link).toHaveAttribute("href", "#/tasks/task000000000aa");
+  expect(items[0]).toHaveTextContent("Learn");
+  expect(items[0].querySelector("time")).toHaveAttribute(
+    "dateTime",
+    "2026-11-10T09:30:00.000Z",
+  );
+  expect(section.querySelector("button")).toBeNull();
+});
+it("shows no wake list when nothing is overdue or bridges cannot be read", async () => {
+  vi.mocked(crewApi.read).mockImplementation(async (c) => {
+    if (c === "webhook_bridges") throw new Error("synthetic");
+    return fixtures[c] || [];
+  });
+  render(<WebhookStatus agents={agents} tasks={[]} />);
+  await screen.findByRole("heading", { name: "Grok setup" });
+  await waitFor(() =>
+    expect(screen.queryByText("Loading integration…")).toBeNull(),
+  );
+  expect(screen.queryByRole("region", { name: "Wakes not received" })).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+});

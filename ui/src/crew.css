@@ -428,6 +428,121 @@ a.crew-logo:hover .product-brand span {
   padding: 2px 7px;
   color: #77806a;
 }
+/* Labels: the same chip on cards and in the editor. */
+.crew-chip,
+.crew-tags > .crew-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 999px;
+  background: #eef0e7;
+  border: 1px solid #dfe4d6;
+  padding: 1px 8px;
+  color: #5d6a52;
+  overflow-wrap: anywhere;
+}
+.crew-tags > .crew-chip {
+  font-size: 10px;
+}
+.crew-chip button {
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  margin-right: -4px;
+  font-size: 13px;
+  line-height: 1;
+  color: inherit;
+  cursor: pointer;
+}
+.crew-chip:focus-visible,
+.crew-chip.selected {
+  outline: 2px solid #487d55;
+  outline-offset: 1px;
+}
+.crew-chip.flash {
+  background: #f3e9c9;
+  border-color: #d9c27d;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .crew-chip {
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+}
+.crew-chip-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-height: 38px;
+  padding: 4px 6px;
+  border: 1px solid #dce2d8;
+  border-radius: 6px;
+  background: #fff;
+  cursor: text;
+  font-weight: 400;
+}
+.crew-chip-input:focus-within {
+  border-color: #487d55;
+  box-shadow: 0 0 0 1px #487d55;
+}
+.crew-chip-input.disabled {
+  cursor: default;
+  background: transparent;
+}
+.crew-dialog .crew-chip-input input,
+.crew-dialog .crew-chip-input input:focus {
+  flex: 1;
+  min-width: 90px;
+  width: auto;
+  border: 0;
+  box-shadow: none;
+  outline: none;
+  padding: 4px 2px;
+  background: transparent;
+}
+.crew-labels-field {
+  position: relative;
+}
+.crew-label-suggestions {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 4px;
+  border: 1px solid #dce2d8;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(37, 51, 44, 0.1);
+  font-weight: 400;
+}
+.crew-label-suggestions li {
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.crew-label-suggestions li:hover,
+.crew-label-suggestions li[aria-selected="true"] {
+  background: #eef1e7;
+}
+/* Hold: On hold is the quiet amber of other "a person decides" markers. */
+.crew-tags > .crew-hold-chip {
+  background: #f6eedb;
+  color: #7d6224;
+}
+.crew-tags > .crew-ready-chip {
+  background: #e3eee0;
+  color: #3f6b48;
+}
+.crew-wake-missing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: #6b5a2e;
+}
 .crew-human,
 .crew-tags > .crew-human {
   display: inline-block;
@@ -798,9 +913,11 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-home-counts {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
+/* The whole card is the link. Hover and focus change only colour, shadow and
+   transform, so nothing around it moves. */
 .crew-home-counts a {
   display: grid;
   gap: 2px;
@@ -810,11 +927,43 @@ a.crew-logo:hover .product-brand span {
   color: #52654f;
   font-size: 12px;
   text-decoration: none;
+  cursor: pointer;
+  background: transparent;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+.crew-home-counts a:hover,
+.crew-home-counts a:focus-visible {
+  border-color: #487d55;
+  background: var(--accent-soft, #35694f0d);
+  box-shadow: 0 2px 8px rgba(37, 51, 44, 0.08);
+  transform: translateY(-1px);
+}
+.crew-home-counts a:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-home-counts a {
+    transition: none;
+  }
+  .crew-home-counts a:hover,
+  .crew-home-counts a:focus-visible {
+    transform: none;
+  }
 }
 .crew-home-counts b {
   font-size: 22px;
   font-weight: 600;
   color: #293e2c;
+}
+@media (max-width: 900px) {
+  .crew-home-counts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 @media (max-width: 520px) {
   .crew-home-counts {
@@ -1396,8 +1545,39 @@ a.crew-logo:hover .product-brand span {
   color: #70825d;
   font-size: 10px;
 }
-.crew-timeline p {
+.crew-timeline li > p {
   white-space: pre-wrap;
+}
+.crew-comment-body {
+  margin-top: 6px;
+}
+.crew-comment-form .crew-md-field textarea {
+  width: 100%;
+  min-height: 95px;
+}
+.crew-comment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.crew-stranded ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.crew-stranded li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 6px 0;
+  border-top: 1px solid #e5e9df;
+  overflow-wrap: anywhere;
+}
+.crew-stranded small {
+  color: #6b7964;
 }
 .crew-review-meta {
   display: flex;
@@ -1683,10 +1863,6 @@ a.crew-logo:hover .product-brand span {
 .crew-assignment-warning {
   color: #8a3e17;
   font-weight: 550;
-}
-.crew-task-card .crew-readiness {
-  font-size: 12px;
-  color: #4b5844;
 }
 .crew-webhooks {
   margin: 30px 0;

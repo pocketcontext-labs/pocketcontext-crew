@@ -305,10 +305,23 @@ while a live execution holds the task: `dispatching` or `running` with an unexpi
 lease, or `handed_off` before its acknowledgment deadline. Stale executions are
 invalidated first. Without a live execution the write applies without proof, even
 on a governed task whose `execution_required_generation` is still set, so a worker
-whose run ended (for example after its own `review.request`, which invalidates
-the execution) can still comment, edit, archive or restore the task. Supplied
+whose run ended can still comment, edit, archive or restore the task. Supplied
 proof is always validated, never ignored: obsolete or mismatched proof is refused
-with `execution_conflict`. Setting Waiting releases governance for any caller.
+with `execution_conflict`.
+
+Putting a task on hold (readiness `waiting`, or the alias `on_hold`) works for
+any caller even during a live execution: an update whose data has only
+`readiness` and optionally `waiting_reason` needs no proof. It cancels the
+task's unfinished executions (outcome `put_on_hold`, task event
+`execution.cancel`), advances the wake generation and releases governance. An
+on-hold task never wakes, whatever changes; only Ready tasks wake.
+
+`review.request` is the last step of governed work. With your proof it completes
+your execution (outcome `review_requested`; the result carries
+`execution_completed`). Post comments first. Afterwards your fenced comment is
+still accepted while nobody else holds the task, and `execution.complete`
+without `mark_done` returns the record with `already_completed: true`. A review
+requested by anyone else invalidates the live execution.
 Reader writes remain authoritative and never need proof. These rules keep a stale
 worker from writing during someone else's live run; they coordinate the shared
 principal, not independently authenticated bots.
@@ -348,7 +361,7 @@ A recipient may start before this report; the late report must not replace its l
 Renew during long work. Include proof on task writes and review requests. Use a
 stable key for proof-bearing comments so a lost response cannot create a second
 pong. Complete through `execution.complete`; `mark_done:true` plus task_revision
-commits task completion and execution outcome together. Review/Waiting/reassignment
+commits task completion and execution outcome together. The holder's own review request completes the execution instead; other review, on-hold and reassignment
 changes invalidate previous authority; later eligible work uses a new generation.
 
 ## Reader comment wakes

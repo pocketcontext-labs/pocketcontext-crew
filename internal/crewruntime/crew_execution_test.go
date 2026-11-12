@@ -123,17 +123,19 @@ func TestExecutionReviewTransitionInvalidatesAndReopens(t *testing.T) {
 	raw, _ = json.Marshal(map[string]any{"action": "review.request", "id": task.Id, "expected_revision": updated["revision"], "data": map[string]any{}, "execution": proof})
 	review := a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
 	prior, _ := a.app.FindRecordById("crew_webhook_executions", run["id"].(string))
-	if prior.GetString("state") != "invalidated" {
-		t.Fatal("review left execution locked")
+	// The holder's own review request completes its execution rather than
+	// invalidating it, so nothing stays locked.
+	if prior.GetString("state") != "completed" || prior.GetString("outcome_code") != "review_requested" {
+		t.Fatal("review left execution locked", prior.GetString("state"))
 	}
-	// With nothing live, the requester can still comment without proof; its
-	// invalidated proof is refused, and so is completing that execution.
+	// With nothing live, the requester can comment without proof or with its
+	// proof, and a late execution.complete is acknowledged without change.
 	current, _ := a.app.FindRecordById("crew_tasks", task.Id)
 	raw, _ = json.Marshal(map[string]any{"action": "task.comment", "id": task.Id, "expected_revision": current.GetInt("revision"), "data": map[string]any{"body": "Synthetic note after review request"}})
 	a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
-	raw, _ = json.Marshal(map[string]any{"action": "task.comment", "id": task.Id, "expected_revision": current.GetInt("revision"), "idempotency_key": "stale-proof-comment", "data": map[string]any{"body": "Synthetic stale proof"}, "execution": proof})
-	a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 409)
-	executionOperation(t, a, "execution.complete", prior.Id, prior.GetInt("revision"), map[string]any{"worker_id": "worker", "fence": run["fence"], "outcome": "completed"}, "complete-after-review", false, 409)
+	raw, _ = json.Marshal(map[string]any{"action": "task.comment", "id": task.Id, "expected_revision": current.GetInt("revision"), "idempotency_key": "final-proof-comment", "data": map[string]any{"body": "Synthetic final proof comment"}, "execution": proof})
+	a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
+	executionOperation(t, a, "execution.complete", prior.Id, prior.GetInt("revision"), map[string]any{"worker_id": "worker", "fence": run["fence"], "outcome": "completed"}, "complete-after-review", false, 200)
 	raw, _ = json.Marshal(map[string]any{"action": "review.decide", "id": review["id"], "expected_revision": review["revision"], "data": map[string]any{"decision": "approved"}})
 	a.request(t, "POST", "/api/crew/write", a.token, string(raw), 200)
 	events, err := a.app.FindRecordsByFilter("crew_webhook_deliveries", "task={:task}", "-created", 10, 0, map[string]any{"task": task.Id})
