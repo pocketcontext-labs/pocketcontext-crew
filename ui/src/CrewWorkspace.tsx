@@ -49,6 +49,7 @@ import {
   releaseMatches,
 } from "./taskReleases";
 import StartSession from "./StartSession";
+import SessionInstructions from "./SessionInstructions";
 import {
   clearedBoard,
   commitBoardSearch,
@@ -2271,9 +2272,15 @@ export default function CrewWorkspace() {
           close={() => setInstructions(null)}
           onEdit={() => undefined}
         >
-          <div className="crew-dialog-body crew-session-dialog">
-            <Prose>{instructions.session.instructions}</Prose>
-          </div>
+          {/* Copy prompt and the session itself always read the latest
+              saved revision; edits here replace the shown session. */}
+          <SessionInstructions
+            session={instructions.session}
+            onChange={(session) =>
+              setInstructions((open) => (open ? { ...open, session } : open))
+            }
+            Markdown={Prose}
+          />
         </Modal>
       )}
       {dialog && (

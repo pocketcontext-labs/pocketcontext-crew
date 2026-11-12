@@ -191,6 +191,56 @@ function document() {
   };
   const worker = { worker_id: str, fence: num };
   const event = { event_id: str, epoch: str, generation: num };
+  // crew_read {collection:"session"} and the session.update result.
+  const sessionResult = {
+    type: "object",
+    properties: {
+      agent: object({ id: str, name: str, kind: str }, ["id", "name", "kind"]),
+      prompt: str,
+      instructions: {
+        type: "string",
+        description:
+          "What the session follows: the instructions body, then the agent brief under ## Agent brief",
+      },
+      lease_hours: num,
+      body: {
+        type: "string",
+        description:
+          "The editable instructions body of the current revision (the built-in default text when is_default)",
+      },
+      revision: {
+        type: "integer",
+        description:
+          "Current revision; 0 while the built-in default was never changed. Pass it as expected_revision to session.update.",
+      },
+      is_default: {
+        type: "boolean",
+        description: "True when the body is Crew's built-in default",
+      },
+      edited_by: {
+        type: "string",
+        description:
+          "Who saved the current revision: reported name (attribution only), owner or a connected agent; empty at revision 0",
+      },
+      edited_at: { type: "string", description: "When; empty at revision 0" },
+      reason: str,
+      rewrite_prompt: {
+        type: "string",
+        description:
+          "The prompt the reader copies to ask an agent to rewrite the instructions at this revision",
+      },
+    },
+    required: [
+      "agent",
+      "prompt",
+      "instructions",
+      "lease_hours",
+      "body",
+      "revision",
+      "is_default",
+    ],
+    additionalProperties: false,
+  };
   const operations = {};
   function op(name, fields, required, options) {
     options = options || {};
@@ -258,6 +308,39 @@ function document() {
       revision: "record",
       description:
         "Ends the claim (claimed_by and claim_until cleared), sets an In progress task back to To do and optionally sets readiness and the hold reason. Allowed for the claimer (reported_agent = claimed_by), the owner in the reader, or anyone once the claim expired; otherwise HTTP 409 not_claimer. Setting Done also ends a claim.",
+    },
+  );
+  op(
+    "session.update",
+    {
+      agent: {
+        type: "string",
+        description: "The external agent's ID or exact name",
+      },
+      instructions: {
+        type: "string",
+        maxLength: 100000,
+        description:
+          "New Markdown instructions body (the agent brief is appended separately and is not part of it)",
+      },
+      restore_revision: {
+        type: "integer",
+        minimum: 1,
+        description:
+          "Copy this earlier revision (from session_revisions) into a new revision",
+      },
+      restore_default: {
+        const: true,
+        description:
+          "Go back to Crew's built-in default instructions (a new revision that follows the built-in text)",
+      },
+    },
+    ["agent"],
+    {
+      revision: "session",
+      result: sessionResult,
+      description:
+        "Saves an external agent's session instructions as a new immutable revision. Send exactly one of instructions, restore_revision or restore_default. expected_revision (top level) is required and must equal the current revision from crew_read session (0 while the built-in default was never changed); otherwise HTTP 409: reread and reassess. Only for agents of kind external. Appends a session.update event on the agent. Rewrite instructions only when the owner asks, show the owner the new text and save it after the owner approves. Returns the session object.",
     },
   );
   op("task.comment", { body: str }, ["body"], {
@@ -639,6 +722,7 @@ function document() {
     "buckets",
     "notes",
     "note_revisions",
+    "session_revisions",
     "tasks",
     "events",
     "reviews",
@@ -658,6 +742,7 @@ function document() {
   for (const [name, parent] of Object.entries({
     notes: "bucket",
     note_revisions: "note",
+    session_revisions: "agent (ID or exact name)",
     events: "record",
     reviews: "task",
     webhook_deliveries: "config",
@@ -670,23 +755,9 @@ function document() {
     collections[name].parent = parent;
   collections.session = {
     parameters: object({ agent: str }, ["agent"]),
-    result_schema: {
-      type: "object",
-      properties: {
-        agent: object({ id: str, name: str, kind: str }, [
-          "id",
-          "name",
-          "kind",
-        ]),
-        prompt: str,
-        instructions: str,
-        lease_hours: num,
-      },
-      required: ["agent", "prompt", "instructions", "lease_hours"],
-      additionalProperties: false,
-    },
+    result_schema: sessionResult,
     description:
-      'crew_read {collection:"session", agent:<ID or exact name>} returns one object (not items): the agent, the two-line prompt the reader copies to start a coder session, the full session instructions (Crew template plus the agent brief) and the claim lease in hours. Unknown agent: 404.',
+      'crew_read {collection:"session", agent:<ID or exact name>} returns one object (not items): the agent, the two-line prompt the reader copies to start a coder session, the full session instructions (the saved or built-in body plus the agent brief), the editable body with its revision, is_default, edited_by and edited_at, and the claim lease in hours. History: session_revisions with parent = the agent. Change it with session.update. Unknown agent: 404.',
   };
 
   const permanentLink = {
@@ -754,6 +825,19 @@ function document() {
       links: strings,
       actor: str,
       reported_agent: str,
+      reason: str,
+    },
+    session_revisions: {
+      agent: str,
+      instructions: {
+        type: "string",
+        description:
+          "The instructions body of this revision; for a default revision, the built-in text it stands for",
+      },
+      is_default: bool,
+      actor: str,
+      reported_agent: str,
+      edited_by: str,
       reason: str,
     },
     events: {
@@ -1356,6 +1440,7 @@ function sqlDiscovery() {
       "buckets",
       "notes",
       "note_revisions",
+      "session_revisions",
       "tasks",
       "events",
       "reviews",

@@ -119,7 +119,7 @@ approve access only when you intended to connect that app.
 Six tools are exposed: crew_read, crew_search, crew_schema, crew_query,
 crew_attachment and crew_write. Read collections are session (one coder
 session's prompt and instructions; requires `agent`),
-agents, buckets, notes, note_revisions, tasks, events, reviews, attachments and
+agents, buckets, notes, note_revisions, session_revisions (`parent` = agent), tasks, events, reviews, attachments and
 settings, plus the non-secret webhook collections. Writes use custom revision-checked operations
 through the work-client route only. See [the contract](crew.md) for assignment and review.
 

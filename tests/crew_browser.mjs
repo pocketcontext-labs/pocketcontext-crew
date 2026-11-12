@@ -608,6 +608,58 @@ try {
   assert.equal(await networkCard.evaluate(e=>e.getBoundingClientRect().height),networkHeight,`other cards keep their height at ${width}`);
   assert.equal(await page.getByRole('button',{name:'Start a session for synthetic-repo'}).evaluate(b=>!!b.closest('.crew-agent-tile')),true,'Start a session stays in its tile');
  }
+ // Session instructions are saved in Crew: edit by hand, restore from history,
+ // restore the default and copy prompts. The clipboard is captured in the page.
+ {
+  await page.setViewportSize({width:1280,height:900});
+  await page.evaluate(()=>{window.__copied=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{window.__copied.push(t);}}});});
+  const lastCopied=()=>page.evaluate(()=>window.__copied.at(-1));
+  const readSession=async()=>(await page.request.post(base+'/api/crew/read',{headers:{Authorization:syntheticOwnerAuth},data:{collection:'session',agent:'synthetic-repo'}})).json();
+  await showInstructions.click();
+  const box=page.getByRole('dialog',{name:'Session instructions for synthetic-repo'});
+  await box.getByText('These instructions are saved in Crew, not in the code. Edit them by hand, or ask an agent to rewrite them.').waitFor();
+  await box.getByText('Built-in default · not edited yet').waitFor();
+  assert.equal(await box.getByRole('button',{name:'Restore default'}).isDisabled(),true,'Restore default is off for the default');
+  await box.getByRole('button',{name:'Rewrite with an agent'}).click();
+  await box.getByRole('button',{name:'Rewrite prompt copied'}).waitFor();
+  const rewrite=await lastCopied();
+  assert.ok(rewrite.startsWith('Rewrite the Crew session instructions for agent "synthetic-repo" (revision 0).')&&rewrite.includes('expected_revision 0')&&rewrite.includes('session.update'),rewrite);
+  await box.getByRole('button',{name:'Edit',exact:true}).click();
+  const field=box.getByLabel(/Session instructions/);
+  assert.ok((await field.inputValue()).includes('## 1. Session name'),'the editor opens on the current body');
+  await field.fill('# Synthetic browser instructions\n\nWork on **one** synthetic task.');
+  await box.getByRole('button',{name:'Save',exact:true}).click();
+  await box.getByText(/^Revision 1 · edited by owner, /).waitFor();
+  await box.getByRole('heading',{name:'Synthetic browser instructions'}).waitFor();
+  await box.getByRole('heading',{name:'Agent brief'}).waitFor();
+  if(process.env.CREW_SCREENSHOTS) await snapView('crew-session-instructions-edited');
+  await box.getByRole('button',{name:'Restore default'}).click();
+  await box.getByText(/^Revision 2 · edited by owner, .* · built-in default$/).waitFor();
+  await box.getByRole('heading',{name:'1. Session name'}).waitFor();
+  await box.getByRole('button',{name:'History'}).click();
+  await box.getByText(/^Revision 1 · owner · /).waitFor();
+  assert.equal(await box.getByRole('button',{name:'Restore revision 2'}).count(),0,'the current revision has no Restore');
+  await box.getByRole('button',{name:'Restore revision 1'}).click();
+  await box.getByText(/^Revision 3 · edited by owner, /).waitFor();
+  await box.getByRole('heading',{name:'Synthetic browser instructions'}).waitFor();
+  const latest=await readSession();
+  assert.equal(latest.revision,3,'the session reads the restored revision');
+  assert.equal(latest.body,'# Synthetic browser instructions\n\nWork on **one** synthetic task.');
+  await box.getByRole('button',{name:'Copy prompt',exact:true}).click();
+  await box.getByRole('button',{name:'Prompt copied',exact:true}).waitFor();
+  assert.equal(await lastCopied(),latest.prompt,'Copy prompt copies the session prompt');
+  // Reopening shows the latest revision, and the rewrite prompt follows it.
+  await box.getByRole('button',{name:'Close dialog'}).click();
+  await box.waitFor({state:'hidden'});
+  await showInstructions.click();
+  await box.getByText(/^Revision 3 · edited by owner, /).waitFor();
+  await box.getByRole('button',{name:'Rewrite with an agent'}).click();
+  await box.getByRole('button',{name:'Rewrite prompt copied'}).waitFor();
+  assert.ok((await lastCopied()).includes('(revision 3)'),'the rewrite prompt names the latest revision');
+  await box.getByRole('button',{name:'Close dialog'}).click();
+  await box.waitFor({state:'hidden'});
+  assert.ok(writeActions.filter(a=>a==='session.update').length===3,'three session.update writes: '+writeActions.join(','));
+ }
  await page.setViewportSize({width:1280,height:800});
  // Search boxes draw one focus ring, on the box, never a second one on the field inside.
  await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
@@ -1041,5 +1093,5 @@ try {
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');
- console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, session instructions dialog 1024/1280/1440, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, file previews (log, CSV, PDF with inert JavaScript, audio, video) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, artifacts (share, publish, signed-out phone view 390, snapshot, replace, revoke), logout.');
+ console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, session instructions dialog 1024/1280/1440 with hand edit, history restore, restore default and copied prompts, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, file previews (log, CSV, PDF with inert JavaScript, audio, video) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, artifacts (share, publish, signed-out phone view 390, snapshot, replace, revoke), logout.');
 }catch(error){ console.error('Synthetic browser page:', (await page.locator('body').innerText()).slice(0,2500)); await snap('crew-failure'); throw error; }finally{await browser.close();}

@@ -29,9 +29,19 @@ export type AgentSession = {
   agent: { id: string; name: string; kind: string };
   /** A short prompt to paste into a new Codex or Claude Code session. */
   prompt: string;
-  /** The full session instructions, Markdown. */
+  /** The full session instructions, Markdown: the body, then the agent brief. */
   instructions: string;
   lease_hours: number;
+  /** The editable instructions body of the current revision. */
+  body: string;
+  /** The current revision; 0 while the built-in default was never changed. */
+  revision: number;
+  /** Whether the body is Crew's built-in default. */
+  is_default: boolean;
+  edited_by: string;
+  edited_at: string;
+  /** A prompt for an agent conversation that rewrites the instructions. */
+  rewrite_prompt: string;
 };
 export type ArtifactLink = {
   id: string;
@@ -39,6 +49,11 @@ export type ArtifactLink = {
   link_path: string;
   link: string;
 };
+/** What a session.update writes: new text, an earlier revision or the default. */
+export type SessionChange =
+  | { instructions: string }
+  | { restore_revision: number }
+  | { restore_default: true };
 export type ConnectedApp = { id: string; name: string; created: number };
 async function connectionsRequest<T>(body?: { id: string }): Promise<T> {
   const response = await fetch("/oauth/connections", {
@@ -134,15 +149,28 @@ export const crewApi = {
         ? response.items[0]
         : response
     ) as Partial<AgentSession> | undefined;
-    if (typeof session?.prompt !== "string" || !session.prompt.trim())
-      throw new Error("No session prompt was returned.");
-    return {
-      agent: session.agent ?? { id: agent, name: "", kind: "external" },
-      prompt: session.prompt,
-      instructions:
-        typeof session.instructions === "string" ? session.instructions : "",
-      lease_hours: Number(session.lease_hours) || 0,
-    };
+    return parseSession(session, agent);
+  },
+  /**
+   * Saves session instructions as a new revision. `revision` is the one the
+   * owner saw; a newer one answers 409.
+   */
+  async updateSession(
+    agent: string,
+    revision: number,
+    change: SessionChange,
+    reason = "",
+  ): Promise<AgentSession> {
+    const response = await pb.send<Partial<AgentSession>>("/api/crew/write", {
+      method: "POST",
+      body: {
+        action: "session.update",
+        data: { agent, ...change },
+        expected_revision: revision,
+        reason,
+      },
+    });
+    return parseSession(response, agent);
   },
   /** Links of published artifacts; owner-only, never reachable by MCP. */
   async artifactLinks(): Promise<ArtifactLink[]> {
@@ -171,6 +199,27 @@ export const crewApi = {
     });
   },
 };
+function parseSession(
+  session: Partial<AgentSession> | undefined,
+  agent: string,
+): AgentSession {
+  if (typeof session?.prompt !== "string" || !session.prompt.trim())
+    throw new Error("No session prompt was returned.");
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const instructions = text(session.instructions);
+  return {
+    agent: session.agent ?? { id: agent, name: "", kind: "external" },
+    prompt: session.prompt,
+    instructions,
+    lease_hours: Number(session.lease_hours) || 0,
+    body: typeof session.body === "string" ? session.body : instructions,
+    revision: Number(session.revision) || 0,
+    is_default: session.is_default !== false,
+    edited_by: text(session.edited_by),
+    edited_at: text(session.edited_at),
+    rewrite_prompt: text(session.rewrite_prompt),
+  };
+}
 export const statuses = [
   ["todo", "To do"],
   ["in_progress", "In progress"],

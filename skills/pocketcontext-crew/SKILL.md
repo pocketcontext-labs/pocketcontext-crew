@@ -95,7 +95,7 @@ Reported agent names are attribution, not authenticated identity.
 Read collection capabilities once (`read`, crew_read) for versioned operation
 schemas (wake runs use the compact execution subset below). If a cached
 connector omits execution/idempotency_key, use data._crew as documented there;
-never fall back to unfenced writes. Other read collections: session (one coder session's prompt and instructions; requires agent), agents, buckets, notes, note_revisions, tasks, events, reviews,
+never fall back to unfenced writes. Other read collections: session (one coder session's prompt and instructions; requires agent), agents, buckets, notes, note_revisions, session_revisions (parent: agent), tasks, events, reviews,
 attachments (file metadata; parent = task or note), settings (storage limit and usage),
 webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings,
 webhook_bridges and webhook_executions.
@@ -154,6 +154,17 @@ claim. Claims are advisory and never wake anyone. Close an approved task in one
 task.update: `{"status":"done","release":"<version>","review_mode":"in_session",
 "approved_by":"<owner's name if known, else owner>"}`; Crew records when it was
 approved. If the owner decides not to do a task, comment why and set `wont_do`.
+
+Session instructions are saved in Crew per external agent, with immutable
+revisions; the session read returns `body` (the editable part; the agent brief is
+appended separately), `revision` (0 while the built-in default was never
+changed) and `is_default`. When the owner asks you to rewrite them, read the
+session, ask what to change, show the new text, and save only after the owner
+approves: `session.update` with top-level `expected_revision` = that revision and
+data `{"agent":NAME,"instructions":TEXT}` (or `restore_revision` N or
+`restore_default` true). HTTP 409 means someone saved meanwhile: reread and
+show the owner what changed. History: `{"collection":"session_revisions",
+"parent":NAME}`.
 
 ## Files and screenshots
 

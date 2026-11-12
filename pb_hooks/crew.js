@@ -14,6 +14,7 @@ const names = [
   "buckets",
   "notes",
   "note_revisions",
+  "session_revisions",
   "tasks",
   "events",
   "reviews",
@@ -316,6 +317,7 @@ const derivedFields = {
   webhook_bridges: ["overdue"],
   tasks: ["path", "url", "claim_state"],
   notes: ["path", "url"],
+  session_revisions: ["edited_by"],
   upload_links: ["state"],
   artifacts: ["pending_changes", "path"],
   settings: ["storage_used_bytes", "max_file_bytes", "max_active_attachments"],
@@ -529,7 +531,9 @@ function read(e) {
         ? "bucket"
         : col === "note_revisions"
           ? "note"
-          : col === "reviews"
+          : col === "session_revisions"
+            ? "agent"
+            : col === "reviews"
             ? "task"
             : col === "webhook_executions"
               ? "task"
@@ -542,6 +546,7 @@ function read(e) {
       ![
         "notes",
         "note_revisions",
+        "session_revisions",
         "reviews",
         "events",
         "webhook_deliveries",
@@ -554,7 +559,11 @@ function read(e) {
     )
       bad("Invalid parent filter");
     clauses.push(key + "={:parent}");
-    params.parent = b.parent;
+    // Session revisions take the agent by ID or exact name, like session.
+    params.parent =
+      col === "session_revisions"
+        ? session.findAgent(e.app, b.parent).id
+        : b.parent;
   }
   if (["agents", "buckets", "tasks", "attachments"].includes(col)) {
     clauses.push(b.archived ? "archived=true" : "archived=false");
@@ -634,7 +643,7 @@ function read(e) {
     rows = e.app.findRecordsByFilter(
       "crew_" + col,
       clauses.join(" && "),
-      col === "note_revisions"
+      col === "note_revisions" || col === "session_revisions"
         ? "-revision"
         : col === "attachments"
           ? "position"
@@ -658,9 +667,11 @@ function read(e) {
                   ? artifacts.exported(r)
                   : col === "tasks" || col === "notes"
                     ? webhooks.linkedExport(e.app, col, r)
-                    : keep
-                      ? r.publicExport()
-                      : r;
+                    : col === "session_revisions"
+                      ? session.exportRevision(e.app, r)
+                      : keep
+                        ? r.publicExport()
+                        : r;
       return keep ? pick(value, keep) : value;
     }),
     has_more: rows.length > limit,
@@ -727,6 +738,12 @@ function write(e, isAgent) {
     }
     if (b.action === "agent.ensure" || b.action.startsWith("webhook.")) {
       result = webhooks.handle(app, b, actor, isAgent);
+      return;
+    }
+    // Editable session instructions (0.21.0): shared by the reader and work
+    // clients, revision-checked against the agent's latest revision.
+    if (b.action === "session.update") {
+      result = session.update(app, b, actor, event);
       return;
     }
     const parts = b.action.split("."),

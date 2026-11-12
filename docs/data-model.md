@@ -9,6 +9,7 @@ erDiagram
   crew_agents o|--o{ crew_buckets : responsible_agent
   crew_buckets ||--o{ crew_notes : bucket
   crew_notes ||--o{ crew_note_revisions : note
+  crew_agents ||--o{ crew_session_revisions : agent
   crew_agents o|--o{ crew_tasks : assigned_agent
   crew_tasks ||--o{ crew_reviews : task
   crew_tasks ||--o{ crew_attachments : parent
@@ -29,7 +30,12 @@ Agents have a `kind`: `bot` (default; Grok bots woken by webhook), `external`
 carry an advisory claim: `claimed_by` (reported session name, attribution only),
 `claimed_at` (start) and `claim_until` (ISO UTC lease end), empty without a claim.
 Responses add a
-derived `claim_state`. See [project coder agents](crew.md#project-coder-agents).
+derived `claim_state`. External agents' session instructions are immutable
+`crew_session_revisions` rows (agent, revision, instructions body, is_default,
+actor, reported_agent, reason; unique per agent and revision). The latest row is
+current; without rows, or when the latest is a default revision (empty text,
+is_default true), Crew's built-in template applies. The agent brief is not stored
+there; it is appended when the instructions are read. See [project coder agents](crew.md#project-coder-agents).
 Task `status` is `todo`, `in_progress`, `needs_review`, `done` or `wont_do`
 (terminal like done). Tasks also carry `release` (the shipping release, at most 32
 characters), `review_mode` (empty, `crew` or `in_session`), `approved_by` (reported

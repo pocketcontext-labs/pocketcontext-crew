@@ -32,7 +32,7 @@ func TestCrewSQLSchemaMatchesAllowlist(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	if fmt.Sprint(names) != "[agents artifacts attachments buckets events note_revisions notes reviews tasks webhook_attempts webhook_bridges webhook_configs webhook_deliveries webhook_executions webhook_mappings webhook_routing]" {
+	if fmt.Sprint(names) != "[agents artifacts attachments buckets events note_revisions notes reviews session_revisions tasks webhook_attempts webhook_bridges webhook_configs webhook_deliveries webhook_executions webhook_mappings webhook_routing]" {
 		t.Fatalf("schema views: %v", names)
 	}
 	if schema["limits"].(map[string]any)["max_rows"] != float64(crewSQLMaxRows) {

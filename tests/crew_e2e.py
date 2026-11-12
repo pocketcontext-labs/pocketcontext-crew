@@ -550,6 +550,7 @@ def cli_session_scenario(cli, write):
     assert session['agent'] == {'id': project['id'], 'name': 'synthetic-cli-project', 'kind': 'external'} and session['lease_hours'] == 2
     assert session['instructions'].endswith('## Agent brief\n\nSynthetic project brief.'), session['instructions'][-200:]
     assert 'HTTP 404' in cli('read', {'collection': 'session', 'agent': 'synthetic-missing'}, expect=1)
+    cli_session_instructions_scenario(cli, write, project, session)
     ticket = write('task.create', {'title': 'Synthetic ticket', 'assigned_agent': project['id'], 'readiness': 'ready'})
     listed = cli('read', {'collection': 'tasks', 'assigned_agent': 'synthetic-cli-project', 'status': ['todo'], 'readiness': 'ready', 'claim_state': '', 'fields': ['title', 'claim_state']})['items']
     assert listed == [{'id': ticket['id'], 'revision': ticket['revision'], 'title': 'Synthetic ticket', 'claim_state': ''}], listed
@@ -568,6 +569,40 @@ def cli_session_scenario(cli, write):
     rows = cli('query', {'sql': "SELECT kind FROM agents WHERE id = '%s'" % project['id']})['rows']
     assert rows == [['external']], rows
     cli_release_scenario(cli, write, project)
+
+
+def cli_session_instructions_scenario(cli, write, project, session):
+    """0.21.0: an agent reads and rewrites session instructions with expected_revision."""
+    assert session['revision'] == 0 and session['is_default'] is True and session['edited_by'] == '', session
+    default = session['body']
+    assert '## 1. Session name' in default and '## Agent brief' not in default
+    assert session['instructions'] == default + '\n\n## Agent brief\n\nSynthetic project brief.'
+    assert '(revision 0)' in session['rewrite_prompt'] and 'session.update' in session['rewrite_prompt']
+    who = 'synthetic-cli-project · Claude Code · s/9 · dddddddd'
+
+    def update(revision, data, expect=0):
+        return write('session.update', {'agent': 'synthetic-cli-project', **data}, expect=expect,
+                     expected_revision=revision, reported_agent=who)
+
+    first = update(0, {'instructions': '# Synthetic rewritten instructions\n\nClaim one task at a time.'})
+    assert first['revision'] == 1 and first['is_default'] is False and first['edited_by'] == who, first
+    read = cli('read', {'collection': 'session', 'agent': project['id']})
+    assert read['body'] == '# Synthetic rewritten instructions\n\nClaim one task at a time.' and read['revision'] == 1, read
+    assert read['instructions'].endswith('Claim one task at a time.\n\n## Agent brief\n\nSynthetic project brief.'), read
+    stale = update(0, {'instructions': 'Synthetic stale rewrite'}, expect=4)
+    assert 'another request changed the record first' in stale or '409' in stale, stale
+    assert update(1, {'restore_default': True})['body'] == default
+    restored = update(2, {'restore_revision': 1})
+    assert restored['revision'] == 3 and restored['body'].startswith('# Synthetic rewritten'), restored
+    history = cli('read', {'collection': 'session_revisions', 'parent': 'synthetic-cli-project', 'fields': ['revision', 'is_default', 'edited_by']})['items']
+    assert [(h['revision'], h['is_default']) for h in history] == [(3, False), (2, True), (1, False)], history
+    assert all(h['edited_by'] == who for h in history), history
+    events = cli('read', {'collection': 'events', 'parent': project['id'], 'fields': ['action', 'reported_agent']})['items']
+    assert [e['action'] for e in events].count('session.update') == 3 and all(e['reported_agent'] == who for e in events if e['action'] == 'session.update'), events
+    bot = write('agent.create', {'name': 'synthetic-cli-bot-kind'})
+    assert 'HTTP 400' in write('session.update', {'agent': bot['id'], 'instructions': 'x'}, expect=1, expected_revision=0)
+    # Leave the built-in default for the steps that follow.
+    update(3, {'restore_default': True})
 
 
 def cli_release_scenario(cli, write, project):

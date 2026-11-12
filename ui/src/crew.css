@@ -1158,6 +1158,69 @@ a.crew-logo:hover .product-brand span {
 .crew-session-dialog pre {
   max-width: 100%;
 }
+.crew-session-hint {
+  margin: 0;
+  font-weight: 600;
+}
+.crew-session-revision {
+  margin: 2px 0 10px;
+}
+.crew-session-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.crew-session-rewrite {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 260px;
+  justify-items: start;
+}
+.crew-session-rewrite small {
+  color: #5d6a52;
+}
+.crew-session-editor {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.crew-session-editor label small {
+  font-weight: normal;
+  color: #77806a;
+}
+.crew-session-editor textarea {
+  width: 100%;
+  min-height: 320px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.crew-session-actions {
+  display: flex;
+  gap: 8px;
+}
+.crew-session-history ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.crew-session-history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid #e4e7dc;
+  padding-top: 8px;
+}
+.crew-session-history details {
+  flex: 1 1 280px;
+  min-width: 0;
+}
 /* How an agent is started: three choices in the agent form. */
 .crew-agent-start {
   border: 0;

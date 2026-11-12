@@ -2734,6 +2734,13 @@ describe("project agents and coding sessions", () => {
     prompt: "Use the PocketContext Crew skill.\nWork as synthetic-repo.",
     instructions: "## Session\n\nClaim **one** Ready task.",
     lease_hours: 2,
+    body: "## Session\n\nClaim **one** Ready task.",
+    revision: 0,
+    is_default: true,
+    edited_by: "",
+    edited_at: "",
+    rewrite_prompt:
+      'Rewrite the Crew session instructions for agent "synthetic-repo" (revision 0).',
   };
   beforeEach(() => {
     fixtures.agents = [agent, project, person];
@@ -2896,7 +2903,7 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Show full instructions" }),
     );
-    const dialog = screen.getByRole("dialog", {
+    const dialog = await screen.findByRole("dialog", {
       name: "Session instructions for synthetic-repo",
     });
     // The instructions open in their own dialog, not inside the agent card.
@@ -2912,6 +2919,106 @@ describe("project agents and coding sessions", () => {
     expect(writeText).toHaveBeenLastCalledWith(session.prompt);
     fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+  it("edits session instructions by hand, restores history and copies a rewrite prompt", async () => {
+    vi.spyOn(crewApi, "session").mockResolvedValue(session);
+    const writeText = mockClipboard(async () => undefined);
+    const edited = {
+      ...session,
+      body: "Synthetic **edited** text",
+      instructions: "Synthetic **edited** text\n\n## Agent brief\n\nBrief.",
+      revision: 1,
+      is_default: false,
+      edited_by: "owner",
+      edited_at: "2026-11-12 10:00:00.000Z",
+      rewrite_prompt:
+        'Rewrite the Crew session instructions for agent "synthetic-repo" (revision 1).',
+    };
+    const update = vi
+      .spyOn(crewApi, "updateSession")
+      .mockResolvedValueOnce(edited)
+      .mockResolvedValueOnce({ ...session, revision: 2, edited_by: "owner", edited_at: "2026-11-12 11:00:00.000Z" });
+    vi.mocked(crewApi.read).mockImplementation(async (c, f = {}) =>
+      c === "session_revisions"
+        ? [
+            { id: "srev00000000001", revision: 1, instructions: edited.body, is_default: false, edited_by: "owner", created: edited.edited_at },
+          ]
+        : f.archived ? [] : fixtures[c] || [],
+    );
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Start a session for synthetic-repo" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Show full instructions" }));
+    const dialog = within(
+      await screen.findByRole("dialog", { name: "Session instructions for synthetic-repo" }),
+    );
+    dialog.getByText(
+      "These instructions are saved in Crew, not in the code. Edit them by hand, or ask an agent to rewrite them.",
+    );
+    dialog.getByText("Built-in default · not edited yet");
+    expect(dialog.getByRole("button", { name: "Restore default" })).toBeDisabled();
+    // The recommended path copies a prompt for an agent conversation.
+    fireEvent.click(dialog.getByRole("button", { name: "Rewrite with an agent" }));
+    await dialog.findByRole("button", { name: "Rewrite prompt copied" });
+    expect(writeText).toHaveBeenLastCalledWith(session.rewrite_prompt);
+    // Edit by hand: Save sends the revision shown.
+    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    const field = dialog.getByLabelText(/Session instructions/);
+    expect(field).toHaveValue(session.body);
+    fireEvent.change(field, { target: { value: edited.body } });
+    fireEvent.click(dialog.getByRole("button", { name: "Save" }));
+    await dialog.findByText(/^Revision 1 · edited by owner, /);
+    expect(update).toHaveBeenLastCalledWith(
+      project.id,
+      0,
+      { instructions: edited.body },
+      "Edited by hand",
+    );
+    expect(dialog.getByText("edited").tagName).toBe("STRONG");
+    expect(dialog.getByRole("button", { name: "Restore default" })).toBeEnabled();
+    // History lists revisions; the current one has no Restore.
+    fireEvent.click(dialog.getByRole("button", { name: "History" }));
+    await dialog.findByText(/^Revision 1 · owner · .* · current$/);
+    expect(dialog.queryByRole("button", { name: "Restore revision 1" })).toBeNull();
+    // Restore default writes a new revision against the current one.
+    fireEvent.click(dialog.getByRole("button", { name: "Restore default" }));
+    await dialog.findByText(/^Revision 2 · edited by owner, .* · built-in default$/);
+    expect(update).toHaveBeenLastCalledWith(
+      project.id,
+      1,
+      { restore_default: true },
+      "Restore default",
+    );
+    // Copy prompt copies the session prompt of the latest revision.
+    fireEvent.click(dialog.getByRole("button", { name: "Copy prompt" }));
+    await dialog.findByRole("button", { name: "Prompt copied" });
+    expect(writeText).toHaveBeenLastCalledWith(session.prompt);
+  });
+  it("explains a stale session instructions revision", async () => {
+    vi.spyOn(crewApi, "session").mockResolvedValue(session);
+    mockClipboard(async () => undefined);
+    vi.spyOn(crewApi, "updateSession").mockRejectedValue(
+      Object.assign(new Error("conflict"), { status: 409 }),
+    );
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Start a session for synthetic-repo" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Show full instructions" }));
+    const dialog = within(
+      await screen.findByRole("dialog", { name: "Session instructions for synthetic-repo" }),
+    );
+    fireEvent.click(dialog.getByRole("button", { name: "Edit" }));
+    fireEvent.change(dialog.getByLabelText(/Session instructions/), {
+      target: { value: "Synthetic stale edit" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Save" }));
+    await dialog.findByText(/Someone saved a newer revision meanwhile/);
+    dialog.getByRole("button", { name: "Reload latest" });
+    expect(dialog.getByLabelText(/Session instructions/)).toHaveValue("Synthetic stale edit");
   });
   it("shows the prompt to copy by hand when the clipboard is unavailable", async () => {
     vi.spyOn(crewApi, "session").mockResolvedValue(session);
@@ -3064,6 +3171,7 @@ it("explains project agents and coding sessions in the Guide", async () => {
   );
   expect(section.getByText(/One agent per project/)).toBeInTheDocument();
   expect(section.getByText(/claims one task for 2 hours/)).toBeInTheDocument();
+  expect(section.getByText(/Its instructions are saved in Crew/)).toBeInTheDocument();
   expect(section.getByText(/Claim expired/)).toBeInTheDocument();
   expect(
     screen.getByRole("heading", { name: "How an agent is started" }),

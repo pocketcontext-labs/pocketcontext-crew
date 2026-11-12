@@ -252,6 +252,9 @@ def rehearse(target, previous, root):
             assert current.execute("SELECT count(*) FROM crew_artifacts").fetchone() == (0,)
             attachment_fields = json.loads(current.execute("SELECT fields FROM _collections WHERE name='crew_attachments'").fetchone()[0])
             assert next(f for f in attachment_fields if f['name'] == 'parent_kind')['values'] == ['task', 'note', 'artifact']
+            # 0.21.0: session instructions start empty, so every agent uses the built-in default.
+            assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801500000_crew_session_instructions.js'").fetchone() == (1,)
+            assert current.execute('SELECT count(*) FROM crew_session_revisions').fetchone() == (0,)
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()

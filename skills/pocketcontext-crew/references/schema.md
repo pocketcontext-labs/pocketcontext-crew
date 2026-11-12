@@ -32,7 +32,8 @@ with `write` (crew_write), which uses only the work-client route; revisions are
 mandatory for changes. The server's tool schemas and collection capabilities
 are authoritative; CLI and MCP take the same JSON. Agents may create/update
 agents and buckets, assign buckets, create/update/restore notes, create/update/
-claim/claim_renew/release/comment on tasks, request/withdraw/decide review, add/archive/restore
+claim/claim_renew/release/comment on tasks, update session instructions (session.update),
+request/withdraw/decide review, add/archive/restore
 attachments, archive and restore, and recover executions: every reader
 operation except webhook credential entry, upload-link creation and publishing,
 replacing or revoking artifacts (agents create and edit artifact drafts; the owner
@@ -52,6 +53,13 @@ updates, comments and attachment writes renew it. `task.release` (claimer, owner
 or anyone after expiry; optional readiness and waiting_reason) ends it and sets
 In progress back to To do. Done or Won't do ends it. The session collection
 (`{"collection":"session","agent":NAME}`) returns `{agent, prompt, instructions,
-lease_hours}`.
+lease_hours, body, revision, is_default, edited_by, edited_at, rewrite_prompt}`:
+instructions is body plus the agent brief. Only external agents have editable
+instructions: `session.update` data {agent, instructions | restore_revision |
+restore_default:true} with top-level expected_revision = revision (0 for the
+built-in default) appends an immutable revision and a session.update event on the
+agent; a stale revision is HTTP 409. History: session_revisions (parent = agent ID
+or exact name; agent, revision, instructions, is_default, actor, reported_agent,
+edited_by, reason, created), newest first.
 
 Webhook operations and receiver requirements: [webhooks](webhooks.md).

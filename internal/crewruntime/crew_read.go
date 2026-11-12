@@ -58,6 +58,7 @@ var crewSQLViews = func() []sqlread.View {
 		{Name: "buckets", Table: "crew_buckets", Columns: cols(f("name purpose responsible_agent"), archive)},
 		{Name: "notes", Table: "crew_notes", Columns: cols(f("bucket title body links"), archive)},
 		{Name: "note_revisions", Table: "crew_note_revisions", Columns: cols(f("note title body links actor reported_agent reason"))},
+		{Name: "session_revisions", Table: "crew_session_revisions", Columns: cols(f("agent instructions is_default actor reported_agent reason"))},
 		{Name: "tasks", Table: "crew_tasks", Columns: cols(f("title description assigned_agent created_by_agent labels status draft links readiness waiting_reason wake_generation execution_required_generation bot_handoffs handoff_limited comment_wake_generation comment_wake_event claimed_by claimed_at claim_until held_since release review_mode approved_by approved_at"), archive)},
 		{Name: "events", Table: "crew_events", Columns: cols(f("parent action body actor reported_agent reason changes"))},
 		{Name: "reviews", Table: "crew_reviews", Columns: cols(f("task draft attachments options option_decisions status decision_note decided_by decided_at requested_by reported_agent"))},

@@ -33,6 +33,16 @@ export default function StartSession({
     setSession(next);
     setState((await copyText(next.prompt)) ? "copied" : "manual");
   };
+  // The instructions are editable, so the dialog opens on the latest saved
+  // revision; the copy read at Start is the fallback when offline.
+  const openInstructions = async (current: AgentSession) => {
+    let next = current;
+    try {
+      next = await crewApi.session(agent.id);
+      setSession(next);
+    } catch {}
+    showInstructions(next);
+  };
   return (
     <div className="crew-session">
       <button
@@ -74,7 +84,7 @@ export default function StartSession({
           type="button"
           className="crew-session-instructions"
           aria-haspopup="dialog"
-          onClick={() => showInstructions(session)}
+          onClick={() => void openInstructions(session)}
         >
           Show full instructions
         </button>

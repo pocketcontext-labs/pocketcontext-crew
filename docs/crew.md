@@ -11,6 +11,7 @@ reporting (see [SQL reads](#bounded-read-only-sql)).
 | buckets        | Name, purpose and responsible agent                                         |
 | notes          | One bucket, title, Markdown body, note-ID links, archive state              |
 | note_revisions | Immutable snapshots, version, actor, reported agent and reason              |
+| session_revisions | Immutable session instruction revisions of an external agent (built-in default when none) |
 | tasks          | Board status, assignment, creator attribution, labels, draft, note links, advisory claim, release and approval mode |
 | events         | Immutable changes/comments, actor and reported attribution                  |
 | reviews        | Immutable draft and attachment snapshot with monotonic decision state       |
@@ -85,7 +86,7 @@ statement and returns `columns`, `rows` (arrays) and `truncated`. Both require
 the same authentication as crew_read (owner token or MCP OAuth caller) and are
 the MCP tools crew_schema and crew_query.
 
-Views: agents, buckets, notes, note_revisions, tasks, events, reviews,
+Views: agents, buckets, notes, note_revisions, session_revisions, tasks, events, reviews,
 attachments, webhook_configs, webhook_mappings, webhook_routing,
 webhook_deliveries, webhook_attempts, webhook_executions and webhook_bridges. Each view selects an
 explicit column allowlist, and every column is one crew_read already returns.
@@ -650,7 +651,8 @@ integration. Setup checks that look for mapped agents ignore non-bots.
 
 **Session instructions.** `crew_read {collection: "session", agent: "<ID or exact
 name>"}` (also CLI `read` and `/api/crew/read`) returns one object:
-`{agent: {id, name, kind}, prompt, instructions, lease_hours: 2}`. `prompt` is the
+`{agent: {id, name, kind}, prompt, instructions, lease_hours: 2, body, revision,
+is_default, edited_by, edited_at, reason, rewrite_prompt}`. `prompt` is the
 two-line paste the reader copies to start a session:
 
 ```text
@@ -658,8 +660,10 @@ You are <name> in PocketContext Crew.
 Read your session instructions with crew_read collection "session" agent "<name>" and follow them.
 ```
 
-`instructions` is Crew's fixed template (`pb_hooks/crew_session.js`) followed by
-the agent's brief under `## Agent brief`. It tells the session to build a session
+`instructions` is the instructions `body` followed by the agent's brief under
+`## Agent brief`. The body is the latest saved revision, or Crew's built-in default
+(`pb_hooks/crew_session.js`) while none is saved or after Restore default. The
+default tells the session to build a session
 name once with one shell command (`$CREW_SESSION`, else
 `<name> · <tool> · <Zellij session>/<pane> · <session id 8>` from
 `CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID` and `ZELLIJ_SESSION_NAME`/`ZELLIJ_PANE_ID`)
@@ -671,6 +675,44 @@ task.update with `status: "done"`, `release: "<version>"`, `review_mode: "in_ses
 and `approved_by` (the owner's name if known, else `owner`); set Won't do
 (`wont_do`) with a comment when the owner decides not to do a task; or release
 with a hold reason when stopping early. An unknown agent is HTTP 404.
+
+**Editable session instructions (0.21.0).** Session instructions are saved in
+Crew, not in the code, per external agent, with immutable revisions in
+`crew_session_revisions` (agent, revision, instructions, is_default, actor,
+reported_agent, reason). Only the body is stored: the agent brief stays on the
+agent and is appended when the session reads its instructions, so editing the
+brief never creates an instructions revision. `revision` is 0 until the first save;
+the built-in default then applies. A Restore default revision stores `is_default`
+with empty text, so it follows the built-in template of the running release
+(reads of that revision show the built-in text). Saved text keeps the agent name it
+was written with if the agent is renamed.
+
+`session.update` (reader `/api/crew/write` and work-client `/api/crew/agent-write`;
+not owner-only) takes data `{agent: <ID or exact name>, instructions: TEXT}`, or
+`{agent, restore_revision: N}` (copies revision N into a new revision), or
+`{agent, restore_default: true}`; exactly one of the three. Top-level
+`expected_revision` is required and must equal the current revision (0 for the
+built-in default); otherwise HTTP 409. Only agents of kind `external` that are not
+archived; text is non-empty Markdown up to 100,000 characters. Each change appends
+one revision and one `session.update` event on the agent (changes: revision, mode
+edit/restore/default, restored_from, is_default; reported_agent and reason as
+sent) and returns the new session object. History:
+`crew_read {collection: "session_revisions", parent: <agent ID or exact name>}`,
+newest first, each row with a derived `edited_by` (the reported name, else `owner`
+for reader writes or `a connected agent`). The skill and MCP instructions say to
+rewrite instructions only when the owner asks and to save only after the owner
+approves the new text.
+
+In the reader, the Session instructions dialog says "These instructions are saved
+in Crew, not in the code. Edit them by hand, or ask an agent to rewrite them.",
+shows `Revision N · edited by X, date`, and offers **Rewrite with an agent**
+(recommended: copies `rewrite_prompt`, which tells an agent to read the current
+text, ask what to change, show the new version and save it with
+`expected_revision` only after approval), **Edit** (a Markdown textarea with Save
+and Cancel; a stale revision explains the conflict and offers Reload latest),
+**History** (revision, who, when, with Restore) and **Restore default**. The dialog
+rereads the session when it opens; **Copy prompt** copies the two-line prompt,
+which makes the session read the latest saved revision.
 
 **Releases, in-session approval and Won't do (0.19.0).** Tasks have:
 

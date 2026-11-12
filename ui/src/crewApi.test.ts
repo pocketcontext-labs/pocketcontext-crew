@@ -100,7 +100,16 @@ it("reads one agent's session prompt as a single object", async () => {
     lease_hours: 2,
   };
   const send = vi.spyOn(pb, "send").mockResolvedValue(session);
-  expect(await crewApi.session("agent0000000009")).toEqual(session);
+  // A server before 0.21.0 sends no revision: the default, read-only text.
+  expect(await crewApi.session("agent0000000009")).toEqual({
+    ...session,
+    body: session.instructions,
+    revision: 0,
+    is_default: true,
+    edited_by: "",
+    edited_at: "",
+    rewrite_prompt: "",
+  });
   expect(send).toHaveBeenCalledWith("/api/crew/read", {
     method: "POST",
     body: { collection: "session", agent: "agent0000000009" },
@@ -111,4 +120,36 @@ it("reads one agent's session prompt as a single object", async () => {
   );
   send.mockResolvedValue({ items: [] });
   await expect(crewApi.session("synthetic-repo")).rejects.toThrow();
+});
+it("saves session instructions against the revision shown", async () => {
+  const saved = {
+    agent: { id: "agent0000000009", name: "synthetic-repo", kind: "external" },
+    prompt: "Line one\nLine two",
+    instructions: "Synthetic\n\n## Agent brief\n\nBrief.",
+    lease_hours: 2,
+    body: "Synthetic",
+    revision: 4,
+    is_default: false,
+    edited_by: "owner",
+    edited_at: "2026-11-12 10:00:00.000Z",
+    rewrite_prompt: "Rewrite (revision 4)",
+  };
+  const send = vi.spyOn(pb, "send").mockResolvedValue(saved);
+  expect(
+    await crewApi.updateSession(
+      "agent0000000009",
+      3,
+      { restore_revision: 2 },
+      "Restore revision 2",
+    ),
+  ).toEqual(saved);
+  expect(send).toHaveBeenCalledWith("/api/crew/write", {
+    method: "POST",
+    body: {
+      action: "session.update",
+      data: { agent: "agent0000000009", restore_revision: 2 },
+      expected_revision: 3,
+      reason: "Restore revision 2",
+    },
+  });
 });

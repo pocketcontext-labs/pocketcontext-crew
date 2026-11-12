@@ -144,6 +144,13 @@ export default function Guide() {
             session.
           </li>
           <li>
+            <strong>Its instructions are saved in Crew.</strong> Open Show full
+            instructions to edit them by hand, see their history or restore the
+            default. To change more than a line, use Rewrite with an agent: it
+            copies a prompt for an agent conversation that saves only after you
+            approve.
+          </li>
+          <li>
             <strong>A session claims one task for 2 hours.</strong> It renews
             the claim while it works, and a second session can't take the same
             task.
