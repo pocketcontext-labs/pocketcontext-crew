@@ -739,6 +739,28 @@ function Modal({
   const ref = useRef<HTMLDialogElement>(null);
   const pressedBackdrop = useRef(false);
   const helpWasOpen = useRef(false);
+  // A native file picker opened from inside the dialog: while it is open, and
+  // briefly after it closes, a stray Escape, cancel or backdrop click comes from
+  // dismissing the picker, not from the owner closing this dialog.
+  const pickerOpen = useRef(false);
+  const pickerClosedAt = useRef(0);
+  const pickerBusy = () =>
+    pickerOpen.current || Date.now() - pickerClosedAt.current < 600;
+  const openedPicker = (target: EventTarget) => {
+    if (!(target instanceof HTMLInputElement) || target.type !== "file") return;
+    pickerOpen.current = true;
+    const done = () => {
+      if (!pickerOpen.current) return;
+      pickerOpen.current = false;
+      pickerClosedAt.current = Date.now();
+      window.removeEventListener("focus", done);
+      target.removeEventListener("cancel", done);
+      target.removeEventListener("change", done);
+    };
+    window.addEventListener("focus", done);
+    target.addEventListener("cancel", done);
+    target.addEventListener("change", done);
+  };
   // Backdrop clicks target the dialog itself, as do its scrollbars, so use position.
   const onBackdrop = (e: MouseEvent<HTMLDialogElement>) => {
     if (e.target !== ref.current) return false;
@@ -782,15 +804,21 @@ function Modal({
         )
       }
       onMouseDown={(e) => {
-        pressedBackdrop.current = onBackdrop(e) && !helpWasOpen.current;
+        pressedBackdrop.current =
+          onBackdrop(e) && !helpWasOpen.current && !pickerBusy();
       }}
+      onClickCapture={(e) => openedPicker(e.target)}
       onClick={(e) => {
         // A drag that starts inside, such as selecting text, must not close it.
-        if (pressedBackdrop.current && onBackdrop(e)) close();
+        if (pressedBackdrop.current && onBackdrop(e) && !pickerBusy()) close();
         pressedBackdrop.current = false;
       }}
       onCancel={(e) => {
+        // A file input fires a bubbling cancel when its picker is dismissed;
+        // only a cancel aimed at the dialog itself (Escape) closes it.
+        if (e.target !== e.currentTarget) return;
         e.preventDefault();
+        if (pickerBusy()) return;
         close();
       }}
       aria-label={title}
@@ -3447,6 +3475,7 @@ function Editor({
                   multiple
                   hidden
                   aria-label="Attach files to the comment"
+                  onCancel={(e) => e.stopPropagation()}
                   onChange={(e) => {
                     const files = Array.from(e.target.files ?? []);
                     e.target.value = "";

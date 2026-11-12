@@ -161,6 +161,41 @@ it("closes an overlay on a backdrop click but not on a drag from inside", async 
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(location.hash).toBe("#/tasks");
 });
+it("keeps the dialog and the draft comment when a file picker is cancelled", async () => {
+  history.replaceState(null, "", "/#/tasks/task00000000001?tab=comments");
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  let now = 1_000_000;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  render(<CrewWorkspace />);
+  const dialog = await screen.findByRole("dialog");
+  const box = await within(dialog).findByPlaceholderText(
+    "Paste or drop screenshots here",
+  );
+  fireEvent.change(box, { target: { value: "Half-written comment" } });
+  const input = within(dialog).getByLabelText("Attach files to the comment");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Attach files" }));
+  // Dismissing the native picker fires a bubbling cancel on the input, and a
+  // stray Escape or backdrop click may follow.
+  fireEvent(input, new Event("cancel", { bubbles: true, cancelable: true }));
+  fireEvent(dialog, new Event("cancel", { cancelable: true }));
+  const outside = { clientX: -5, clientY: -5 };
+  fireEvent.mouseDown(dialog, outside);
+  fireEvent.click(dialog, outside);
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(box).toHaveValue("Half-written comment");
+  expect(confirm).not.toHaveBeenCalled();
+  // A cancel bubbling from any file input never closes the dialog by itself.
+  now += 5_000;
+  const other = document.createElement("input");
+  other.type = "file";
+  dialog.appendChild(other);
+  fireEvent(other, new Event("cancel", { bubbles: true, cancelable: true }));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  other.remove();
+  // Escape on the dialog itself still closes it once the picker is gone.
+  fireEvent(dialog, new Event("cancel", { cancelable: true }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
 it("asks before discarding edits, and only when something changed", async () => {
   history.replaceState(null, "", "/#/tasks/task00000000001");
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);

@@ -918,6 +918,7 @@ export function AttachmentsSection({
               multiple
               hidden
               aria-label="Choose files to add"
+              onCancel={(e) => e.stopPropagation()}
               onChange={onPick}
             />
           </>
