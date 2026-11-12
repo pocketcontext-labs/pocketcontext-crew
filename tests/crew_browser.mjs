@@ -85,7 +85,11 @@ try {
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch post');
  await dialog().getByLabel('Description',{exact:true}).fill('Introduce our product in our voice.');
  await dialog().getByLabel('Assigned agent',{exact:true}).selectOption({label:'Network'});
- await dialog().getByLabel('Labels (comma separated)').fill('Network, Launch');
+ const labels=dialog().getByLabel('Labels',{exact:true});
+ await labels.fill('Network');await labels.press('Enter');
+ await labels.fill('Launch,');
+ await dialog().getByRole('button',{name:'Remove label Network'}).waitFor();
+ await dialog().getByRole('button',{name:'Remove label Launch'}).waitFor();
  await dialog().getByLabel('Draft for review',{exact:true}).fill('A synthetic draft for the owner to publish manually.');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch post/}).click();

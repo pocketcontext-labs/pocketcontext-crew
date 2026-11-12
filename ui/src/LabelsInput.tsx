@@ -180,7 +180,17 @@ export default function LabelsInput({
           // Typing is not an edit until it becomes a chip.
           onChange={(e) => {
             e.stopPropagation();
-            setText(e.target.value);
+            const next = e.target.value;
+            // A comma that arrives without a key press (autocorrect, mobile
+            // keyboards, scripted input) still finishes the labels before it.
+            if (/[,\n]/.test(next)) {
+              const parts = next.split(/[,\n]/);
+              const rest = parts.pop() ?? "";
+              add(parts);
+              setText(rest);
+              return;
+            }
+            setText(next);
             setActive(-1);
             setSelected(null);
           }}

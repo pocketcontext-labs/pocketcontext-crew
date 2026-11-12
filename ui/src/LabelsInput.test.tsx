@@ -66,3 +66,11 @@ it("shows chips without remove buttons when disabled", () => {
   expect(screen.queryByRole("button")).toBeNull();
   expect(input()).toBeDisabled();
 });
+
+it("turns a comma that arrives without a key press into chips", () => {
+  const changed = vi.fn();
+  render(<Harness onChange={changed} />);
+  fireEvent.change(input(), { target: { value: "Network, launch, Ne" } });
+  expect(changed).toHaveBeenLastCalledWith(["Network", "Launch"]);
+  expect(input()).toHaveValue(" Ne");
+});
