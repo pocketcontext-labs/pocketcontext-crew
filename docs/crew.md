@@ -421,6 +421,11 @@ Needs review for In progress and goes on hold (`waiting`, hold reason
 `Review withdrawn`), its wake generation advances and nothing wakes. `review.decide` also refuses when the snapshot no longer
 matches. Approval therefore covers exactly the draft and files the owner saw.
 
+Every decision returns the task to In progress. Request changes also makes it
+Ready and clears any hold reason, so its bot assignee wakes with
+`review_outcome`; approval, rejection and withdrawal keep the readiness the
+task had (see docs/webhooks.md).
+
 ### Wakes
 
 Attachment writes, including uploads through a link, never wake anyone and do

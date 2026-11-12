@@ -50,7 +50,7 @@ const pageEntries = {
     question: "What are approvals?",
     what: "Drafts waiting for your decision, and your past decisions. Approving never sends or publishes anything.",
     action:
-      "Open a draft, then Approve, Request changes or Reject it. Whatever you decide, the task goes back to In progress.",
+      "Open a draft, then Approve, Request changes or Reject it. Whatever you decide, the task goes back to In progress. Request changes also makes it Ready, so its bot picks the work up again.",
   },
   agents: {
     name: "Agents",

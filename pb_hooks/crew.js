@@ -1391,6 +1391,18 @@ function write(e, isAgent) {
       app.save(r);
       if (!isAgent) ownerTouch(t);
       t.set("status", "in_progress");
+      // Request changes hands the work back: the task is Ready (any earlier
+      // hold reason is stale) so the assignee wakes with review_outcome. A
+      // withdrawal, approval or rejection keeps the readiness it had, and a
+      // work client cannot lift a bot hand-off limit stop this way.
+      if (
+        op === "decide" &&
+        d.decision === "changes_requested" &&
+        !t.getBool("handoff_limited")
+      ) {
+        t.set("readiness", "ready");
+        t.set("waiting_reason", "");
+      }
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
       webhooks.transition(app, t, oldTask, { outcome: r.getString("status") });

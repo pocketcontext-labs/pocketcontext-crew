@@ -341,6 +341,13 @@ an active bot recipient, a mapping and an enabled subscribed integration can emi
 wake. The task and outbox record commit atomically. A persisted governance marker
 is set at enqueue, before any worker acquires the event.
 
+Request changes (`review.decide` with `changes_requested`) hands the work back:
+the task returns to In progress and becomes Ready with no hold reason, even if
+it was on hold, so the assignee wakes with `review_outcome`. A task stopped by
+the bot hand-off limit stays on hold when a work client decides; the owner's
+decision resets the limit as any reader write does. Withdrawing, approving and
+rejecting keep the task's readiness, so a held task stays held and does not wake.
+
 Work-client task writes (`task.update`, `task.claim`, `task.comment`,
 `review.request`, `review.withdraw`, `review.decide`) need execution proof only
 while a live execution holds the task: `dispatching` or `running` with an unexpired
