@@ -76,8 +76,13 @@ func TestMCPPublicHostedLoopbackListener(t *testing.T) {
 	})
 	deadline := time.Now().Add(15 * time.Second)
 	for {
+		// Health answers on the local socket before the dev HTTP listener may be
+		// up (slow macOS runners), so wait for both.
 		if _, err = appserver.Health(p); err == nil {
-			break
+			if c, dialErr := net.DialTimeout("tcp", address, time.Second); dialErr == nil {
+				c.Close()
+				break
+			}
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("server did not become healthy")
