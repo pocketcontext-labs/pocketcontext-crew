@@ -749,6 +749,11 @@ describe("comments", () => {
     fireEvent.click(dialog.getByRole("tab", { name: "Activity" }));
     return dialog;
   };
+  const openComments = async () => {
+    const dialog = await openTask();
+    fireEvent.click(dialog.getByRole("tab", { name: /^Comments/ }));
+    return dialog;
+  };
   it("renders comment Markdown with inline images that open the viewer, and never runs HTML", async () => {
     attachments = [att("img1", { name: "bug.png" })];
     fixtures.events = [
@@ -783,6 +788,28 @@ describe("comments", () => {
       "/api/crew/attachment?id=img1&token=tok",
     );
   });
+  it("lists only comments, with a count, and labels history in plain words", async () => {
+    fixtures.events = [
+      { id: "ev1", revision: 1, action: "task.comment", actor: "owner", reported_agent: "Build", body: "Looks **good**" },
+      { id: "ev2", revision: 1, action: "task.update", actor: "owner", reason: "Retitled" },
+      { id: "ev3", revision: 1, action: "review.request", actor: "owner" },
+    ];
+    const dialog = await openTask();
+    const tab = await dialog.findByRole("tab", { name: /^Comments/ });
+    await waitFor(() => expect(tab).toHaveTextContent("Comments1"));
+    fireEvent.click(tab);
+    const list = within(dialog.getByRole("list", { name: "Comments" }));
+    expect(list.getAllByRole("listitem")).toHaveLength(1);
+    expect(list.getByText("good")).toContainHTML("<strong>good</strong>");
+    expect(list.getByText("Build")).toBeInTheDocument();
+    expect(dialog.queryByText("Retitled")).toBeNull();
+    expect(dialog.getByLabelText("Add a comment")).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("tab", { name: "Activity" }));
+    expect(dialog.queryByLabelText("Add a comment")).toBeNull();
+    for (const label of ["Comment", "Updated", "Review requested"])
+      expect(dialog.getByText(label)).toBeInTheDocument();
+    expect(dialog.queryByText("task.comment")).toBeNull();
+  });
   it("uploads a pasted screenshot into the comment and waits for it before posting", async () => {
     let finish: (v: {
       attachment: Attachment;
@@ -794,7 +821,7 @@ describe("comments", () => {
           finish = resolve;
         }),
     );
-    const dialog = await openActivity();
+    const dialog = await openComments();
     const box = dialog.getByLabelText("Add a comment") as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: "See " } });
     box.setSelectionRange(4, 4);
@@ -827,7 +854,7 @@ describe("comments", () => {
       attachment: att(`up${++n}`, { name: file.name }),
       review_withdrawn: false,
     }));
-    const dialog = await openActivity();
+    const dialog = await openComments();
     const box = dialog.getByLabelText("Add a comment") as HTMLTextAreaElement;
     fireEvent.drop(box, {
       dataTransfer: { files: [png("drop.png")], types: ["Files"] },

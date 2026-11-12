@@ -45,7 +45,7 @@ import {
   doneColumn,
   isClosed,
 } from "./closedTasks";
-import StartSession from "./StartSession";
+import StartSession, { SessionToast, type SessionStart } from "./StartSession";
 import SessionInstructions from "./SessionInstructions";
 import {
   clearedBoard,
@@ -70,6 +70,7 @@ import {
   claimOf,
   claimLabel,
   claimTitle,
+  copyText,
   webhookConfigured,
   type AgentKind,
 } from "./projectAgents";
@@ -112,6 +113,9 @@ import {
   isItemHash,
   itemPath,
   itemShareUrl,
+  itemTabPath,
+  taskTabs,
+  type TaskTab,
   legacyRedirect,
   noteSorts,
   parseItemHash,
@@ -365,14 +369,8 @@ function CopyLink({
   copiedLabel?: string;
 }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(target);
-      setState("copied");
-    } catch {
-      setState("failed");
-    }
-  };
+  // One copy helper for the reader: the Clipboard API, then the copy command.
+  const copy = async () => setState((await copyText(target)) ? "copied" : "failed");
   return (
     <span className="crew-copy-link">
       <button type="button" onClick={() => void copy()}>
@@ -555,71 +553,142 @@ function MarkdownField({
     </div>
   );
 }
-function RelatedNotes({
-  notes,
+type Related = { id: string; kind: ItemKind; row?: Row };
+/**
+ * Links (0.24.0) name tasks or notes. `linked` are this record's own links in
+ * order; `linkedFrom` are other records that link here and aren't linked back,
+ * so a relationship shows on both sides without writing it twice.
+ */
+function relatedItems(
+  data: Data,
+  currentId: string | undefined,
+  links: string[],
+): { linked: Related[]; linkedFrom: Related[] } {
+  const find = (id: string): Related => {
+    const task = (data.tasks || []).find((x) => x.id === id);
+    if (task) return { id, kind: "task", row: task };
+    const note = (data.notes || []).find((x) => x.id === id);
+    return { id, kind: "note", row: note };
+  };
+  const linked = links.map(find);
+  const linkedFrom: Related[] = [];
+  if (currentId)
+    for (const kind of ["task", "note"] as const)
+      for (const row of data[`${kind}s`] || [])
+        if (
+          row.id !== currentId &&
+          !links.includes(row.id) &&
+          list(row, "links").includes(currentId)
+        )
+          linkedFrom.push({ id: row.id, kind, row });
+  return { linked, linkedFrom };
+}
+const kindName = (kind: ItemKind) => (kind === "task" ? "Task" : "Note");
+/** A related task or note by title, linking to its permanent address. */
+function RelatedLink({
+  item,
+  open,
+}: {
+  item: Related;
+  open: (kind: ItemKind, row: Row) => void;
+}) {
+  const { row, kind } = item;
+  if (!row) return <span className="crew-related-missing">Unavailable item</span>;
+  const title = val(row, "title") || "Untitled";
+  return (
+    <span className="crew-related-item">
+      <span className="crew-related-kind">{kindName(kind)}</span>
+      <a
+        href={itemPath(kind, row)}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+          e.preventDefault();
+          open(kind, row);
+        }}
+      >
+        {title}
+      </a>
+      {row.archived ? <span className="crew-related-archived">archived</span> : null}
+    </span>
+  );
+}
+function RelatedItems({
+  data,
   currentId,
   links,
   setLinks,
   readOnly,
+  open,
 }: {
-  notes: Row[];
+  data: Data;
   currentId?: string;
   links: string;
   setLinks: (next: string) => void;
   readOnly: boolean;
+  open: (kind: ItemKind, row: Row) => void;
 }) {
   const [query, setQuery] = useState("");
-  const linked = links.split("\n").filter(Boolean);
-  const others = notes.filter((note) => note.id !== currentId);
+  const ids = links.split("\n").filter(Boolean);
+  const { linked, linkedFrom } = relatedItems(data, currentId, ids);
+  const candidates: Related[] = [
+    ...(data.tasks || []).map((row) => ({ id: row.id, kind: "task" as const, row })),
+    ...(data.notes || []).map((row) => ({ id: row.id, kind: "note" as const, row })),
+  ].filter((x) => x.id !== currentId && !x.row.archived);
   const needle = query.trim().toLowerCase();
   const results = needle
-    ? others
+    ? candidates
         .filter(
-          (note) =>
-            !linked.includes(note.id) &&
-            val(note, "title").toLowerCase().includes(needle),
+          (x) =>
+            !ids.includes(x.id) &&
+            val(x.row, "title").toLowerCase().includes(needle),
         )
         .slice(0, 8)
     : [];
-  const label = (note: Row) =>
-    `${val(note, "title")}${note.archived ? " (archived)" : ""}`;
   return (
-    <fieldset className="crew-related" aria-label="Related notes">
+    <fieldset className="crew-related" aria-label="Related">
       <legend>
-        <span>Related notes</span>
+        <span>Related</span>
         {!readOnly && <Help topic="related-memory" />}
       </legend>
       {linked.length > 0 && (
-        <ul className="crew-related-linked">
-          {linked.map((id) => {
-            const note = notes.find((x) => x.id === id);
-            const text = note ? label(note) : "Unavailable note";
-            return (
-              <li key={id}>
-                <span>{text}</span>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    className="crew-quiet"
-                    aria-label={`Remove ${text}`}
-                    onClick={() =>
-                      setLinks(linked.filter((x) => x !== id).join("\n"))
-                    }
-                  >
-                    Remove
-                  </button>
-                )}
-              </li>
-            );
-          })}
+        <ul className="crew-related-linked" aria-label="Links">
+          {linked.map((item) => (
+            <li key={item.id}>
+              <RelatedLink item={item} open={open} />
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="crew-quiet"
+                  aria-label={`Remove ${item.row ? val(item.row, "title") : "unavailable item"}`}
+                  onClick={() =>
+                    setLinks(ids.filter((x) => x !== item.id).join("\n"))
+                  }
+                >
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
         </ul>
       )}
-      {!readOnly && others.length > 0 && (
+      {linkedFrom.length > 0 && (
+        <>
+          <h4 className="crew-related-heading">Linked from</h4>
+          <ul className="crew-related-linked" aria-label="Linked from">
+            {linkedFrom.map((item) => (
+              <li key={item.id}>
+                <RelatedLink item={item} open={open} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {!readOnly && candidates.length > 0 && (
         <label className="crew-field crew-related-search">
-          <span>Add related note</span>
+          <span>Link a task or note</span>
           <input
             type="search"
-            placeholder="Search your notes"
+            placeholder="Search tasks and notes"
             value={query}
             // Searching is not an edit to the record.
             onChange={(e) => {
@@ -631,23 +700,26 @@ function RelatedNotes({
       )}
       {results.length > 0 && (
         <ul className="crew-related-results">
-          {results.map((note) => (
-            <li key={note.id}>
+          {results.map((x) => (
+            <li key={x.id}>
               <button
                 type="button"
                 onClick={() => {
-                  setLinks([...linked, note.id].join("\n"));
+                  setLinks([...ids, x.id].join("\n"));
                   setQuery("");
                 }}
               >
-                {label(note)}
+                <span className="crew-related-kind">{kindName(x.kind)}</span>{" "}
+                {val(x.row, "title")}
               </button>
             </li>
           ))}
         </ul>
       )}
-      {needle && !results.length && <p>No matching notes.</p>}
-      {!others.length && !linked.length && <p>No other notes yet.</p>}
+      {needle && !results.length && <p>No matching tasks or notes.</p>}
+      {!candidates.length && !linked.length && !linkedFrom.length && (
+        <p>Nothing to link yet.</p>
+      )}
     </fieldset>
   );
 }
@@ -803,12 +875,20 @@ export default function CrewWorkspace() {
         copiedLabel="Address copied"
       />
     ) : null;
-  const [dialog, setDialog] = useState<{ kind: Kind; row?: Row } | null>(null),
+  const [dialog, setDialog] = useState<{
+      kind: Kind;
+      row?: Row;
+      /** A task tab asked for by the address, with a counter to repeat it. */
+      tab?: TaskTab;
+      tabAsk?: number;
+    } | null>(null),
     // An external agent's full session instructions, read by Start a session.
     [instructions, setInstructions] = useState<{
       name: string;
       session: AgentSession;
     } | null>(null),
+    // The toast after Start a session (0.24.0).
+    [sessionStart, setSessionStart] = useState<SessionStart | null>(null),
     // Set per hash navigation and consumed once, so data refreshes never open a dialog.
     [pendingLink, setPendingLink] = useState(() =>
       parseItemHash(location.hash),
@@ -1017,16 +1097,21 @@ export default function CrewWorkspace() {
   useEffect(() => {
     if (!pendingLink || !ready) return;
     setPendingLink(null);
-    const { kind, id } = pendingLink;
+    const { kind, id, tab } = pendingLink;
     const collection = kind === "task" ? "tasks" : "notes";
     const row = [...data[collection], ...archived[collection]].find(
       (x) => x.id === id,
     );
     if (!row) return;
-    setAddress(itemPath(kind, row));
-    // Navigating to the open item must not disturb its in-progress edits.
+    setAddress(itemTabPath(itemPath(kind, row), tab));
+    // Navigating to the open item must not disturb its in-progress edits; a
+    // tab in the address still switches to it.
     setDialog((open) =>
-      open?.kind === kind && open.row?.id === id ? open : { kind, row },
+      open?.kind === kind && open.row?.id === id
+        ? tab
+          ? { ...open, tab, tabAsk: (open.tabAsk || 0) + 1 }
+          : open
+        : { kind, row, tab },
     );
   }, [pendingLink, ready, data, archived]);
   // The section query is consumed once: drop it from the address so a refresh
@@ -1058,6 +1143,7 @@ export default function CrewWorkspace() {
     const timer = setTimeout(() => setHighlightColumn(""), 1200);
     return () => clearTimeout(timer);
   }, [highlightColumn]);
+  const dismissSessionStart = useCallback(() => setSessionStart(null), []);
   const openItem = (kind: ItemKind, row: Row) => {
     pushAddress(itemPath(kind, row));
     setDialog({ kind, row });
@@ -1672,6 +1758,7 @@ export default function CrewWorkspace() {
               invalidAssignment={invalidAssignment}
               connection={connection}
               copyEndpoint={copyEndpoint}
+              onStartSession={setSessionStart}
             />
           )}
           {view === "guide" && <Guide />}
@@ -2104,12 +2191,7 @@ export default function CrewWorkspace() {
                       </p>
                     </button>
                     {agentKind(x) === "external" && (
-                      <StartSession
-                        agent={x}
-                        showInstructions={(session) =>
-                          setInstructions({ name: val(x, "name"), session })
-                        }
-                      />
+                      <StartSession agent={x} onStart={setSessionStart} />
                     )}
                   </div>
                 ))}
@@ -2203,6 +2285,21 @@ export default function CrewWorkspace() {
           </button>
         </footer>
       </main>
+      {sessionStart && (
+        <SessionToast
+          key={`${sessionStart.name}-${sessionStart.state}-${sessionStart.prompt}`}
+          start={sessionStart}
+          dismiss={dismissSessionStart}
+          view={() => {
+            const { name, session } = sessionStart;
+            setSessionStart(null);
+            void session?.then(
+              (next) => setInstructions({ name, session: next }),
+              () => undefined,
+            );
+          }}
+        />
+      )}
       {instructions && (
         <Modal
           title={`Session instructions for ${instructions.name}`}
@@ -2273,12 +2370,16 @@ export default function CrewWorkspace() {
               agents: [...data.agents, ...archived.agents],
               buckets: [...data.buckets, ...archived.buckets],
               notes: [...data.notes, ...archived.notes],
+              tasks: [...data.tasks, ...archived.tasks],
             }}
             archiveNotice={archiveNotice}
             onEdit={() => {
               edited.current = true;
             }}
-            openNote={(note) => openItem("note", note)}
+            openRelated={(kind, target) => {
+              if (target.id === dialog.row?.id || !discardOk()) return;
+              openItem(kind, target);
+            }}
             wakeMissing={
               dialog.kind === "task" && !!dialog.row && wakeMissing.has(dialog.row.id)
             }
@@ -2303,10 +2404,14 @@ export default function CrewWorkspace() {
 type EditorProps = {
   kind: Kind;
   row?: Row;
+  /** The task tab the address asked for, and a counter to switch again. */
+  tab?: TaskTab;
+  tabAsk?: number;
   data: Data;
   archiveNotice?: string;
   onEdit: () => void;
-  openNote: (note: Row) => void;
+  /** Opens a related task or note, after confirming unsaved changes. */
+  openRelated: (kind: ItemKind, row: Row) => void;
   /** An overdue wake for this task was never received. */
   wakeMissing?: boolean;
   busy: boolean;
@@ -2364,10 +2469,12 @@ function formValues(kind: Kind, row: Row | undefined, data: Data) {
 function Editor({
   kind,
   row,
+  tab: askedTab,
+  tabAsk = 0,
   data,
   archiveNotice = "",
   onEdit,
-  openNote,
+  openRelated,
   wakeMissing = false,
   busy,
   error,
@@ -2380,10 +2487,28 @@ function Editor({
 }: EditorProps) {
   const readOnly = !!archiveNotice;
   const root = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState(kind === "note" && row ? "read" : "edit"),
+  const [tab, setTabState] = useState<string>(
+      kind === "note" && row ? "read" : kind === "task" && row && askedTab ? askedTab : "edit",
+    ),
     [history, setHistory] = useState<Row[]>([]),
     [events, setEvents] = useState<Row[]>([]),
     [relatedError, setRelatedError] = useState("");
+  const comments = events.filter(
+    (x) => val(x, "action") === "task.comment" && val(x, "body"),
+  );
+  // A task's tab follows into its address (`?tab=comments`), so Copy link and
+  // a reload keep it; the address changes only while it names this task.
+  const setTab = (next: string) => {
+    setTabState(next);
+    if (kind !== "task" || !row) return;
+    const link = parseItemHash(location.hash);
+    if (link?.kind === "task" && link.id === row.id)
+      setAddress(itemTabPath(location.hash, next));
+  };
+  useEffect(() => {
+    if (kind === "task" && row && askedTab && tabAsk) setTabState(askedTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabAsk]);
   const [start] = useState(() => formValues(kind, row, data));
   const [title, setTitle] = useState(start.title),
     [body, setBody] = useState(start.body),
@@ -2816,7 +2941,7 @@ function Editor({
       )}
       {row && kind === "task" && (
         <div className="crew-tabs" role="tablist" aria-label="Record views">
-          {["edit", "activity", "reviews"].map((key) => (
+          {taskTabs.map((key) => (
             <button
               key={key}
               role="tab"
@@ -2826,6 +2951,11 @@ function Editor({
               {readOnly && key === "edit"
                 ? "Details"
                 : key[0].toUpperCase() + key.slice(1)}
+              {key === "comments" && (
+                <span className="crew-tab-count" aria-label={`, ${comments.length}`}>
+                  {comments.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -2871,28 +3001,36 @@ function Editor({
                 </div>
               </div>
             </div>
-            {list(row, "links").length > 0 && (
-              <section className="crew-linked-notes">
-                <h3>Related notes</h3>
-                {list(row, "links").map((id) => {
-                  const target = data.notes.find((note) => note.id === id);
-                  return (
-                    <div key={id}>
-                      {target && !target.archived ? (
-                        <button onClick={() => openNote(target)}>
-                          {val(target, "title")} →
-                        </button>
-                      ) : (
-                        <span>
-                          {target ? val(target, "title") : "Unavailable note"}{" "}
-                          (archived or unavailable)
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </section>
-            )}
+            {(() => {
+              const rel = relatedItems(data, row?.id, list(row, "links"));
+              if (!rel.linked.length && !rel.linkedFrom.length) return null;
+              return (
+                <section className="crew-linked-notes" aria-label="Related">
+                  <h3>Related</h3>
+                  {rel.linked.length > 0 && (
+                    <ul className="crew-related-linked">
+                      {rel.linked.map((item) => (
+                        <li key={item.id}>
+                          <RelatedLink item={item} open={openRelated} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {rel.linkedFrom.length > 0 && (
+                    <>
+                      <h4 className="crew-related-heading">Linked from</h4>
+                      <ul className="crew-related-linked">
+                        {rel.linkedFrom.map((item) => (
+                          <li key={item.id}>
+                            <RelatedLink item={item} open={openRelated} />
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </section>
+              );
+            })()}
           </article>
           {filesSection}
           {more}
@@ -3024,16 +3162,17 @@ function Editor({
                 status={inlineStatus("body")}
               />
             ) : (
-              <Field
+              // Briefs and purposes are Markdown (0.24.0): Read and Edit like a
+              // task description, opening in Read when there is text.
+              <MarkdownField
                 label={kind === "agent" ? "Agent brief" : "Purpose"}
-                help={kind === "agent" ? help("brief") : undefined}
-              >
-                <GrowingTextarea
-                  className={kind === "agent" ? "crew-long-text" : ""}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                />
-              </Field>
+                help={
+                  kind === "agent" && help("brief") ? <Help topic="brief" /> : undefined
+                }
+                className={kind === "agent" ? "crew-long-text" : ""}
+                value={body}
+                onChange={setBody}
+              />
             )}
             {kind === "task" && (
               <>
@@ -3131,11 +3270,12 @@ function Editor({
               </>
             )}
             {(kind === "note" || kind === "task") && (
-              <RelatedNotes
-                notes={data.notes}
+              <RelatedItems
+                data={data}
                 currentId={row?.id}
                 links={links}
                 readOnly={readOnly}
+                open={openRelated}
                 setLinks={(next) => {
                   setLinks(next);
                   onEdit();
@@ -3263,7 +3403,7 @@ function Editor({
             })}
         </>
       )}
-      {tab === "activity" && (
+      {tab === "comments" && (
         <>
           {!readOnly && (
             <form
@@ -3335,6 +3475,27 @@ function Editor({
               </div>
             </form>
           )}
+          {comments.length ? (
+            <ol className="crew-timeline crew-comments" aria-label="Comments">
+              {comments.map((x) => (
+                <li key={x.id}>
+                  <small>
+                    <strong>{eventSummary(x).by}</strong> · {when(x.created)}
+                  </small>
+                  {/* Sanitized Markdown: raw HTML is shown as text, never run. */}
+                  <div className="crew-comment-body">
+                    <Prose>{val(x, "body")}</Prose>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="crew-empty-note">No comments yet.</p>
+          )}
+        </>
+      )}
+      {tab === "activity" && (
+        <>
           <ol className="crew-timeline">
             {events.map((x) => {
               const summary = eventSummary(x);

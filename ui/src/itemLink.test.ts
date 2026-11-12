@@ -11,6 +11,7 @@ import {
   legacyRedirect,
   loginReturnHash,
   parseItemHash,
+  itemTabPath,
   viewFromHash,
   viewStateFromHash,
   viewStateHash,
@@ -235,6 +236,24 @@ describe("Tasks and Notes address state", () => {
     });
     expect(viewStateFromHash("#/notes/voice-guide-note00000000001")).toEqual(
       defaultViewState,
+    );
+  });
+  it("opens a task on a tab named in its link", () => {
+    expect(parseItemHash("#/tasks/launch-post-task00000000001?tab=comments")).toEqual({
+      kind: "task",
+      id: "task00000000001",
+      tab: "comments",
+    });
+    expect(parseItemHash("#/tasks/task00000000001?tab=reviews")?.tab).toBe("reviews");
+    // Unknown tabs, other queries and note tabs stay malformed.
+    expect(parseItemHash("#/tasks/task00000000001?tab=nope")).toBeNull();
+    expect(parseItemHash("#/tasks/task00000000001?tab=comments&x=1")).toBeNull();
+    expect(parseItemHash("#/notes/note00000000001?tab=comments")).toBeNull();
+    expect(itemTabPath("#/tasks/a-task00000000001", "comments")).toBe(
+      "#/tasks/a-task00000000001?tab=comments",
+    );
+    expect(itemTabPath("#/tasks/a-task00000000001?tab=comments", "edit")).toBe(
+      "#/tasks/a-task00000000001",
     );
   });
   it("remembers a canonical filtered page across sign-in", () => {

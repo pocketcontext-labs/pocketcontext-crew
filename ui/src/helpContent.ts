@@ -116,7 +116,7 @@ const glossaryEntries = {
     question: "What does In progress mean?",
     what: "Work that has started. A task also comes back here after you decide on its draft, whatever you decided.",
     action:
-      "Open a task and use its Activity tab to follow it. After an approval, do any step outside Crew yourself.",
+      "Open a task and use its Comments tab for the conversation and Activity for the full history. After an approval, do any step outside Crew yourself.",
   },
   "needs-review": {
     name: "Needs review",
@@ -180,11 +180,11 @@ const glossaryEntries = {
       "Keep what's worth remembering. Use History to see earlier versions; restoring one adds a new revision.",
   },
   "related-memory": {
-    name: "Related notes",
-    question: "What are related notes?",
-    what: "Links from this item to other notes, so you and your agents can find the background.",
+    name: "Related",
+    question: "What are related tasks and notes?",
+    what: "Links from this item to other tasks and notes, so you and your agents can find the background. Items that link here show under Linked from.",
     action:
-      "Search for a note and add it. Linking doesn't change the note you link to.",
+      "Search for a task or note and add it. Linking doesn't change the item you link to, but it shows this item under Linked from.",
   },
   draft: {
     name: "Draft",

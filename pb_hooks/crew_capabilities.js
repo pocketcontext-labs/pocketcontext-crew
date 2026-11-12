@@ -35,6 +35,13 @@ const optionDecisions = {
   ),
 };
 const strings = { type: "array", items: str };
+// Links (0.24.0): task or note IDs on tasks and notes alike.
+const linkIds = {
+  type: "array",
+  items: str,
+  description:
+    "Task or note IDs (15 characters). Unknown or malformed IDs are refused with 400 unknown_link naming the ID; a record cannot link to itself. Readers show links both ways.",
+};
 const nullable = { type: ["string", "null"] };
 const proof = object({ id: str, worker_id: str, fence: num }, [
   "id",
@@ -145,7 +152,7 @@ function document() {
     bucket: str,
     title: str,
     body: str,
-    links: strings,
+    links: linkIds,
     archived: bool,
   };
   const task = {
@@ -159,7 +166,7 @@ function document() {
         "Done and wont_do (Won't do) are terminal: they end any claim, never wake a bot and leaving either reopens the task. Enter needs_review only with review.request.",
     },
     draft: str,
-    links: strings,
+    links: linkIds,
     archived: bool,
     readiness: {
       enum: ["waiting", "on_hold", "ready"],

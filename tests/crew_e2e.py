@@ -443,6 +443,15 @@ def scenario(pc):
     assert task['status'] == 'todo' and task['created_by_agent'] == 'Network'
     for label in ['Human', 'human', 'HUMAN']:
         write('task.update', {'labels': [label]}, task, expected=400)
+    # Links (0.24.0): tasks link to tasks and notes; unknown ids name themselves.
+    sibling = write('task.create', {'title': 'Sibling ticket', 'links': [task['id'], note['id']]})
+    assert sibling['links'] == [task['id'], note['id']], sibling
+    missing = write('task.update', {'links': ['zzzzzzzzzzzzzzz']}, sibling, expected=400)
+    assert 'zzzzzzzzzzzzzzz' in missing['message'] and 'unknown_link' in missing['message'], missing
+    assert 'unknown_link' in write('note.update', {'links': ['not-an-id']}, linked, expected=400)['message']
+    assert 'self_link' in write('task.update', {'links': [sibling['id']]}, sibling, expected=400)['message']
+    linked = write('note.update', {'links': [note['id'], sibling['id']]}, current('notes', linked))
+    assert linked['links'] == [note['id'], sibling['id']], linked
     # Two callers with the same read cannot both claim the task.
     payload = {'action': 'task.claim', 'id': task['id'], 'expected_revision': task['revision'], 'reported_agent': 'Network', 'data': {'assigned_agent': network['id']}}
     with ThreadPoolExecutor(max_workers=2) as pool:

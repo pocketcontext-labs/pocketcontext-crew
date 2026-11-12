@@ -4,6 +4,8 @@ import Help from "./Help";
 import { boardStatuses, val, type ConnectionState, type Row } from "./crewApi";
 import { isClosed } from "./closedTasks";
 import { longHolds, statusMatches } from "./boardFilters";
+import { agentKind } from "./projectAgents";
+import StartSession, { type SessionStart } from "./StartSession";
 export { longHolds } from "./boardFilters";
 import {
   boardStatusHash,
@@ -44,6 +46,7 @@ export default function Home({
   invalidAssignment,
   connection,
   copyEndpoint,
+  onStartSession,
 }: {
   data: Data;
   archived: Data;
@@ -57,7 +60,12 @@ export default function Home({
   invalidAssignment: (task: Row) => boolean;
   connection: ConnectionState;
   copyEndpoint: ReactNode;
+  /** One click on a Start a session button: the workspace shows the toast. */
+  onStartSession: (start: SessionStart) => void;
 }) {
+  // Agents the owner starts by hand (0.24.0); bots and people never appear,
+  // and data.agents holds only active agents.
+  const manual = data.agents.filter((agent) => agentKind(agent) === "external");
   const [connected, setConnected] = useState(() => stored(connectedKey));
   const [hidden, setHidden] = useState(() => stored(hiddenKey));
   if (!ready) return <p role="status">Loading your workspace…</p>;
@@ -215,6 +223,18 @@ export default function Home({
               </li>
             ))}
           </ol>
+        </section>
+      )}
+      {manual.length > 0 && (
+        <section className="crew-home-sessions" aria-label="Start a session">
+          {manual.map((agent) => (
+            <StartSession
+              key={agent.id}
+              agent={agent}
+              label={`Start a session · ${val(agent, "name")}`}
+              onStart={onStartSession}
+            />
+          ))}
         </section>
       )}
       <section aria-label="Needs you">

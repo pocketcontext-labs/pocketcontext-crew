@@ -203,11 +203,27 @@ function validateData(app, col, d, r) {
     active(app, "agents", d.responsible_agent);
   if (d.assigned_agent && d.assigned_agent !== r.getString("assigned_agent"))
     active(app, "agents", d.assigned_agent);
-  if (d.links)
-    for (const id of d.links) {
-      if (!/^[a-z0-9]{15}$/.test(id)) bad("Links must be note IDs");
-      get(app, "notes", id);
-    }
+  if (d.links) validateLinks(app, r, d.links);
+}
+// Links (0.24.0) name tasks or notes, on tasks and notes alike. An unknown or
+// malformed id is a 400 naming that id; a record cannot link to itself.
+function validateLinks(app, r, links) {
+  for (const id of links) {
+    if (!/^[a-z0-9]{15}$/.test(id))
+      bad("Link " + JSON.stringify(id) + " is not a task or note ID (unknown_link)");
+    if (r && r.id === id) bad("A record cannot link to itself (self_link)");
+    if (!linkTarget(app, id))
+      bad("Link " + id + " is not a task or note (unknown_link)");
+  }
+}
+function linkTarget(app, id) {
+  for (const col of ["tasks", "notes"]) {
+    try {
+      app.findRecordById("crew_" + col, id);
+      return col;
+    } catch (_) {}
+  }
+  return "";
 }
 // In-session approval (0.19.0). review_mode in_session records
 // that the owner approved the work in a coding session instead of a Crew

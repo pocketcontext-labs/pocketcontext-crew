@@ -346,10 +346,12 @@ it("sizes a long agent brief once its dialog is shown, and on rewrap", async () 
     fireEvent.click(
       (await screen.findByRole("heading", { name: "Network" })).closest("button")!,
     );
-    const field = within(await screen.findByRole("dialog")).getByLabelText(
-      "Agent brief",
-    ) as HTMLTextAreaElement;
+    const dialog = within(await screen.findByRole("dialog"));
+    const field = dialog.getByLabelText("Agent brief") as HTMLTextAreaElement;
     expect(field.style.height).toBe("auto");
+    // A non-empty brief opens in Read; Edit shows the growing editor.
+    expect(field).not.toBeVisible();
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     shown = true;
     width = 480;
     act(() => observers.forEach((cb) => cb([], {} as ResizeObserver)));
@@ -1338,7 +1340,7 @@ it("updates the address on click without a duplicate open, and not for new items
   window.removeEventListener("hashchange", listener);
 });
 
-it("updates the address when a linked note opens from a note's related notes", async () => {
+it("updates the address when a linked note opens from a note's related items", async () => {
   const source: Row = {
     ...linkedNote,
     id: "note00000000002",
@@ -1350,11 +1352,27 @@ it("updates the address when a linked note opens from a note's related notes", a
   history.replaceState(null, "", "/#/notes/source-note00000000002");
   render(<CrewWorkspace />);
   const dialog = within(await screen.findByRole("dialog"));
-  fireEvent.click(dialog.getByRole("button", { name: /Voice guide/ }));
+  fireEvent.click(dialog.getByRole("link", { name: "Voice guide" }));
   expect(location.hash).toBe("#/notes/voice-guide-note00000000001");
   expect(
     await dialog.findByRole("heading", { name: "Voice guide" }),
   ).toBeInTheDocument();
+});
+
+it("opens a task on its Comments tab from a ?tab=comments link", async () => {
+  fixtures.tasks = [linkedTask];
+  history.replaceState(null, "", "/#/tasks/launch-post-task00000000001?tab=comments");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  expect(dialog.getByRole("tab", { name: /^Comments/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(location.hash).toBe("#/tasks/launch-post-task00000000001?tab=comments");
+  fireEvent.click(dialog.getByRole("tab", { name: "Activity" }));
+  expect(location.hash).toBe("#/tasks/launch-post-task00000000001?tab=activity");
+  fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
+  expect(location.hash).toBe("#/tasks/launch-post-task00000000001");
 });
 
 it("shows an archived task read-only and explains how to restore it", async () => {
@@ -1589,13 +1607,13 @@ describe("simple dialogs", () => {
     fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     expect(dialog.queryByRole("checkbox")).toBeNull();
     expect(dialog.getByText("Pricing")).toBeInTheDocument();
-    expect(dialog.queryByRole("button", { name: "Launch checklist" })).toBeNull();
-    fireEvent.change(dialog.getByLabelText("Add related note"), {
+    expect(dialog.queryByRole("button", { name: "Note Launch checklist" })).toBeNull();
+    fireEvent.change(dialog.getByLabelText("Link a task or note"), {
       target: { value: "launch" },
     });
     // Searching alone is not an edit.
     expect(dialog.getByRole("button", { name: "Save note" })).toBeDisabled();
-    fireEvent.click(dialog.getByRole("button", { name: "Launch checklist" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Note Launch checklist" }));
     fireEvent.click(dialog.getByRole("button", { name: "Remove Pricing" }));
     fireEvent.click(dialog.getByRole("button", { name: "Save note" }));
     await waitFor(() =>
@@ -1608,16 +1626,51 @@ describe("simple dialogs", () => {
     );
   });
 
+  it("links tasks as well as notes and shows links both ways", async () => {
+    const task: Row = {
+      id: "task00000000077",
+      title: "Ship the launch",
+      status: "todo",
+      readiness: "ready",
+      labels: [],
+      links: [linkedNote.id],
+      revision: 1,
+      path: "#/tasks/ship-the-launch-task00000000077",
+    };
+    fixtures.tasks = [...(fixtures.tasks || []), task];
+    fixtures.notes = [linkedNote];
+    const dialog = await openNote();
+    // The note doesn't list the task, but the task links here.
+    const from = dialog.getByRole("region", { name: "Related" });
+    expect(within(from).getByText("Linked from")).toBeInTheDocument();
+    const link = within(from).getByRole("link", { name: "Ship the launch" });
+    expect(link).toHaveAttribute("href", task.path);
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
+    fireEvent.change(dialog.getByLabelText("Link a task or note"), {
+      target: { value: "ship" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Task Ship the launch" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Save note" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "note.update",
+        expect.objectContaining({ links: [task.id] }),
+        expect.anything(),
+        "",
+      ),
+    );
+  });
+
   it("asks before discarding a related-note change", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const other: Row = { ...linkedNote, id: "note00000000002", title: "Other" };
     fixtures.notes = [linkedNote, other];
     const dialog = await openNote();
     fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
-    fireEvent.change(dialog.getByLabelText("Add related note"), {
+    fireEvent.change(dialog.getByLabelText("Link a task or note"), {
       target: { value: "oth" },
     });
-    fireEvent.click(dialog.getByRole("button", { name: "Other" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Note Other" }));
     fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
     expect(confirm).toHaveBeenCalledTimes(1);
   });
@@ -2817,6 +2870,20 @@ describe("project agents and coding sessions", () => {
     await act(async () => answer([]));
     expect(group.getByRole("radio", { name: "Webhook (bot)" })).toBeChecked();
   });
+  it("shows the agent brief as Markdown in Read and edits it in Edit", async () => {
+    fixtures.agents = [{ ...fixtures.agents[0], brief: "## Rules\n\n- Work on `main`" }];
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      (await screen.findByRole("heading", { name: "Network" })).closest("button")!,
+    );
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByText("Markdown supported")).toBeInTheDocument();
+    expect(dialog.getByRole("tab", { name: "Read" })).toHaveAttribute("aria-selected", "true");
+    expect(dialog.getByRole("heading", { name: "Rules" })).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
+    expect(dialog.getByLabelText("Agent brief")).toBeVisible();
+  });
   it("changes an existing agent's kind and sends kind only when it changed", async () => {
     history.replaceState(null, "", "/#/agents");
     render(<CrewWorkspace />);
@@ -2882,35 +2949,37 @@ describe("project agents and coding sessions", () => {
         .querySelector(".crew-agent-kind"),
     ).toBeNull();
   });
-  it("Start a session copies the prompt and can show the full instructions", async () => {
+  it("Start a session copies the prompt in one click and confirms it in a toast", async () => {
     const session$ = vi.spyOn(crewApi, "session").mockResolvedValue(session);
     const writeText = mockClipboard(async () => undefined);
     history.replaceState(null, "", "/#/agents");
     render(<CrewWorkspace />);
+    // The session is read as the card renders, so the click copies at once.
+    await waitFor(() => expect(session$).toHaveBeenCalledWith(project.id));
+    const card = screen
+      .getByRole("heading", { name: "synthetic-repo" })
+      .closest(".crew-agent-tile") as HTMLElement;
+    const before = card.innerHTML;
     fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Start a session for synthetic-repo",
-      }),
+      screen.getByRole("button", { name: "Start a session for synthetic-repo" }),
     );
-    expect(
-      await screen.findByText(
-        "Copied. Paste it into a new Codex or Claude Code session.",
-      ),
-    ).toBeInTheDocument();
-    expect(session$).toHaveBeenCalledWith(project.id);
     expect(writeText).toHaveBeenCalledWith(session.prompt);
+    const toast = await screen.findByRole("status");
+    expect(toast).toHaveTextContent("Copied the session prompt for synthetic-repo.");
+    expect(within(toast).queryByRole("button", { name: /Undo/ })).toBeNull();
+    // Nothing stays on the card, and no tool is named.
+    expect(card.innerHTML).toBe(before);
+    expect(document.body.textContent).not.toMatch(/Codex|Claude Code/);
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Show full instructions" }),
-    );
+    fireEvent.click(within(toast).getByRole("button", { name: "View" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Session instructions for synthetic-repo",
     });
-    // The instructions open in their own dialog, not inside the agent card.
+    // One read when the card rendered and one for this start, none to open View.
+    expect(session$).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("status")).toBeNull();
     expect(within(dialog).getByText("one").tagName).toBe("STRONG");
-    expect(
-      screen.getByText("one").closest(".crew-agent-tile"),
-    ).toBeNull();
+    expect(screen.getByText("one").closest(".crew-agent-tile")).toBeNull();
     fireEvent.click(within(dialog).getByRole("button", { name: "Copy prompt" }));
     await waitFor(() =>
       expect(within(dialog).getByRole("button", { name: "Prompt copied" }))
@@ -2919,6 +2988,52 @@ describe("project agents and coding sessions", () => {
     expect(writeText).toHaveBeenLastCalledWith(session.prompt);
     fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+  it("Dismiss closes the Start a session toast and leaves the card as it was", async () => {
+    const session$ = vi.spyOn(crewApi, "session").mockResolvedValue(session);
+    mockClipboard(async () => undefined);
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    await waitFor(() => expect(session$).toHaveBeenCalled());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start a session for synthetic-repo" }),
+    );
+    const toast = await screen.findByRole("status");
+    fireEvent.click(within(toast).getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Start a session for synthetic-repo" }),
+    ).toHaveTextContent("Start a session");
+  });
+  it("offers Start a session on Home for active manually started agents only", async () => {
+    const session$ = vi.spyOn(crewApi, "session").mockResolvedValue(session);
+    const writeText = mockClipboard(async () => undefined);
+    serveArchived({
+      agents: [{ ...project, id: "agentarchived01", name: "old-repo", archived: true }],
+    });
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    const row = within(await screen.findByRole("region", { name: "Start a session" }));
+    const buttons = row.getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual([
+      "Start a session · synthetic-repo",
+    ]);
+    // No counts beside them.
+    expect(row.queryByText(/\d/)).toBeNull();
+    await waitFor(() => expect(session$).toHaveBeenCalledWith(project.id));
+    fireEvent.click(buttons[0]);
+    expect(writeText).toHaveBeenCalledWith(session.prompt);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Copied the session prompt for synthetic-repo.",
+    );
+  });
+  it("shows no Start a session row on Home without manual agents", async () => {
+    fixtures.agents = fixtures.agents.filter((a) => a.kind !== "external");
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    await screen.findByRole("region", { name: "Needs you" });
+    expect(screen.queryByRole("region", { name: "Start a session" })).toBeNull();
   });
   it("edits session instructions by hand, restores history and copies a rewrite prompt", async () => {
     vi.spyOn(crewApi, "session").mockResolvedValue(session);
@@ -2950,7 +3065,9 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Start a session for synthetic-repo" }),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Show full instructions" }));
+    fireEvent.click(
+      within(await screen.findByRole("status")).getByRole("button", { name: "View" }),
+    );
     const dialog = within(
       await screen.findByRole("dialog", { name: "Session instructions for synthetic-repo" }),
     );
@@ -3008,7 +3125,9 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Start a session for synthetic-repo" }),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Show full instructions" }));
+    fireEvent.click(
+      within(await screen.findByRole("status")).getByRole("button", { name: "View" }),
+    );
     const dialog = within(
       await screen.findByRole("dialog", { name: "Session instructions for synthetic-repo" }),
     );
@@ -3047,7 +3166,7 @@ describe("project agents and coding sessions", () => {
       }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Could not prepare the session prompt. Check your connection and try again.",
+      "Could not prepare the session prompt for synthetic-repo. Check your connection and try again.",
     );
     expect(screen.queryByText(/synthetic 500/)).toBeNull();
   });

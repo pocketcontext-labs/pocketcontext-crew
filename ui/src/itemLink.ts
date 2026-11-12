@@ -7,7 +7,10 @@ import {
 } from "./searchApi";
 
 export type ItemKind = "task" | "note";
-export type ItemLink = { kind: ItemKind; id: string };
+export type ItemLink = { kind: ItemKind; id: string; tab?: TaskTab };
+/** Task dialog views a link can open on: `#/tasks/<slug>?tab=comments`. */
+export const taskTabs = ["edit", "comments", "activity", "reviews"] as const;
+export type TaskTab = (typeof taskTabs)[number];
 
 export const viewHashes = {
   home: "#/",
@@ -244,11 +247,25 @@ export function isCanonicalViewStateHash(hash: string): boolean {
  * before it is the server's and is never interpreted here.
  */
 export function parseItemHash(hash: string): ItemLink | null {
-  const match = /^#\/(tasks|notes)\/([^/?#]+)$/.exec(hash);
+  // The only query an item link takes is a task tab (0.24.0); anything else
+  // makes the link malformed, as before.
+  const match =
+    /^#\/(tasks|notes)\/([^/?#]+)(?:\?tab=(edit|comments|activity|reviews))?$/.exec(
+      hash,
+    );
   if (!match) return null;
   const id = match[2].slice(match[2].lastIndexOf("-") + 1);
   if (!/^[a-z0-9]{15}$/.test(id)) return null;
-  return { kind: match[1] === "tasks" ? "task" : "note", id };
+  const kind = match[1] === "tasks" ? "task" : "note";
+  if (match[3] && kind !== "task") return null;
+  return match[3] ? { kind, id, tab: match[3] as TaskTab } : { kind, id };
+}
+/** An item's address on one task tab; Edit, the default, has no query. */
+export function itemTabPath(path: string, tab?: string): string {
+  const base = path.replace(/\?.*$/, "");
+  return tab && tab !== "edit" && taskTabs.includes(tab as TaskTab)
+    ? `${base}?tab=${tab}`
+    : base;
 }
 
 export const isItemHash = (hash: string) => /^#\/(tasks|notes)\//.test(hash);

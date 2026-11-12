@@ -2,11 +2,12 @@
 
 Agents: name, brief, archived, kind (bot, the default; external, a coder session
 the owner starts by hand; human). Only bots are woken or mapped. Buckets: name, purpose, responsible_agent, archived.
-Notes: bucket, title, body, links (note IDs), archived. Note revisions preserve
+Notes: bucket, title, body, links (task or note IDs), archived. Note revisions preserve
 immutable title/body/links snapshots. Tasks: title, description, assigned_agent,
-labels, status (todo, in_progress, needs_review via review.request, done or
-wont_do; done and wont_do are terminal), draft, links, archived, release (the
-shipping release, at most 32 characters; also a task read filter, "" for none),
+labels (a shipped task carries release-<version>; there is no release field),
+status (todo, in_progress, needs_review via review.request, done or wont_do;
+done and wont_do are terminal), draft, links (task or note IDs; an unknown ID
+gets 400 unknown_link, readers show links both ways), archived,
 review_mode ("", crew or in_session; in_session only with status done, which
 stamps the server-set approved_at), approved_by (reported name, default owner),
 readiness (waiting = on hold, the default,

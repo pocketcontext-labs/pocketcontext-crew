@@ -1177,8 +1177,55 @@ export function eventSummary(event: Row): { title: string; by: string } {
             ? "Created an upload link"
             : action === "upload_link.revoke"
               ? "Revoked an upload link"
-              : action;
+              : eventLabel(action);
   return { title, by };
+}
+/** Plain labels for history (0.24.0): people read these, not action names. */
+const eventLabels: Record<string, string> = {
+  "task.create": "Created",
+  "task.update": "Updated",
+  "task.comment": "Comment",
+  "task.claim": "Claimed",
+  "task.claim_renew": "Claim renewed",
+  "task.release": "Claim released",
+  "task.wake": "Woke the assignee",
+  "task.hop_limit": "Stopped at the handoff limit",
+  "task.self_started": "Started by the assignee",
+  "note.create": "Created",
+  "note.update": "Updated",
+  "note.restore": "Restored an earlier revision",
+  "review.request": "Review requested",
+  "review.decide": "Review decided",
+  "review.withdraw": "Review withdrawn",
+  "agent.create": "Created",
+  "agent.ensure": "Created",
+  "agent.update": "Updated",
+  "bucket.create": "Created",
+  "bucket.update": "Updated",
+  "bucket.assign": "Responsibility changed",
+  "artifact.create": "Draft created",
+  "artifact.update": "Draft updated",
+  "artifact.publish": "Published",
+  "artifact.replace": "Published link replaced",
+  "artifact.revoke": "Link revoked",
+  "artifact.set_expiry": "Link expiry changed",
+  "artifact.archive": "Archived",
+  "artifact.restore": "Restored",
+  "execution.begin": "Work started",
+  "execution.acquire": "Work started",
+  "execution.start": "Work started",
+  "execution.dispatched": "Handed to the bot",
+  "execution.handoff": "Handed off",
+  "execution.renew": "Work lease renewed",
+  "execution.complete": "Work finished",
+  "execution.cancel": "Work cancelled",
+  "execution.recover": "Work recovered",
+};
+export function eventLabel(action: string): string {
+  if (eventLabels[action]) return eventLabels[action];
+  if (action.startsWith("webhook.")) return "Webhook activity";
+  if (action.startsWith("execution.")) return "Work activity";
+  return "Change";
 }
 export const isFileEvent = (event: Row) =>
   /^(attachment|upload_link)\./.test(String(event.action || ""));

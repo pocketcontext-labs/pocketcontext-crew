@@ -514,7 +514,15 @@ a.crew-logo:hover .product-brand span {
 .crew-labels-field {
   position: relative;
 }
+/* Floats over the form (0.24.0): showing it never moves the fields below. */
 .crew-label-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: min(240px, 40vh);
+  overflow-y: auto;
   list-style: none;
   margin: 2px 0 0;
   padding: 4px;
@@ -1115,18 +1123,53 @@ a.crew-logo:hover .product-brand span {
 .crew-session-error {
   color: #8b4a26;
 }
-/* Opens the full instructions in a dialog; reads as a link under the button. */
-.crew-app .crew-session-instructions {
-  border: 0;
-  background: none;
-  padding: 0;
-  color: #567257;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+/* Home (0.24.0): one compact Start a session button per manual agent. */
+.crew-home-sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
 }
-.crew-app .crew-session-instructions:hover {
-  background: none;
-  color: #2d4538;
+.crew-home-sessions .crew-session button {
+  min-height: 40px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+/* The Start a session toast: over the page, never in the card's flow. */
+.crew-toast {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(440px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid #cfd9c4;
+  border-radius: 8px;
+  background: #fff;
+  color: #25332c;
+  box-shadow: 0 8px 28px rgba(37, 51, 44, 0.18);
+  font-size: 13px;
+}
+.crew-toast-alert {
+  border-color: #e0c7b2;
+}
+.crew-toast p {
+  margin: 0 0 8px;
+}
+.crew-toast textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  margin: 0 0 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.crew-toast-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 /* Long lines and code blocks scroll inside their own box, not the dialog. */
 .crew-session-dialog > * {
@@ -1703,6 +1746,28 @@ a.crew-logo:hover .product-brand span {
 .crew-tabs button[aria-selected="true"] {
   background: #e4ecda;
 }
+/* Four task tabs (0.24.0) still fit a phone: they scroll rather than wrap. */
+.crew-tabs {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.crew-tabs button {
+  flex: none;
+}
+.crew-tab-count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #e9eee3;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+.crew-comments small strong {
+  font-weight: 600;
+}
 .crew-version {
   border: 1px solid #dce4d3;
   border-radius: 7px;
@@ -2064,9 +2129,38 @@ a.crew-logo:hover .product-brand span {
   font-size: 12px;
   font-weight: 550;
 }
-.crew-linked-notes button {
-  margin: 5px 0;
-  text-align: left;
+.crew-linked-notes ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.crew-linked-notes li {
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+}
+.crew-related-item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.crew-related-kind {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #5d6b55;
+}
+.crew-related-archived,
+.crew-related-missing {
+  font-size: 12px;
+  color: #6b6b6b;
+}
+.crew-related-heading {
+  font-size: 12px;
+  font-weight: 550;
+  margin: 10px 0 4px;
 }
 
 .crew-assignment-warning {

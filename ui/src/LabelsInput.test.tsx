@@ -74,3 +74,23 @@ it("turns a comma that arrives without a key press into chips", () => {
   expect(changed).toHaveBeenLastCalledWith(["Network", "Launch"]);
   expect(input()).toHaveValue(" Ne");
 });
+
+it("closes the suggestions on Escape without letting it reach the dialog", () => {
+  const outer = vi.fn();
+  render(
+    <div onKeyDown={outer}>
+      <Harness />
+    </div>,
+  );
+  fireEvent.change(input(), { target: { value: "l" } });
+  expect(screen.getByRole("listbox")).toBeInTheDocument();
+  fireEvent.keyDown(input(), { key: "Escape" });
+  expect(screen.queryByRole("listbox")).toBeNull();
+  expect(outer).not.toHaveBeenCalled();
+  // With the list closed, Escape is the dialog's again.
+  fireEvent.keyDown(input(), { key: "Escape" });
+  expect(outer).toHaveBeenCalledTimes(1);
+  // Typing again reopens it.
+  fireEvent.change(input(), { target: { value: "le" } });
+  expect(screen.getByRole("option", { name: "Legal" })).toBeInTheDocument();
+});

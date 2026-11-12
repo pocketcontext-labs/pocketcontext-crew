@@ -38,6 +38,8 @@ export default function LabelsInput({
   // A chip briefly highlighted because the owner tried to add it again.
   const [flash, setFlash] = useState("");
   const [active, setActive] = useState(-1);
+  // Escape closes the suggestions until the text changes.
+  const [dismissed, setDismissed] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!flash) return;
@@ -45,7 +47,7 @@ export default function LabelsInput({
     return () => clearTimeout(timer);
   }, [flash]);
   const needle = text.trim().toLowerCase();
-  const matches = needle
+  const matches = needle && !dismissed
     ? [...new Map(suggestions.map((s) => [s.toLowerCase(), s])).values()]
         .filter(
           (s) =>
@@ -96,11 +98,12 @@ export default function LabelsInput({
       setActive((i) => (i <= 0 ? matches.length - 1 : i - 1));
       return;
     }
-    if (e.key === "Escape" && active >= 0) {
-      // Closes the suggestion, not the dialog.
+    if (e.key === "Escape" && matches.length) {
+      // Closes the suggestions, not the dialog.
       e.preventDefault();
       e.stopPropagation();
       setActive(-1);
+      setDismissed(true);
       return;
     }
     if (e.key === "Enter" || e.key === "," || (e.key === "Tab" && needle)) {
@@ -192,6 +195,7 @@ export default function LabelsInput({
             }
             setText(next);
             setActive(-1);
+            setDismissed(false);
             setSelected(null);
           }}
           onKeyDown={onKeyDown}
