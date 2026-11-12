@@ -263,6 +263,7 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 15px;
   margin-bottom: 24px;
@@ -271,13 +272,20 @@ a.crew-logo:hover .product-brand span {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
+  flex: 1 0 280px;
+  min-width: min(280px, 100%);
   max-width: 480px;
   border: 1px solid #dce2d8;
   border-radius: 7px;
   background: #fffefb;
   padding: 0 10px;
 }
+.crew-toolbar > select,
+.crew-toolbar > button {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.crew-toolbar > button { white-space: nowrap; }
 .crew-search span {
   font-size: 24px;
   color: #708069;
@@ -3196,3 +3204,24 @@ a.crew-logo:hover .product-brand span {
     padding: 12px;
   }
 }
+
+/* Cards retain a keyboard-openable surface while labels have their own buttons. */
+.crew-app .crew-task-card {
+  border: 1px solid #e0e5d9;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.crew-task-card:focus-visible {
+  outline: 2px solid #617348;
+  outline-offset: 2px;
+}
+.crew-task-card:hover { border-color: #aebba2; }
+.crew-app .crew-tags > .crew-label-filter {
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.crew-tags > .crew-claim-chip,
+.crew-tags > .crew-claim-expired { white-space: nowrap; }
+.crew-claim-details { display: block; margin-top: 4px; overflow-wrap: anywhere; }

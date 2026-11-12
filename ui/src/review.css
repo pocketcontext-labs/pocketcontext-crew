@@ -1,0 +1,60 @@
+.crew-review-content .crew-prose p {
+  white-space: pre-wrap;
+}
+.crew-review-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 1rem;
+}
+.crew-review-gallery figure {
+  margin: 0;
+  min-width: 0;
+}
+.crew-review-gallery figcaption {
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+  margin-top: 0.3rem;
+}
+.crew-review-option {
+  border: 1px solid var(--line, #d7ded6);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+  min-width: 0;
+}
+.crew-review-option h3 {
+  margin-top: 0;
+}
+.crew-option-decision {
+  border: 0;
+  padding: 0;
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.crew-option-decision legend {
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+.crew-option-decision label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.crew-option-decision input {
+  width: auto;
+}
+.crew-option-note {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+}
+.crew-review-request details {
+  margin: 0.75rem 0;
+}
+.crew-review-request summary {
+  cursor: pointer;
+}
+.crew-review-content .crew-alert code {
+  overflow-wrap: anywhere;
+}

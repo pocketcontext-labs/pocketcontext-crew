@@ -25,8 +25,9 @@ append-only. Agents, buckets, notes and tasks archive without purging history.
 
 Agents have a `kind`: `bot` (default; Grok bots woken by webhook), `external`
 (coder sessions the owner starts by hand) or `human`. Only bots are woken. Tasks
-carry an advisory claim: `claimed_by` (reported session name, attribution only)
-and `claim_until` (ISO UTC lease end), both empty without a claim; responses add a
+carry an advisory claim: `claimed_by` (reported session name, attribution only),
+`claimed_at` (start) and `claim_until` (ISO UTC lease end), empty without a claim.
+Responses add a
 derived `claim_state`. See [project coder agents](crew.md#project-coder-agents).
 Task `status` is `todo`, `in_progress`, `needs_review`, `done` or `wont_do`
 (terminal like done). Tasks also carry `release` (the shipping release, at most 32
@@ -41,7 +42,9 @@ SHA-256, position, attribution and archive state. Their bytes are immutable and
 never purged. Upload links store only a token SHA-256 with parent, expiry,
 maximum files, usage and revocation. `crew_settings` is a singleton holding
 `storage_limit_bytes` (default 5 GiB). Reviews snapshot the task's active
-attachments as `[{id, sha256}]`. See [Attachments](crew.md#attachments).
+attachments as `[{id, sha256}]`. Optional review `options` freeze keyed alternative
+bodies; `option_decisions` records each approved/rejected choice. Tasks have
+server-managed `held_since` for stable hold age on open tasks. See [Attachments](crew.md#attachments).
 
 Responsibility does not enforce write isolation. Work clients have the reader's
 operations except webhook credential entry and upload-link creation; review decisions, archival and

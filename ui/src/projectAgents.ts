@@ -45,7 +45,12 @@ export const webhookConfigured = (configs: Row[]) => {
 };
 
 /** A task's claim by a coding session; `until` is ISO UTC. */
-export type Claim = { state: "" | "live" | "expired"; by: string; until: string };
+export type Claim = {
+  state: "" | "live" | "expired";
+  by: string;
+  until: string;
+  started: string;
+};
 /**
  * The server derives `claim_state`; a live claim whose lease has passed since
  * the last refresh already shows as expired.
@@ -56,7 +61,7 @@ export function claimOf(task: Row | undefined, now = Date.now()): Claim {
   const until = val(task, "claim_until");
   let state: Claim["state"] = raw === "live" || raw === "expired" ? raw : "";
   if (state === "live" && until && Date.parse(until) <= now) state = "expired";
-  return { state, by, until };
+  return { state, by, until, started: val(task, "claimed_at") };
 }
 /** HH:MM in the owner's local time. */
 export const claimTime = (until: string) => {
@@ -66,13 +71,30 @@ export const claimTime = (until: string) => {
     : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 export const claimTitle = (claim: Claim) =>
-  claim.state === "live"
-    ? claimTime(claim.until)
-      ? `until ${claimTime(claim.until)}`
-      : ""
-    : claim.by
-      ? `Previously claimed by ${claim.by}`
-      : "The session's claim ran out";
+  [
+    claim.by ? `Claimed by ${claim.by}` : "Claimed by a session",
+    claim.started
+      ? `Started ${new Date(claim.started).toLocaleString()}`
+      : "Start time unavailable",
+    claim.until ? `Until ${new Date(claim.until).toLocaleString()}` : "",
+    claim.state === "expired" ? "Claim expired" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+export function claimLabel(claim: Claim, now = Date.now()) {
+  if (claim.state === "expired") return "Claim expired";
+  const tool =
+    claim.by
+      .split(" · ")
+      .find((part) => /^(Codex|Claude Code|Antigravity)$/i.test(part)) ||
+    "Session";
+  const minutes = Math.max(
+    0,
+    Math.ceil((Date.parse(claim.until) - now) / 60000),
+  );
+  if (!Number.isFinite(minutes)) return tool;
+  return `${tool} · ${minutes >= 60 ? `${Math.floor(minutes / 60)}h ` : ""}${minutes % 60}m left`;
+}
 
 /**
  * Copies text: the Clipboard API, else a selected textarea and the copy

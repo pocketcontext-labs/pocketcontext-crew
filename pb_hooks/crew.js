@@ -3,6 +3,7 @@ const webhooks = require(`${__hooks}/crew_webhooks.js`);
 const execution = require(`${__hooks}/crew_execution.js`);
 const attachments = require(`${__hooks}/crew_attachments.js`);
 const session = require(`${__hooks}/crew_session.js`);
+const reviewChoices = require(`${__hooks}/crew_review.js`);
 const names = [
   ...webhooks.collections,
   ...execution.collections,
@@ -234,8 +235,7 @@ function taskApproval(r, values, op) {
   const fresh = op === "create",
     oldStatus = fresh ? "" : r.getString("status"),
     oldMode = fresh ? "" : r.getString("review_mode"),
-    status =
-      out.status !== undefined ? out.status : fresh ? "todo" : oldStatus;
+    status = out.status !== undefined ? out.status : fresh ? "todo" : oldStatus;
   // Leaving Done (by any task operation) clears review_mode and approval.
   if (
     out.review_mode === undefined &&
@@ -318,13 +318,7 @@ const derivedFields = {
   settings: ["storage_used_bytes", "max_file_bytes", "max_active_attachments"],
 };
 const redactedFields = ["url", "secret", "secret_ciphertext"];
-const taskStatuses = [
-  "todo",
-  "in_progress",
-  "needs_review",
-  "done",
-  "wont_do",
-];
+const taskStatuses = ["todo", "in_progress", "needs_review", "done", "wont_do"];
 function projectable(app, col) {
   const out = ["collectionId", "collectionName"];
   const collection = app.findCollectionByNameOrId("crew_" + col);
@@ -942,6 +936,7 @@ function write(e, isAgent) {
           values = {
             status: "in_progress",
             claimed_by: claimer(b),
+            claimed_at: new Date().toISOString(),
             claim_until: claimUntil(),
           };
         } else {
@@ -950,6 +945,7 @@ function write(e, isAgent) {
           const id = resolveAgent(app, d.assigned_agent);
           values = {
             assigned_agent: d.assigned_agent,
+            claimed_at: new Date().toISOString(),
             status: "in_progress",
             claimed_by:
               (b.reported_agent || "").trim() ||
@@ -995,7 +991,7 @@ function write(e, isAgent) {
           );
           return;
         }
-        values = { claimed_by: "", claim_until: "" };
+        values = { claimed_by: "", claim_until: "", claimed_at: "" };
         if (r.getString("status") === "in_progress") values.status = "todo";
         if (d.readiness !== undefined) values.readiness = d.readiness;
         if (d.waiting_reason !== undefined)
@@ -1050,7 +1046,12 @@ function write(e, isAgent) {
           webhooks.terminal(values.status) &&
           (r.getString("claimed_by") || r.getString("claim_until"))
         )
-          values = { ...values, claimed_by: "", claim_until: "" };
+          values = {
+            ...values,
+            claimed_by: "",
+            claim_until: "",
+            claimed_at: "",
+          };
         else if (!webhooks.terminal(values.status) && renewByClaimer(r, b))
           values = { ...values, claim_until: r.getString("claim_until") };
       }
@@ -1195,6 +1196,7 @@ function write(e, isAgent) {
         if (["claim", "claim_renew", "release"].includes(op)) {
           changes.status = r.getString("status");
           changes.claimed_by = r.getString("claimed_by");
+          changes.claimed_at = r.getString("claimed_at");
           changes.claim_until = r.getString("claim_until");
         } else if (
           values.claim_until !== undefined &&
@@ -1252,18 +1254,22 @@ function write(e, isAgent) {
       return;
     }
     if (kind === "review" && op === "request") {
-      only(d, []);
+      only(d, ["options"]);
+      const choices = reviewChoices.options(d.options);
       const t = active(app, "tasks", b.id);
       check(t, b);
       execution.guardTaskWrite(app, t, b, isAgent);
       const oldTask = webhooks.state(app, t);
       if (!t.getString("draft").trim()) bad("Add a draft first");
+      reviewChoices.evidence(app, t, t.getString("draft"), choices);
       if (pending(app, t.id).length)
         throw new ApiError(409, "A review is already pending", {});
       const r = new Record(app.findCollectionByNameOrId("crew_reviews"));
       r.set("task", t.id);
       r.set("draft", t.getString("draft"));
       r.set("attachments", attachments.snapshot(app, t.id));
+      r.set("options", choices);
+      r.set("option_decisions", []);
       r.set("status", "pending");
       r.set("revision", 1);
       r.set("requested_by", actor);
@@ -1271,7 +1277,8 @@ function write(e, isAgent) {
       app.save(r);
       if (!isAgent) ownerTouch(t);
       // A review request leaves Done, which clears an in-session approval.
-      const approvalCleared = t.getString("status") === "done" && hasApproval(t);
+      const approvalCleared =
+        t.getString("status") === "done" && hasApproval(t);
       if (approvalCleared) {
         t.set("review_mode", "");
         t.set("approved_by", "");
@@ -1306,7 +1313,7 @@ function write(e, isAgent) {
       return;
     }
     if (kind === "review" && ["decide", "withdraw"].includes(op)) {
-      only(d, op === "decide" ? ["decision", "note"] : []);
+      only(d, op === "decide" ? ["decision", "note", "option_decisions"] : []);
       const r = get(app, "reviews", b.id);
       check(r, b);
       if (r.getString("status") !== "pending") bad("Review already closed");
@@ -1320,6 +1327,17 @@ function write(e, isAgent) {
           bad("Draft changed; request a new review");
         if (!attachments.snapshotMatches(app, r))
           bad("Attachments changed; request a new review");
+        const choices = JSON.parse(r.getString("options") || "null") || [];
+        const decisions = reviewChoices.decisions(
+          choices,
+          d.option_decisions,
+          d.decision,
+        );
+        r.set("option_decisions", decisions);
+        if (choices.length) {
+          d.option_decisions = decisions;
+          d.options = choices;
+        }
         r.set("status", d.decision);
         r.set("decision_note", d.note || "");
         r.set("decided_by", actor);

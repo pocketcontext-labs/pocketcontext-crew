@@ -27,9 +27,9 @@ it("treats agents without a kind, or an unknown one, as webhook bots", () => {
 });
 it("knows whether the webhook integration is set up", () => {
   expect(webhookConfigured([])).toBe(false);
-  expect(
-    webhookConfigured([row({ scope: "global", enabled: false })]),
-  ).toBe(false);
+  expect(webhookConfigured([row({ scope: "global", enabled: false })])).toBe(
+    false,
+  );
   expect(
     webhookConfigured([row({ scope: "legacy", url_configured: true })]),
   ).toBe(false);
@@ -52,14 +52,15 @@ it("reads the claim, showing a live claim whose lease passed as expired", () => 
     state: "live",
     by: "codex-1",
     until: "2026-11-12T11:30:00Z",
+    started: "",
   });
-  expect(claimTitle(claimOf(live, now))).toMatch(/^until \d{1,2}:\d{2}/);
+  expect(claimTitle(claimOf(live, now))).toContain("Claimed by codex-1");
   expect(claimOf(live, Date.parse("2026-11-12T12:00:00Z")).state).toBe(
     "expired",
   );
   const expired = row({ claim_state: "expired", claimed_by: "codex-1" });
   expect(claimTitle(claimOf(expired, now))).toBe(
-    "Previously claimed by codex-1",
+    "Claimed by codex-1 · Start time unavailable · Claim expired",
   );
 });
 it("copies with the Clipboard API, else the copy command, else reports failure", async () => {

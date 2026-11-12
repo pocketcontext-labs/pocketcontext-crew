@@ -6,8 +6,9 @@ if(!base || !new URL(base).hostname.match(/^(127\.0\.0\.1|localhost)$/)) throw n
 const browser = await chromium.launch({headless:true});
 const page = await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[],outside=[],writeActions=[];
+let syntheticOwnerAuth="";
 page.on('pageerror',e=>errors.push(e.message));
-page.on('request',r=>{if(r.url().endsWith('/api/crew/write')){try{writeActions.push(r.postDataJSON()?.action);}catch{}}});
+page.on('request',r=>{if(r.url().endsWith('/api/crew/write')){try{writeActions.push(r.postDataJSON()?.action);syntheticOwnerAuth=r.headers().authorization||syntheticOwnerAuth;}catch{}}});
 page.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('data:')&&!r.url().startsWith('blob:'))outside.push(new URL(r.url()).origin);});
 const dialog=()=>page.getByRole('dialog');
 const close=()=>dialog().getByRole('button',{name:'Close dialog'}).click();
@@ -262,12 +263,17 @@ try {
    await page.getByRole('navigation').getByRole('link',{name:new RegExp('^'+name)}).click();
    await page.locator('nav a[aria-current=page]').filter({hasText:name}).waitFor();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
+   if(name==='Tasks') {
+    const searchWidth=await page.getByRole('searchbox',{name:'Search tasks',exact:true}).evaluate(e=>e.getBoundingClientRect().width);
+    assert.ok(searchWidth>=200,`task search stays usable at ${width}: ${searchWidth}`);
+    assert.equal(await page.locator('.crew-toolbar > select').evaluateAll(selects=>selects.every(e=>getComputedStyle(e).flexShrink==='0')),true,'filters wrap rather than shrink their labels');
+   }
   }
   await page.getByRole('navigation').getByRole('link',{name:'Home',exact:true}).click();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();await snap('crew-home-'+width);
-  // A status tile opens the whole board on its column: scrolled to, focused and
-  // highlighted, with the one-shot column query gone from the address; Back returns Home.
+  // A status tile filters to exactly its tasks and focuses that column.
+  // The one-shot column query is consumed; the status filter remains. Back returns Home.
   await page.getByRole('link',{name:/^\d+ Done, show on the Tasks board$/}).click();
-  await page.waitForURL(u=>u.hash==='#/tasks');
+  await page.waitForURL(u=>u.hash==='#/tasks?status=done');
   await page.waitForFunction(()=>{const c=document.activeElement;if(!c?.matches('.crew-column')||!c.textContent.startsWith('Done'))return false;const r=c.getBoundingClientRect();return r.top>=0&&r.top<innerHeight&&r.left>=0&&r.right<=innerWidth;});
   assert.equal(await page.locator('.crew-column').count(),4,`all columns at ${width}`);
   await page.waitForTimeout(250);await snapView('crew-board-column-'+width);
@@ -409,6 +415,24 @@ try {
  await page.getByRole('button',{name:'Show all tasks',exact:true}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
+ // Labels are independent keyboard controls; filtering combines with assignment and survives history/reload.
+ await page.getByRole('button',{name:/Synthetic long description/}).click();
+ const labelsInput=dialog().getByRole('combobox',{name:'Labels',exact:true});
+ await labelsInput.fill('Synthetic-board');await labelsInput.press('Enter');
+ await dialog().getByRole('button',{name:'Save task'}).click();await saved();
+ await page.getByRole('button',{name:'Filter by label Synthetic-board',exact:true}).focus();
+ await page.keyboard.press('Enter');
+ await cards(1);
+ assert.equal(await dialog().count(),0,'label activation does not open the card');
+ await page.waitForFunction(()=>location.hash==='#/tasks?label=Synthetic-board');
+ await page.reload();await cards(1);
+ assert.equal(await page.getByRole('combobox',{name:'Filter by label'}).inputValue(),'synthetic-board');
+ await page.getByRole('button',{name:'Show all tasks',exact:true}).click();await cards(2);
+ await page.goBack();await cards(1);
+ await page.goForward();await cards(2);
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'board filters fit at phone width');
+ await page.setViewportSize({width:1280,height:800});
  // Releases: Won't do and a release put a card in the Done column under its release group.
  await page.getByRole('button',{name:/Synthetic long description/}).click();
  await dialog().getByLabel('Status').selectOption('wont_do');
@@ -846,6 +870,69 @@ try {
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'settings fit at 390');
  await snapView('file-settings-390');
  await page.setViewportSize({width:1440,height:1000});
+ // Compact claims keep full attribution available, without repeated Ready/assignee chips.
+ const boardWrite=async(action,data,id,revision)=>{
+  const response=await page.request.post(base+'/api/crew/write',{headers:{Authorization:syntheticOwnerAuth},data:{action,data,id,expected_revision:revision,reported_agent:'Synthetic · Codex · browser/1 · abcdef12'}});
+  assert.equal(response.ok(),true,`synthetic ${action}`);return response.json();
+ };
+ const boardAgent=await boardWrite('agent.create',{name:'Synthetic-board-agent',kind:'external'});
+ const boardTask=await boardWrite('task.create',{title:'Synthetic compact claim',assigned_agent:boardAgent.id,readiness:'ready',labels:['Synthetic-board-agent','Synthetic-board','Bug']});
+ await boardWrite('task.claim',{assigned_agent:boardAgent.id},boardTask.id,boardTask.revision);
+ await page.goto(base+'/#/tasks?label=synthetic-board');
+ const claimCard=page.locator('.crew-task-card').filter({hasText:'Synthetic compact claim'});
+ await claimCard.waitFor();
+ assert.equal(await claimCard.getByText('Ready',{exact:true}).count(),0);
+ assert.equal(await claimCard.getByRole('button',{name:'Filter by label Synthetic-board-agent'}).count(),0);
+ const claimChip=claimCard.locator('.crew-claim-chip');
+ assert.match(await claimChip.innerText(),/^Codex · (1h 59m|2h 0m) left$/);
+ assert.match(await claimChip.getAttribute('title'),/Synthetic · Codex · browser\/1 · abcdef12.*Started.*Until/);
+ await claimCard.click();await dialog().waitFor();
+ await dialog().locator('.crew-claim-details').waitFor();
+ assert.match(await dialog().locator('.crew-claim-details').innerText(),/browser\/1/);
+ await close();await dialog().waitFor({state:'hidden'});
+ // Every Home tile opens exactly the number it counted, including old Done and stale holds.
+ for(const name of ['To do','In progress','Needs review','Done','on hold over 3 days']){
+  await page.goto(base+'/#/');
+  const tile=page.getByRole('link',{name:new RegExp('^\\d+ '+name+', show')});
+  await tile.waitFor();const count=Number(await tile.locator('b').innerText());
+  await tile.click();await page.getByRole('heading',{name:'Tasks',exact:true}).waitFor();
+  await cards(count);
+  if(name==='on hold over 3 days') await page.getByRole('button',{name:'Remove over 3 days filter'}).waitFor();
+ }
+ // Review evidence and structured alternatives: only the frozen images, exact decisions.
+ const reviewTask=await boardWrite('task.create',{title:'Synthetic review alternatives',draft:'Hook\nProblem\nSolution\n![First](attachment:new-1)\n![Second](attachment:new-2)',files:shotsBase64.map((content_base64,i)=>({name:`review-${i+1}.png`,content_base64}))});
+ const reviewOptions=[{key:'a-linkedin',label:'Draft A · LinkedIn',body:'LinkedIn A'},{key:'a-x',label:'Draft A · X',body:'X A'},{key:'b-linkedin',label:'Draft B · LinkedIn',body:'LinkedIn B'},{key:'b-x',label:'Draft B · X',body:'X B'}];
+ await boardWrite('review.request',{options:reviewOptions},reviewTask.id,reviewTask.revision);
+ await page.goto(base+'/#/approvals');
+ await page.getByRole('button',{name:'Review draft: Synthetic review alternatives'}).click();
+ await dialog().getByRole('region',{name:'Files submitted for review'}).waitFor();
+ await allLoaded('.crew-review-gallery img');
+ assert.equal(await dialog().locator('.crew-review-gallery img').count(),2,'both snapshot images are visible');
+ assert.equal(await dialog().locator('.crew-draft-snapshot p').first().evaluate(p=>getComputedStyle(p).whiteSpace),'pre-wrap','review line breaks are preserved');
+ const optionApproval=dialog().getByRole('button',{name:'Approve selected options'});
+ assert.equal(await optionApproval.isDisabled(),true,'undecided options cannot be approved');
+ for(const option of reviewOptions) await dialog().getByRole('region',{name:option.label,exact:true}).getByRole('radio',{name:option.key.startsWith('a-')?'Approve':'Reject',exact:true}).check();
+ await dialog().getByLabel('Note for Draft A · X (optional)').fill('Use this option');
+ await optionApproval.click();await saved();
+ await page.goto(base+'/#/tasks/'+reviewTask.id);
+ await dialog().getByRole('tab',{name:'Activity',exact:true}).click();
+ await dialog().getByText('Approved: Draft A · LinkedIn, Draft A · X; Rejected: Draft B · LinkedIn, Draft B · X',{exact:true}).waitFor();
+ await dialog().getByRole('tab',{name:'Reviews',exact:true}).click();
+ await dialog().getByText('Approved: Draft A · LinkedIn, Draft A · X; Rejected: Draft B · LinkedIn, Draft B · X',{exact:true}).waitFor();
+ await close();await dialog().waitFor({state:'hidden'});
+ // Legacy snapshots can contain local paths; simulate only their read response.
+ const legacyTask=await boardWrite('task.create',{title:'Synthetic legacy missing image',draft:'Legacy draft'});
+ const legacyReview=await boardWrite('review.request',{},legacyTask.id,legacyTask.revision);
+ await page.route('**/api/crew/read',async route=>{
+  const response=await route.fetch();const body=await response.json();
+  if(Array.isArray(body.items)) for(const row of body.items) if(row.id===legacyReview.id) row.draft='/workspace/unattached.png';
+  await route.fulfill({response,json:body});
+ });
+ await page.goto(base+'/#/approvals');
+ await page.getByRole('button',{name:'Review draft: Synthetic legacy missing image'}).click();
+ await dialog().getByRole('alert').filter({hasText:"This draft mentions files that aren't attached to Crew"}).waitFor();
+ await close();await dialog().waitFor({state:'hidden'});
+ await page.unroute('**/api/crew/read');
  await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);

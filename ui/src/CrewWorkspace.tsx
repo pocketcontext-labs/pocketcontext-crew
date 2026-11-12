@@ -37,6 +37,8 @@ import Help, {
 import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
 import LabelsInput from "./LabelsInput";
+import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest } from "./Review";
+import { decisionSummary, objects } from "./reviews";
 import { strandedWakes } from "./wakes";
 import {
   approvalLine,
@@ -47,6 +49,7 @@ import {
   releaseMatches,
 } from "./taskReleases";
 import StartSession from "./StartSession";
+import { heldDuration, heldSince, isLongHeld, knownLabels, labelMatches, statusMatches } from "./boardFilters";
 import {
   agentKind,
   agentKindCardLabel,
@@ -54,6 +57,7 @@ import {
   agentKinds,
   agentKindSuffix,
   claimOf,
+  claimLabel,
   claimTitle,
   webhookConfigured,
   type AgentKind,
@@ -260,31 +264,30 @@ function Prose({ children }: { children: string }) {
 }
 /** On hold (with its reason on hover) or Ready; not shown for Done tasks. */
 function HoldChip({ task }: { task: Row }) {
-  if (!onHold(task)) return <span className="crew-ready-chip">Ready</span>;
+  if (!onHold(task)) return val(task, "status") === "todo" ? <span className="crew-ready-chip">Ready</span> : null;
   const reason = val(task, "waiting_reason").trim();
   return (
     <span className="crew-hold-chip" title={reason || undefined}>
-      On hold
+      On hold{heldDuration(task) ? ` ${heldDuration(task)}` : ""}
       {reason && <span className="sr-only">: {reason}</span>}
     </span>
   );
 }
 /** A coding session's claim: live with its end time on hover, or expired. */
-function ClaimChip({ task }: { task: Row }) {
-  const claim = claimOf(task);
+function ClaimChip({ task, details = false }: { task: Row; details?: boolean }) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  const claim = claimOf(task, now);
   if (!claim.state) return null;
-  const title = claimTitle(claim) || undefined;
-  if (claim.state === "expired")
-    return (
-      <span className="crew-claim-expired" title={title}>
-        Claim expired
-        {title && <span className="sr-only">: {title}</span>}
-      </span>
-    );
+  const title = claimTitle(claim);
+  const warning = claim.state === "expired" || Date.parse(claim.until) - now < 15 * 60000;
   return (
-    <span className="crew-claim-chip" title={title}>
-      Claimed by {claim.by || "a session"}
-      {title && <span className="sr-only"> {title}</span>}
+    <span className={warning ? "crew-claim-expired" : "crew-claim-chip"} title={title}>
+      {claimLabel(claim, now)}
+      {details && <span className="crew-claim-details">{title}</span>}
     </span>
   );
 }
@@ -900,16 +903,18 @@ export default function CrewWorkspace() {
   const assignmentFilter = validAssignment(viewState.assignment, data.agents)
     ? viewState.assignment
     : "all";
-  const setAssignmentFilter = (value: string) =>
-    setViewState((state) => ({ ...state, assignment: value }));
+  const updateBoard = (changes: Partial<ViewState>) => {
+    const next = { ...viewState, ...changes };
+    pushAddress(viewStateHash("board", next));
+    setViewState(next);
+  };
+  const setAssignmentFilter = (value: string) => updateBoard({ assignment: value });
   const holdFilter = viewState.hold;
-  const setHoldFilter = (value: HoldFilter) =>
-    setViewState((state) => ({ ...state, hold: value }));
+  const setHoldFilter = (value: HoldFilter) => updateBoard({ hold: value, heldOver: "" });
   const releaseFilter = viewState.release;
-  const setReleaseFilter = (value: string) =>
-    setViewState((state) => ({ ...state, release: value }));
-  const boardFiltered =
-    assignmentFilter !== "all" || holdFilter !== "all" || releaseFilter !== "";
+  const setReleaseFilter = (value: string) => updateBoard({ release: value });
+  const boardFiltered = assignmentFilter !== "all" || holdFilter !== "all" || releaseFilter !== "" ||
+    !!viewState.label || !!viewState.status || !!viewState.heldOver || viewState.taskSort !== "updated";
   // Older closed tasks stay folded until asked for; not part of the address.
   const [showOlderDone, setShowOlderDone] = useState(false);
   const bucket = data.buckets.some((x) => x.id === viewState.bucket)
@@ -1095,6 +1100,7 @@ export default function CrewWorkspace() {
       count: data.tasks.filter((x) => val(x, "assigned_agent") === agent.id)
         .length,
     }));
+  const labelsAvailable = knownLabels(data.tasks);
   const releases = knownReleases(data.tasks);
   const releaseOptions =
     releaseFilter && releaseFilter !== noRelease && !releases.includes(releaseFilter)
@@ -1430,18 +1436,27 @@ export default function CrewWorkspace() {
                 ))}
                 <option value={noRelease}>No release</option>
               </select>
+              <select aria-label="Filter by label" value={viewState.label.toLowerCase()}
+                onChange={(e) => updateBoard({ label: e.target.value })}>
+                <option value="">All labels</option>
+                {viewState.label && !labelsAvailable.some((x) => x.label.toLowerCase() === viewState.label.toLowerCase()) &&
+                  <option value={viewState.label.toLowerCase()}>{viewState.label} (0)</option>}
+                {labelsAvailable.map(({ label, count }) => <option key={label.toLowerCase()} value={label.toLowerCase()}>{label} ({count})</option>)}
+              </select>
+              <select aria-label="Filter by status" value={viewState.status}
+                onChange={(e) => updateBoard({ status: e.target.value })}>
+                <option value="">All statuses</option>
+                {boardStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <select aria-label="Sort tasks" value={viewState.taskSort}
+                onChange={(e) => updateBoard({ taskSort: e.target.value as ViewState["taskSort"] })}>
+                <option value="updated">Sort: Last updated</option>
+                <option value="held">Sort: Oldest hold first</option>
+              </select>
+              {viewState.heldOver && <button type="button" className="crew-hold-filter"
+                onClick={() => updateBoard({ heldOver: "" })} aria-label="Remove over 3 days filter">On hold · over 3 days ×</button>}
               {boardFiltered && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setViewState((state) => ({
-                      ...state,
-                      assignment: "all",
-                      hold: "all",
-                      release: "",
-                    }))
-                  }
-                >
+                <button type="button" onClick={() => { setQuery(""); updateBoard({ assignment: "all", hold: "all", release: "", label: "", status: "", heldOver: "", taskSort: "updated" }); }}>
                   Show all tasks
                 </button>
               )}
@@ -1498,16 +1513,26 @@ export default function CrewWorkspace() {
                     matches(x) &&
                     assignmentMatches(assignmentFilter, x, invalidAssignment) &&
                     holdMatches(holdFilter, x) &&
-                    releaseMatches(releaseFilter, x),
+                    releaseMatches(releaseFilter, x) &&
+                    labelMatches(viewState.label, x) && statusMatches(viewState.status, x) &&
+                    (!viewState.heldOver || isLongHeld(x)),
                 );
+                tasks.sort((a, b) => viewState.taskSort === "held"
+                  ? (onHold(a) && !isClosed(a) ? heldSince(a) || Infinity : Infinity) - (onHold(b) && !isClosed(b) ? heldSince(b) || Infinity : Infinity)
+                  : val(b, "updated").localeCompare(val(a, "updated")));
                 // Grouped by release; older ones fold away unless a release
                 // is chosen or the owner asks for them.
                 const done =
                   status === "done"
-                    ? doneColumn(tasks, showOlderDone || releaseFilter !== "")
+                    ? doneColumn(tasks, showOlderDone || releaseFilter !== "" || viewState.status === "done")
                     : null;
                 const card = (x: Row) => (
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openItem("task", x); }
+                    }}
                     className="crew-task-card"
                     key={x.id}
                     onClick={() => openItem("task", x)}
@@ -1545,10 +1570,12 @@ export default function CrewWorkspace() {
                             Comment wake pending
                           </span>
                         )}
-                      {list(x, "labels").map((l) => (
-                        <span className="crew-chip" key={l}>
+                      {list(x, "labels").filter((l) => !val(x, "assigned_agent") || l.toLowerCase() !== name(val(x, "assigned_agent")).toLowerCase()).map((l) => (
+                        <button type="button" className="crew-chip crew-label-filter" key={l}
+                          aria-label={`Filter by label ${l}`}
+                          onClick={(e) => { e.stopPropagation(); updateBoard({ label: l }); }}>
                           {l}
-                        </span>
+                        </button>
                       ))}
                     </div>
                     {thumbs[x.id] && (
@@ -1571,7 +1598,7 @@ export default function CrewWorkspace() {
                       </span>
                       {name(val(x, "assigned_agent"))}
                     </footer>
-                  </button>
+                  </div>
                 );
                 return (
                   <section
@@ -2460,96 +2487,9 @@ function Editor({
     void save(`${kind}.${row ? "update" : "create"}`, fields, row, reason);
   };
   if (kind === "review" && row)
-    return (
-      <AttachmentsProvider attachments={item.attachments}>
-      <div className="crew-dialog-body">
-        <div className="crew-review-meta">
-          <span
-            className={
-              val(row, "status") === "pending" ? "crew-human" : "crew-pill"
-            }
-          >
-            {val(row, "status").replaceAll("_", " ")}
-          </span>
-          <span>
-            Snapshot {row.id} · {when(row.created)}
-          </span>
-        </div>
-        <p>
-          This is the exact submitted draft. Approval does not send, post or
-          publish it.
-        </p>
-        <div className="crew-draft-snapshot">
-          <Prose>{val(row, "draft")}</Prose>
-        </div>
-        {val(row, "decision_note") && (
-          <p>
-            <strong>Your decision note:</strong> {val(row, "decision_note")}
-          </p>
-        )}
-        {val(row, "status") === "pending" && (
-          <>
-            <Field label="Decision note">
-              <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Feedback for the next revision"
-              />
-            </Field>
-            <div className="crew-actions">
-              <button
-                className="crew-primary"
-                disabled={busy}
-                onClick={() =>
-                  void save(
-                    "review.decide",
-                    { decision: "approved", note: reason },
-                    row,
-                  )
-                }
-              >
-                Approve draft
-              </button>
-              <button
-                disabled={busy}
-                onClick={() =>
-                  void save(
-                    "review.decide",
-                    { decision: "changes_requested", note: reason },
-                    row,
-                  )
-                }
-              >
-                Request changes
-              </button>
-              <button
-                className="crew-danger"
-                disabled={busy}
-                onClick={() =>
-                  void save(
-                    "review.decide",
-                    { decision: "rejected", note: reason },
-                    row,
-                  )
-                }
-              >
-                Reject
-              </button>
-            </div>
-            <p className="crew-footnote">
-              After approval, perform the external action yourself and mark the
-              task Done.
-            </p>
-          </>
-        )}
-        {error && (
-          <p className="crew-alert" role="alert">
-            {error}
-          </p>
-        )}
-      </div>
-      </AttachmentsProvider>
-    );
+    return <ReviewDecision row={row} busy={busy} error={error}
+      attachments={item.attachments} loaded={item.loaded} Prose={Prose}
+      when={when} save={save} />;
   const bar = (action?: ReactNode) =>
     action || error ? (
       <div className="crew-save-bar">
@@ -2610,14 +2550,7 @@ function Editor({
   ) : !savedDraft.trim() ? (
     <p className="crew-review-state">Add a draft to request approval</p>
   ) : (
-    <button
-      type="button"
-      className="crew-review-submit"
-      disabled={busy}
-      onClick={() => void save("review.request", {}, row)}
-    >
-      Send draft for approval
-    </button>
+    <ReviewRequest busy={busy} submit={(options) => void save("review.request", options.length ? { options } : {}, row)} />
   );
   const buckets = data.buckets.find((x) => x.id === val(row, "bucket"));
   // A coding session's claim; the owner may always release it (In progress goes back to To do).
@@ -2922,7 +2855,7 @@ function Editor({
               <>
                 {row && claim.state && (
                   <div className="crew-claim-row">
-                    <ClaimChip task={row} />
+                    <ClaimChip task={row} details />
                     {!readOnly && (
                       <button
                         type="button"
@@ -3234,6 +3167,12 @@ function Editor({
               return (
                 <li key={x.id}>
                   <strong>{summary.title}</strong>
+                  {val(x, "action") === "review.decide" && (() => {
+                    const changes = typeof x.changes === "string" ? (() => { try { return JSON.parse(x.changes); } catch { return {}; } })() : (x.changes || {});
+                    const choices = objects(changes.option_decisions);
+                    const summary = decisionSummary({ id: x.id, revision: x.revision, options: changes.options, option_decisions: choices });
+                    return summary ? <p>{summary}</p> : null;
+                  })()}
                   <small>
                     {when(x.created)} · {summary.by}
                   </small>
@@ -3265,7 +3204,10 @@ function Editor({
                 {val(x, "status").replaceAll("_", " ")}
               </span>
               <small>{when(x.created)}</small>
-              <Prose>{val(x, "draft")}</Prose>
+              <ReviewContent row={x} attachments={item.attachments} loaded={item.loaded} Prose={Prose}>
+                <ReviewChoices row={x} Prose={Prose} />
+              </ReviewContent>
+              {decisionSummary(x) && <p>{decisionSummary(x)}</p>}
               {val(x, "decision_note") && <p>{val(x, "decision_note")}</p>}
               {val(x, "status") === "pending" && !readOnly && (
                 <button

@@ -10,6 +10,30 @@ function object(properties, required) {
 const str = { type: "string" },
   num = { type: "integer" },
   bool = { type: "boolean" };
+const reviewOptions = {
+  type: "array",
+  maxItems: 20,
+  items: object(
+    {
+      key: { type: "string", pattern: "^[A-Za-z0-9_-]{1,64}$" },
+      label: { type: "string", minLength: 1, maxLength: 200 },
+      body: { type: "string", minLength: 1, maxLength: 100000 },
+    },
+    ["key", "label", "body"],
+  ),
+};
+const optionDecisions = {
+  type: "array",
+  maxItems: 20,
+  items: object(
+    {
+      key: str,
+      decision: { enum: ["approved", "rejected"] },
+      note: { type: "string", maxLength: 20000 },
+    },
+    ["key", "decision"],
+  ),
+};
 const strings = { type: "array", items: str };
 const nullable = { type: ["string", "null"] };
 const proof = object({ id: str, worker_id: str, fence: num }, [
@@ -243,7 +267,9 @@ function document() {
     files:
       "Optional data.files (or multipart parts named files) become attachments of the task, all or nothing; attachment:new-N in body names the Nth file. Every attachment:ID in body must name an active attachment of this task. Files on a task with a pending review withdraw it like attachment.add.",
   });
-  op("review.request", {}, [], {
+  op("review.request", { options: reviewOptions }, [], {
+    description:
+      "Attach every image or file first and reference attachment:ID. Local file paths are refused with draft_references_unattached_files. Send alternatives as options with unique keys, labels and bodies (max 20; combined bodies max 200000 characters); they are frozen with the draft.",
     revision: "task",
     execution_proof:
       "Required only while another execution is live on the task. With your proof, review.request completes your execution (outcome review_requested; result execution_completed) instead of invalidating it: make it your last step. Your fenced comment and execution.complete (outcome completed, no mark_done) afterwards are accepted as no-ops for the execution.",
@@ -258,6 +284,7 @@ function document() {
     {
       decision: { enum: ["approved", "changes_requested", "rejected"] },
       note: str,
+      option_decisions: optionDecisions,
     },
     ["decision"],
     {
@@ -265,7 +292,7 @@ function document() {
       execution_proof:
         "Required only while another execution is live on the task",
       description:
-        "Records the owner's review decision. Work clients use it only when the owner explicitly delegates the decision. Approval never performs an external action.",
+        "Records the owner's review decision. Work clients use it only when the owner explicitly delegates the decision. Approval never performs an external action. With options, approval requires a decision for every key and at least one approved choice; rejected may omit choices (all rejected), changes_requested may omit them or record partial feedback.",
     },
   );
   op(
@@ -645,6 +672,16 @@ function document() {
       handoff_limited: bool,
       comment_wake_generation: num,
       comment_wake_event: str,
+      held_since: {
+        type: "string",
+        description:
+          "Server-managed hold start; stable across edits, empty when Ready. Legacy holds use their pre-upgrade updated time.",
+      },
+      claimed_at: {
+        type: "string",
+        description:
+          "Claim start, stable across renewal; empty without a claim or when unknown for a legacy claim.",
+      },
       claimed_by: {
         type: "string",
         description:
@@ -684,6 +721,8 @@ function document() {
       changes: { type: "object" },
     },
     reviews: {
+      options: { ...reviewOptions, type: ["array", "null"] },
+      option_decisions: { ...optionDecisions, type: ["array", "null"] },
       task: str,
       draft: str,
       attachments: {

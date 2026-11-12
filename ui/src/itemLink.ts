@@ -74,6 +74,10 @@ export type ViewState = {
   hold: HoldFilter;
   /** "" for every release, "none" for tasks without one, or a release. */
   release: string;
+  label: string;
+  status: string;
+  heldOver: string;
+  taskSort: "updated" | "held";
 };
 export const defaultViewState: ViewState = {
   bucket: "",
@@ -82,12 +86,20 @@ export const defaultViewState: ViewState = {
   assignment: "all",
   hold: "all",
   release: "",
+  label: "",
+  status: "",
+  heldOver: "",
+  taskSort: "updated",
 };
 const recordId = /^[a-z0-9]{15}$/;
 const assignments = ["unassigned", "invalid"];
 // A release filter: trimmed, one line, at most 32 characters like the server's.
 // eslint-disable-next-line no-control-regex
-const validRelease = (v: string) => v.length > 0 && v.length <= 32 && v === v.trim() && !/[\u0000-\u001f\u007f]/.test(v);
+const validRelease = (v: string) =>
+  v.length > 0 &&
+  v.length <= 32 &&
+  v === v.trim() &&
+  !/[\u0000-\u001f\u007f]/.test(v);
 
 /**
  * Reads `#/notes?bucket=<id>&sort=<notes>&buckets=<buckets>` and
@@ -113,15 +125,23 @@ export function viewStateFromHash(hash: string): ViewState {
       assignment:
         one("agent", (v) => recordId.test(v) || assignments.includes(v)) ??
         defaultViewState.assignment,
-      hold: (one("hold", (v) => v !== "all" && (holdFilters as readonly string[]).includes(v)) ??
-        defaultViewState.hold) as HoldFilter,
+      hold: (one(
+        "hold",
+        (v) => v !== "all" && (holdFilters as readonly string[]).includes(v),
+      ) ?? defaultViewState.hold) as HoldFilter,
       release: one("release", validRelease) ?? defaultViewState.release,
+      label: one("label", (v) => v.trim().length > 0 && v.length <= 200) ?? "",
+      status: one("status", (v) => boardColumns.includes(v)) ?? "",
+      heldOver: one("held_over", (v) => v === "3d") ?? "",
+      taskSort:
+        one("sort", (v) => v === "held") === "held" ? "held" : "updated",
     };
   return {
     ...defaultViewState,
     bucket: one("bucket", (v) => recordId.test(v)) ?? defaultViewState.bucket,
-    noteSort: (one("sort", (v) => (noteSorts as readonly string[]).includes(v)) ??
-      defaultViewState.noteSort) as NoteSort,
+    noteSort: (one("sort", (v) =>
+      (noteSorts as readonly string[]).includes(v),
+    ) ?? defaultViewState.noteSort) as NoteSort,
     bucketSort: (one("buckets", (v) =>
       (bucketSorts as readonly string[]).includes(v),
     ) ?? defaultViewState.bucketSort) as BucketSort,
@@ -137,6 +157,12 @@ export function viewStateHash(view: View, state: ViewState): string {
     params.set("hold", state.hold);
   if (view === "board" && state.release && validRelease(state.release))
     params.set("release", state.release);
+  if (view === "board") {
+    if (state.label) params.set("label", state.label);
+    if (state.status) params.set("status", state.status);
+    if (state.heldOver) params.set("held_over", state.heldOver);
+    if (state.taskSort === "held") params.set("sort", "held");
+  }
   if (view === "memory") {
     if (state.bucket) params.set("bucket", state.bucket);
     if (state.noteSort !== defaultViewState.noteSort)
@@ -159,7 +185,9 @@ export const boardColumnHash = (status: string) =>
   `${viewHashes.board}?column=${encodeURIComponent(status)}`;
 
 /** The Tasks board showing only open tasks on hold. */
-export const boardOnHoldHash = `${viewHashes.board}?hold=on_hold`;
+export const boardOnHoldHash = `${viewHashes.board}?hold=on_hold&held_over=3d`;
+export const boardStatusHash = (status: string) =>
+  `${viewHashes.board}?status=${encodeURIComponent(status)}&column=${encodeURIComponent(status)}`;
 
 /** The status column a Tasks address asks for, or null. */
 export function boardColumnFromHash(hash: string): string | null {

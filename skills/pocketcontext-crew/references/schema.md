@@ -10,11 +10,13 @@ shipping release, at most 32 characters; also a task read filter, "" for none),
 review_mode ("", crew or in_session; in_session only with status done, which
 stamps the server-set approved_at), approved_by (reported name, default owner),
 readiness (waiting = on hold, the default,
-or ready; writes accept on_hold), waiting_reason (hold reason) and server-managed
+or ready; writes accept on_hold), waiting_reason (hold reason), held_since (server-managed hold start) and server-managed
 wake_generation, bot_handoffs, handoff_limited and comment wake markers, plus the
-advisory claim: claimed_by (reported session name), claim_until (ISO UTC lease end)
-and derived claim_state ("", live or expired; also a task read filter). Reviews preserve exact draft snapshots and
-review decisions. Events preserve action, actor, reported_agent, reason and changes.
+advisory claim: claimed_at (start, unchanged by renewal), claimed_by (reported session name), claim_until (ISO UTC lease end)
+and derived claim_state ("", live or expired; also a task read filter). Reviews preserve exact draft and attachment snapshots, optional options
+[{key,label,body}] and option_decisions [{key,decision,note}]. Attach evidence first,
+use attachment:ID references and submit each draft/platform alternative as an
+option. An approval requires explicit choices and at least one approved option. Events preserve action, actor, reported_agent, reason and changes.
 Attachments: parent_kind (task or note), parent, name, media_type, image, width,
 height, size, sha256, position, actor, reported_agent, archived; bytes come only
 through crew_attachment or the `attachment` command, never as URLs. Settings:

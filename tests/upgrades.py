@@ -242,6 +242,11 @@ def rehearse(target, previous, root):
             assert {f['name']: f['type'] for f in fields if f['name'] in ('release', 'review_mode', 'approved_by', 'approved_at')} == {
                 'release': 'text', 'review_mode': 'select', 'approved_by': 'text', 'approved_at': 'date'}
             assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801200000_crew_task_release.js'").fetchone() == (1,)
+            assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801300000_crew_review_choices.js'").fetchone() == (1,)
+            # 0.20.0 freezes legacy hold time and preserves old reviews.
+            assert current.execute("SELECT count(*) FROM crew_tasks WHERE readiness='waiting' AND status NOT IN ('done','wont_do') AND held_since != updated").fetchone() == (0,)
+            assert current.execute("SELECT count(*) FROM crew_tasks WHERE claimed_at != ''").fetchone() == (0,)
+            assert current.execute("SELECT count(*) FROM crew_reviews WHERE options IS NOT NULL OR option_decisions IS NOT NULL").fetchone() == (0,)
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()

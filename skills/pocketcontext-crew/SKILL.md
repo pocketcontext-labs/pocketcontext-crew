@@ -110,6 +110,11 @@ The optional responsible_agent filter applies to bucket reads.
 
 Save durable findings as notes. Tasks track work and drafts. Request human review
 with review.request; record a decision only as the Authorization rules allow.
+Attach every image or file the draft is about first and reference it with
+`attachment:ID`; local file paths cannot be reviewed. For alternatives, send
+`options: [{key, label, body}]` (one option per draft/platform) with review.request.
+When delegated a decision, use `option_decisions: [{key, decision, note}]` to
+record each choice explicitly; an approval needs at least one approved option.
 In a wake run, review.request with your execution proof completes your execution
 (outcome `review_requested`): post comments first and request review last.
 Draft changes withdraw pending review; approval never sends, posts, pays
@@ -128,9 +133,11 @@ constructing operations. Administration commands are separate from agent work.
 
 ## Project coder sessions
 
-One Crew agent per project (kind `external`, named like the repository) runs in
-coding sessions the owner starts by hand; it has no bot mapping and is never
-woken. Only `bot` agents (the default kind) are woken, mapped or chosen as
+A manually started Crew agent (kind `external`) runs in coding sessions the owner
+starts by hand; it has no bot mapping and is never woken. It can be a shared
+`Implement` agent with repository labels on tasks, or one agent per repository.
+Follow its brief: work only on the repository the owner selects, and filter tasks
+by that label. Keep one session per repository unless the owner says otherwise. Only `bot` agents (the default kind) are woken, mapped or chosen as
 dispatcher or triage. When the owner starts you with a Crew session prompt, read
 `{"collection":"session","agent":"<name>"}` (crew_read or `read`) and follow its
 instructions: build your session name once and use it as reported_agent, list the

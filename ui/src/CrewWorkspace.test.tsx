@@ -2269,11 +2269,11 @@ describe("board agent filter", () => {
     const tile = screen.getByRole("link", {
       name: "3 To do, show on the Tasks board",
     });
-    expect(tile).toHaveAttribute("href", "#/tasks?column=todo");
+    expect(tile).toHaveAttribute("href", "#/tasks?status=todo&column=todo");
     expect(tile).toHaveTextContent("3To do");
     fireEvent.click(tile);
     await waitFor(() => expect(filter()).toHaveValue("all"));
-    expect(cardTitles()).toHaveLength(5);
+    expect(cardTitles()).toHaveLength(3);
     expect(document.querySelectorAll(".crew-column")).toHaveLength(4);
   });
 });
@@ -2310,7 +2310,7 @@ describe("Home tiles focus a board column", () => {
       await waitFor(() =>
         expect(
           screen.getByRole("link", { name: `${name}, show on the Tasks board` }),
-        ).toHaveAttribute("href", `#/tasks?column=${status}`),
+        ).toHaveAttribute("href", `#/tasks?status=${status}&column=${status}`),
       );
   });
 
@@ -2336,8 +2336,8 @@ describe("Home tiles focus a board column", () => {
       block: "nearest",
       inline: "nearest",
     });
-    expect(location.hash).toBe("#/tasks");
-    expect(screen.getAllByRole("heading", { name: /First|Second/ })).toHaveLength(2);
+    expect(location.hash).toBe("#/tasks?status=done");
+    expect(screen.getAllByRole("heading", { name: /First|Second/ })).toHaveLength(1);
     await waitFor(
       () => expect(done).not.toHaveClass("crew-column-highlight"),
       { timeout: 2000 },
@@ -2429,7 +2429,7 @@ describe("labels as chips", () => {
     const card = screen.getByRole("button", { name: /Launch post/ });
     expect(
       [...card.querySelectorAll(".crew-chip")].map((x) => x.textContent),
-    ).toEqual(["Network", "Launch"]);
+    ).toEqual(["Launch"]);
     fireEvent.click(card);
     const dialog = within(screen.getByRole("dialog"));
     const input = dialog.getByRole("combobox", { name: "Labels" });
@@ -2608,14 +2608,14 @@ describe("On hold", () => {
     const tile = await screen.findByRole("link", {
       name: "1 on hold over 3 days, show tasks on hold",
     });
-    expect(tile).toHaveAttribute("href", "#/tasks?hold=on_hold");
+    expect(tile).toHaveAttribute("href", "#/tasks?hold=on_hold&held_over=3d");
     fireEvent.click(tile);
     await waitFor(() =>
       expect(
         screen.getByRole("combobox", { name: "Filter by hold" }),
       ).toHaveValue("on_hold"),
     );
-    expect(cardTitles()).toEqual(["Old hold", "New hold"]);
+    expect(cardTitles()).toEqual(["Old hold"]);
   });
 });
 
@@ -2959,16 +2959,13 @@ describe("project agents and coding sessions", () => {
     it("marks a live claim with its end time on hover and an expired one with the previous claimer", async () => {
       render(<CrewWorkspace />);
       const live = await screen.findByRole("button", { name: /Claimed work/ });
-      const chip = within(live).getByText(/^Claimed by codex-session-1/);
+      const chip = within(live).getByText(/^Session · /);
       expect(chip).toHaveClass("crew-claim-chip");
-      expect(chip.getAttribute("title")).toMatch(/^until \d{1,2}:\d{2}/);
+      expect(chip.getAttribute("title")).toContain("Claimed by codex-session-1");
       const stale = screen.getByRole("button", { name: /Stale work/ });
       const badge = within(stale).getByText(/^Claim expired/);
       expect(badge).toHaveClass("crew-claim-expired");
-      expect(badge).toHaveAttribute(
-        "title",
-        "Previously claimed by claude-session-2",
-      );
+      expect(badge.getAttribute("title")).toContain("Claimed by claude-session-2");
       expect(within(live).queryByText(/Claim expired/)).toBeNull();
     });
     it("asks before releasing a live claim and releases it with an empty payload", async () => {
@@ -2976,7 +2973,7 @@ describe("project agents and coding sessions", () => {
       render(<CrewWorkspace />);
       fireEvent.click(await screen.findByRole("button", { name: /Claimed work/ }));
       const dialog = within(screen.getByRole("dialog"));
-      expect(dialog.getByText(/^Claimed by codex-session-1/)).toBeInTheDocument();
+      expect(dialog.getByText(/^Session · /)).toBeInTheDocument();
       expect(dialog.queryByRole("button", { name: /^Claim/ })).toBeNull();
       fireEvent.click(dialog.getByRole("button", { name: "Release claim" }));
       expect(confirm).toHaveBeenCalledWith(
@@ -3145,7 +3142,7 @@ describe("releases and Won't do on the board", () => {
     const tile = await screen.findByRole("link", {
       name: "4 Done, show on the Tasks board",
     });
-    expect(tile).toHaveAttribute("href", "#/tasks?column=done");
+    expect(tile).toHaveAttribute("href", "#/tasks?status=done&column=done");
     expect(screen.queryByRole("link", { name: /Won't do, show/ })).toBeNull();
     expect(
       screen.getByRole("link", { name: "1 To do, show on the Tasks board" }),
@@ -3192,4 +3189,29 @@ describe("releases and Won't do on the board", () => {
     expect(dialog.queryByText(/Approved in session/)).toBeNull();
     expect(dialog.getByRole("textbox", { name: "Release" })).toHaveValue("");
   });
+});
+
+it("combines label filtering with assignment, keeps hidden assignee labels filterable, and restores history", async () => {
+  fixtures.reviews = [];
+  fixtures.tasks = [
+    { ...task, title: "Crew change", status: "todo", readiness: "ready", labels: ["Network", "Crew", "Bug"] },
+    { ...task, id: "task00000000002", title: "Atlas change", status: "in_progress", labels: ["Network", "Atlas"] },
+    { ...task, id: "task00000000003", title: "Other Crew", assigned_agent: "", status: "todo", labels: ["crew"] },
+  ];
+  render(<CrewWorkspace />);
+  const card = await screen.findByRole("button", { name: /Crew change/ });
+  expect(within(card).queryByRole("button", { name: "Filter by label Network" })).toBeNull();
+  expect(within(screen.getByRole("combobox", { name: "Filter by label" })).getByRole("option", { name: "Network (2)" })).toBeInTheDocument();
+  fireEvent.change(screen.getByRole("combobox", { name: "Filter by assignment" }), { target: { value: agent.id } });
+  fireEvent.click(within(card).getByRole("button", { name: "Filter by label Crew" }));
+  expect(document.querySelectorAll(".crew-task-card")).toHaveLength(1);
+  expect(location.hash).toBe(`#/tasks?agent=${agent.id}&label=Crew`);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  act(() => history.back());
+  await waitFor(() => expect(document.querySelectorAll(".crew-task-card")).toHaveLength(2));
+  act(() => history.forward());
+  await waitFor(() => expect(document.querySelectorAll(".crew-task-card")).toHaveLength(1));
+  fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
+  expect(document.querySelectorAll(".crew-task-card")).toHaveLength(3);
+  expect(location.hash).toBe("#/tasks");
 });

@@ -1,5 +1,32 @@
 # Crew upgrades and rollback
 
+## Crew 0.19.0 to 0.20.0
+
+One data migration (`1801300000_crew_review_choices.js`) adds server-managed task hold/claim start timestamps and
+structured review option snapshots and decisions. Existing reviews keep their
+original decisions and have no options. Existing held tasks use their pre-upgrade
+`updated` time as an approximate hold start; later edits do not reset it. An old
+claim whose original start is unavailable does not invent a start time.
+
+1. Take a complete stopped backup first: `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` (when present), the matching 0.19.0 binary and,
+   with webhooks, the private webhook key. Hosted deployment prepares a verified
+   complete backup before replacement.
+2. Replace the binary or image (`CREW_REPLACE_VERSION=0.19.0` for the installer)
+   and upgrade paired clients with the server to 0.20.0.
+3. Run `skill` on each computer with a Crew profile and refresh MCP tool schemas.
+   Agents must attach review evidence and use `attachment:ID` references. Drafts
+   with local image/document paths now fail with
+   `draft_references_unattached_files`. Submit alternatives as structured options
+   and explicitly record choices when delegated a review decision.
+4. `capabilities_digest` changes, so agents reread capabilities. Protocol 3 and the
+   managed instruction block stay unchanged; this upgrade does not pause delivery.
+
+Older binaries refuse the migrated database without changing it. Rollback requires
+restoring the complete pre-upgrade backup with the matching 0.19.0 binary or image;
+changes made after the backup are not preserved. From earlier versions, also read
+the intervening upgrade notes below.
+
 ## Crew 0.18.x to 0.19.0
 
 One data migration (`1801200000_crew_task_release.js`) adds the task fields `release`,

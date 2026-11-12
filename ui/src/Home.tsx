@@ -1,15 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { ConnectionPending, skillCommand } from "./Connect";
 import Help from "./Help";
-import {
-  boardStatuses,
-  val,
-  type ConnectionState,
-  type Row,
-} from "./crewApi";
+import { boardStatuses, val, type ConnectionState, type Row } from "./crewApi";
 import { isClosed } from "./taskReleases";
+import { longHolds, statusMatches } from "./boardFilters";
+export { longHolds } from "./boardFilters";
 import {
-  boardColumnHash,
+  boardStatusHash,
   boardOnHoldHash,
   viewHashes,
   type ItemKind,
@@ -18,18 +15,6 @@ import {
 type Data = Record<string, Row[]>;
 const connectedKey = "pocketcontext.crew.agent_connected";
 const hiddenKey = "pocketcontext.crew.get_started_hidden";
-/** A task on hold this long without a change is worth a look. */
-const longHoldMs = 3 * 24 * 60 * 60 * 1000;
-/** Open tasks on hold (`waiting` in the API) unchanged for over three days. */
-export function longHolds(tasks: Row[], now = Date.now()) {
-  return tasks.filter((x) => {
-    if (isClosed(x) || val(x, "readiness") === "ready")
-      return false;
-    const updated = Date.parse(val(x, "updated"));
-    return Number.isFinite(updated) && now - updated > longHoldMs;
-  });
-}
-
 // Per-browser conveniences: progress itself comes from the workspace data.
 function stored(key: string) {
   try {
@@ -179,9 +164,7 @@ export default function Home({
       "title",
     ) || "Untitled draft";
   const stuck = data.tasks.filter(
-    (x) =>
-      !isClosed(x) &&
-      (x.handoff_limited === true || invalidAssignment(x)),
+    (x) => !isClosed(x) && (x.handoff_limited === true || invalidAssignment(x)),
   );
   const recent = [
     ...data.tasks.map((row) => ({ kind: "task" as const, row })),
@@ -263,13 +246,13 @@ export default function Home({
         <h2>Your crew right now</h2>
         <div className="crew-home-counts">
           {boardStatuses.map(([status, label]) => {
-            const count = data.tasks.filter(
-              (x) => val(x, "status") === status,
+            const count = data.tasks.filter((x) =>
+              statusMatches(status, x),
             ).length;
             return (
               <a
                 key={status}
-                href={boardColumnHash(status)}
+                href={boardStatusHash(status)}
                 aria-label={`${count} ${label}, show on the Tasks board`}
               >
                 <b>{count}</b>
@@ -281,7 +264,7 @@ export default function Home({
             className="crew-home-hold"
             href={boardOnHoldHash}
             aria-label={`${heldLong} on hold over 3 days, show tasks on hold`}
-            title="Open tasks on hold with no change for more than 3 days"
+            title="Open tasks held for more than 3 days"
           >
             <b>{heldLong}</b>
             On hold over 3 days

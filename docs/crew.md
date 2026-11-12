@@ -523,6 +523,33 @@ requires a still-pending request and matching current draft. It moves
 the task to in_progress, never done. Closed decisions cannot be rewritten. New
 content requires a new review; historical approval never transfers to a new draft.
 
+### Review evidence and alternatives (0.20.0)
+
+Attach every image or document before requesting review and reference it as
+`attachment:ID`. `review.request` rejects local image/document paths (including
+Unix, Windows and `file://` paths) with `draft_references_unattached_files`, listing
+the paths to replace. Existing reviews keep their snapshots; the reader warns
+when a legacy draft mentions missing local files. Snapshot images appear inline
+and in the attachment gallery with full-size previews.
+
+`review.request` optionally accepts `options: [{key, label, body}]`. Use a unique
+key for each alternative, including its platform when relevant (for example
+`A-linkedin` and `A-x`). Option bodies use the same Markdown and attachment
+references as the draft; all are frozen in the review. Without options, existing
+review requests and decisions behave as before. At most 20 options are accepted;
+keys contain 1–64 letters, digits, underscores or hyphens, labels have at most
+200 characters, each nonempty body at most 100,000, and all bodies together at
+most 200,000. Option decision notes have at most 20,000 characters.
+
+`review.decide` accepts `option_decisions: [{key, decision, note}]` alongside the
+overall `decision` and optional `note`. An approval needs explicit approved/rejected
+choices for every option and at least one approved option. Unknown or duplicate
+keys and contradictory decisions are refused. Rejecting with omitted option decisions
+records every option as rejected; supplied rejection choices must reject them all.
+Request changes can include partial choices. Choices are exposed through
+`crew_read`, the bounded SQL reviews view, review history and task Activity. Closed
+reviews remain immutable. The owner's delegation rules apply to every decision.
+
 Archive is reversible and audited. Archived buckets block note writes without
 cascading note changes; restoring a bucket preserves individually archived notes.
 Historical links stay valid. Agent deactivation blocks new assignments but is
@@ -552,8 +579,11 @@ real user confirmation; automated checks must not be presented as that confirmat
 ## Project coder agents
 
 Besides Grok bots, the owner runs coding agents (Codex, Claude Code) in terminal
-sessions, one Crew agent per project, named exactly like the repository (for example
-`pocketcontext-crew`). Its brief holds the project's instructions.
+sessions. A shared manually started agent such as `Implement` can serve several
+repositories: label each task with its repository and filter the board by assignment
+and label. Its brief tells sessions to work only on the repository the owner picks.
+One agent per repository remains supported. Keep one session per repository unless
+the owner requests parallel work.
 
 **Agent kinds.** `crew_agents.kind` is `bot` (a Grok bot woken by webhook, the
 default, and every agent created before 0.18.0), `external` (a coder session the
@@ -622,8 +652,8 @@ with **Show older (N)** for the rest. Cards with a release show "Shipped in X", 
 the board filter bar has a release filter kept in the address
 (`#/tasks?release=<release>` or `release=none`).
 
-**Claims.** Tasks have `claimed_by` (the claimer's reported session name;
-attribution, not identity), `claim_until` (ISO UTC lease end) and a derived
+**Claims.** Tasks have `claimed_at` (the original start, unchanged by renewal),
+`claimed_by` (the claimer's reported session name; attribution, not identity), `claim_until` (ISO UTC lease end) and a derived
 `claim_state` (`""`, `live` or `expired`) in every task response.
 
 - `task.claim` with `data.assigned_agent`: on an unassigned task it assigns and sets
@@ -673,6 +703,17 @@ filters return `waiting` (the read filter accepts `on_hold` too).
 `Draft edited` (a draft edit withdrew a pending review), `Review withdrawn` (an
 attachment change withdrew one) and `Bot hand-off limit reached`. Going Ready
 clears it unless the same write sets one.
+
+Since 0.20.0, `held_since` records the start of the current hold on an open task.
+The server manages it across explicit and automatic holds; edits, comments and
+attachment changes during that hold do not reset it. Going Ready or terminal clears
+it. Existing held tasks use their pre-upgrade update time as an approximate start.
+Home and the board share the same over-three-days rule, exclude terminal tasks
+from hold views, and keep the age filter in the address (`held_over=3d`).
+
+The board also supports a case-insensitive single label filter (`label=…`), combined
+with assignment, hold, status and release filters. Click a label chip to filter;
+Show all tasks clears the filters. The MCP `label` filter remains an exact match.
 
 The wake rule: an on-hold task never wakes a bot, whatever changes. Creating it,
 assigning or reassigning it, reopening it, review outcomes and comments

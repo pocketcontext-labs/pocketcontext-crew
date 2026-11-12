@@ -191,7 +191,7 @@ describe("Tasks and Notes address state", () => {
       );
       expect(isCanonicalViewStateHash(`#/tasks?hold=${value}`)).toBe(true);
     }
-    expect(boardOnHoldHash).toBe("#/tasks?hold=on_hold");
+    expect(boardOnHoldHash).toBe("#/tasks?hold=on_hold&held_over=3d");
   });
   it("round-trips the board release filter after the other filters", () => {
     for (const value of ["0.19.0", "none", "v1.0.0-rc.1"]) {
@@ -208,9 +208,9 @@ describe("Tasks and Notes address state", () => {
       );
     }
     expect(isCanonicalViewStateHash("#/tasks?release=0.19.0")).toBe(true);
-    expect(viewStateHash("memory", { ...defaultViewState, release: "0.19.0" })).toBe(
-      "#/notes",
-    );
+    expect(
+      viewStateHash("memory", { ...defaultViewState, release: "0.19.0" }),
+    ).toBe("#/notes");
   });
   it.each([
     ["empty release", "#/tasks?release="],
@@ -292,7 +292,9 @@ describe("board column address", () => {
     expect(boardColumnFromHash("#/tasks?agent=unassigned&column=done")).toBe(
       "done",
     );
-    expect(boardColumnFromHash("#/team?column=in_progress")).toBe("in_progress");
+    expect(boardColumnFromHash("#/team?column=in_progress")).toBe(
+      "in_progress",
+    );
   });
 
   it("refuses anything else", () => {
@@ -307,9 +309,9 @@ describe("board column address", () => {
   });
 
   it("is not page state", () => {
-    expect(viewStateHash("board", viewStateFromHash("#/tasks?column=todo"))).toBe(
-      "#/tasks",
-    );
+    expect(
+      viewStateHash("board", viewStateFromHash("#/tasks?column=todo")),
+    ).toBe("#/tasks");
     expect(loginReturnHash("#/tasks?column=todo")).toBe("#/tasks");
   });
 });

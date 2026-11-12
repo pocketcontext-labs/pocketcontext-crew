@@ -340,6 +340,17 @@ function selfStarted(app, current, name) {
 }
 // Returns true when a new task was recorded as self-started instead of waking.
 function transition(app, t, old, options) {
+  const held =
+    t.getString("readiness") === "waiting" && !terminal(t.getString("status"));
+  const since = held
+    ? !old || old.readiness !== "waiting" || terminal(old.status)
+      ? new Date().toISOString()
+      : t.getString("held_since") || t.getString("updated")
+    : "";
+  if (since !== t.getString("held_since")) {
+    t.set("held_since", since);
+    app.save(t);
+  }
   options = options || {};
   const current = state(app, t),
     causes = [];
