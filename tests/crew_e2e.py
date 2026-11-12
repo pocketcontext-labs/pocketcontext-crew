@@ -10,6 +10,7 @@ import struct
 import uuid
 import zlib
 import subprocess
+import time
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from e2e import Project, PASSWORD, IDENTITY
@@ -123,6 +124,8 @@ def attachment_scenario(pc, headers, write, read):
     assert task['id'] in [h['id'] for h in hits], hits
     print('Crew attachments: multipart and base64 add, protected reads, placeholders, upload link, SQL and search passed.')
 
+GONE = b'This link is no longer available.\n'
+
 def artifact_scenario(pc, headers, write, read):
     """Artifacts: bots draft, the owner publishes, revokes and replaces."""
     import re
@@ -141,7 +144,8 @@ def artifact_scenario(pc, headers, write, read):
     assert draft['status'] == 'draft' and 'token' not in draft and draft['sources'] == [source['id']], draft
     own = read('attachments', parent=draft['id'])
     assert len(own) == 1 and own[0]['parent_kind'] == 'artifact', own
-    for action in ['artifact.publish', 'artifact.replace', 'artifact.revoke']:
+    for action in ['artifact.publish', 'artifact.replace', 'artifact.revoke', 'artifact.archive',
+                   'artifact.restore', 'artifact.set_expiry']:
         write(action, {}, draft, expected=403)
     write('artifact.create', {'title': 'Bad', 'sources': ['nosuchrecord123']}, expected=400)
     write('artifact.create', {'title': 'Text file', 'body': '[f](attachment:%s)' % draft['id']}, expected=400)
@@ -179,7 +183,7 @@ def artifact_scenario(pc, headers, write, read):
     # Unknown and malformed tokens get the same plain 404.
     unknown = raw_http(pc, 'GET', '/a/' + 'Z' * 32)
     malformed = raw_http(pc, 'GET', '/a/short')
-    assert unknown[0] == malformed[0] == 404 and unknown[2] == malformed[2] == b'Not found\n', (unknown, malformed)
+    assert unknown[0] == malformed[0] == 404 and unknown[2] == malformed[2] == GONE, (unknown, malformed)
     # Source edits never change the page; a bot edit is a pending change.
     write('note.update', {'body': 'Changed after sharing'}, source)
     current = read('artifacts', id=draft['id'])[0]
@@ -195,13 +199,87 @@ def artifact_scenario(pc, headers, write, read):
     # Revoke: the page and its images answer 404 at once.
     revoked = write('artifact.revoke', {}, replaced, agent=False)
     assert revoked['status'] == 'revoked' and 'token' not in revoked, revoked
-    assert raw_http(pc, 'GET', '/a/' + token)[2] == b'Not found\n'
+    assert raw_http(pc, 'GET', '/a/' + token)[2] == GONE
     again = write('artifact.publish', {}, revoked, agent=False)
     assert again['token'] != token and raw_http(pc, 'GET', '/a/' + token)[0] == 404
     assert raw_http(pc, 'GET', '/a/' + again['token'])[0] == 200
     actions = [e['action'] for e in read('events', parent=draft['id'])]
     assert {'artifact.create', 'artifact.publish', 'artifact.update', 'artifact.replace', 'artifact.revoke'} <= set(actions), actions
+    artifact_lifecycle(pc, headers, write, read, again)
     print('Crew artifacts: bot drafts, owner publish/replace/revoke, public page, headers, snapshot and 404s passed.')
+
+def artifact_lifecycle(pc, headers, write, read, live):
+    """0.22.0: discard and archive, update drafts, expiry and restore."""
+    import datetime
+    token = live['token']
+    # Discard: a draft is archived, hidden by default, listed with archived.
+    draft = write('artifact.create', {'title': 'Second thoughts'})
+    write('artifact.archive', {}, draft, expected=403)
+    discarded = write('artifact.archive', {}, draft, agent=False)
+    assert discarded['archived'] and discarded['state'] == 'archived' and discarded['archived_by'].startswith('owner:'), discarded
+    assert draft['id'] not in [a['id'] for a in read('artifacts')]
+    assert draft['id'] in [a['id'] for a in read('artifacts', archived=True)]
+    write('artifact.update', {'title': 'Edit'}, discarded, expected=400)
+    restored = write('artifact.restore', {}, discarded, agent=False)
+    assert not restored['archived'] and restored['state'] == 'draft', restored
+    # A live link must be revoked before it is archived.
+    write('artifact.archive', {}, read('artifacts', id=live['id'])[0], agent=False, expected=400)
+    # A bot drafts an update of the live link; publishing asks replace or new.
+    write('artifact.create', {'title': 'Self', 'replaces': 'nosuchrecord123'}, expected=400)
+    update = write('artifact.create', {'title': 'Pricing, revised', 'body': 'Plans start at 15.', 'replaces': live['id']})
+    assert update['replaces'] == live['id'] and update['state'] == 'draft', update
+    write('artifact.create', {'title': 'Chain', 'replaces': update['id']}, expected=400)
+    write('artifact.publish', {}, update, agent=False, expected=400)
+    write('artifact.publish', {'mode': 'other'}, update, agent=False, expected=400)
+    before = read('artifacts', id=live['id'])[0]
+    merged = write('artifact.publish', {'mode': 'replace'}, update, agent=False)
+    assert merged['id'] == live['id'] and merged['token'] == token, merged
+    assert merged['published_revision'] == before['published_revision'] + 1 and merged['title'] == 'Pricing, revised', merged
+    page = raw_http(pc, 'GET', '/a/' + token)[2].decode()
+    assert 'Plans start at 15.' in page, page
+    gone = read('artifacts', id=update['id'], archived=True)[0]
+    assert gone['archived'], gone
+    history = [e for e in read('events', parent=live['id']) if e['action'] == 'artifact.replace']
+    assert history[0]['changes']['previous']['title'] == before['published_title'], history[0]
+    assert history[0]['changes']['snapshot']['body'] == 'Plans start at 15.' and history[0]['changes']['from'] == update['id'], history[0]
+    # Publish as new: a separate link; replaces is cleared.
+    other = write('artifact.create', {'title': 'Pricing, alt', 'replaces': live['id']})
+    separate = write('artifact.publish', {'mode': 'new'}, other, agent=False)
+    assert separate['id'] == other['id'] and separate['token'] != token and separate['replaces'] == '', separate
+    # Expiry: only in the future; the link stops working at expires_at.
+    current = read('artifacts', id=separate['id'])[0]
+    past = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=1)).isoformat()
+    write('artifact.set_expiry', {'expires_at': past}, current, agent=False, expected=400)
+    soon = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)).isoformat()
+    timed = write('artifact.set_expiry', {'expires_at': soon}, current, agent=False)
+    assert timed['expires_at'] and timed['state'] == 'published', timed
+    assert raw_http(pc, 'GET', '/a/' + separate['token'])[0] == 200
+    time.sleep(2.5)
+    unknown = raw_http(pc, 'GET', '/a/' + 'Y' * 32)
+    expired = raw_http(pc, 'GET', '/a/' + separate['token'])
+    assert expired[0] == unknown[0] == 404 and expired[2] == unknown[2] == GONE, (expired, unknown)
+    current = read('artifacts', id=separate['id'])[0]
+    assert current['state'] == 'expired' and current['expired'] and not current['pending_changes'], current
+    links = json.loads(raw_http(pc, 'GET', '/api/crew/artifact-links', headers=headers)[2])['items']
+    assert separate['id'] not in [l['id'] for l in links], links
+    write('artifact.replace', {}, current, agent=False, expected=400)
+    write('artifact.set_expiry', {'expires_at': ''}, current, agent=False, expected=400)
+    # Publishing again gives a new token and no expiry; the old one stays dead.
+    fresh = write('artifact.publish', {}, current, agent=False)
+    assert fresh['token'] != separate['token'] and fresh['expires_at'] == '' and fresh['state'] == 'published', fresh
+    assert raw_http(pc, 'GET', '/a/' + separate['token'])[0] == 404 and raw_http(pc, 'GET', '/a/' + fresh['token'])[0] == 200
+    # Expired links archive; archiving clears the token.
+    later = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=1)).isoformat()
+    write('artifact.set_expiry', {'expires_at': later}, read('artifacts', id=separate['id'])[0], agent=False)
+    time.sleep(1.5)
+    shelved = write('artifact.archive', {}, read('artifacts', id=separate['id'])[0], agent=False)
+    assert shelved['state'] == 'archived', shelved
+    assert raw_http(pc, 'GET', '/a/' + fresh['token'])[0] == 404
+    restored = write('artifact.restore', {}, shelved, agent=False)
+    assert restored['state'] == 'expired' and 'token' not in restored, restored
+    rows = request_json(pc, headers, '/api/crew/query', {'sql': "SELECT archived, expires_at, replaces FROM artifacts WHERE id = '%s'" % update['id']})['rows']
+    assert rows == [[1, '', live['id']]] or rows == [[True, '', live['id']]], rows
+    print('Crew artifact lifecycle: discard, archive, restore, update drafts, expiry and new links passed.')
 
 
 def current_revision(read, record):

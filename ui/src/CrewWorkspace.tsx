@@ -1322,7 +1322,7 @@ export default function CrewWorkspace() {
     guide: "What Crew does, what each page is for, and the words it uses.",
     search: "Every task, note, agent and bucket that matches your words.",
     shared:
-      "Frozen copies of notes, shared by a secret link with no sign-in. Agents draft them; only you publish, replace or revoke them. Editing a source note never changes a published page.",
+      "Frozen copies of notes, shared by a secret link with no sign-in. Agents draft them; only you publish, update, expire, revoke or archive them. Editing a source note never changes a published page.",
   };
   const titleHelp = viewHelp[view];
   return (

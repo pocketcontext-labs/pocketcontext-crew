@@ -1,15 +1,52 @@
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { crewApi, val, list, type ArtifactLink, type Row } from "./crewApi";
-import { itemPath } from "./itemLink";
+import {
+  itemPath,
+  sharedFilters,
+  sharedFiltersFromHash,
+  sharedHash,
+  type SharedFilter,
+} from "./itemLink";
 import "./shared.css";
 
 /**
- * The owner's Shared page (#/shared): every artifact with its status, link,
- * views and sources. Publishing, replacing and revoking happen only here (the
- * owner's browser); agents create and edit drafts over MCP.
+ * The owner's Shared page (#/shared): every artifact with its state, link,
+ * expiry, views and sources. Publishing, replacing, revoking, expiry,
+ * archiving and restoring happen only here (the owner's browser); agents
+ * create and edit drafts over MCP, including drafts that update another
+ * artifact's link (replaces).
  */
 export const PUBLISH_RISK =
-  "Anyone with this link can view it until you revoke it.";
+  "Anyone with this link can view it until you revoke it or it expires.";
+
+const filterLabels: Record<SharedFilter, string> = {
+  drafts: "Drafts",
+  live: "Live",
+  ended: "Revoked/expired",
+  archived: "Archived",
+};
+
+type State = "draft" | "published" | "expired" | "revoked" | "archived";
+
+/** The lifecycle state, from the server's derived state when present. */
+export function artifactState(row: Row): State {
+  const state = val(row, "state");
+  if (["draft", "published", "expired", "revoked", "archived"].includes(state))
+    return state as State;
+  if (row.archived === true) return "archived";
+  const status = val(row, "status");
+  return status === "published" || status === "revoked" ? status : "draft";
+}
+
+function filterOf(state: State): SharedFilter {
+  return state === "draft"
+    ? "drafts"
+    : state === "published"
+      ? "live"
+      : state === "archived"
+        ? "archived"
+        : "ended";
+}
 
 type Props = {
   notes: Row[];
@@ -23,27 +60,55 @@ export function artifactUrl(link: ArtifactLink | undefined): string {
   return link.link || `${location.origin}${link.link_path}`;
 }
 
-function when(value: unknown): string {
+function when(value: unknown, withTime = true): string {
   const text = typeof value === "string" ? value : "";
   const time = Date.parse(text.includes("T") ? text : text.replace(" ", "T"));
   if (!text || !Number.isFinite(time)) return "";
-  return new Date(time).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return new Date(time).toLocaleString(
+    undefined,
+    withTime
+      ? { dateStyle: "medium", timeStyle: "short" }
+      : { dateStyle: "medium" },
+  );
+}
+
+/** A date as YYYY-MM-DD in the owner's time zone (for date inputs). */
+function localDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Expiry choices: none, 7 or 30 days from now, or a chosen date. */
+export function expiryFrom(
+  choice: string,
+  date: string,
+  now = Date.now(),
+): string {
+  if (choice === "7" || choice === "30")
+    return new Date(now + Number(choice) * 86400000).toISOString();
+  if (choice === "date" && date) {
+    // The end of the chosen day, in the owner's time zone.
+    const [y, m, d] = date.split("-").map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59).toISOString();
+  }
+  return "";
 }
 
 export default function Shared({ notes, tasks, focus, Prose }: Props) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [links, setLinks] = useState<Record<string, ArtifactLink>>({});
   const [error, setError] = useState("");
+  const [filters, setFilters] = useState<SharedFilter[]>(() =>
+    sharedFiltersFromHash(location.hash),
+  );
   const load = useCallback(async () => {
     try {
-      const [artifacts, published] = await Promise.all([
+      const [active, archived, published] = await Promise.all([
         crewApi.read("artifacts"),
+        crewApi.read("artifacts", { archived: true }),
         crewApi.artifactLinks(),
       ]);
-      setRows(artifacts);
+      setRows([...active, ...archived]);
       setLinks(Object.fromEntries(published.map((l) => [l.id, l])));
       setError("");
     } catch (e) {
@@ -60,14 +125,56 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
       .getElementById(`artifact-${focus}`)
       ?.scrollIntoView?.({ block: "start" });
   }, [focus, rows]);
+  const toggle = (filter: SharedFilter) => {
+    const next = filters.includes(filter)
+      ? filters.filter((f) => f !== filter)
+      : [...filters, filter];
+    setFilters(next);
+    // Keeps the choice in the address without firing hashchange.
+    if (!focus)
+      history.replaceState(
+        null,
+        "",
+        location.pathname + location.search + sharedHash(next),
+      );
+  };
 
   if (!rows) return <p className="crew-shared-loading">Loading artifacts…</p>;
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  const counts = Object.fromEntries(
+    sharedFilters.map((f) => [
+      f,
+      rows.filter((r) => filterOf(artifactState(r)) === f).length,
+    ]),
+  ) as Record<SharedFilter, number>;
+  // A focused artifact (#/shared/<id>) shows whatever its state.
+  const shown = rows.filter(
+    (r) => r.id === focus || filters.includes(filterOf(artifactState(r))),
+  );
   return (
     <section className="crew-shared" aria-label="Shared artifacts">
       {error && (
         <p role="alert" className="crew-alert">
           {error}
         </p>
+      )}
+      {rows.length > 0 && (
+        <div
+          className="crew-shared-filters"
+          role="group"
+          aria-label="Show artifacts"
+        >
+          {sharedFilters.map((f) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={filters.includes(f)}
+              onClick={() => toggle(f)}
+            >
+              {filterLabels[f]} <span>{counts[f]}</span>
+            </button>
+          ))}
+        </div>
       )}
       {!rows.length && (
         <div className="crew-empty">
@@ -79,12 +186,16 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
           </p>
         </div>
       )}
+      {rows.length > 0 && !shown.length && (
+        <p className="crew-shared-none">No artifacts match these filters.</p>
+      )}
       <ol className="crew-shared-list">
-        {rows.map((row) => (
+        {shown.map((row) => (
           <ArtifactCard
             key={`${row.id}-${row.revision}`}
             row={row}
             link={links[row.id]}
+            target={byId[val(row, "replaces")]}
             focused={row.id === focus}
             notes={notes}
             tasks={tasks}
@@ -97,9 +208,18 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
   );
 }
 
+const stateLabels: Record<State, string> = {
+  draft: "Draft",
+  published: "Published",
+  expired: "Expired",
+  revoked: "Revoked",
+  archived: "Archived",
+};
+
 function ArtifactCard({
   row,
   link,
+  target,
   focused,
   notes,
   tasks,
@@ -108,28 +228,37 @@ function ArtifactCard({
 }: {
   row: Row;
   link?: ArtifactLink;
+  target?: Row;
   focused: boolean;
   notes: Row[];
   tasks: Row[];
   Prose: ComponentType<{ children: string }>;
   reload: () => Promise<void>;
 }) {
-  const status = val(row, "status") || "draft";
+  const state = artifactState(row);
   const pending = row.pending_changes === true;
+  const updates = val(row, "replaces");
+  const targetLive = !!target && artifactState(target) === "published";
   const [editing, setEditing] = useState(false);
-  const [preview, setPreview] = useState(focused && status === "draft");
+  const [choosing, setChoosing] = useState(false);
+  const [expiring, setExpiring] = useState(false);
+  const [expiryChoice, setExpiryChoice] = useState("none");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [preview, setPreview] = useState(focused && state === "draft");
   const [title, setTitle] = useState(val(row, "title"));
   const [body, setBody] = useState(val(row, "body"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState<"" | "copied" | "failed">("");
-  const url = artifactUrl(link);
+  const url = state === "published" ? artifactUrl(link) : "";
   const run = async (action: string, data: Record<string, unknown> = {}) => {
     setBusy(true);
     setError("");
     try {
       await crewApi.write(action, data, row);
       setEditing(false);
+      setChoosing(false);
+      setExpiring(false);
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "That did not work.");
@@ -156,6 +285,8 @@ function ArtifactCard({
     };
   });
   const views = Number(row.view_count) || 0;
+  const everPublished = Number(row.published_revision) > 0;
+  const expires = val(row, "expires_at");
   return (
     <li
       id={`artifact-${row.id}`}
@@ -163,30 +294,46 @@ function ArtifactCard({
     >
       <header>
         <h3>{val(row, "title")}</h3>
-        <span className={`crew-artifact-status crew-artifact-${status}`}>
-          {status === "published"
-            ? "Published"
-            : status === "revoked"
-              ? "Revoked"
-              : "Draft"}
+        <span className={`crew-artifact-status crew-artifact-${state}`}>
+          {stateLabels[state]}
         </span>
         {pending && (
           <span className="crew-artifact-pending">Changes not live</span>
         )}
       </header>
+      {updates && (
+        <p className="crew-artifact-update">
+          Update of:{" "}
+          {target ? (
+            <a href={`#/shared/${target.id}`}>{val(target, "title")}</a>
+          ) : (
+            "an unavailable artifact"
+          )}
+          {target && !targetLive ? " (its link no longer works)" : ""}
+        </p>
+      )}
       <p className="crew-artifact-meta">
         {[
-          status === "published" && val(row, "published_at")
+          state === "published" && val(row, "published_at")
             ? `Published ${when(row.published_at)}`
             : "",
           Number(row.published_revision) > 1
             ? `revision ${row.published_revision}`
             : "",
-          status === "revoked" ? `Revoked ${when(row.revoked_at)}` : "",
-          Number(row.published_revision) > 0
-            ? `${views} ${views === 1 ? "view" : "views"}`
+          state === "published"
+            ? expires
+              ? `expires ${when(expires)}`
+              : "no expiry"
             : "",
-          row.last_viewed_at ? `last viewed ${when(row.last_viewed_at)}` : "",
+          state === "expired" ? `Expired ${when(expires)}` : "",
+          state === "revoked" ? `Revoked ${when(row.revoked_at)}` : "",
+          state === "archived" ? `Archived ${when(row.archived_at)}` : "",
+          everPublished ? `${views} ${views === 1 ? "view" : "views"}` : "",
+          everPublished
+            ? row.last_viewed_at
+              ? `last opened ${when(row.last_viewed_at)}`
+              : "never opened"
+            : "",
           val(row, "created_by_agent")
             ? `drafted by ${val(row, "created_by_agent")}`
             : "",
@@ -194,7 +341,7 @@ function ArtifactCard({
           .filter(Boolean)
           .join(" · ")}
       </p>
-      {status === "published" && url && (
+      {url && (
         <div className="crew-artifact-link">
           <input
             readOnly
@@ -212,6 +359,12 @@ function ArtifactCard({
           )}
         </div>
       )}
+      {(state === "expired" || state === "revoked") && (
+        <p className="crew-artifact-note">
+          The link no longer works: visitors see “This link is no longer
+          available”. Publishing again gives a new link.
+        </p>
+      )}
       {sources.length > 0 && (
         <p className="crew-artifact-sources">
           Sources:{" "}
@@ -225,7 +378,7 @@ function ArtifactCard({
       )}
       {pending && (
         <p className="crew-artifact-note">
-          The draft differs from the published page. Replace content to put it
+          The draft differs from the published page. Update content to put it
           live under the same link.
         </p>
       )}
@@ -288,31 +441,120 @@ function ArtifactCard({
               )}
             </div>
           )}
+          {choosing && (
+            <div
+              className="crew-artifact-choice"
+              role="group"
+              aria-label="How to publish this update"
+            >
+              <p>This draft updates “{target ? val(target, "title") : ""}”.</p>
+              <button
+                type="button"
+                className="crew-primary"
+                disabled={busy || !targetLive}
+                onClick={() =>
+                  void run("artifact.publish", { mode: "replace" })
+                }
+              >
+                Replace the existing link's content
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void run("artifact.publish", { mode: "new" })}
+              >
+                Publish as a new link
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setChoosing(false)}
+              >
+                Cancel
+              </button>
+              <small>
+                {targetLive
+                  ? "Replace keeps the same link and shows this draft from now on; the earlier version stays in history and this draft is archived."
+                  : "The link this draft updates no longer works, so it can only be published as a new link."}
+              </small>
+            </div>
+          )}
+          {expiring && (
+            <form
+              className="crew-artifact-expiry"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void run("artifact.set_expiry", {
+                  expires_at: expiryFrom(expiryChoice, expiryDate),
+                });
+              }}
+            >
+              <label>
+                Link expires
+                <select
+                  aria-label="Link expires"
+                  value={expiryChoice}
+                  onChange={(e) => setExpiryChoice(e.target.value)}
+                >
+                  <option value="none">Never</option>
+                  <option value="7">In 7 days</option>
+                  <option value="30">In 30 days</option>
+                  <option value="date">On a date…</option>
+                </select>
+              </label>
+              {expiryChoice === "date" && (
+                <input
+                  type="date"
+                  aria-label="Expiry date"
+                  required
+                  value={expiryDate}
+                  min={localDate(new Date())}
+                  onChange={(e) => setExpiryDate(e.target.value)}
+                />
+              )}
+              <button type="submit" className="crew-primary" disabled={busy}>
+                Save expiry
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setExpiring(false)}
+              >
+                Cancel
+              </button>
+            </form>
+          )}
           <div className="crew-artifact-actions">
-            {status !== "published" && (
+            {state !== "published" && state !== "archived" && !choosing && (
               <span className="crew-artifact-publish">
                 <button
                   type="button"
                   className="crew-primary"
                   disabled={busy}
-                  onClick={() => void run("artifact.publish")}
+                  onClick={() =>
+                    updates && state === "draft"
+                      ? setChoosing(true)
+                      : void run("artifact.publish")
+                  }
                 >
-                  {status === "revoked" ? "Publish again" : "Publish"}
+                  {state === "draft"
+                    ? "Publish"
+                    : "Publish again with a new link"}
                 </button>
                 <small>
                   {PUBLISH_RISK}
-                  {status === "revoked" ? " Publishing gives a new link." : ""}
+                  {state !== "draft" ? " The old link never works again." : ""}
                 </small>
               </span>
             )}
-            {status === "published" && pending && (
+            {state === "published" && pending && (
               <button
                 type="button"
                 className="crew-primary"
                 disabled={busy}
                 onClick={() => void run("artifact.replace")}
               >
-                Replace content
+                Update content (same link)
               </button>
             )}
             <button
@@ -322,14 +564,31 @@ function ArtifactCard({
             >
               {preview ? "Hide draft" : "Show draft"}
             </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setEditing(true)}
-            >
-              Edit draft
-            </button>
-            {status === "published" && (
+            {state !== "archived" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setEditing(true)}
+              >
+                Edit draft
+              </button>
+            )}
+            {state === "published" && !expiring && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setExpiryChoice(expires ? "date" : "none");
+                  setExpiryDate(
+                    expires ? localDate(new Date(Date.parse(expires))) : "",
+                  );
+                  setExpiring(true);
+                }}
+              >
+                Set expiry
+              </button>
+            )}
+            {state === "published" && (
               <button
                 type="button"
                 className="crew-artifact-revoke"
@@ -344,6 +603,40 @@ function ArtifactCard({
                 }}
               >
                 Revoke
+              </button>
+            )}
+            {state === "draft" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (
+                    confirm(
+                      "Discard this draft? It moves to Archived, where you can restore it.",
+                    )
+                  )
+                    void run("artifact.archive");
+                }}
+              >
+                Discard
+              </button>
+            )}
+            {(state === "expired" || state === "revoked") && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void run("artifact.archive")}
+              >
+                Archive
+              </button>
+            )}
+            {state === "archived" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void run("artifact.restore")}
+              >
+                Restore
               </button>
             )}
           </div>

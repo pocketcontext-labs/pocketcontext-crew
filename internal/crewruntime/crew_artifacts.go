@@ -5,7 +5,9 @@ package crewruntime
 // GET /a/<token>/files/<n> serves its nth image. These are the only Crew
 // pages readable without signing in. The token (32 base62 characters, about
 // 190 bits, random and never derived from the id) is the secret; revoking
-// clears it, so a revoked or unknown token gets the same plain 404.
+// clears it, so a revoked or unknown token gets the same plain 404. Since
+// 0.22.0 a link may expire: from expires_at on, its token gets that same 404
+// with no manual action, and archived artifacts never serve.
 //
 // The page has no script, no Crew navigation and no links back into Crew:
 // Markdown is rendered with the notes' GFM semantics, raw HTML is omitted,
@@ -50,7 +52,7 @@ const (
 	artifactMaxFiles      = 9999
 	artifactRelAttribute  = "nofollow noopener noreferrer"
 	artifactRobotsHeader  = "noindex, nofollow, noarchive"
-	artifactNotFoundBody  = "Not found\n"
+	artifactNotFoundBody  = "This link is no longer available.\n"
 	artifactRateLimitBody = "Too many requests. Try again shortly.\n"
 )
 
@@ -99,16 +101,27 @@ func (g *artifactGuardState) reset() {
 	g.links = map[string]*rateBucket{}
 }
 
-// publishedArtifact finds the published artifact a well-formed token names.
+// publishedArtifact finds the live published artifact a well-formed token
+// names: not archived and not expired.
 func publishedArtifact(app core.App, token string) *core.Record {
 	if !artifactTokenPattern.MatchString(token) {
 		return nil
 	}
-	rec, err := app.FindFirstRecordByFilter("crew_artifacts", "token={:t} && status='published'", dbx.Params{"t": token})
-	if err != nil || rec.GetString("token") != token {
+	rec, err := app.FindFirstRecordByFilter("crew_artifacts", "token={:t} && status='published' && archived=false", dbx.Params{"t": token})
+	if err != nil || rec.GetString("token") != token || artifactExpired(rec.GetString("expires_at"), time.Now()) {
 		return nil
 	}
 	return rec
+}
+
+// artifactExpired reports whether an expiry time has passed; an unreadable
+// non-empty expiry fails closed.
+func artifactExpired(expiresAt string, now time.Time) bool {
+	if expiresAt == "" {
+		return false
+	}
+	at, err := time.Parse(time.RFC3339Nano, expiresAt)
+	return err != nil || !now.Before(at)
 }
 
 // artifactHeaders apply to every /a/ response, found or not.

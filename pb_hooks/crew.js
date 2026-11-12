@@ -319,7 +319,7 @@ const derivedFields = {
   notes: ["path", "url"],
   session_revisions: ["edited_by"],
   upload_links: ["state"],
-  artifacts: ["pending_changes", "path"],
+  artifacts: ["pending_changes", "state", "expired", "path"],
   settings: ["storage_used_bytes", "max_file_bytes", "max_active_attachments"],
 };
 const redactedFields = ["url", "secret", "secret_ciphertext"];
@@ -534,14 +534,14 @@ function read(e) {
           : col === "session_revisions"
             ? "agent"
             : col === "reviews"
-            ? "task"
-            : col === "webhook_executions"
               ? "task"
-              : ["webhook_deliveries", "webhook_bridges"].includes(col)
-                ? "config"
-                : col === "webhook_attempts"
-                  ? "delivery"
-                  : "parent";
+              : col === "webhook_executions"
+                ? "task"
+                : ["webhook_deliveries", "webhook_bridges"].includes(col)
+                  ? "config"
+                  : col === "webhook_attempts"
+                    ? "delivery"
+                    : "parent";
     if (
       ![
         "notes",
@@ -565,7 +565,9 @@ function read(e) {
         ? session.findAgent(e.app, b.parent).id
         : b.parent;
   }
-  if (["agents", "buckets", "tasks", "attachments"].includes(col)) {
+  if (
+    ["agents", "buckets", "tasks", "attachments", "artifacts"].includes(col)
+  ) {
     clauses.push(b.archived ? "archived=true" : "archived=false");
     sql.push(b.archived ? "[[archived]]=TRUE" : "[[archived]]=FALSE");
   }

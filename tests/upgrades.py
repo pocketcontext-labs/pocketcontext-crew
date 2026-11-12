@@ -255,6 +255,11 @@ def rehearse(target, previous, root):
             # 0.21.0: session instructions start empty, so every agent uses the built-in default.
             assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801500000_crew_session_instructions.js'").fetchone() == (1,)
             assert current.execute('SELECT count(*) FROM crew_session_revisions').fetchone() == (0,)
+            # 0.22.0: artifacts gain expiry, update drafts and archiving.
+            assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801600000_crew_artifact_lifecycle.js'").fetchone() == (1,)
+            artifact_fields = {f['name']: f['type'] for f in json.loads(current.execute("SELECT fields FROM _collections WHERE name='crew_artifacts'").fetchone()[0])}
+            assert {k: artifact_fields.get(k) for k in ('expires_at', 'replaces', 'archived', 'archived_at', 'archived_by')} == {
+                'expires_at': 'text', 'replaces': 'text', 'archived': 'bool', 'archived_at': 'text', 'archived_by': 'text'}, artifact_fields
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()

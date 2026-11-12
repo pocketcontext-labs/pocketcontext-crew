@@ -584,6 +584,11 @@ function document() {
       description:
         "IDs of the notes and tasks the artifact was built from; shown only in Crew, never on the public page.",
     },
+    replaces: {
+      type: "string",
+      description:
+        "ID of the artifact whose link this draft updates (an unarchived artifact that is not an update draft itself; empty clears). On Publish the owner chooses: replace that link's content (same link; this draft is then archived) or publish as a new link. Only on drafts that were never published.",
+    },
   };
   op("artifact.create", Object.assign({ files }, artifactDraft), ["title"], {
     description:
@@ -596,15 +601,43 @@ function document() {
     description:
       "Edit the draft title, body or sources. On a published artifact the edit is a pending change (pending_changes true): the public page keeps the published snapshot until the owner replaces the content in the browser.",
   });
-  for (const [action, text] of Object.entries({
-    publish:
-      "Turn the link on: snapshot title, body and images and generate a new random token (a revoked link stays dead). Returns the record plus token, link_path /a/<token> and link (with a domain).",
-    replace:
-      "Replace the published snapshot with the current draft under the same link; bumps published_revision.",
-    revoke:
+  const expiresAt = {
+    type: "string",
+    description:
+      "RFC 3339 time in the future when the link stops working (the page answers 404 from then on, with no manual action); empty never expires.",
+  };
+  for (const [action, text, fields] of [
+    [
+      "publish",
+      "Turn the link on: snapshot title, body and images and generate a new random token (a revoked or expired link stays dead). Optional expires_at. A draft with replaces needs mode: replace (that artifact's link keeps its URL and shows this draft as its new snapshot; this draft is archived and the result is that artifact) or new (a separate link; replaces is cleared). Returns the record plus token, link_path /a/<token> and link (with a domain).",
+      {
+        expires_at: expiresAt,
+        mode: { enum: ["replace", "new"] },
+      },
+    ],
+    [
+      "replace",
+      "Replace the published snapshot with the current draft under the same link; bumps published_revision. The event keeps the previous and new snapshots. Not on an expired link.",
+      {},
+    ],
+    [
+      "revoke",
       "Turn the link off immediately (the page and its images answer 404); the draft is kept and can be published again under a new link.",
-  }))
-    op("artifact." + action, {}, [], {
+      {},
+    ],
+    [
+      "set_expiry",
+      "Set or clear when a live link stops working. An expired link never works again; publish again for a new link.",
+      { expires_at: expiresAt },
+    ],
+    [
+      "archive",
+      "Discard a draft or put away a revoked or expired link: hidden from default reads (archived:true lists it), kept for history, never deleted. A live link must be revoked first.",
+      {},
+    ],
+    ["restore", "Bring an archived artifact back to its previous state.", {}],
+  ])
+    op("artifact." + action, fields, [], {
       owner: true,
       revision: "artifact",
       description:
@@ -908,8 +941,25 @@ function document() {
       status: {
         enum: ["draft", "published", "revoked"],
         description:
-          "draft (never published), published (the link works) or revoked (the link answers 404). The token and link are never returned to work clients.",
+          "Stored status: draft (never published), published or revoked (the link answers 404). See state for expiry and archiving. The token and link are never returned to work clients.",
       },
+      state: {
+        enum: ["draft", "published", "expired", "revoked", "archived"],
+        description:
+          "Lifecycle: archived when archived, expired when published and expires_at has passed (the link answers 404), else status.",
+      },
+      expired: { type: "boolean" },
+      expires_at: {
+        type: "string",
+        description: "When the link stops working; empty never expires.",
+      },
+      replaces: {
+        type: "string",
+        description: "The artifact whose link this draft updates, or empty.",
+      },
+      archived: { type: "boolean" },
+      archived_at: str,
+      archived_by: str,
       published_title: str,
       published_body: str,
       published_files: {

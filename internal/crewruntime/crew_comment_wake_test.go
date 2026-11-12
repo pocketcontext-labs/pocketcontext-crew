@@ -313,11 +313,11 @@ func TestCapabilitiesDescribeCommentWakeAndHandoffLimit(t *testing.T) {
 		t.Fatal("limit still owner-only in capabilities", op)
 	}
 	// Work clients share every operation except credential entry,
-	// upload-link creation and publishing, replacing or revoking artifacts.
+	// upload-link creation and publishing, replacing, revoking, expiring or archiving artifacts.
 	for name, raw := range ops {
 		want := "shared_mcp"
 		switch name {
-		case "webhook.credentials.update", "upload_link.create", "artifact.publish", "artifact.replace", "artifact.revoke":
+		case "webhook.credentials.update", "upload_link.create", "artifact.publish", "artifact.replace", "artifact.revoke", "artifact.set_expiry", "artifact.archive", "artifact.restore":
 			want = "owner_browser"
 		}
 		if authority := raw.(map[string]any)["authority"]; authority != want {

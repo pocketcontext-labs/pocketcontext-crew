@@ -51,6 +51,7 @@ export function viewFromHash(hash: string): View {
   if (/^#\/notes\?/.test(hash)) return "memory";
   if (/^#\/connect\?/.test(hash)) return "connect";
   if (/^#\/shared\/[a-z0-9]{15}$/.test(hash)) return "shared";
+  if (/^#\/shared\?/.test(hash)) return "shared";
   const link = parseItemHash(hash);
   if (link) return link.kind === "task" ? "board" : "memory";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
@@ -60,6 +61,31 @@ export function viewFromHash(hash: string): View {
 /** The artifact a Shared page address (#/shared/<id>) points at, or "". */
 export function sharedFocusFromHash(hash: string): string {
   return /^#\/shared\/([a-z0-9]{15})$/.exec(hash)?.[1] ?? "";
+}
+
+/**
+ * Shared page filters: Drafts, Live, Revoked/expired ("ended") and Archived.
+ * The default (Drafts and Live) keeps the plain #/shared address; any other
+ * choice lives in ?show=, in this order.
+ */
+export const sharedFilters = ["drafts", "live", "ended", "archived"] as const;
+export type SharedFilter = (typeof sharedFilters)[number];
+export const defaultSharedFilters: SharedFilter[] = ["drafts", "live"];
+
+export function sharedFiltersFromHash(hash: string): SharedFilter[] {
+  const match = /^#\/shared\?(.*)$/.exec(hash);
+  if (!match) return [...defaultSharedFilters];
+  const show = new URLSearchParams(match[1]).get("show");
+  if (show === null) return [...defaultSharedFilters];
+  const wanted = show.split(",");
+  return sharedFilters.filter((f) => wanted.includes(f));
+}
+
+export function sharedHash(filters: SharedFilter[]): string {
+  const ordered = sharedFilters.filter((f) => filters.includes(f));
+  if (ordered.join(",") === defaultSharedFilters.join(","))
+    return viewHashes.shared;
+  return `${viewHashes.shared}?show=${ordered.join(",")}`;
 }
 
 export const noteSorts = ["updated", "created", "title", "bucket"] as const;

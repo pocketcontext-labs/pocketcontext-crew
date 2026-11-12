@@ -1050,7 +1050,8 @@ try {
  await page.waitForFunction(()=>/^#\/shared\/[a-z0-9]{15}$/.test(location.hash));
  const artifactCard=page.locator('.crew-artifact-focused');
  await artifactCard.getByRole('heading',{name:'Synthetic partner pricing'}).waitFor();
- await artifactCard.getByText('Anyone with this link can view it until you revoke it.').waitFor();
+ await artifactCard.getByText('Anyone with this link can view it until you revoke it or it expires.').waitFor();
+ const artifactId=(await page.evaluate(()=>location.hash)).split('/').pop();
  await artifactCard.getByRole('button',{name:'Publish',exact:true}).click();
  const artifactLinkBox=artifactCard.getByRole('textbox',{name:/^Link to /});
  await artifactLinkBox.waitFor();
@@ -1079,19 +1080,50 @@ try {
  await artifactCard.getByRole('button',{name:'Save draft'}).click();
  await artifactCard.getByText('Changes not live').waitFor();
  await visitorPage.reload();await visitorPage.getByText('Plans start at 10.').waitFor();
- await artifactCard.getByRole('button',{name:'Replace content'}).click();
+ await artifactCard.getByRole('button',{name:'Update content (same link)'}).click();
  await artifactCard.getByText('Changes not live').waitFor({state:'hidden'});
  assert.equal(await artifactCard.getByRole('textbox',{name:/^Link to /}).inputValue(),artifactLink,'replace keeps the link');
  await visitorPage.reload();await visitorPage.getByText('Plans start at 12.').waitFor();
+ // A live card shows expiry and last opened; Set expiry saves a date.
+ await artifactCard.getByText(/no expiry/).waitFor();await artifactCard.getByText(/last opened/).waitFor();
+ await artifactCard.getByRole('button',{name:'Set expiry'}).click();
+ await artifactCard.getByRole('combobox',{name:'Link expires'}).selectOption('30');
+ await artifactCard.getByRole('button',{name:'Save expiry'}).click();
+ await artifactCard.getByText(/expires /).waitFor();
+ // An update draft from a bot: "Update of", then Replace keeps the link.
+ await boardWrite('artifact.create',{title:'Synthetic partner pricing, revised',body:'Plans start at 15.',replaces:artifactId});
+ await page.goto(base+'/#/shared');await page.reload();
+ const updateCard=page.locator('.crew-artifact').filter({hasText:'Update of:'});
+ await updateCard.getByText('Update of:').waitFor();
+ await updateCard.getByRole('button',{name:'Publish',exact:true}).click();
+ await updateCard.getByRole('button',{name:"Replace the existing link's content"}).click();
+ await updateCard.waitFor({state:'detached'});
+ await visitorPage.reload();await visitorPage.getByText('Plans start at 15.').waitFor();
+ await page.goto(base+'/#/shared/'+artifactId);await page.reload();
+ assert.equal(await artifactCard.getByRole('textbox',{name:/^Link to /}).inputValue(),artifactLink,'an update draft keeps the link');
  // The PDF check's listener dismisses every dialog; Revoke needs its confirm accepted.
  page.removeAllListeners('dialog');page.once('dialog',d=>d.accept());
  await artifactCard.getByRole('button',{name:'Revoke'}).click();
  await artifactCard.getByText('Revoked',{exact:true}).waitFor();
- assert.equal((await visitorPage.reload()).status(),404,'a revoked link answers 404');
+ const gone=await visitorPage.reload();
+ assert.equal(gone.status(),404,'a revoked link answers 404');
+ assert.equal((await gone.text()).trim(),'This link is no longer available.');
+ // Archive a revoked link: hidden by default, shown under the Archived filter kept in the address.
+ await artifactCard.getByRole('button',{name:'Archive'}).click();
+ await artifactCard.getByText('Archived',{exact:true}).waitFor();
+ await page.goto(base+'/#/shared');await page.reload();
+ const archivedCard=page.locator('.crew-artifact').filter({hasText:'Synthetic partner pricing, revised'});
+ await page.getByRole('button',{name:/^Drafts/}).waitFor();
+ assert.equal(await archivedCard.count(),0,'archived artifacts are hidden by default');
+ await page.getByRole('button',{name:/^Archived/}).click();
+ await archivedCard.first().waitFor();
+ assert.equal(await page.evaluate(()=>location.hash),'#/shared?show=drafts,live,archived');
+ await page.reload();await archivedCard.first().getByRole('button',{name:'Restore'}).waitFor();
+ await snap('crew-shared-archived');
  await visitor.close();
  await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');
- console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, session instructions dialog 1024/1280/1440 with hand edit, history restore, restore default and copied prompts, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, file previews (log, CSV, PDF with inert JavaScript, audio, video) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, artifacts (share, publish, signed-out phone view 390, snapshot, replace, revoke), logout.');
+ console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, session instructions dialog 1024/1280/1440 with hand edit, history restore, restore default and copied prompts, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, file previews (log, CSV, PDF with inert JavaScript, audio, video) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, artifacts (share, publish, signed-out phone view 390, snapshot, replace, expiry, update draft, revoke, archive, filters), logout.');
 }catch(error){ console.error('Synthetic browser page:', (await page.locator('body').innerText()).slice(0,2500)); await snap('crew-failure'); throw error; }finally{await browser.close();}

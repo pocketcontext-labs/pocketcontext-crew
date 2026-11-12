@@ -36,7 +36,7 @@ claim/claim_renew/release/comment on tasks, update session instructions (session
 request/withdraw/decide review, add/archive/restore
 attachments, archive and restore, and recover executions: every reader
 operation except webhook credential entry, upload-link creation and publishing,
-replacing or revoking artifacts (agents create and edit artifact drafts; the owner
+replacing, revoking, expiring or archiving artifacts (agents create and edit artifact drafts; the owner
 publishes them in the browser).
 The skill's Authorization rules say when (review decisions only on explicit owner
 delegation; archival, deactivation and recovery when the owner asks).

@@ -166,7 +166,7 @@ func PublicRoute(method, p string) bool {
 		return true
 	}
 	// Published artifact pages and their images: token-scoped, read-only and
-	// rate-limited; unknown and revoked tokens get the same plain 404.
+	// rate-limited; unknown, revoked and expired tokens get the same plain 404.
 	if read && ArtifactPath(p) {
 		return true
 	}

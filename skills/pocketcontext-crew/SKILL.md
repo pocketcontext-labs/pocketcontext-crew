@@ -77,7 +77,7 @@ read-only. Read [retrieval](references/retrieval.md) to keep reads compact.
 On this computer the commands act with the owner's authority through the
 local key. `write` always uses the work-client route, which has every
 reader operation except webhook credential entry, upload-link creation and
-publishing, replacing or revoking artifacts. The server does not decide
+publishing, replacing, revoking, expiring or archiving artifacts. The server does not decide
 when you may use them; the Authorization rules below do. Never call the reader
 route (`/api/crew/write`) or handle credentials yourself.
 

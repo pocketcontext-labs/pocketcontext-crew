@@ -13,7 +13,8 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
 - MCP and the CLI work commands use only the work-client route
   (`/api/crew/agent-write`). It accepts every reader (`/api/crew/write`)
   operation except `webhook.credentials.update`, `upload_link.create` and
-  `artifact.publish`/`artifact.replace`/`artifact.revoke`: webhook
+  `artifact.publish`/`artifact.replace`/`artifact.revoke`/
+  `artifact.set_expiry`/`artifact.archive`/`artifact.restore`: webhook
   URL/credentials, upload links and publishing artifacts are owner-browser-only
   (bots draft artifacts, the owner publishes), and reads never return
   credentials, link tokens or artifact tokens. Keep those 403s before idempotency
@@ -34,7 +35,7 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   single batch, revocable, rate-limited, never readable. Published artifact
   pages (`/a/<token>`, `/a/<token>/files/<n>`) are read-only frozen snapshots
   the owner published: 32-character random token, the same plain 404 for
-  unknown and revoked tokens, rate-limited, no script, no links into Crew,
+  unknown, revoked, expired and archived tokens, rate-limited, no script, no links into Crew,
   noindex/no-referrer/no-store; images only from the published list.
 - Attachments are immutable protected files under storage/. Archive, never
   purge; only `/api/crew/attachment` (signed in) serves bytes, with nosniff and

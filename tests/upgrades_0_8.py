@@ -26,7 +26,7 @@ PREVIOUS = '0.8.0'
 LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js', '1801000000_crew_attachments.js',
                     '1801100000_crew_project_agents.js', '1801200000_crew_task_release.js', '1801300000_crew_review_choices.js',
                     '1801400000_crew_artifacts.js',
-                    '1801500000_crew_session_instructions.js'}
+                    '1801500000_crew_session_instructions.js', '1801600000_crew_artifact_lifecycle.js'}
 
 
 def settled(operation, *args):

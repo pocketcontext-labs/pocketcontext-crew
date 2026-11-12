@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const read = vi.fn();
 const artifactLinks = vi.fn();
@@ -12,12 +18,18 @@ vi.mock("./crewApi", async (original) => ({
     write: (...a: unknown[]) => write(...a),
   },
 }));
-import Shared, { PUBLISH_RISK, artifactUrl } from "./Shared";
+import Shared, { PUBLISH_RISK, artifactUrl, expiryFrom } from "./Shared";
 
+/** Active rows for the default read, none for the archived read. */
+const only =
+  (rows: unknown[]) =>
+  (_collection: string, filters?: { archived?: boolean }) =>
+    Promise.resolve(filters?.archived ? [] : rows);
 const Prose = ({ children }: { children: string }) => <div>{children}</div>;
 const note = { id: "note00000000001", revision: 1, title: "Source note" };
 
 describe("Shared", () => {
+  afterEach(cleanup);
   beforeEach(() => {
     read.mockReset();
     artifactLinks.mockReset();
@@ -25,16 +37,18 @@ describe("Shared", () => {
   });
 
   it("publishes a draft from the owner's page with the risk line", async () => {
-    read.mockResolvedValue([
-      {
-        id: "art000000000001",
-        revision: 1,
-        title: "Pricing",
-        body: "Hi",
-        status: "draft",
-        sources: [note.id],
-      },
-    ]);
+    read.mockImplementation(
+      only([
+        {
+          id: "art000000000001",
+          revision: 1,
+          title: "Pricing",
+          body: "Hi",
+          status: "draft",
+          sources: [note.id],
+        },
+      ]),
+    );
     artifactLinks.mockResolvedValue([]);
     write.mockResolvedValue({});
     render(<Shared notes={[note]} tasks={[]} Prose={Prose} />);
@@ -54,20 +68,22 @@ describe("Shared", () => {
     );
   });
 
-  it("shows the link, pending changes, Replace content and Revoke for a published artifact", async () => {
-    read.mockResolvedValue([
-      {
-        id: "art000000000002",
-        revision: 4,
-        title: "Live",
-        body: "New",
-        status: "published",
-        pending_changes: true,
-        published_at: "2026-11-12T10:00:00Z",
-        published_revision: 2,
-        view_count: 3,
-      },
-    ]);
+  it("shows the link, pending changes, Update content and Revoke for a published artifact", async () => {
+    read.mockImplementation(
+      only([
+        {
+          id: "art000000000002",
+          revision: 4,
+          title: "Live",
+          body: "New",
+          status: "published",
+          pending_changes: true,
+          published_at: "2026-11-12T10:00:00Z",
+          published_revision: 2,
+          view_count: 3,
+        },
+      ]),
+    );
     artifactLinks.mockResolvedValue([
       {
         id: "art000000000002",
@@ -83,7 +99,9 @@ describe("Shared", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Changes not live")).toBeInTheDocument();
     expect(screen.getByText(/3 views/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Replace content" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Update content (same link)" }),
+    );
     await waitFor(() =>
       expect(write).toHaveBeenCalledWith(
         "artifact.replace",
@@ -100,6 +118,135 @@ describe("Shared", () => {
         expect.anything(),
       ),
     );
+  });
+
+  it("filters by state, hides archived by default and keeps the choice in the address", async () => {
+    history.replaceState(null, "", "#/shared");
+    read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
+      Promise.resolve(
+        f?.archived
+          ? [
+              {
+                id: "art000000000009",
+                revision: 2,
+                title: "Old draft",
+                status: "draft",
+                state: "archived",
+                archived: true,
+              },
+            ]
+          : [
+              {
+                id: "art000000000003",
+                revision: 1,
+                title: "Draft one",
+                status: "draft",
+                state: "draft",
+              },
+              {
+                id: "art000000000004",
+                revision: 3,
+                title: "Gone",
+                status: "published",
+                state: "expired",
+                expires_at: "2026-11-01T00:00:00Z",
+                published_revision: 1,
+              },
+            ],
+      ),
+    );
+    artifactLinks.mockResolvedValue([]);
+    write.mockResolvedValue({});
+    render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
+    expect(await screen.findByText("Draft one")).toBeInTheDocument();
+    expect(screen.queryByText("Gone")).not.toBeInTheDocument();
+    expect(screen.queryByText("Old draft")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Archived/ }));
+    expect(await screen.findByText("Old draft")).toBeInTheDocument();
+    expect(location.hash).toBe("#/shared?show=drafts,live,archived");
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    await waitFor(() =>
+      expect(write).toHaveBeenCalledWith(
+        "artifact.restore",
+        {},
+        expect.objectContaining({ id: "art000000000009" }),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Revoked\/expired/ }));
+    expect(await screen.findByText("Gone")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Publish again with a new link" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    await waitFor(() =>
+      expect(write).toHaveBeenCalledWith(
+        "artifact.archive",
+        {},
+        expect.objectContaining({ id: "art000000000004" }),
+      ),
+    );
+    history.replaceState(null, "", "#/");
+  });
+
+  it("asks replace or new for an update draft and discards drafts after confirming", async () => {
+    read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
+      Promise.resolve(
+        f?.archived
+          ? []
+          : [
+              {
+                id: "art000000000005",
+                revision: 1,
+                title: "Revised",
+                status: "draft",
+                state: "draft",
+                replaces: "art000000000006",
+              },
+              {
+                id: "art000000000006",
+                revision: 2,
+                title: "Live original",
+                status: "published",
+                state: "published",
+                published_revision: 1,
+              },
+            ],
+      ),
+    );
+    artifactLinks.mockResolvedValue([]);
+    write.mockResolvedValue({});
+    render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
+    expect(await screen.findByText("Update of:")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Replace the existing link's content",
+      }),
+    );
+    await waitFor(() =>
+      expect(write).toHaveBeenCalledWith(
+        "artifact.publish",
+        { mode: "replace" },
+        expect.objectContaining({ id: "art000000000005" }),
+      ),
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
+    await waitFor(() =>
+      expect(write).toHaveBeenCalledWith(
+        "artifact.archive",
+        {},
+        expect.objectContaining({ id: "art000000000005" }),
+      ),
+    );
+  });
+
+  it("turns expiry choices into times", () => {
+    const now = Date.UTC(2026, 10, 12, 12);
+    expect(expiryFrom("none", "", now)).toBe("");
+    expect(expiryFrom("7", "", now)).toBe("2026-11-19T12:00:00.000Z");
+    expect(expiryFrom("30", "", now)).toBe("2026-12-12T12:00:00.000Z");
+    expect(new Date(expiryFrom("date", "2026-12-01", now)).getDate()).toBe(1);
   });
 
   it("builds links from the page origin without a domain", () => {

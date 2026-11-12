@@ -49,8 +49,12 @@ Artifacts (0.21.0) are pages shared by link. The draft is `title`, `body`
 are immutable, so the snapshot never changes) with `published_at`, `published_by`
 and `published_revision`. `token` is a hidden field (32 random base62 characters,
 cleared on revoke; never in crew_read, SQL or MCP). `view_count` and
-`last_viewed_at` are updated by the public page outside the record revision. See
-[Artifacts](crew.md#artifacts).
+`last_viewed_at` are updated by the public page outside the record revision.
+Since 0.22.0, `expires_at` (RFC 3339, empty never expires) ends a published
+link, `replaces` names the artifact whose link a draft updates, and `archived`,
+`archived_at` and `archived_by` archive artifacts instead of deleting them; reads
+add the derived `state` (`draft`, `published`, `expired`, `revoked` or
+`archived`). See [Artifacts](crew.md#artifacts).
 
 Attachments carry `parent_kind` (task, note or artifact) and the parent ID as text, a
 protected single file (20 MiB, thumbs 1600x0 and 320x0, never exported), display

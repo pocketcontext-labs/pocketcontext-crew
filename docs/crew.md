@@ -118,7 +118,8 @@ lookups; use SQL for counts, joins, aggregates and history.
 CLI `write` command only forward to `POST /api/crew/agent-write`, the work-client
 route. Both accept the same operations with the same transaction and revision
 checks, except `webhook.credentials.update`, `upload_link.create` and
-`artifact.publish`/`artifact.replace`/`artifact.revoke` (HTTP 403 on the
+`artifact.publish`/`artifact.replace`/`artifact.revoke`/
+  `artifact.set_expiry`/`artifact.archive`/`artifact.restore` (HTTP 403 on the
 work-client route, before idempotency replay): webhook URL and secret entry,
 upload-link creation and publishing artifacts stay reader-only, and reads never
 return credentials, link tokens or artifact tokens. The routes otherwise differ only in
@@ -473,8 +474,10 @@ choose to publish, never a live view of a task or note, so activity, comments
 and later edits stay private.
 
 - **Drafts.** Any client creates and edits drafts: `artifact.create` (`title`,
-  optional `body`, `sources`, `files`) and `artifact.update` (`title`, `body`,
-  `sources`; revision-checked). In the reader, a note's **Share as artifact**
+  optional `body`, `sources`, `files`, `replaces`) and `artifact.update`
+  (`title`, `body`, `sources`, `replaces`; revision-checked). `replaces` (0.22.0)
+  names the artifact whose link a never-published draft updates; the Shared page
+  shows it as "Update of: <title>". In the reader, a note's **Share as artifact**
   creates a draft prefilled from the note. An agent can compose one body from
   several notes. `sources` lists the notes and tasks it was built from and is
   shown only in Crew. Images are `![alt](attachment:ID)` references to image
@@ -486,14 +489,33 @@ and later edits stay private.
   becomes the published content under the same link; `published_revision`
   increments) and `artifact.revoke` (clears the token: the page and its images
   answer 404 at once) are refused with 403 on the work-client route before
-  idempotency replay and take no `idempotency_key`. Their results carry
+  idempotency replay and take no `idempotency_key`, like the 0.22.0 lifecycle
+  actions below. Their results carry
   `token`, `link_path` (`/a/<token>`) and `link` (with a domain). The reader's
   **Shared** page (`#/shared`, `#/shared/<id>`) lists every artifact with its
-  status, link and Copy link, published time, views and sources, plus Publish,
-  Replace content, Edit draft and Revoke. It reads links from
+  state, link and Copy link, published time, expiry, views, last opened and
+  sources, plus Publish, Update content (same link), Set expiry, Edit draft,
+  Revoke, Discard, Archive and Restore. Filters (Drafts, Live, Revoked/expired,
+  Archived; Drafts and Live by default) stay in the address
+  (`#/shared?show=...`). It reads links from
   `GET /api/crew/artifact-links` (signed in, not on the MCP proxy's route
   list). `crew_read` artifacts, SQL view `artifacts` and MCP never return the
   token.
+- **Lifecycle (0.22.0).** Reads add a derived `state`: `draft`, `published`,
+  `expired` (published, and `expires_at` has passed), `revoked` or `archived`;
+  `status` keeps the stored `draft`, `published` or `revoked`. Owner-only
+  actions: `artifact.set_expiry` (`expires_at`, a future RFC 3339 time, or
+  empty for none) on a live link; `artifact.publish` also takes `expires_at`,
+  and on a draft with `replaces` it requires `mode`: `replace` (that artifact's
+  link keeps its URL and shows this draft as its next snapshot; the update draft
+  is archived) or `new` (a separate link; `replaces` is cleared).
+  `artifact.archive` discards a draft or puts away a revoked or expired link (a
+  live link is revoked first; archiving clears any token), and
+  `artifact.restore` brings it back. Archived artifacts are hidden from
+  `crew_read` unless `archived: true`, kept for history and never deleted. An
+  expired token never works again: publishing again issues a new one. Every
+  publish and replace event keeps the frozen snapshot it published (and the one
+  it replaced), so earlier versions stay in history.
 - **Snapshot rule.** Publishing copies the title, body and the ordered list of
   image attachments into `published_*`. Editing a source note never changes the
   page; editing a published artifact's draft sets `pending_changes` until the
@@ -506,14 +528,16 @@ and later edits stay private.
   links into Crew, and sends `X-Robots-Tag: noindex, nofollow, noarchive`,
   `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and a CSP of
   `default-src 'none'` with only self images and the page's hashed style.
-  Unknown, malformed and revoked tokens get the same plain `404 Not found`.
+  Unknown, malformed, revoked, expired and archived tokens get the same plain
+  404, "This link is no longer available."
   Each page view (not HEAD or images) increments `view_count` and sets
   `last_viewed_at` with one statement outside the record revision.
 - **Rate limits.** Hosted mode sees one proxy address, so limits are keyed like
   upload links: unknown or malformed tokens share one bucket (60, refilling
   1/s), and each published artifact has its own (120, refilling 2/s). Refusals
   are 429 with `Retry-After`.
-- **Risk.** Anyone with the link can read and forward it until you revoke it.
+- **Risk.** Anyone with the link can read and forward it until you revoke it or
+  it expires.
   The Publish button says so.
 
 ## Command-line work commands

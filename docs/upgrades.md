@@ -1,5 +1,30 @@
 # Crew upgrades and rollback
 
+## Crew 0.21.0 to 0.22.0
+
+One data migration (`1801600000_crew_artifact_lifecycle.js`) adds `expires_at`,
+`replaces`, `archived`, `archived_at` and `archived_by` to `crew_artifacts`.
+Existing artifacts keep their status and links, never expire and are not archived.
+Other records and history are unchanged.
+
+1. Take a complete stopped backup first: `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` (when present), the matching 0.21.0 binary and,
+   with webhooks, the private webhook key. Hosted deployment prepares a verified
+   complete backup before replacement.
+2. Replace the binary or image (`CREW_REPLACE_VERSION=0.21.0` for the installer)
+   and upgrade paired clients with the server to 0.22.0.
+3. Run `skill` on each computer with a Crew profile and refresh MCP tool schemas.
+   Agents can set `replaces` on drafts; `artifact.set_expiry`, `artifact.archive`
+   and `artifact.restore` are owner-browser-only.
+4. `capabilities_digest` changes, so agents reread capabilities. Protocol 3 and the
+   managed instruction block stay unchanged; this upgrade does not pause delivery.
+
+Older binaries refuse the migrated database without changing it. Rollback requires
+restoring the complete pre-upgrade backup with the matching 0.21.0 binary or image;
+changes made after the backup, including expiry, archiving and newly published
+links, are not preserved. From earlier versions, also read the intervening upgrade
+notes below.
+
 ## Crew 0.20.0 to 0.21.0
 
 Two data migrations. `1801400000_crew_artifacts.js` adds the empty

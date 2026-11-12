@@ -89,3 +89,18 @@ func TestArtifactPathsAndTokenPattern(t *testing.T) {
 		}
 	}
 }
+
+func TestArtifactExpiryFailsClosed(t *testing.T) {
+	now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
+	for value, want := range map[string]bool{
+		"":                         false,
+		"2026-11-12T12:00:00.001Z": false,
+		"2026-11-12T12:00:00.000Z": true,
+		"2026-11-11T00:00:00Z":     true,
+		"tomorrow":                 true,
+	} {
+		if got := artifactExpired(value, now); got != want {
+			t.Errorf("artifactExpired(%q) = %v, want %v", value, got, want)
+		}
+	}
+}
