@@ -3236,7 +3236,7 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-lightbox[open] {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
 }
 .crew-lightbox::backdrop {
   background: #111814e6;
@@ -3279,12 +3279,65 @@ a.crew-logo:hover .product-brand span {
   line-height: 1;
   padding: 4px 12px;
 }
+.crew-lightbox-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 8px;
+  padding: 0 max(14px, env(safe-area-inset-right)) 10px
+    max(14px, env(safe-area-inset-left));
+}
+.crew-lightbox-tools button,
+.crew-lightbox-original {
+  min-height: 36px;
+  padding: 4px 10px;
+}
+.crew-lightbox-tools button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.crew-lightbox-tools button[aria-pressed="true"] {
+  background: #ffffff40;
+  border-color: #ffffff80;
+}
+.crew-lightbox-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.crew-lightbox-zoom button {
+  min-width: 36px;
+  font-size: 18px !important;
+  line-height: 1;
+}
+.crew-lightbox-level {
+  min-width: 3.4em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.crew-lightbox-original {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+  border-radius: 8px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.crew-lightbox-original:focus-visible {
+  outline: 2px solid #b9dcc0;
+  outline-offset: 2px;
+}
 .crew-lightbox-stage {
+  position: relative;
   min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0 56px 16px;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  touch-action: pan-x pan-y;
 }
 .crew-lightbox-stage img {
   max-width: 100%;
@@ -3292,6 +3345,29 @@ a.crew-logo:hover .product-brand span {
   width: auto;
   height: auto;
   object-fit: contain;
+  cursor: zoom-in;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+/* Zoomed: the stage scrolls; auto margins centre a small image without
+   clipping the start of a large one. */
+.crew-lightbox-stage.is-zoomed {
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overscroll-behavior: contain;
+}
+.crew-lightbox-stage.is-zoomed img {
+  max-width: none;
+  max-height: none;
+  flex: none;
+  margin: auto;
+  object-fit: fill;
+  cursor: grab;
+}
+.crew-lightbox-stage.is-zoomed img:active {
+  cursor: grabbing;
 }
 .crew-lightbox-prev,
 .crew-lightbox-next {
@@ -3323,7 +3399,14 @@ a.crew-logo:hover .product-brand span {
 }
 @media (max-width: 680px) {
   .crew-lightbox-stage {
-    padding: 0 8px 64px;
+    padding: 0 8px calc(64px + env(safe-area-inset-bottom));
+  }
+  .crew-lightbox-tools {
+    gap: 6px;
+  }
+  .crew-lightbox-tools button,
+  .crew-lightbox-original {
+    min-height: 40px;
   }
   .crew-lightbox-prev,
   .crew-lightbox-next {
