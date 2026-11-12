@@ -19,7 +19,7 @@ erDiagram
   crew_artifacts ||--o{ crew_attachments : parent
 ```
 
-Notes and tasks also carry JSON arrays of note IDs. Events carry a parent record
+Notes and tasks also carry JSON arrays of linked task or note IDs. Events carry a parent record
 ID as text, plus action, actor, reported_agent, reason and changes. These links are
 validated by custom operations rather than generic record writes. Every Crew
 record has revision and timestamps. Notes have immutable snapshots; events are

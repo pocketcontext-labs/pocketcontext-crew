@@ -118,9 +118,19 @@ try {
  assert.equal(await taskDialogHeight(),editHeight,'Reviews tab keeps the dialog height');
  await dialog().getByRole('tab',{name:'Activity'}).click();
  assert.equal(await taskDialogHeight(),editHeight,'Activity tab keeps the dialog height');
+ // Comments (0.24.0): only comments, with the box; the address follows the tab.
+ await dialog().getByRole('tab',{name:/^Comments/}).click();
+ assert.equal(await taskDialogHeight(),editHeight,'Comments tab keeps the dialog height');
+ await page.waitForFunction(()=>location.hash.endsWith('?tab=comments'));
  await dialog().getByLabel('Add a comment').fill('Owner completed the external action manually.');
  await dialog().getByRole('button',{name:'Add comment',exact:true}).click();
  await dialog().getByText('Owner completed the external action manually.',{exact:true}).waitFor();
+ await page.waitForFunction(()=>[...document.querySelectorAll('dialog [role=tab]')].some(t=>t.textContent==='Comments1'),null,{timeout:5000}).catch(async()=>assert.fail('the tab counts comments: '+await dialog().getByRole('tablist',{name:'Record views'}).innerText()));
+ await page.reload();
+ await dialog().getByRole('list',{name:'Comments'}).getByText('Owner completed the external action manually.',{exact:true}).waitFor();
+ await dialog().getByRole('tab',{name:'Activity'}).click();
+ await dialog().locator('.crew-timeline strong').filter({hasText:/^Comment$/}).first().waitFor();
+ assert.equal(await dialog().getByText('task.comment',{exact:true}).count(),0,'Activity uses plain labels');
  await dialog().getByRole('tablist',{name:'Record views'}).getByRole('tab',{name:'Edit',exact:true}).click();
  await dialog().getByLabel('Status').selectOption('done');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
@@ -418,6 +428,13 @@ try {
  // Labels are independent keyboard controls; filtering combines with assignment and survives history/reload.
  await page.getByRole('button',{name:/Synthetic long description/}).click();
  const labelsInput=dialog().getByRole('combobox',{name:'Labels',exact:true});
+ // Suggestions float over the form (0.24.0) and Escape closes only them.
+ {const field=dialog().locator('.crew-labels-field');const before=await field.evaluate(e=>e.getBoundingClientRect().height);
+ await labelsInput.fill('n');await dialog().getByRole('listbox').waitFor();
+ assert.equal(await field.evaluate(e=>e.getBoundingClientRect().height),before,'label suggestions do not push the form');
+ await labelsInput.press('Escape');await dialog().getByRole('listbox').waitFor({state:'hidden'});
+ assert.equal(await dialog().count(),1,'Escape closes the suggestions, not the dialog');
+ await labelsInput.fill('');}
  await labelsInput.fill('Synthetic-board');await labelsInput.press('Enter');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  await page.getByRole('button',{name:'Filter by label Synthetic-board',exact:true}).focus();
@@ -560,6 +577,8 @@ try {
  await page.waitForURL('**/#/agents');
  await page.locator('.crew-agent-card').filter({hasText:'Network'}).click();
  const longBrief=Array.from({length:45},(_,i)=>`Synthetic brief line ${i+1}`).join('\n');
+ const briefEdit=()=>dialog().getByRole('tablist',{name:'Agent brief view'}).getByRole('tab',{name:'Edit',exact:true});
+ await briefEdit().click();
  await dialog().getByLabel('Agent brief',{exact:true}).fill(longBrief);
  await dialog().getByRole('button',{name:'Save agent'}).click();await saved();
  const networkCard=page.locator('.crew-agent-card').filter({hasText:'Network'});
@@ -567,6 +586,9 @@ try {
  assert.equal(await networkCard.locator('p').getAttribute('title'),longBrief,'the card keeps the full brief on hover');
  await snapView('crew-agents-1280');
  await networkCard.click();
+ // A filled-in brief opens in Read (rendered Markdown); Edit shows the source.
+ await dialog().locator('.crew-md-preview').getByText('Synthetic brief line 1',{exact:false}).first().waitFor();
+ await briefEdit().click();
  const briefField=dialog().getByLabel('Agent brief',{exact:true});
  assert.equal(await briefField.inputValue(),longBrief);
  // The field re-measures once the dialog has laid out (ResizeObserver), so wait for it.
@@ -583,9 +605,22 @@ try {
  await dialog().getByRole('radio',{name:'I start it myself (no webhook)'}).check();
  await dialog().getByRole('button',{name:'Save agent'}).click();await saved();
  const pageOverflows=()=>page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1);
- await page.getByRole('button',{name:'Start a session for synthetic-repo'}).click();
- const showInstructions=page.getByRole('button',{name:'Show full instructions'});
- await showInstructions.waitFor();
+ // One click copies; a toast confirms, and View opens the instructions.
+ const startButton=page.getByRole('button',{name:'Start a session for synthetic-repo'});
+ const toast=page.locator('.crew-toast');
+ const showInstructions={click:async()=>{
+  await startButton.click();
+  await toast.getByText('Copied the session prompt for synthetic-repo.').waitFor();
+  await toast.getByRole('button',{name:'View'}).click();
+  await toast.waitFor({state:'hidden'});
+ }};
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:base}).catch(()=>{});
+ {const tile=page.locator('.crew-agent-tile').filter({has:startButton});const before=await tile.evaluate(e=>e.getBoundingClientRect().height);
+ await startButton.click();
+ await toast.getByText('Copied the session prompt for synthetic-repo.').waitFor();
+ assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),before,'nothing stays on the card after Start a session');
+ assert.equal(await tile.getByText(/Codex|Claude Code|Show full instructions/).count(),0,'no tool names or extra links on the card');
+ await toast.getByRole('button',{name:'Dismiss'}).click();await toast.waitFor({state:'hidden'});}
  for(const width of [1024,1280,1440]){
   await page.setViewportSize({width,height:900});
   const networkHeight=await networkCard.evaluate(e=>e.getBoundingClientRect().height);
@@ -654,6 +689,20 @@ try {
   await box.getByRole('button',{name:'Close dialog'}).click();
   await box.waitFor({state:'hidden'});
   assert.ok(writeActions.filter(a=>a==='session.update').length===3,'three session.update writes: '+writeActions.join(','));
+ }
+ // Home offers the same one-click start for manual agents only (0.24.0), on a phone too.
+ for(const width of [1280,390]){
+  await page.setViewportSize({width,height:844});
+  await page.getByRole(width<700?'banner':'navigation').waitFor().catch(()=>{});
+  await page.goto(base+'/#/');
+  const row=page.getByRole('region',{name:'Start a session'});
+  const homeStart=row.getByRole('button',{name:'Start a session for synthetic-repo'});
+  assert.equal(await homeStart.innerText(),'Start a session · synthetic-repo');
+  assert.equal(await row.getByRole('button').count(),1,'only manual agents appear on Home');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Home overflow at ${width}`);
+  await homeStart.click();
+  await page.locator('.crew-toast').getByText('Copied the session prompt for synthetic-repo.').waitFor();
+  await page.locator('.crew-toast').getByRole('button',{name:'Dismiss'}).click();
  }
  await page.setViewportSize({width:1280,height:800});
  // Search boxes draw one focus ring, on the box, never a second one on the field inside.

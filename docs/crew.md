@@ -9,10 +9,10 @@ reporting (see [SQL reads](#bounded-read-only-sql)).
 | -------------- | --------------------------------------------------------------------------- |
 | agents         | Role metadata, brief and kind (bot, external, human); not auth accounts     |
 | buckets        | Name, purpose and responsible agent                                         |
-| notes          | One bucket, title, Markdown body, note-ID links, archive state              |
+| notes          | One bucket, title, Markdown body, task or note links, archive state         |
 | note_revisions | Immutable snapshots, version, actor, reported agent and reason              |
 | session_revisions | Immutable session instruction revisions of an external agent (built-in default when none) |
-| tasks          | Board status, assignment, creator attribution, labels, draft, note links, advisory claim, release and approval mode |
+| tasks          | Board status, assignment, creator attribution, labels, draft, task or note links, advisory claim and approval mode |
 | events         | Immutable changes/comments, actor and reported attribution                  |
 | reviews        | Immutable draft and attachment snapshot with monotonic decision state       |
 | attachments    | Immutable files on a task or note: metadata, archive state; bytes in storage/ |
@@ -66,7 +66,10 @@ revision records are never indexed or returned.
 Tasks and notes open in the reader at `#/tasks/<slug>-<id>` and
 `#/notes/<slug>-<id>`. The id decides what opens and the slug is cosmetic, so links
 survive renames. Older bare `#/tasks/<id>` links still work. Archived items open
-read-only. Opened from its link, a task shows over the Tasks page (`#/tasks`) and a
+read-only. A task link may name a dialog tab (since 0.24.0):
+`#/tasks/<slug>-<id>?tab=comments` (also `activity`, `reviews` and `edit`, the
+default); the address follows the tab while the task is open. Any other query
+leaves the link malformed. Opened from its link, a task shows over the Tasks page (`#/tasks`) and a
 note over the Notes page (`#/notes`). An item opened from a page closes back to that
 page with its filters (`#/tasks?agent=…`, `#/notes?bucket=…&sort=…&buckets=…`). The
 older page addresses `#/team` and `#/memory` redirect to these, keeping their query.
@@ -598,7 +601,10 @@ revision_id and creates a new note revision. Claim takes an unassigned task, or
 lets the assignee claim its own task; see [project coder agents](#project-coder-agents).
 Comments preserve task revision (unless files sent with them withdraw a pending
 review); append-only events record them. Link arrays hold
-note IDs. Human is reserved as a derived pending-review label, not editable data.
+task or note IDs (since 0.24.0): an unknown or malformed ID is a 400 naming it
+(`unknown_link`) and a record cannot link to itself (`self_link`). The reader
+shows a record's links under Related and the records that link to it under
+Linked from, so a relationship appears on both sides. Human is reserved as a derived pending-review label, not editable data.
 
 Creating a review snapshots the task draft and moves it to needs_review. Editing
 the draft (which puts the task on hold with hold reason `Draft edited`) or
@@ -744,9 +750,19 @@ shows `Revision N · edited by X, date`, and offers **Rewrite with an agent**
 text, ask what to change, show the new version and save it with
 `expected_revision` only after approval), **Edit** (a Markdown textarea with Save
 and Cancel; a stale revision explains the conflict and offers Reload latest),
-**History** (revision, who, when, with Restore) and **Restore default**. The dialog
-rereads the session when it opens; **Copy prompt** copies the two-line prompt,
-which makes the session read the latest saved revision.
+**History** (revision, who, when, with Restore) and **Restore default**. **Copy
+prompt** copies the two-line prompt, which makes the session read the latest saved
+revision.
+
+**Start a session (one click since 0.24.0).** Each manually started agent has a
+Start a session button under its card on the Agents page and, labelled
+`Start a session · <name>`, on Home (active manual agents only; bots, people and
+inactive agents never appear, and there are no counts). The reader reads the
+session when the button renders, so the click copies `prompt` straight away (a
+phone refuses a clipboard write that waits for the network). A toast confirms
+"Copied the session prompt for <name>." with **View** (opens the Session
+instructions dialog with the session read by that start) and **Dismiss**; if the
+copy fails the toast shows the prompt to copy by hand. Nothing stays on the card.
 
 **In-session approval and Won't do (0.19.0; release labels since 0.23.0).** Tasks have:
 

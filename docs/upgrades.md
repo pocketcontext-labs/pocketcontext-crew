@@ -1,5 +1,18 @@
 # Crew upgrades and rollback
 
+## Crew 0.23.1 to 0.24.0
+
+No data migration, protocol or managed block change. Replace the binary or image
+and upgrade paired clients to 0.24.0. Run `skill` once on each computer with a Crew
+profile and refresh MCP tool schemas: `links` on tasks and notes now accepts task or
+note IDs, so the descriptions and `capabilities_digest` change. Agents reread
+capabilities; delivery is not paused. Writes with an unknown link ID get HTTP 400
+`unknown_link` instead of 404.
+
+Rollback to 0.23.1 needs no restore. Records saved with task links stay readable
+there, but 0.23.1 refuses to save them again (404) until the task links are
+removed. From 0.22.0 or earlier, follow the 0.22.0 to 0.23.0 notes first.
+
 ## Crew 0.23.0 to 0.23.1
 
 No data migration, protocol, managed block, skill or capabilities change. Replace
