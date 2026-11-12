@@ -368,11 +368,11 @@ type rateBucket struct {
 }
 
 // take refills, then takes one token: 0, or whole seconds until one is available.
-func (b *rateBucket) take(now time.Time, burst float64) int {
+func (b *rateBucket) take(now time.Time, burst float64, refill time.Duration) int {
 	if b.last.IsZero() {
 		b.tokens = burst
 	} else {
-		b.tokens += float64(now.Sub(b.last)) / float64(uploadRefill)
+		b.tokens += float64(now.Sub(b.last)) / float64(refill)
 		if b.tokens > burst {
 			b.tokens = burst
 		}
@@ -382,7 +382,7 @@ func (b *rateBucket) take(now time.Time, burst float64) int {
 		b.tokens--
 		return 0
 	}
-	wait := time.Duration((1 - b.tokens) * float64(uploadRefill))
+	wait := time.Duration((1 - b.tokens) * float64(refill))
 	return int((wait + time.Second - 1) / time.Second)
 }
 
@@ -406,7 +406,7 @@ func (g *uploadGuardState) allow(linkID string) int {
 	defer g.mu.Unlock()
 	now := g.now()
 	if linkID == "" {
-		return g.bad.take(now, uploadBadBurst)
+		return g.bad.take(now, uploadBadBurst, uploadRefill)
 	}
 	b := g.links[linkID]
 	if b == nil {
@@ -420,7 +420,7 @@ func (g *uploadGuardState) allow(linkID string) int {
 		b = &rateBucket{}
 		g.links[linkID] = b
 	}
-	return b.take(now, uploadLinkBurst)
+	return b.take(now, uploadLinkBurst, uploadRefill)
 }
 
 func (g *uploadGuardState) reset() {

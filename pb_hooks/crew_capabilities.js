@@ -439,9 +439,9 @@ function document() {
     "Optional files created with the task in one step; attachment:new-N in description or draft names the Nth file (1-based). Any refused file refuses the whole create.";
   operations["note.create"].files =
     "Optional files created with the note in one step; attachment:new-N in body names the Nth file (1-based). Any refused file refuses the whole create.";
-  op("attachment.add", { task: str, note: str, files }, [], {
+  op("attachment.add", { task: str, note: str, artifact: str, files }, [], {
     description:
-      'Attach files to one active task or note (name exactly one of task or note). Each file succeeds or fails on its own; the result lists attachments (saved records), results [{index, name, ok, id | error {code, message}}] and review_withdrawn. HTTP 400 only when every file failed (data["files.N"]). Never wakes; on a task with a pending review it withdraws that review like a draft edit.',
+      'Attach files to one active task or note, or to an artifact (name exactly one of task, note or artifact). Each file succeeds or fails on its own; the result lists attachments (saved records), results [{index, name, ok, id | error {code, message}}] and review_withdrawn. HTTP 400 only when every file failed (data["files.N"]). Never wakes; on a task with a pending review it withdraws that review like a draft edit.',
     result: {
       type: "object",
       properties: {
@@ -485,6 +485,50 @@ function document() {
     },
   );
   op("upload_link.revoke", {}, [], { revision: "upload_link" });
+  // Artifacts (0.21.0): frozen pages published from notes at /a/<token>.
+  const artifactDraft = {
+    title: { type: "string", maxLength: 300 },
+    body: {
+      type: "string",
+      maxLength: 200000,
+      description:
+        "Markdown. Images are ![alt](attachment:ID) references to image attachments (the artifact's own files or a note's or task's images); attachment:new-N names the Nth file of artifact.create. Only PNG, JPEG, GIF and WebP images can be shown.",
+    },
+    sources: {
+      type: "array",
+      maxItems: 50,
+      items: str,
+      description:
+        "IDs of the notes and tasks the artifact was built from; shown only in Crew, never on the public page.",
+    },
+  };
+  op("artifact.create", Object.assign({ files }, artifactDraft), ["title"], {
+    description:
+      "Create a draft artifact (status draft). Any client may create and edit drafts; publishing is owner-browser-only. Compose the body from one or several notes; the public page shows only title, body and images. Optional files become the artifact's attachments, all or nothing.",
+    files:
+      "Optional files created with the artifact; attachment:new-N in body names the Nth file (1-based).",
+  });
+  op("artifact.update", artifactDraft, [], {
+    revision: "artifact",
+    description:
+      "Edit the draft title, body or sources. On a published artifact the edit is a pending change (pending_changes true): the public page keeps the published snapshot until the owner replaces the content in the browser.",
+  });
+  for (const [action, text] of Object.entries({
+    publish:
+      "Turn the link on: snapshot title, body and images and generate a new random token (a revoked link stays dead). Returns the record plus token, link_path /a/<token> and link (with a domain).",
+    replace:
+      "Replace the published snapshot with the current draft under the same link; bumps published_revision.",
+    revoke:
+      "Turn the link off immediately (the page and its images answer 404); the draft is kept and can be published again under a new link.",
+  }))
+    op("artifact." + action, {}, [], {
+      owner: true,
+      revision: "artifact",
+      description:
+        "Owner browser only (HTTP 403 for work clients). " +
+        text +
+        " No idempotency_key.",
+    });
   op(
     "storage.update",
     {
@@ -608,6 +652,7 @@ function document() {
     "attachments",
     "upload_links",
     "settings",
+    "artifacts",
   ])
     collections[name] = { result_schema: record };
   for (const [name, parent] of Object.entries({
@@ -619,7 +664,7 @@ function document() {
     webhook_attempts: "delivery",
     webhook_executions: "task",
     webhook_bridges: "config",
-    attachments: "task or note",
+    attachments: "task, note or artifact",
     upload_links: "task or note",
   }))
     collections[name].parent = parent;
@@ -772,8 +817,41 @@ function document() {
       setup: { type: "object" },
     },
     webhook_mappings: { agent: str, bot_ref: str, bot_name: str },
+    artifacts: {
+      title: str,
+      body: str,
+      sources: strings,
+      status: {
+        enum: ["draft", "published", "revoked"],
+        description:
+          "draft (never published), published (the link works) or revoked (the link answers 404). The token and link are never returned to work clients.",
+      },
+      published_title: str,
+      published_body: str,
+      published_files: {
+        type: "array",
+        items: str,
+        description:
+          "Attachment IDs the published page shows, in order (/a/<token>/files/<n>, n from 1). Attachments are immutable, so the snapshot never changes.",
+      },
+      published_at: str,
+      published_by: str,
+      published_revision: num,
+      revoked_at: str,
+      revoked_by: str,
+      view_count: num,
+      last_viewed_at: str,
+      created_by_agent: str,
+      actor: str,
+      pending_changes: {
+        type: "boolean",
+        description:
+          "Published, and the draft title or body differs from what the link shows.",
+      },
+      path: { type: "string", description: "Reader link #/shared/<id>." },
+    },
     attachments: {
-      parent_kind: { enum: ["task", "note"] },
+      parent_kind: { enum: ["task", "note", "artifact"] },
       parent: str,
       name: str,
       media_type: str,
@@ -937,6 +1015,7 @@ function document() {
       attachment: "attachments",
       upload_link: "upload_links",
       storage: "settings",
+      artifact: "artifacts",
     }[prefix];
     if (prefix === "webhook")
       collection = name.startsWith("webhook.bridge.")
@@ -1247,7 +1326,7 @@ function attachmentsDiscovery() {
     transport: {
       json: "data.files [{name, content_base64}] on POST /api/crew/agent-write (MCP crew_write) or /api/crew/write; at most 5 MiB decoded per request.",
       multipart:
-        "multipart/form-data to the same write routes: field @jsonPayload holds the JSON write envelope, file parts are named files (filename = display name). For attachment.add, task.create, note.create and task.comment only.",
+        "multipart/form-data to the same write routes: field @jsonPayload holds the JSON write envelope, file parts are named files (filename = display name). For attachment.add, task.create, note.create, task.comment and artifact.create only.",
     },
     references:
       "Markdown in note body, task description and task draft may reference ![alt](attachment:ID) or [label](attachment:ID). A new reference must name an active attachment of the same task or note; a reference already saved in that field may stay after archiving (shown as removed). Embedded data: images are refused. attachment:new-N placeholders (N = 1-based file position) work only in task.create/note.create/task.comment with files. Comment bodies follow the same rules; every reference in a comment is new, so it must name an active attachment of the task.",
@@ -1260,6 +1339,8 @@ function attachmentsDiscovery() {
       reader:
         "The owner browser and CLI read GET /api/crew/attachment?id=ID[&thumb=1600x0|320x0][&download=1] with the auth header or ?token= from POST /api/files/token. Work clients use attachment-read.",
     },
+    artifacts:
+      "An artifact body may reference image attachments of its own or of any note or task; publishing snapshots the list, and the public page serves those images only through its token.",
     upload_links:
       "One-time links the owner creates in the reader. Upload only, one batch, expiring (default 15 minutes, at most 24 hours), revocable; events attribute the files to actor upload_link:<id>.",
     rules:

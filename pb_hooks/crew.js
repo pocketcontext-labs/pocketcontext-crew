@@ -2,12 +2,14 @@ const capabilities = require(`${__hooks}/crew_capabilities.js`);
 const webhooks = require(`${__hooks}/crew_webhooks.js`);
 const execution = require(`${__hooks}/crew_execution.js`);
 const attachments = require(`${__hooks}/crew_attachments.js`);
+const artifacts = require(`${__hooks}/crew_artifacts.js`);
 const session = require(`${__hooks}/crew_session.js`);
 const reviewChoices = require(`${__hooks}/crew_review.js`);
 const names = [
   ...webhooks.collections,
   ...execution.collections,
   ...attachments.collections,
+  ...artifacts.collections,
   "agents",
   "buckets",
   "notes",
@@ -315,6 +317,7 @@ const derivedFields = {
   tasks: ["path", "url", "claim_state"],
   notes: ["path", "url"],
   upload_links: ["state"],
+  artifacts: ["pending_changes", "path"],
   settings: ["storage_used_bytes", "max_file_bytes", "max_active_attachments"],
 };
 const redactedFields = ["url", "secret", "secret_ciphertext"];
@@ -572,7 +575,9 @@ function read(e) {
           ? ["title", "description", "draft"]
           : ["agents", "buckets", "attachments"].includes(col)
             ? ["name"]
-            : [];
+            : col === "artifacts"
+              ? ["title", "body"]
+              : [];
     if (!searchFields.length) bad("Search not supported here");
     clauses.push(
       "(" + searchFields.map((k) => k + " ~ {:q}").join(" || ") + ")",
@@ -649,11 +654,13 @@ function read(e) {
               ? execution.exported(r)
               : attachments.collections.includes(col)
                 ? attachments.exported(r, e.app)
-                : col === "tasks" || col === "notes"
-                  ? webhooks.linkedExport(e.app, col, r)
-                  : keep
-                    ? r.publicExport()
-                    : r;
+                : col === "artifacts"
+                  ? artifacts.exported(r)
+                  : col === "tasks" || col === "notes"
+                    ? webhooks.linkedExport(e.app, col, r)
+                    : keep
+                      ? r.publicExport()
+                      : r;
       return keep ? pick(value, keep) : value;
     }),
     has_more: rows.length > limit,
@@ -697,6 +704,10 @@ function write(e, isAgent) {
   // Owner-browser-only, like webhook credentials: refused before idempotency.
   if (isAgent && b.action === "upload_link.create")
     throw new ForbiddenError("Create upload links in the owner UI");
+  // Bots draft artifacts; only the owner's browser publishes, replaces or
+  // revokes them (the outbound gate), also refused before idempotency.
+  if (isAgent && artifacts.OWNER_ACTIONS.includes(b.action))
+    throw new ForbiddenError(artifacts.OWNER_ONLY_MESSAGE);
   const files = attachments.collect(e, b);
   const actor = (isAgent ? "mcp:" : "owner:") + e.auth.id;
   let result, refusal;
@@ -704,6 +715,10 @@ function write(e, isAgent) {
     if (attachments.ACTIONS.includes(b.action)) {
       result = attachments.handle(app, e, b, actor, isAgent, files, helpers);
       renewAfterAttachment(app, b);
+      return;
+    }
+    if (artifacts.ACTIONS.includes(b.action)) {
+      result = artifacts.handle(app, b, actor, isAgent, files);
       return;
     }
     if (b.action.startsWith("execution.")) {

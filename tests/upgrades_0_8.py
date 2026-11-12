@@ -24,7 +24,8 @@ import upgrades
 PREVIOUS = '0.8.0'
 # Migrations added by releases after PREVIOUS; nothing else may change the ledger.
 LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js', '1801000000_crew_attachments.js',
-                    '1801100000_crew_project_agents.js', '1801200000_crew_task_release.js', '1801300000_crew_review_choices.js'}
+                    '1801100000_crew_project_agents.js', '1801200000_crew_task_release.js', '1801300000_crew_review_choices.js',
+                    '1801400000_crew_artifacts.js'}
 
 
 def settled(operation, *args):

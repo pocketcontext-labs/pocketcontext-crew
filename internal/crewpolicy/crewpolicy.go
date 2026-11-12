@@ -5,6 +5,7 @@ package crewpolicy
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
@@ -45,8 +46,8 @@ var Text = appserver.Text{
 	LegacyRecreateHint: "Keep using the earlier release for it, or start a new project with `pocketcontext-crew init --db NEW_PATH` and recreate the Crew records you need",
 	OAuthResourceName:  "PocketContext Crew notes and tasks",
 	OAuthConsent: appserver.OAuthConsentText{
-		ConnectionsHTML: `<p>These apps can read and change notes and tasks in every bucket, request human review, and record your review decisions when you delegate them. They cannot enter webhook credentials. Revoke access to disconnect an app.</p>`,
-		RequestHTML:     `<p><strong>{{.Name}}</strong> is asking to read and change notes and tasks in every bucket and request human review.</p><p>It can record review decisions you delegate to it, archive buckets and deactivate agents, following the rules in its instructions. It cannot enter or read webhook credentials, administer the server or get shell access.</p>`,
+		ConnectionsHTML: `<p>These apps can read and change notes and tasks in every bucket, request human review, and record your review decisions when you delegate them. They cannot enter webhook credentials or publish artifacts. Revoke access to disconnect an app.</p>`,
+		RequestHTML:     `<p><strong>{{.Name}}</strong> is asking to read and change notes and tasks in every bucket and request human review.</p><p>It can record review decisions you delegate to it, archive buckets and deactivate agents, following the rules in its instructions. It cannot enter or read webhook credentials, publish shared links, administer the server or get shell access.</p>`,
 		// Unused while Page.SignInPath and Page.ConnectionsPath replace both places
 		// Core would show it; kept so the plain pages still explain sign-in.
 		SignInHTML: `If you are not signed in, open your fresh {{.Product}} reader sign-in link in another tab of this browser, then return here. Your setup agent can issue one with <code>open --public</code>. You can also <a href="/" target="_blank" rel="noopener">open the reader</a> and use your password if you set one.`,
@@ -143,6 +144,12 @@ var Observe = mcpobserve.Policy{
 	APIRoutes: []string{"/api/crew/read", "/api/crew/search", "/api/crew/schema", "/api/crew/query", "/api/crew/agent-write", "/api/crew/attachment-read"},
 }
 
+var artifactPathPattern = regexp.MustCompile(`^/a/[A-Za-z0-9]{1,64}(/files/[0-9]{1,4})?$`)
+
+// ArtifactPath reports a public artifact page (/a/<token>) or image
+// (/a/<token>/files/<n>) path. The handler checks the token itself.
+func ArtifactPath(p string) bool { return artifactPathPattern.MatchString(p) }
+
 // PublicRoute is deliberately an allowlist. A future local API does not become
 // public merely because it was registered on the application's router.
 func PublicRoute(method, p string) bool {
@@ -155,7 +162,12 @@ func PublicRoute(method, p string) bool {
 	}
 	// /api/crew/attachment checks the sign-in itself (auth header or a
 	// short-lived file token from /api/files/token).
-	if read && (p == "/api/realtime" || p == "/api/crew/schema" || p == "/api/crew/attachment") {
+	if read && (p == "/api/realtime" || p == "/api/crew/schema" || p == "/api/crew/attachment" || p == "/api/crew/artifact-links") {
+		return true
+	}
+	// Published artifact pages and their images: token-scoped, read-only and
+	// rate-limited; unknown and revoked tokens get the same plain 404.
+	if read && ArtifactPath(p) {
 		return true
 	}
 	if method == http.MethodPost {

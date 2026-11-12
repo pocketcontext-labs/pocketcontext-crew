@@ -20,6 +20,7 @@ const FILE_ACTIONS = [
   "task.create",
   "note.create",
   "task.comment",
+  "artifact.create",
 ];
 const ACTIONS = [
   "attachment.add",
@@ -29,7 +30,11 @@ const ACTIONS = [
   "upload_link.revoke",
   "storage.update",
 ];
-const TEXT_FIELDS = { task: ["description", "draft"], note: ["body"] };
+const TEXT_FIELDS = {
+  task: ["description", "draft"],
+  note: ["body"],
+  artifact: ["body"],
+};
 // Attachment references and data: images are found on a parsed CommonMark
 // (GFM) tree in Go ($pocketcontext.crewMarkdownRefs), with the reader's
 // semantics: link and image destinations, reference definitions anywhere and
@@ -118,16 +123,29 @@ function nextPosition(app, parent) {
     .one(row);
   return row.position + 1;
 }
+const PARENT_COLLECTIONS = {
+  task: "crew_tasks",
+  note: "crew_notes",
+  artifact: "crew_artifacts",
+};
 function parentRecord(app, kind, id) {
-  return get(app, kind === "task" ? "crew_tasks" : "crew_notes", id);
+  return get(app, PARENT_COLLECTIONS[kind], id);
 }
+// attachment.add also accepts an artifact (0.21.0); upload links stay on
+// tasks and notes (upload_link.create refuses other fields first).
 function parentOf(app, d) {
-  if ((d.task === undefined) === (d.note === undefined))
-    bad("Name exactly one of task or note");
-  const kind = d.task !== undefined ? "task" : "note";
+  const kinds = ["task", "note", "artifact"].filter((k) => d[k] !== undefined);
+  if (kinds.length !== 1)
+    bad(
+      d.artifact === undefined
+        ? "Name exactly one of task or note"
+        : "Name exactly one of task, note or artifact",
+    );
+  const kind = kinds[0];
   return { kind, record: parentRecord(app, kind, d[kind]) };
 }
 function parentActive(app, kind, r) {
+  if (kind === "artifact") return true;
   if (r.getBool("archived")) return false;
   if (kind === "note")
     return !app
@@ -178,7 +196,7 @@ function collect(e, b) {
   if (d && typeof d === "object" && d.files !== undefined) {
     if (!FILE_ACTIONS.includes(b.action))
       bad(
-        "Files are accepted only by attachment.add, task.create, note.create and task.comment",
+        "Files are accepted only by attachment.add, task.create, note.create, task.comment and artifact.create",
       );
     if (!Array.isArray(d.files))
       bad("data.files must be an array of {name, content_base64}");
@@ -189,7 +207,7 @@ function collect(e, b) {
   if (result.error) bad(result.error);
   if (result.files.length && !FILE_ACTIONS.includes(b.action))
     bad(
-      "Files are accepted only by attachment.add, task.create, note.create and task.comment",
+      "Files are accepted only by attachment.add, task.create, note.create, task.comment and artifact.create",
     );
   return result.files;
 }
@@ -230,7 +248,7 @@ function addFiles(app, kind, parent, files, ctx) {
         failure(
           f,
           "attachment_limit",
-          "A " +
+          (kind === "artifact" ? "An " : "A ") +
             kind +
             " holds at most 20 active attachments; archive one first",
         ),
@@ -512,7 +530,7 @@ function handle(app, e, b, actor, isAgent, files, h) {
   const d = b.data || {};
   const ctx = { b, actor, isAgent, ownerTouch: !isAgent, link: null };
   if (b.action === "attachment.add") {
-    only(d, ["task", "note"]);
+    only(d, ["task", "note", "artifact"]);
     if (!files.length)
       bad("Add at least one file (multipart parts named files, or data.files)");
     const p = parentOf(app, d);
@@ -548,7 +566,7 @@ function handle(app, e, b, actor, isAgent, files, h) {
         );
       if (!archive && active(app, parent.id).length >= MAX_ACTIVE)
         bad(
-          "A " +
+          (kind === "artifact" ? "An " : "A ") +
             kind +
             " holds at most 20 active attachments; archive one first",
         );
@@ -765,6 +783,7 @@ module.exports = {
   snapshot,
   snapshotMatches,
   checkRefs,
+  markdown,
   stageCreate,
   stageComment,
   fingerprint,

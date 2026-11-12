@@ -19,6 +19,7 @@ export const viewHashes = {
   connect: "#/connect",
   guide: "#/guide",
   search: "#/search",
+  shared: "#/shared",
 } as const;
 export type View = keyof typeof viewHashes;
 
@@ -49,10 +50,16 @@ export function viewFromHash(hash: string): View {
   if (/^#\/tasks\?/.test(hash)) return "board";
   if (/^#\/notes\?/.test(hash)) return "memory";
   if (/^#\/connect\?/.test(hash)) return "connect";
+  if (/^#\/shared\/[a-z0-9]{15}$/.test(hash)) return "shared";
   const link = parseItemHash(hash);
   if (link) return link.kind === "task" ? "board" : "memory";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
   return match ? (match[0] as View) : "home";
+}
+
+/** The artifact a Shared page address (#/shared/<id>) points at, or "". */
+export function sharedFocusFromHash(hash: string): string {
+  return /^#\/shared\/([a-z0-9]{15})$/.exec(hash)?.[1] ?? "";
 }
 
 export const noteSorts = ["updated", "created", "title", "bucket"] as const;

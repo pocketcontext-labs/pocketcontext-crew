@@ -3008,5 +3008,250 @@
   "method": "PUT",
   "path": "/up",
   "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/crew/artifact-links",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/crew/artifact-links",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/api/crew/artifact-links",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/api/crew/artifact-links",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/crew/artifact-links",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/api/crew/artifact-links",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/api/crew/artifact-links",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/a/",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/a/",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/a/",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/a/",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/a/",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/a/",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/a/",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/x",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/x",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/x",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/x",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/x",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/x",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/x",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/other",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/other",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/other",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/other",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/other",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/other",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/other",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1/2",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1/2",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1/2",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1/2",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1/2",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1/2",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1/2",
+  "allow": false
  }
 ]

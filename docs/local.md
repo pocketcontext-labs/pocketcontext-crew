@@ -46,8 +46,8 @@ overwriting a file. See
 
 On an install without a domain, CLI agents act with owner authority: the local
 key on this computer, or the saved session token on a paired computer. The
-work-client route has every reader operation except webhook credential entry
-and upload-link creation,
+work-client route has every reader operation except webhook credential entry,
+upload-link creation and publishing artifacts,
 and the skill's authorization rules say when an agent may decide a review (only
 on your explicit delegation), archive, deactivate or recover. An agent holding
 owner credentials could still reach the reader route with raw HTTP; the skill

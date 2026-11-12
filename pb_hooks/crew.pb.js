@@ -42,3 +42,12 @@ routerAdd(
   (e) => require(`${__hooks}/crew.js`).uploadFiles(e),
   $apis.bodyLimit(94371840),
 );
+// Artifact links (0.21.0) for the owner's Shared page: signed in, and kept off
+// the MCP proxy's route list like /api/crew/write, so work clients never read
+// tokens. The public pages themselves (/a/<token>) are served in Go.
+routerAdd(
+  "GET",
+  "/api/crew/artifact-links",
+  (e) => require(`${__hooks}/crew_artifacts.js`).links(e),
+  $apis.requireAuth("users"),
+);

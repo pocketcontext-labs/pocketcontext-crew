@@ -38,8 +38,8 @@ SQL; [Crew 0.7.1](docs/releases/0.7.1.md) fixed remote client invitations.
   owner can open on a phone, and bounded reads for agents (`crew_attachment`).
 
 Work clients (MCP `crew_write` and the CLI `write` command) have the same
-operations as the owner's reader, except webhook URL and secret entry and
-upload-link creation, which stay in the owner browser. Authorization for the rest is a set of owner-editable
+operations as the owner's reader, except webhook URL and secret entry,
+upload-link creation and publishing, replacing or revoking artifacts, which stay in the owner browser. Authorization for the rest is a set of owner-editable
 default rules in the skill and MCP instructions (for example: decide reviews
 only on explicit delegation); attribution (`actor`, `reported_agent`) is kept
 for audit and never used to block. Agent names are reported attribution, not

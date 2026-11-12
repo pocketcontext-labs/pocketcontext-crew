@@ -33,6 +33,12 @@ export type AgentSession = {
   instructions: string;
   lease_hours: number;
 };
+export type ArtifactLink = {
+  id: string;
+  token: string;
+  link_path: string;
+  link: string;
+};
 export type ConnectedApp = { id: string; name: string; created: number };
 async function connectionsRequest<T>(body?: { id: string }): Promise<T> {
   const response = await fetch("/oauth/connections", {
@@ -137,6 +143,14 @@ export const crewApi = {
         typeof session.instructions === "string" ? session.instructions : "",
       lease_hours: Number(session.lease_hours) || 0,
     };
+  },
+  /** Links of published artifacts; owner-only, never reachable by MCP. */
+  async artifactLinks(): Promise<ArtifactLink[]> {
+    const response = await pb.send<{ items?: ArtifactLink[] }>(
+      "/api/crew/artifact-links",
+      { method: "GET", cache: "no-store" },
+    );
+    return Array.isArray(response?.items) ? response.items : [];
   },
   async write(
     action: string,

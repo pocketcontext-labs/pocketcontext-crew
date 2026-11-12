@@ -123,6 +123,86 @@ def attachment_scenario(pc, headers, write, read):
     assert task['id'] in [h['id'] for h in hits], hits
     print('Crew attachments: multipart and base64 add, protected reads, placeholders, upload link, SQL and search passed.')
 
+def artifact_scenario(pc, headers, write, read):
+    """Artifacts: bots draft, the owner publishes, revokes and replaces."""
+    import re
+    bucket = write('bucket.create', {'name': 'SHARE', 'purpose': 'Artifact sources'})
+    shot = synthetic_png(48, 30)
+    source = write('note.create', {'bucket': bucket['id'], 'title': 'Pricing summary',
+                                   'body': 'Plans **start** at 10.\n\n![chart](attachment:new-1)',
+                                   'files': [{'name': 'chart.png', 'content_base64': base64.b64encode(shot).decode()}]})
+    image = read('attachments', parent=source['id'])[0]
+    body = (source['body'] + '\n\n[Crew task](#/tasks/x) [home](http://127.0.0.1:%d/#/notes/y) '
+            '[docs](https://example.com/docs) <script>alert(1)</script>' % pc.port)
+    # A bot drafts from a note (with its own file too) and cannot publish.
+    draft = write('artifact.create', {'title': 'Pricing for partners', 'body': body + '\n\n![own](attachment:new-1)',
+                                      'sources': [source['id']],
+                                      'files': [{'name': 'own.png', 'content_base64': base64.b64encode(shot).decode()}]})
+    assert draft['status'] == 'draft' and 'token' not in draft and draft['sources'] == [source['id']], draft
+    own = read('attachments', parent=draft['id'])
+    assert len(own) == 1 and own[0]['parent_kind'] == 'artifact', own
+    for action in ['artifact.publish', 'artifact.replace', 'artifact.revoke']:
+        write(action, {}, draft, expected=403)
+    write('artifact.create', {'title': 'Bad', 'sources': ['nosuchrecord123']}, expected=400)
+    write('artifact.create', {'title': 'Text file', 'body': '[f](attachment:%s)' % draft['id']}, expected=400)
+    # Owner publishes: a 32-character base62 token, never in reads or SQL.
+    published = write('artifact.publish', {}, draft, agent=False)
+    token = published['token']
+    assert re.fullmatch(r'[A-Za-z0-9]{32}', token) and published['link_path'] == '/a/' + token, published
+    assert published['published_files'] == [image['id'], own[0]['id']], published
+    assert 'token' not in json.dumps(read('artifacts', id=draft['id']))
+    assert raw_http(pc, 'POST', '/api/crew/read', json.dumps({'collection': 'artifacts', 'fields': ['token']}).encode(),
+                    {**headers, 'Content-Type': 'application/json'})[0] == 400
+    assert raw_http(pc, 'POST', '/api/crew/query', json.dumps({'sql': 'SELECT token FROM artifacts'}).encode(),
+                    {**headers, 'Content-Type': 'application/json'})[0] == 400
+    links = json.loads(raw_http(pc, 'GET', '/api/crew/artifact-links', headers=headers)[2])['items']
+    assert [l['token'] for l in links] == [token], links
+    assert raw_http(pc, 'GET', '/api/crew/artifact-links')[0] == 401
+    tokens = {write('artifact.publish', {}, write('artifact.create', {'title': 'T%d' % i}), agent=False)['token'] for i in range(5)}
+    assert len(tokens) == 5 and token not in tokens
+    # The public page: no sign-in, only title, body and images, no Crew links.
+    status, got, page = raw_http(pc, 'GET', '/a/' + token)
+    text = page.decode()
+    assert status == 200 and got['Content-Type'].startswith('text/html'), (status, got)
+    assert 'noindex' in got['X-Robots-Tag'] and got['Referrer-Policy'] == 'no-referrer' and got['Cache-Control'] == 'no-store', got
+    assert "script-src" not in got['Content-Security-Policy'] and "default-src 'none'" in got['Content-Security-Policy'], got
+    assert '<title>Pricing for partners</title>' in text and '<strong>start</strong>' in text, text
+    assert '/a/%s/files/1' % token in text and '/a/%s/files/2' % token in text, text
+    assert 'href="https://example.com/docs"' in text and 'noreferrer' in text, text
+    assert '#/tasks' not in text and '#/notes' not in text and '<script' not in text and 'Synthetic' not in text, text
+    status, got, data = raw_http(pc, 'GET', '/a/%s/files/1' % token)
+    assert status == 200 and data[:8] == b'\x89PNG\r\n\x1a\n' and got['Content-Type'] == 'image/png', (status, got)
+    assert raw_http(pc, 'GET', '/a/%s/files/3' % token)[0] == 404
+    assert raw_http(pc, 'HEAD', '/a/' + token)[0] == 200
+    viewed = read('artifacts', id=draft['id'])[0]
+    assert viewed['view_count'] == 1 and viewed['last_viewed_at'], viewed
+    # Unknown and malformed tokens get the same plain 404.
+    unknown = raw_http(pc, 'GET', '/a/' + 'Z' * 32)
+    malformed = raw_http(pc, 'GET', '/a/short')
+    assert unknown[0] == malformed[0] == 404 and unknown[2] == malformed[2] == b'Not found\n', (unknown, malformed)
+    # Source edits never change the page; a bot edit is a pending change.
+    write('note.update', {'body': 'Changed after sharing'}, source)
+    current = read('artifacts', id=draft['id'])[0]
+    current = write('artifact.update', {'body': 'Plans start at 12.'}, current)
+    assert current['pending_changes'] and current['published_body'] == body + '\n\n![own](attachment:%s)' % own[0]['id'], current
+    page = raw_http(pc, 'GET', '/a/' + token)[2].decode()
+    assert 'Plans <strong>start</strong> at 10.' in page and 'Changed after sharing' not in page and 'at 12' not in page, page
+    # Replace content: same link, latest published revision.
+    replaced = write('artifact.replace', {}, current, agent=False)
+    assert replaced['token'] == token and replaced['published_revision'] == 2 and not replaced['pending_changes'], replaced
+    page = raw_http(pc, 'GET', '/a/' + token)[2].decode()
+    assert 'Plans start at 12.' in page and raw_http(pc, 'GET', '/a/%s/files/1' % token)[0] == 404, page
+    # Revoke: the page and its images answer 404 at once.
+    revoked = write('artifact.revoke', {}, replaced, agent=False)
+    assert revoked['status'] == 'revoked' and 'token' not in revoked, revoked
+    assert raw_http(pc, 'GET', '/a/' + token)[2] == b'Not found\n'
+    again = write('artifact.publish', {}, revoked, agent=False)
+    assert again['token'] != token and raw_http(pc, 'GET', '/a/' + token)[0] == 404
+    assert raw_http(pc, 'GET', '/a/' + again['token'])[0] == 200
+    actions = [e['action'] for e in read('events', parent=draft['id'])]
+    assert {'artifact.create', 'artifact.publish', 'artifact.update', 'artifact.replace', 'artifact.revoke'} <= set(actions), actions
+    print('Crew artifacts: bot drafts, owner publish/replace/revoke, public page, headers, snapshot and 404s passed.')
+
 
 def current_revision(read, record):
     return [t for t in read('tasks') if t['id'] == record['id']][0]['revision']
@@ -408,6 +488,7 @@ def scenario(pc):
     assert read('webhook_routing')[0]['epoch'] == old_epoch, 'Ordinary restart preserves delivery epoch'
     assert current('webhook_configs', changed)['secret_configured'] is False
     attachment_scenario(pc, headers, write, read)
+    artifact_scenario(pc, headers, write, read)
     print('Crew end-to-end workflow, conflicts, archive/restore and authorization checks passed.')
 
 

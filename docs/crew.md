@@ -116,10 +116,11 @@ lookups; use SQL for counts, joins, aggregates and history.
 `POST /api/crew/write` carries reader writes (the owner browser). MCP and the
 CLI `write` command only forward to `POST /api/crew/agent-write`, the work-client
 route. Both accept the same operations with the same transaction and revision
-checks, except `webhook.credentials.update` and `upload_link.create` (HTTP 403
-on the work-client route, before idempotency replay): webhook URL and secret
-entry and upload-link creation stay reader-only, and reads never return
-credentials or link tokens. The routes otherwise differ only in
+checks, except `webhook.credentials.update`, `upload_link.create` and
+`artifact.publish`/`artifact.replace`/`artifact.revoke` (HTTP 403 on the
+work-client route, before idempotency replay): webhook URL and secret entry,
+upload-link creation and publishing artifacts stay reader-only, and reads never
+return credentials, link tokens or artifact tokens. The routes otherwise differ only in
 loop accounting and audit: work-client comments never wake (so bots cannot
 ping-pong), work-client reassignments count toward `max_bot_handoffs` while
 reader task writes reset the count, and events record an `owner:` or `mcp:`
@@ -462,6 +463,57 @@ reason `via upload link <id>`. A link token is not a sign-in: it cannot read
 anything, including the files it uploaded.
 
 Without a domain, only devices that can reach the local server can use a link.
+
+## Artifacts
+
+Artifacts (0.21.0) are frozen pages the owner shares with someone outside Crew
+by a secret link, with no account or password. An artifact is a snapshot you
+choose to publish, never a live view of a task or note, so activity, comments
+and later edits stay private.
+
+- **Drafts.** Any client creates and edits drafts: `artifact.create` (`title`,
+  optional `body`, `sources`, `files`) and `artifact.update` (`title`, `body`,
+  `sources`; revision-checked). In the reader, a note's **Share as artifact**
+  creates a draft prefilled from the note. An agent can compose one body from
+  several notes. `sources` lists the notes and tasks it was built from and is
+  shown only in Crew. Images are `![alt](attachment:ID)` references to image
+  attachments: the artifact's own files (`attachment:new-N` in
+  `artifact.create`) or any note's or task's images. Only PNG, JPEG, GIF and
+  WebP can be shown.
+- **Publishing is owner-only.** `artifact.publish` (draft or revoked to
+  published, with a new random token), `artifact.replace` (the current draft
+  becomes the published content under the same link; `published_revision`
+  increments) and `artifact.revoke` (clears the token: the page and its images
+  answer 404 at once) are refused with 403 on the work-client route before
+  idempotency replay and take no `idempotency_key`. Their results carry
+  `token`, `link_path` (`/a/<token>`) and `link` (with a domain). The reader's
+  **Shared** page (`#/shared`, `#/shared/<id>`) lists every artifact with its
+  status, link and Copy link, published time, views and sources, plus Publish,
+  Replace content, Edit draft and Revoke. It reads links from
+  `GET /api/crew/artifact-links` (signed in, not on the MCP proxy's route
+  list). `crew_read` artifacts, SQL view `artifacts` and MCP never return the
+  token.
+- **Snapshot rule.** Publishing copies the title, body and the ordered list of
+  image attachments into `published_*`. Editing a source note never changes the
+  page; editing a published artifact's draft sets `pending_changes` until the
+  owner replaces the content.
+- **The public page.** `GET /a/<token>` renders the snapshot in Go with the
+  notes' GFM semantics: raw HTML is omitted, images resolve only through
+  `/a/<token>/files/<n>` (the nth published image as its 1600 px preview), and
+  links survive only when they are http(s) or mailto to another host. Other
+  links and images keep their text. The page has no script, Crew navigation or
+  links into Crew, and sends `X-Robots-Tag: noindex, nofollow, noarchive`,
+  `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and a CSP of
+  `default-src 'none'` with only self images and the page's hashed style.
+  Unknown, malformed and revoked tokens get the same plain `404 Not found`.
+  Each page view (not HEAD or images) increments `view_count` and sets
+  `last_viewed_at` with one statement outside the record revision.
+- **Rate limits.** Hosted mode sees one proxy address, so limits are keyed like
+  upload links: unknown or malformed tokens share one bucket (60, refilling
+  1/s), and each published artifact has its own (120, refilling 2/s). Refusals
+  are 429 with `Retry-After`.
+- **Risk.** Anyone with the link can read and forward it until you revoke it.
+  The Publish button says so.
 
 ## Command-line work commands
 

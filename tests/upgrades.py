@@ -247,6 +247,11 @@ def rehearse(target, previous, root):
             assert current.execute("SELECT count(*) FROM crew_tasks WHERE readiness='waiting' AND status NOT IN ('done','wont_do') AND held_since != updated").fetchone() == (0,)
             assert current.execute("SELECT count(*) FROM crew_tasks WHERE claimed_at != ''").fetchone() == (0,)
             assert current.execute("SELECT count(*) FROM crew_reviews WHERE options IS NOT NULL OR option_decisions IS NOT NULL").fetchone() == (0,)
+            # 0.21.0 adds artifacts (empty) and lets attachments belong to one.
+            assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801400000_crew_artifacts.js'").fetchone() == (1,)
+            assert current.execute("SELECT count(*) FROM crew_artifacts").fetchone() == (0,)
+            attachment_fields = json.loads(current.execute("SELECT fields FROM _collections WHERE name='crew_attachments'").fetchone()[0])
+            assert next(f for f in attachment_fields if f['name'] == 'parent_kind')['values'] == ['task', 'note', 'artifact']
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()

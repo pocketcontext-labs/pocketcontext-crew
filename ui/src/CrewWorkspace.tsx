@@ -114,12 +114,15 @@ import {
   viewHashes,
   viewStateFromHash,
   viewStateHash,
+  sharedFocusFromHash,
 } from "./itemLink";
+import Shared from "./Shared";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
   ["board", "Tasks", "▦"],
   ["memory", "Notes", "▤"],
   ["reviews", "Approvals", "✓"],
+  ["shared", "Shared", "↗"],
   ["agents", "Agents", "◎"],
   ["archive", "Archive", "↶"],
 ];
@@ -139,6 +142,7 @@ const eyebrows: Record<View, string> = {
   connect: "ONE CONNECTION FOR ALL YOUR AGENTS",
   guide: "HOW IT WORKS",
   search: "FIND ANYTHING",
+  shared: "PAGES YOU SHARE BY LINK",
 };
 const viewHelp: Partial<Record<View, HelpTopic>> = {
   home: "home",
@@ -366,6 +370,51 @@ function CopyLink({
       {state === "failed" && (
         <span role="alert" className="crew-copy-error">
           Could not copy automatically. Copy it from here: <code>{target}</code>
+        </span>
+      )}
+    </span>
+  );
+}
+/** Creates a draft artifact prefilled from a note; publishing is on Shared. */
+function ShareAsArtifact({
+  note,
+  done,
+}: {
+  note: Row;
+  done: (id: string) => void;
+}) {
+  const [state, setState] = useState<"idle" | "busy" | "failed">("idle");
+  const share = async () => {
+    setState("busy");
+    try {
+      const created = await crewApi.write(
+        "artifact.create",
+        {
+          title: val(note, "title"),
+          body: val(note, "body"),
+          sources: [note.id],
+        },
+        undefined,
+        "Share as artifact",
+      );
+      done(created.id);
+    } catch {
+      setState("failed");
+    }
+  };
+  return (
+    <span className="crew-copy-link">
+      <button
+        type="button"
+        disabled={state === "busy"}
+        title="Make a frozen copy of this note you can share by link"
+        onClick={() => void share()}
+      >
+        Share as artifact
+      </button>
+      {state === "failed" && (
+        <span role="alert" className="crew-copy-error">
+          Could not create the artifact.
         </span>
       )}
     </span>
@@ -1219,6 +1268,8 @@ export default function CrewWorkspace() {
     connect: "Crew needs one connection to your agent platform before agents can work here.",
     guide: "What Crew does, what each page is for, and the words it uses.",
     search: "Every task, note, agent and bucket that matches your words.",
+    shared:
+      "Frozen copies of notes, shared by a secret link with no sign-in. Agents draft them; only you publish, replace or revoke them. Editing a source note never changes a published page.",
   };
   const titleHelp = viewHelp[view];
   return (
@@ -1479,6 +1530,14 @@ export default function CrewWorkspace() {
             />
           )}
           {view === "guide" && <Guide />}
+          {view === "shared" && (
+            <Shared
+              notes={[...data.notes, ...archived.notes]}
+              tasks={[...data.tasks, ...archived.tasks]}
+              focus={sharedFocusFromHash(location.hash)}
+              Prose={Prose}
+            />
+          )}
           {view === "search" && (
             <SearchPage
               text={searchText}
@@ -2063,10 +2122,21 @@ export default function CrewWorkspace() {
           actions={
             dialog.row &&
             (dialog.kind === "task" || dialog.kind === "note") && (
-              <CopyLink
-                key={dialog.row.id}
-                target={itemShareUrl(dialog.kind, dialog.row)}
-              />
+              <>
+                <CopyLink
+                  key={dialog.row.id}
+                  target={itemShareUrl(dialog.kind, dialog.row)}
+                />
+                {dialog.kind === "note" && !archiveNotice && (
+                  <ShareAsArtifact
+                    note={dialog.row}
+                    done={(id) => {
+                      closeDialog();
+                      location.hash = `${viewHashes.shared}/${id}`;
+                    }}
+                  />
+                )}
+              </>
             )
           }
           onEdit={() => {

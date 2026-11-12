@@ -1,0 +1,134 @@
+/* The owner's Shared page (artifacts). */
+.crew-shared-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.crew-artifact {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  padding: 18px 20px;
+  min-width: 0;
+}
+.crew-artifact-focused {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.crew-artifact header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.crew-artifact h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.crew-artifact-status,
+.crew-artifact-pending {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--panel);
+}
+.crew-artifact-published {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+.crew-artifact-revoked {
+  color: var(--danger);
+}
+.crew-artifact-pending {
+  color: #8a5a12;
+  border-color: #e6cf9f;
+  background: #fbf3e2;
+}
+.crew-artifact-meta,
+.crew-artifact-sources,
+.crew-artifact-note {
+  margin: 8px 0 0;
+  color: var(--quiet);
+  font-size: 14px;
+}
+.crew-artifact-meta:empty {
+  display: none;
+}
+.crew-artifact-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.crew-artifact-link input {
+  flex: 1 1 260px;
+  min-width: 0;
+  font:
+    14px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+}
+.crew-artifact-preview {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  max-height: 50vh;
+  overflow: auto;
+}
+.crew-artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+}
+.crew-artifact-publish {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.crew-artifact-publish small {
+  color: var(--quiet);
+  font-size: 13px;
+}
+.crew-artifact-revoke {
+  color: var(--danger);
+}
+.crew-artifact-edit {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.crew-artifact-edit label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text);
+}
+.crew-artifact-edit textarea {
+  font:
+    15px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  resize: vertical;
+}
+@media (max-width: 640px) {
+  .crew-artifact {
+    padding: 14px;
+  }
+}

@@ -15,6 +15,7 @@ erDiagram
   crew_notes ||--o{ crew_attachments : parent
   crew_tasks ||--o{ crew_upload_links : parent
   crew_notes ||--o{ crew_upload_links : parent
+  crew_artifacts ||--o{ crew_attachments : parent
 ```
 
 Notes and tasks also carry JSON arrays of note IDs. Events carry a parent record
@@ -35,7 +36,17 @@ characters), `review_mode` (empty, `crew` or `in_session`), `approved_by` (repor
 name, attribution only) and the server-set `approved_at`; see
 [releases and in-session approval](crew.md#project-coder-agents).
 
-Attachments carry `parent_kind` (task or note) and the parent ID as text, a
+Artifacts (0.21.0) are pages shared by link. The draft is `title`, `body`
+(Markdown) and `sources` (note and task IDs, shown only in Crew); `status` is
+`draft`, `published` or `revoked`. Publishing copies `published_title`,
+`published_body` and `published_files` (ordered image attachment IDs; attachments
+are immutable, so the snapshot never changes) with `published_at`, `published_by`
+and `published_revision`. `token` is a hidden field (32 random base62 characters,
+cleared on revoke; never in crew_read, SQL or MCP). `view_count` and
+`last_viewed_at` are updated by the public page outside the record revision. See
+[Artifacts](crew.md#artifacts).
+
+Attachments carry `parent_kind` (task, note or artifact) and the parent ID as text, a
 protected single file (20 MiB, thumbs 1600x0 and 320x0, never exported), display
 name, media type, verified-image flag and dimensions, size, server-computed
 SHA-256, position, attribution and archive state. Their bytes are immutable and
@@ -47,5 +58,5 @@ bodies; `option_decisions` records each approved/rejected choice. Tasks have
 server-managed `held_since` for stable hold age on open tasks. See [Attachments](crew.md#attachments).
 
 Responsibility does not enforce write isolation. Work clients have the reader's
-operations except webhook credential entry and upload-link creation; review decisions, archival and
+operations except webhook credential entry, upload-link creation and publishing artifacts; review decisions, archival and
 deactivation follow the owner's authorization rules. See [Crew contract](crew.md).

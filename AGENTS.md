@@ -12,9 +12,11 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   writes remain disabled. History is immutable. Archive, never purge.
 - MCP and the CLI work commands use only the work-client route
   (`/api/crew/agent-write`). It accepts every reader (`/api/crew/write`)
-  operation except `webhook.credentials.update` and `upload_link.create`:
-  webhook URL/credentials and upload links are owner-browser-only, and reads
-  never return credentials or link tokens. Keep those 403s before idempotency
+  operation except `webhook.credentials.update`, `upload_link.create` and
+  `artifact.publish`/`artifact.replace`/`artifact.revoke`: webhook
+  URL/credentials, upload links and publishing artifacts are owner-browser-only
+  (bots draft artifacts, the owner publishes), and reads never return
+  credentials, link tokens or artifact tokens. Keep those 403s before idempotency
   replay and keep `/api/crew/write` off the MCP proxy allowlist.
   Authorization for everything else is owner-editable default rules in the skill
   and MCP instructions; attribution (`actor`, `reported_agent`) is audit only,
@@ -27,9 +29,13 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   the host, saved session token on tunnel-paired computers); only the skill keeps
   them off the reader route and webhook credentials. Docs and skill say so plainly.
   Reported names are not identity. No local MCP or unauthenticated endpoints,
-  with one scoped exception: one-time upload links (`/api/crew/upload-link/*`)
+  with two scoped exceptions: one-time upload links (`/api/crew/upload-link/*`)
   add files to their one task or note; token hash only, upload only, expiring,
-  single batch, revocable, rate-limited, never readable.
+  single batch, revocable, rate-limited, never readable. Published artifact
+  pages (`/a/<token>`, `/a/<token>/files/<n>`) are read-only frozen snapshots
+  the owner published: 32-character random token, the same plain 404 for
+  unknown and revoked tokens, rate-limited, no script, no links into Crew,
+  noindex/no-referrer/no-store; images only from the published list.
 - Attachments are immutable protected files under storage/. Archive, never
   purge; only `/api/crew/attachment` (signed in) serves bytes, with nosniff and
   a download disposition for every non-image; work clients get bounded reads

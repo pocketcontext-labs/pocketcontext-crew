@@ -36,6 +36,7 @@ const (
 //     hold legacy receiver URLs), users and every other auth collection,
 //     PocketBase internal tables (_*), OAuth state (outside this database)
 //     and retired knowledge collections;
+//   - crew_artifacts.token (the public link's secret; owner-browser-only);
 //   - crew_attachments.file (storage file name) and crew_upload_links
 //     entirely (token hashes; link metadata is read through crew_read);
 //     crew_settings is read through crew_read.
@@ -61,6 +62,7 @@ var crewSQLViews = func() []sqlread.View {
 		{Name: "events", Table: "crew_events", Columns: cols(f("parent action body actor reported_agent reason changes"))},
 		{Name: "reviews", Table: "crew_reviews", Columns: cols(f("task draft attachments options option_decisions status decision_note decided_by decided_at requested_by reported_agent"))},
 		{Name: "attachments", Table: "crew_attachments", Columns: cols(f("parent_kind parent name media_type image width height size sha256 position actor reported_agent via_upload_link"), archive)},
+		{Name: "artifacts", Table: "crew_artifacts", Columns: cols(f("title body sources status published_title published_body published_files published_at published_by published_revision revoked_at revoked_by view_count last_viewed_at created_by_agent actor"))},
 		{Name: "webhook_configs", Table: "crew_webhook_configs", Columns: cols(f("agent adapter subscriptions enabled destination_version scope sync_status routine_ref dispatch_mode instructions role_instructions reporting_instructions previous_instructions instruction_revision applied_revision managed_hash applied_hash test_event_id runtime_event_id runtime_epoch runtime_context runtime_reported_at runtime_destination_version runtime_instruction_revision runtime_native_handoff runtime_execution_protocol runtime_parent_wake"))},
 		{Name: "webhook_mappings", Table: "crew_webhook_mappings", Columns: cols(f("agent bot_ref bot_name"))},
 		{Name: "webhook_routing", Table: "crew_webhook_routing", Columns: cols(f("singleton instance_id epoch triage_agent paused max_bot_handoffs"))},
@@ -119,6 +121,7 @@ func registerCrewReads(app core.App) {
 			return crewSearch(re, search)
 		}).Bind(apis.RequireAuth("users"))
 		registerAttachmentRoutes(e)
+		registerArtifactRoutes(e)
 		return e.Next()
 	})
 }
