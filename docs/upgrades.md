@@ -1,5 +1,23 @@
 # Crew upgrades and rollback
 
+## Crew 0.16.0 to 0.17.0
+
+No data migration, no protocol version change and no new managed block, so webhook
+delivery is not paused. An 0.16.0 binary can still open the database, so rollback is
+replacing the binary or image again.
+
+1. Take the usual complete backup (hosted instances use the verified backup the
+   deployment prepares).
+2. Replace the binary or image with the normal procedure
+   (`CREW_REPLACE_VERSION=0.16.0` for the installer) and upgrade paired clients with
+   the server. A client and server must report the same release.
+3. Run `skill` once on each computer with a Crew profile: the skill and MCP
+   instructions now state the On hold wake rule and comment files. Refresh MCP
+   connector tool schemas (`crew_read` gains `overdue`).
+4. `capabilities_digest` changes, so routines and agents reread `capabilities` once.
+5. Comment bodies are now validated: a client that put another task's
+   `attachment:ID` in a comment gets a 400 instead.
+
 ## Crew 0.15.0 to 0.16.0
 
 One data migration (`1801000000_crew_attachments.js`) adds the `crew_attachments`,
