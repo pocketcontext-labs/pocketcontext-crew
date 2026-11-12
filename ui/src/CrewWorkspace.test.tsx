@@ -2959,10 +2959,7 @@ describe("project agents and coding sessions", () => {
     );
     dialog.getByText("Built-in default · not edited yet");
     expect(dialog.getByRole("button", { name: "Restore default" })).toBeDisabled();
-    // The recommended path copies a prompt for an agent conversation. The
-    // dialog opens only after its session refetch resolved, so no later
-    // revision change can reset the copied label (flaky only on slow
-    // runners; the 5 s async wait in test-setup.ts covers those).
+    // The recommended path copies a prompt for an agent conversation.
     expect(crewApi.session).toHaveBeenCalledTimes(2);
     fireEvent.click(dialog.getByRole("button", { name: "Rewrite with an agent" }));
     await dialog.findByRole("button", { name: "Rewrite prompt copied" });

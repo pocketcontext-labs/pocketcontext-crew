@@ -55,13 +55,19 @@ export default function SessionInstructions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Row[] | null>(null);
-  const [copied, setCopied] = useState<"" | "copied" | "manual">("");
+  // The rewrite prompt names the revision it was copied at, so the copied
+  // state belongs to that revision and clears when the revision changes. It
+  // is derived rather than reset by an effect: a mount effect that resets it
+  // can run after a fast click and swallow the copied state.
+  const [copy, setCopy] = useState<{
+    state: "copied" | "manual";
+    revision: number;
+  } | null>(null);
+  const copied = copy && copy.revision === session.revision ? copy.state : "";
   const editorId = useId();
   const agent = session.agent.id;
   const name = session.agent.name;
 
-  // A copied rewrite prompt names the revision it was copied at.
-  useEffect(() => setCopied(""), [session.revision]);
   useEffect(() => {
     if (mode !== "history") return;
     let alive = true;
@@ -113,7 +119,11 @@ export default function SessionInstructions({
     }
   };
   const rewrite = async () => {
-    setCopied((await copyText(session.rewrite_prompt)) ? "copied" : "manual");
+    const revision = session.revision;
+    setCopy({
+      state: (await copyText(session.rewrite_prompt)) ? "copied" : "manual",
+      revision,
+    });
   };
 
   return (

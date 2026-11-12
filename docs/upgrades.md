@@ -1,5 +1,11 @@
 # Crew upgrades and rollback
 
+## Crew 0.23.0 to 0.23.1
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.23.1. Rollback to 0.23.0 needs
+no restore. From 0.22.0 or earlier, follow the 0.22.0 to 0.23.0 notes first.
+
 ## Crew 0.22.0 to 0.23.0
 
 One data migration (`1801700000_crew_task_release_labels.js`) moves each task's

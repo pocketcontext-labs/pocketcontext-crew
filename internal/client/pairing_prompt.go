@@ -7,7 +7,7 @@ import "fmt"
 // the reader package version and the release workflow default (checked by
 // TestClientReleaseMatchesRepositoryVersion) and the pushed vX.Y.Z tag (checked
 // by scripts/release.py metadata before publication).
-const clientRelease = "0.23.0"
+const clientRelease = "0.23.1"
 
 // The complete handoff is deliberately printable: the user pastes this one
 // prompt into the agent on their other computer. Invitation data is never code.
