@@ -3475,7 +3475,6 @@ function Editor({
                   multiple
                   hidden
                   aria-label="Attach files to the comment"
-                  onCancel={(e) => e.stopPropagation()}
                   onChange={(e) => {
                     const files = Array.from(e.target.files ?? []);
                     e.target.value = "";

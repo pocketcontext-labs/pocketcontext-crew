@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.24.0 to 0.24.1
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.24.1. Request changes now sets
+the task Ready, so its bot assignee wakes with `review_outcome` even when the task
+was on hold; routines that relied on a held task staying quiet after Request changes
+should put it on hold again. Rollback to 0.24.0 needs no restore. From 0.23.1 or
+earlier, follow the 0.23.1 to 0.24.0 notes first.
+
 ## Crew 0.23.1 to 0.24.0
 
 No data migration, protocol or managed block change. Replace the binary or image
