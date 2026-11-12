@@ -336,6 +336,9 @@ func TestOverdueBridgesRead(t *testing.T) {
 	_, selfBridge := stranded("Synthetic self created", "Synthetic webhook agent")
 	doneTask, _ := stranded("Synthetic finished", "Synthetic owner bot")
 	selfStartWrite(t, a, "task.update", doneTask, apiWebhookRecord(t, a, "tasks", doneTask).GetInt("revision"), map[string]any{"status": "done"}, "", true, 200)
+	// Won't do (0.19.0) is terminal like Done.
+	wontTask, _ := stranded("Synthetic dropped", "Synthetic owner bot")
+	selfStartWrite(t, a, "task.update", wontTask, apiWebhookRecord(t, a, "tasks", wontTask).GetInt("revision"), map[string]any{"status": "wont_do"}, "", true, 200)
 	heldTask, _ := stranded("Synthetic superseded", "Synthetic owner bot")
 	selfStartWrite(t, a, "task.update", heldTask, apiWebhookRecord(t, a, "tasks", heldTask).GetInt("revision"), map[string]any{"readiness": "waiting"}, "", true, 200)
 	got := overdue()

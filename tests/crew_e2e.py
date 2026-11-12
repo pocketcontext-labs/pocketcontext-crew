@@ -486,6 +486,34 @@ def cli_session_scenario(cli, write):
     assert {'task.claim', 'task.claim_renew', 'task.release'} <= set(actions), actions
     rows = cli('query', {'sql': "SELECT kind FROM agents WHERE id = '%s'" % project['id']})['rows']
     assert rows == [['external']], rows
+    cli_release_scenario(cli, write, project)
+
+
+def cli_release_scenario(cli, write, project):
+    """0.19.0: a session closes a task with its release and in-session approval."""
+    session = 'synthetic-cli-project · Codex · s/3 · cccccccc'
+    ticket = write('task.create', {'title': 'Synthetic release ticket', 'assigned_agent': project['id'], 'readiness': 'ready'})
+    claimed = write('task.claim', {'assigned_agent': project['id']}, ticket, reported_agent=session)
+    refused = write('task.update', {'review_mode': 'in_session'}, claimed, expect=1, reported_agent=session)
+    assert 'requires status done' in refused, refused
+    closed = write('task.update', {'status': 'done', 'release': '0.19.0', 'review_mode': 'in_session',
+                                   'approved_by': 'Synthetic Owner'}, claimed, reported_agent=session)
+    assert (closed['status'], closed['release'], closed['review_mode'], closed['approved_by'], closed['claim_state']) == \
+        ('done', '0.19.0', 'in_session', 'Synthetic Owner', ''), closed
+    assert closed['approved_at'], closed
+    shipped = cli('read', {'collection': 'tasks', 'release': '0.19.0', 'fields': ['title', 'approved_at']})['items']
+    assert [t['title'] for t in shipped] == ['Synthetic release ticket'] and shipped[0]['approved_at'] == closed['approved_at'], shipped
+    dropped = write('task.create', {'title': 'Synthetic dropped ticket', 'assigned_agent': project['id']})
+    dropped = write('task.update', {'status': 'wont_do'}, dropped, reported_agent=session)
+    closed_titles = {t['title'] for t in cli('read', {'collection': 'tasks', 'status': ['done', 'wont_do'], 'assigned_agent': project['id'], 'fields': ['title']})['items']}
+    assert closed_titles >= {'Synthetic release ticket', 'Synthetic dropped ticket'}, closed_titles
+    unreleased = {t['id'] for t in cli('read', {'collection': 'tasks', 'release': '', 'fields': ['title']})['items']}
+    assert dropped['id'] in unreleased and closed['id'] not in unreleased, unreleased
+    rows = cli('query', {'sql': "SELECT status, release, review_mode, approved_by FROM tasks WHERE id = '%s'" % closed['id']})['rows']
+    assert rows == [['done', '0.19.0', 'in_session', 'Synthetic Owner']], rows
+    changes = [e['changes'] for e in cli('read', {'collection': 'events', 'parent': closed['id'], 'fields': ['action', 'changes']})['items']
+               if e['action'] == 'task.update']
+    assert changes and changes[0].get('approved_at') == closed['approved_at'] and changes[0].get('claim_cleared') is True, changes
 
 
 def cli_attachment_scenario(pc):

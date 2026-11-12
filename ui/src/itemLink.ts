@@ -72,6 +72,8 @@ export type ViewState = {
   assignment: string;
   /** On hold or Ready (open tasks only), or all. */
   hold: HoldFilter;
+  /** "" for every release, "none" for tasks without one, or a release. */
+  release: string;
 };
 export const defaultViewState: ViewState = {
   bucket: "",
@@ -79,13 +81,17 @@ export const defaultViewState: ViewState = {
   bucketSort: "name",
   assignment: "all",
   hold: "all",
+  release: "",
 };
 const recordId = /^[a-z0-9]{15}$/;
 const assignments = ["unassigned", "invalid"];
+// A release filter: trimmed, one line, at most 32 characters like the server's.
+// eslint-disable-next-line no-control-regex
+const validRelease = (v: string) => v.length > 0 && v.length <= 32 && v === v.trim() && !/[\u0000-\u001f\u007f]/.test(v);
 
 /**
  * Reads `#/notes?bucket=<id>&sort=<notes>&buckets=<buckets>` and
- * `#/tasks?agent=<id|unassigned|invalid>&hold=<on_hold|ready>`, or their older `#/memory` and `#/team`
+ * `#/tasks?agent=<id|unassigned|invalid>&hold=<on_hold|ready>&release=<release|none>`, or their older `#/memory` and `#/team`
  * forms. A missing, repeated or invalid value falls back to its default; unknown
  * parameters are ignored. Whether an id still names an active record is for the
  * page to decide.
@@ -109,6 +115,7 @@ export function viewStateFromHash(hash: string): ViewState {
         defaultViewState.assignment,
       hold: (one("hold", (v) => v !== "all" && (holdFilters as readonly string[]).includes(v)) ??
         defaultViewState.hold) as HoldFilter,
+      release: one("release", validRelease) ?? defaultViewState.release,
     };
   return {
     ...defaultViewState,
@@ -128,6 +135,8 @@ export function viewStateHash(view: View, state: ViewState): string {
     params.set("agent", state.assignment);
   if (view === "board" && state.hold !== defaultViewState.hold)
     params.set("hold", state.hold);
+  if (view === "board" && state.release && validRelease(state.release))
+    params.set("release", state.release);
   if (view === "memory") {
     if (state.bucket) params.set("bucket", state.bucket);
     if (state.noteSort !== defaultViewState.noteSort)

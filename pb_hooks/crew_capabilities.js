@@ -129,7 +129,11 @@ function document() {
     description: str,
     assigned_agent: str,
     labels: strings,
-    status: { enum: ["todo", "in_progress", "needs_review", "done"] },
+    status: {
+      enum: ["todo", "in_progress", "needs_review", "done", "wont_do"],
+      description:
+        "Done and wont_do (Won't do) are terminal: they end any claim, never wake a bot and leaving either reopens the task. Enter needs_review only with review.request.",
+    },
     draft: str,
     links: strings,
     archived: bool,
@@ -142,6 +146,23 @@ function document() {
       type: "string",
       description:
         "Hold reason. Crew sets it on automatic holds (Draft edited, Review withdrawn, Bot hand-off limit reached); going Ready clears it unless the same write sets one.",
+    },
+    release: {
+      type: "string",
+      maxLength: 32,
+      description:
+        "The release that shipped the task, for example 0.19.0; trimmed, empty for none.",
+    },
+    review_mode: {
+      enum: ["", "crew", "in_session"],
+      description:
+        "How the work was approved: empty or crew (a Crew review), or in_session (the owner approved it in a coding session). in_session is accepted only when the task is or becomes done; Crew then stamps approved_at (server time, never written by clients) and approved_by defaults to owner. Leaving done clears review_mode, approved_by and approved_at.",
+    },
+    approved_by: {
+      type: "string",
+      maxLength: 100,
+      description:
+        "Who approved in session (the owner's name if known); a reported name, attribution only. Only with review_mode in_session.",
     },
   };
   const worker = { worker_id: str, fence: num };
@@ -638,6 +659,11 @@ function document() {
         description:
           "Derived: live while claim_until is in the future, expired after it, empty without a claim",
       },
+      approved_at: {
+        type: "string",
+        description:
+          "When the owner approved in session (server time; set with review_mode in_session, empty otherwise). Clients never write it.",
+      },
     },
     note_revisions: {
       note: str,
@@ -1080,10 +1106,14 @@ function readDiscovery() {
       },
       status: {
         anyOf: [
-          { enum: ["todo", "in_progress", "needs_review", "done"] },
+          {
+            enum: ["todo", "in_progress", "needs_review", "done", "wont_do"],
+          },
           {
             type: "array",
-            items: { enum: ["todo", "in_progress", "needs_review", "done"] },
+            items: {
+              enum: ["todo", "in_progress", "needs_review", "done", "wont_do"],
+            },
           },
         ],
         description: "Tasks only",
@@ -1095,9 +1125,15 @@ function readDiscovery() {
       overdue: {
         type: "boolean",
         description:
-          "webhook_bridges only, true: unresolved parent wakes past their deadline (task.wake, no parent receipt) for the task's current wake generation, on active tasks that are not done and were not created by their recipient. Rows are history; nothing retries.",
+          "webhook_bridges only, true: unresolved parent wakes past their deadline (task.wake, no parent receipt) for the task's current wake generation, on active tasks that are not done or won't do and were not created by their recipient. Rows are history; nothing retries.",
       },
       label: { type: "string", description: "Tasks with this exact label" },
+      release: {
+        type: "string",
+        maxLength: 32,
+        description:
+          "Tasks shipped in this exact release; empty string selects tasks without a release",
+      },
       claim_state: {
         enum: ["", "live", "expired"],
         description: "Tasks only: claim state (empty string: no claim)",

@@ -3040,3 +3040,156 @@ it("explains project agents and coding sessions in the Guide", async () => {
   ).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Claim" })).toBeInTheDocument();
 });
+describe("releases and Won't do on the board", () => {
+  const days = (n: number) =>
+    new Date(Date.now() - n * 86_400_000).toISOString().replace("T", " ");
+  const closed = (id: string, title: string, extra: Partial<Row>): Row => ({
+    ...task,
+    id,
+    title,
+    status: "done",
+    readiness: "waiting",
+    updated: days(1),
+    ...extra,
+  });
+  beforeEach(() => {
+    fixtures.reviews = [];
+    fixtures.tasks = [
+      { ...task, id: "task00000000001", title: "Planned", status: "todo", release: "" },
+      closed("task00000000002", "Shipped first", { release: "0.18.0", updated: days(2) }),
+      closed("task00000000003", "Shipped next", { release: "0.19.0" }),
+      closed("task00000000004", "Dropped idea", { status: "wont_do", release: "" }),
+      closed("task00000000005", "Ancient work", { release: "0.9.0", updated: days(30) }),
+      closed("task00000000006", "Also next", {
+        release: "0.19.0",
+        updated: days(3),
+      }),
+    ];
+  });
+  const doneColumn = () =>
+    within(screen.getByRole("region", { name: /^Done/ }));
+  const groups = () =>
+    doneColumn()
+      .queryAllByRole("group")
+      .map((g) => [
+        g.getAttribute("aria-label"),
+        [...g.querySelectorAll(".crew-task-card h3")].map((x) => x.textContent),
+      ]);
+  const cardTitles = () =>
+    [...document.querySelectorAll(".crew-task-card h3")].map((x) => x.textContent);
+
+  it("keeps four columns and groups recent closed tasks by release, newest first", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Planned" });
+    expect(document.querySelectorAll(".crew-column")).toHaveLength(4);
+    expect(groups()).toEqual([
+      ["0.19.0", ["Shipped next", "Also next"]],
+      ["0.18.0", ["Shipped first"]],
+      ["No release", ["Dropped idea"]],
+    ]);
+    const dropped = screen.getByRole("button", { name: /Dropped idea/ });
+    expect(within(dropped).getByText("Won't do")).toBeInTheDocument();
+    expect(within(dropped).queryByText(/On hold|Ready/)).toBeNull();
+    expect(
+      within(screen.getByRole("button", { name: /Shipped next/ })).getByText(
+        "Shipped in 0.19.0",
+      ),
+    ).toBeInTheDocument();
+    // Older closed tasks fold away behind one button.
+    expect(screen.queryByRole("heading", { name: "Ancient work" })).toBeNull();
+    fireEvent.click(doneColumn().getByRole("button", { name: "Show older (1)" }));
+    expect(groups().map(([release]) => release)).toEqual([
+      "0.19.0",
+      "0.18.0",
+      "0.9.0",
+      "No release",
+    ]);
+    expect(doneColumn().queryByRole("button", { name: /Show older/ })).toBeNull();
+  });
+
+  it("filters by release in the address and shows that release's older tasks", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Planned" });
+    const filter = screen.getByRole("combobox", { name: "Filter by release" });
+    expect(within(filter).getAllByRole("option").map((x) => x.textContent)).toEqual([
+      "All releases",
+      "Shipped in 0.19.0",
+      "Shipped in 0.18.0",
+      "Shipped in 0.9.0",
+      "No release",
+    ]);
+    fireEvent.change(filter, { target: { value: "0.9.0" } });
+    expect(cardTitles()).toEqual(["Ancient work"]);
+    expect(location.hash).toBe("#/tasks?release=0.9.0");
+    fireEvent.change(filter, { target: { value: "none" } });
+    expect(cardTitles()).toEqual(["Planned", "Dropped idea"]);
+    expect(location.hash).toBe("#/tasks?release=none");
+    fireEvent.click(screen.getByRole("button", { name: "Show all tasks" }));
+    expect(filter).toHaveValue("");
+    expect(location.hash).toBe("#/tasks");
+  });
+
+  it("restores the release filter from the address", async () => {
+    history.replaceState(null, "", "/#/tasks?release=0.18.0");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Shipped first" });
+    expect(screen.getByRole("combobox", { name: "Filter by release" })).toHaveValue(
+      "0.18.0",
+    );
+    expect(cardTitles()).toEqual(["Shipped first"]);
+  });
+
+  it("counts Done only on its Home tile, and Won't do never breaks the counts", async () => {
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    const tile = await screen.findByRole("link", {
+      name: "4 Done, show on the Tasks board",
+    });
+    expect(tile).toHaveAttribute("href", "#/tasks?column=done");
+    expect(screen.queryByRole("link", { name: /Won't do, show/ })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "1 To do, show on the Tasks board" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Won't do, edits the release and shows an in-session approval", async () => {
+    fixtures.tasks = [
+      closed("task00000000003", "Shipped next", {
+        release: "0.19.0",
+        review_mode: "in_session",
+        approved_by: "Synthetic Owner",
+        approved_at: "2026-11-12 10:00:00.000Z",
+      }),
+    ];
+    render(<CrewWorkspace />);
+    fireEvent.click(await screen.findByRole("button", { name: /Shipped next/ }));
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByRole("note")).toHaveTextContent(
+      /^Approved in session by Synthetic Owner, \S/,
+    );
+    const status = dialog.getByRole("combobox", { name: "Status" });
+    expect(within(status).getByRole("option", { name: "Won't do" })).toBeInTheDocument();
+    const release = dialog.getByRole("textbox", { name: "Release" });
+    expect(release).toHaveValue("0.19.0");
+    fireEvent.change(release, { target: { value: " 0.19.1 " } });
+    fireEvent.change(status, { target: { value: "wont_do" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "task.update",
+        expect.objectContaining({ release: "0.19.1", status: "wont_do" }),
+        expect.objectContaining({ id: "task00000000003" }),
+        "",
+      ),
+    );
+  });
+
+  it("shows no approval line for a task approved through Crew", async () => {
+    fixtures.tasks = [closed("task00000000003", "Shipped next", { review_mode: "" })];
+    render(<CrewWorkspace />);
+    fireEvent.click(await screen.findByRole("button", { name: /Shipped next/ }));
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.queryByText(/Approved in session/)).toBeNull();
+    expect(dialog.getByRole("textbox", { name: "Release" })).toHaveValue("");
+  });
+});

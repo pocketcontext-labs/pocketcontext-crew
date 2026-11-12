@@ -17,8 +17,8 @@ the MCP tools crew_search, crew_read, crew_schema and crew_query.
 3. Read full records or whole pages only when you need every field.
 
 For work lists, filter tasks instead of paging the board: `assigned_agent` (ID or
-exact name; empty string for unassigned), `status` (one or a list), `readiness`,
-`label`, plus `changed_since` (RFC3339) for anything updated since your last
+exact name; empty string for unassigned), `status` (one or a list, including
+`wont_do`), `readiness`, `label`, `release` (exact; empty string for none), plus `changed_since` (RFC3339) for anything updated since your last
 check, with a small `limit` and `fields`. Projection rejects unknown or redacted
 fields; webhook URLs and credentials are never readable.
 

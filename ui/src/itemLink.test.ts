@@ -193,7 +193,32 @@ describe("Tasks and Notes address state", () => {
     }
     expect(boardOnHoldHash).toBe("#/tasks?hold=on_hold");
   });
+  it("round-trips the board release filter after the other filters", () => {
+    for (const value of ["0.19.0", "none", "v1.0.0-rc.1"]) {
+      const state = viewStateFromHash(
+        `#/tasks?release=${encodeURIComponent(value)}&agent=${agentId}`,
+      );
+      expect(state).toEqual({
+        ...defaultViewState,
+        assignment: agentId,
+        release: value,
+      });
+      expect(viewStateHash("board", state)).toBe(
+        `#/tasks?agent=${agentId}&release=${encodeURIComponent(value)}`,
+      );
+    }
+    expect(isCanonicalViewStateHash("#/tasks?release=0.19.0")).toBe(true);
+    expect(viewStateHash("memory", { ...defaultViewState, release: "0.19.0" })).toBe(
+      "#/notes",
+    );
+  });
   it.each([
+    ["empty release", "#/tasks?release="],
+    ["padded release", "#/tasks?release=%200.19.0"],
+    ["long release", `#/tasks?release=${"9".repeat(33)}`],
+    ["multi-line release", "#/tasks?release=0.19%0A0"],
+    ["repeated release", "#/tasks?release=0.19.0&release=0.18.0"],
+    ["release on Notes", "#/notes?release=0.19.0"],
     ["unknown hold", "#/tasks?hold=waiting"],
     ["explicit all hold", "#/tasks?hold=all"],
     ["repeated hold", "#/tasks?hold=ready&hold=on_hold"],

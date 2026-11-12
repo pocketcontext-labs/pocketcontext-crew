@@ -564,6 +564,44 @@ a.crew-logo:hover .product-brand span {
   align-items: center;
   gap: 10px;
 }
+/* Releases: the shipped release on cards, Won't do as a quiet closed marker. */
+.crew-tags > .crew-release {
+  background: #e3eee0;
+  color: #3f6b48;
+}
+.crew-tags > .crew-wont-do {
+  background: #ecebe6;
+  color: #6b675c;
+}
+/* The Done column groups closed tasks by release, newest release first. */
+.crew-release-group + .crew-release-group {
+  margin-top: 6px;
+}
+.crew-release-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #5d6a52;
+  overflow-wrap: anywhere;
+}
+.crew-release-head span {
+  font-weight: 400;
+  color: #8a937e;
+}
+.crew-app .crew-show-older {
+  width: 100%;
+  font-size: 11px;
+  padding: 6px 10px;
+}
+.crew-approval-line {
+  margin: -4px 0 0;
+  font-size: 12px;
+  color: #3f6b48;
+}
 .crew-wake-missing {
   display: flex;
   flex-wrap: wrap;

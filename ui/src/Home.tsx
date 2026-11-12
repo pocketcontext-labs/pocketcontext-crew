@@ -1,7 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { ConnectionPending, skillCommand } from "./Connect";
 import Help from "./Help";
-import { statuses, val, type ConnectionState, type Row } from "./crewApi";
+import {
+  boardStatuses,
+  val,
+  type ConnectionState,
+  type Row,
+} from "./crewApi";
+import { isClosed } from "./taskReleases";
 import {
   boardColumnHash,
   boardOnHoldHash,
@@ -17,7 +23,7 @@ const longHoldMs = 3 * 24 * 60 * 60 * 1000;
 /** Open tasks on hold (`waiting` in the API) unchanged for over three days. */
 export function longHolds(tasks: Row[], now = Date.now()) {
   return tasks.filter((x) => {
-    if (val(x, "status") === "done" || val(x, "readiness") === "ready")
+    if (isClosed(x) || val(x, "readiness") === "ready")
       return false;
     const updated = Date.parse(val(x, "updated"));
     return Number.isFinite(updated) && now - updated > longHoldMs;
@@ -174,7 +180,7 @@ export default function Home({
     ) || "Untitled draft";
   const stuck = data.tasks.filter(
     (x) =>
-      val(x, "status") !== "done" &&
+      !isClosed(x) &&
       (x.handoff_limited === true || invalidAssignment(x)),
   );
   const recent = [
@@ -256,7 +262,7 @@ export default function Home({
       <section aria-label="Your crew right now">
         <h2>Your crew right now</h2>
         <div className="crew-home-counts">
-          {statuses.map(([status, label]) => {
+          {boardStatuses.map(([status, label]) => {
             const count = data.tasks.filter(
               (x) => val(x, "status") === status,
             ).length;

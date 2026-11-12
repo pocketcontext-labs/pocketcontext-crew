@@ -196,6 +196,12 @@ function state(app, t) {
     generation: t.getInt("wake_generation"),
   };
 }
+// Done and Won't do (0.19.0) are terminal: they end claims, never wake and
+// leaving either one reopens the task.
+const TERMINAL_STATUSES = ["done", "wont_do"];
+function terminal(status) {
+  return TERMINAL_STATUSES.includes(status);
+}
 function eligible(s) {
   return (
     !s.archived &&
@@ -353,7 +359,7 @@ function transition(app, t, old, options) {
       causes.push("ready");
     if (
       (old.archived && !current.archived) ||
-      (old.status === "done" && current.status !== "done")
+      (terminal(old.status) && !terminal(current.status))
     )
       causes.push("reopened");
   }
@@ -1279,6 +1285,8 @@ function deactivate(app, agent, b, actor) {
 }
 module.exports = {
   AGENT_KINDS,
+  TERMINAL_STATUSES,
+  terminal,
   agentKind,
   claimState,
   route,

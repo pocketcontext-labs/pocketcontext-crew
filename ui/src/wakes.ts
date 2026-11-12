@@ -1,11 +1,12 @@
 import { val, type Row } from "./crewApi";
+import { isClosed } from "./taskReleases";
 
 /** A wake whose receipt deadline passed, on an open task someone else filed. */
 export type StrandedWake = { bridge: Row; task: Row };
 
 /**
  * Overdue wake bridges worth the owner's attention: one per task (the latest),
- * only for tasks that are open (not done, not archived) and not
+ * only for tasks that are open (not done or won't do, not archived) and not
  * self-dispatched (created by the agent they are assigned to; the creator is
  * a reported name or id, so both are compared). Bridges with
  * no task, such as the connection test, are left out. Display only: the
@@ -22,7 +23,7 @@ export function strandedWakes(
     const taskId = val(bridge, "task_id");
     if (!taskId) continue;
     const task = tasks.find((t) => t.id === taskId);
-    if (!task || task.archived === true || val(task, "status") === "done")
+    if (!task || task.archived === true || isClosed(task))
       continue;
     const creator = val(task, "created_by_agent").trim().toLowerCase();
     const assigned = val(task, "assigned_agent");

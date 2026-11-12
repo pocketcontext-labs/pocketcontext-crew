@@ -140,9 +140,12 @@ A claim sets In progress with a 2-hour lease; your updates, comments and
 attachments renew it, `task.claim_renew` extends it, and `task.release` (optional
 readiness and waiting_reason) ends it. HTTP 409 `already_claimed` names
 `claimed_by` and `claim_until`: report the holder and pick another task. Setting
-Done ends the claim. Never set Done without the owner's explicit approval in the
-session, and never leave a task In progress without a live claim. Claims are
-advisory and never wake anyone.
+Done or Won't do (`wont_do`) ends the claim. Never set Done without the owner's
+explicit approval in the session, and never leave a task In progress without a live
+claim. Claims are advisory and never wake anyone. Close an approved task in one
+task.update: `{"status":"done","release":"<version>","review_mode":"in_session",
+"approved_by":"<owner's name if known, else owner>"}`; Crew records when it was
+approved. If the owner decides not to do a task, comment why and set `wont_do`.
 
 ## Files and screenshots
 

@@ -30,6 +30,9 @@ const fields = {
     "archived",
     "readiness",
     "waiting_reason",
+    "release",
+    "review_mode",
+    "approved_by",
   ],
 };
 function bad(m) {
@@ -199,6 +202,76 @@ function validateData(app, col, d, r) {
       get(app, "notes", id);
     }
 }
+// Releases and in-session approval (0.19.0). review_mode in_session records
+// that the owner approved the work in a coding session instead of a Crew
+// review; it is valid only on a Done task. The server stamps approved_at;
+// approved_by is a reported name (attribution only, never identity) that
+// defaults to "owner". Leaving Done clears review_mode and the approval.
+function trimmedText(values, k, max) {
+  if (values[k] === undefined) return;
+  if (typeof values[k] !== "string") bad(k + " must be a string");
+  const v = values[k].trim();
+  if (v.length > max || /[\u0000-\u001f\u007f]/.test(v))
+    bad(k + " must be at most " + max + " characters on one line");
+  values[k] = v;
+}
+function hasApproval(r) {
+  return !!(
+    r.getString("review_mode") ||
+    r.getString("approved_by") ||
+    r.getString("approved_at")
+  );
+}
+function taskApproval(r, values, op) {
+  const out = { ...values };
+  trimmedText(out, "release", 32);
+  trimmedText(out, "approved_by", 100);
+  if (
+    out.review_mode !== undefined &&
+    !["", "crew", "in_session"].includes(out.review_mode)
+  )
+    bad("review_mode must be crew, in_session or an empty string");
+  const fresh = op === "create",
+    oldStatus = fresh ? "" : r.getString("status"),
+    oldMode = fresh ? "" : r.getString("review_mode"),
+    status =
+      out.status !== undefined ? out.status : fresh ? "todo" : oldStatus;
+  // Leaving Done (by any task operation) clears review_mode and approval.
+  if (
+    out.review_mode === undefined &&
+    !fresh &&
+    status !== "done" &&
+    (oldStatus === "done" || oldMode === "in_session") &&
+    hasApproval(r)
+  ) {
+    if (out.approved_by) bad("approved_by needs review_mode in_session");
+    return {
+      values: { ...out, review_mode: "", approved_by: "", approved_at: "" },
+      cleared: true,
+    };
+  }
+  const mode = out.review_mode !== undefined ? out.review_mode : oldMode;
+  if (mode !== "in_session") {
+    if (out.approved_by) bad("approved_by needs review_mode in_session");
+    if (oldMode === "in_session")
+      return {
+        values: { ...out, approved_by: "", approved_at: "" },
+        cleared: true,
+      };
+    return { values: out };
+  }
+  if (status !== "done") bad("review_mode in_session requires status done");
+  const already = oldMode === "in_session" && oldStatus === "done";
+  if (!already) out.approved_at = new Date().toISOString();
+  const by =
+    out.approved_by !== undefined
+      ? out.approved_by
+      : fresh
+        ? ""
+        : r.getString("approved_by");
+  if (!by) out.approved_by = "owner";
+  return { values: out, stamped: !already };
+}
 function snapshot(app, n, b, actor) {
   const r = new Record(app.findCollectionByNameOrId("crew_note_revisions"));
   for (const k of ["title", "body", "links", "revision"]) r.set(k, n.get(k));
@@ -245,7 +318,13 @@ const derivedFields = {
   settings: ["storage_used_bytes", "max_file_bytes", "max_active_attachments"],
 };
 const redactedFields = ["url", "secret", "secret_ciphertext"];
-const taskStatuses = ["todo", "in_progress", "needs_review", "done"];
+const taskStatuses = [
+  "todo",
+  "in_progress",
+  "needs_review",
+  "done",
+  "wont_do",
+];
 function projectable(app, col) {
   const out = ["collectionId", "collectionName"];
   const collection = app.findCollectionByNameOrId("crew_" + col);
@@ -300,7 +379,7 @@ function actionableOverdue(app, r) {
   }
   if (
     t.getBool("archived") ||
-    t.getString("status") === "done" ||
+    webhooks.terminal(t.getString("status")) ||
     t.getInt("wake_generation") !== r.getInt("generation")
   )
     return false;
@@ -334,6 +413,7 @@ function read(e) {
     "overdue",
     "agent",
     "claim_state",
+    "release",
   ]);
   if (b.collection === "capabilities")
     return e.json(200, capabilities.describe(b.id));
@@ -362,6 +442,7 @@ function read(e) {
     "readiness",
     "label",
     "claim_state",
+    "release",
   ])
     if (b[k] !== undefined && col !== "tasks")
       bad(k + " filter is only supported for tasks");
@@ -419,6 +500,14 @@ function read(e) {
         "COALESCE([[claimed_by]],'')='' AND COALESCE([[claim_until]],'')=''",
       );
     } else bad("claim_state must be live, expired or an empty string");
+  }
+  if (b.release !== undefined) {
+    // Exact release; an empty string selects tasks without a release.
+    if (typeof b.release !== "string" || b.release.length > 32)
+      bad("release must be a string of at most 32 characters");
+    params.release = b.release.trim();
+    clauses.push("release={:release}");
+    sql.push("COALESCE([[release]],'')={:release}");
   }
   if (b.changed_since !== undefined) {
     params.since = sinceFilter(b.changed_since);
@@ -930,6 +1019,11 @@ function write(e, isAgent) {
           assigned_agent: resolveAgent(app, values.assigned_agent),
         };
       validateData(app, col, values, r);
+      let approved = null;
+      if (kind === "task") {
+        approved = taskApproval(r, values, op);
+        values = approved.values;
+      }
       let staged = [];
       if (op === "create" && files.length)
         staged = attachments.stageCreate(app, kind, r, values, files, {
@@ -950,13 +1044,14 @@ function write(e, isAgent) {
         }
       } else r.set("revision", r.getInt("revision") + 1);
       if (kind === "task" && op === "update") {
-        // Done ends the claim; otherwise the live claimer's update renews it.
+        // Done or Won't do ends the claim; otherwise the live claimer's
+        // update renews it.
         if (
-          values.status === "done" &&
+          webhooks.terminal(values.status) &&
           (r.getString("claimed_by") || r.getString("claim_until"))
         )
           values = { ...values, claimed_by: "", claim_until: "" };
-        else if (values.status !== "done" && renewByClaimer(r, b))
+        else if (!webhooks.terminal(values.status) && renewByClaimer(r, b))
           values = { ...values, claim_until: r.getString("claim_until") };
       }
       if (kind === "agent" && op === "create" && values.kind === undefined)
@@ -993,7 +1088,7 @@ function write(e, isAgent) {
           )
             r.set("status", "in_progress");
         }
-        if (values.status === "done" && pending(app, r.id).length)
+        if (webhooks.terminal(values.status) && pending(app, r.id).length)
           bad("Resolve or withdraw the pending review before completion");
       }
       let hopStop = null;
@@ -1107,6 +1202,16 @@ function write(e, isAgent) {
         )
           changes.claim_until = r.getString("claim_until");
         else if (values.claimed_by === "") changes.claim_cleared = true;
+        for (const k of ["release", "approved_by"])
+          if (d[k] !== undefined) changes[k] = r.getString(k);
+        if (approved.stamped) {
+          changes.review_mode = "in_session";
+          changes.approved_by = r.getString("approved_by");
+          changes.approved_at = r.getString("approved_at");
+        } else if (approved.cleared) {
+          changes.review_mode = r.getString("review_mode");
+          changes.approval_cleared = true;
+        }
       }
       if (kind === "agent" && values.kind !== undefined)
         changes.kind = r.getString("kind");
@@ -1165,6 +1270,13 @@ function write(e, isAgent) {
       r.set("reported_agent", b.reported_agent || "");
       app.save(r);
       if (!isAgent) ownerTouch(t);
+      // A review request leaves Done, which clears an in-session approval.
+      const approvalCleared = t.getString("status") === "done" && hasApproval(t);
+      if (approvalCleared) {
+        t.set("review_mode", "");
+        t.set("approved_by", "");
+        t.set("approved_at", "");
+      }
       t.set("status", "needs_review");
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
@@ -1181,6 +1293,7 @@ function write(e, isAgent) {
         wake_generation: t.getInt("wake_generation"),
       };
       if (finished) changes.execution_completed = finished.id;
+      if (approvalCleared) changes.approval_cleared = true;
       event(app, t, b.action, b, actor, changes);
       result = r.publicExport();
       if (finished)

@@ -127,9 +127,9 @@ const glossaryEntries = {
   done: {
     name: "Done",
     question: "What does Done mean?",
-    what: "Finished work. Approval doesn't put a task here: you or an agent marks it Done.",
+    what: "Finished work, plus tasks set to Won't do, grouped by the release that shipped them. Approval doesn't put a task here: you or an agent marks it Done. A coding session that you approve in the terminal records the release and \"Approved in session\".",
     action:
-      "Set the status to Done once everything is finished, including anything outside Crew.",
+      "Set the status to Done once everything is finished, including anything outside Crew, or Won't do when you decide against it. Tasks from the last 7 days show first; Show older reveals the rest.",
   },
   readiness: {
     name: "Hold (On hold or Ready)",

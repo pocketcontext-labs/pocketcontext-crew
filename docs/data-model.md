@@ -28,6 +28,11 @@ Agents have a `kind`: `bot` (default; Grok bots woken by webhook), `external`
 carry an advisory claim: `claimed_by` (reported session name, attribution only)
 and `claim_until` (ISO UTC lease end), both empty without a claim; responses add a
 derived `claim_state`. See [project coder agents](crew.md#project-coder-agents).
+Task `status` is `todo`, `in_progress`, `needs_review`, `done` or `wont_do`
+(terminal like done). Tasks also carry `release` (the shipping release, at most 32
+characters), `review_mode` (empty, `crew` or `in_session`), `approved_by` (reported
+name, attribution only) and the server-set `approved_at`; see
+[releases and in-session approval](crew.md#project-coder-agents).
 
 Attachments carry `parent_kind` (task or note) and the parent ID as text, a
 protected single file (20 MiB, thumbs 1600x0 and 320x0, never exported), display

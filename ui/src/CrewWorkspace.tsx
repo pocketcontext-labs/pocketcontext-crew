@@ -20,6 +20,7 @@ import {
   val,
   list,
   statuses,
+  boardStatuses,
   lineDiff,
   type AgentSession,
   type ConnectionState,
@@ -37,6 +38,14 @@ import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
 import LabelsInput from "./LabelsInput";
 import { strandedWakes } from "./wakes";
+import {
+  approvalLine,
+  doneColumn,
+  isClosed,
+  knownReleases,
+  noRelease,
+  releaseMatches,
+} from "./taskReleases";
 import StartSession from "./StartSession";
 import {
   agentKind,
@@ -137,7 +146,7 @@ const viewHelp: Partial<Record<View, HelpTopic>> = {
   connect: "connect",
   search: "search",
 };
-const statusHelp: Record<(typeof statuses)[number][0], HelpTopic> = {
+const statusHelp: Record<(typeof boardStatuses)[number][0], HelpTopic> = {
   todo: "todo",
   in_progress: "in-progress",
   needs_review: "needs-review",
@@ -188,9 +197,9 @@ function assignmentMatches(
   if (filter === "all") return true;
   // Unassigned and invalid are queues of open work.
   if (filter === "unassigned")
-    return val(task, "status") !== "done" && !val(task, "assigned_agent");
+    return !isClosed(task) && !val(task, "assigned_agent");
   if (filter === "invalid")
-    return val(task, "status") !== "done" && invalid(task);
+    return !isClosed(task) && invalid(task);
   return val(task, "assigned_agent") === filter;
 }
 const holdFilterLabels: Record<HoldFilter, string> = {
@@ -198,10 +207,10 @@ const holdFilterLabels: Record<HoldFilter, string> = {
   on_hold: "On hold",
   ready: "Ready",
 };
-/** Whether a task shows under the board's hold filter; Done has no hold. */
+/** Whether a task shows under the board's hold filter; Done and Won't do have no hold. */
 function holdMatches(filter: HoldFilter, task: Row) {
   if (filter === "all") return true;
-  if (val(task, "status") === "done") return false;
+  if (isClosed(task)) return false;
   return (val(task, "readiness") === "ready") === (filter === "ready");
 }
 /** Readiness as the reader names it: the API keeps `waiting` for On hold. */
@@ -896,7 +905,13 @@ export default function CrewWorkspace() {
   const holdFilter = viewState.hold;
   const setHoldFilter = (value: HoldFilter) =>
     setViewState((state) => ({ ...state, hold: value }));
-  const boardFiltered = assignmentFilter !== "all" || holdFilter !== "all";
+  const releaseFilter = viewState.release;
+  const setReleaseFilter = (value: string) =>
+    setViewState((state) => ({ ...state, release: value }));
+  const boardFiltered =
+    assignmentFilter !== "all" || holdFilter !== "all" || releaseFilter !== "";
+  // Older closed tasks stay folded until asked for; not part of the address.
+  const [showOlderDone, setShowOlderDone] = useState(false);
   const bucket = data.buckets.some((x) => x.id === viewState.bucket)
     ? viewState.bucket
     : "";
@@ -1063,7 +1078,7 @@ export default function CrewWorkspace() {
     const id = val(task, "assigned_agent");
     return !!id && !data.agents.some((agent) => agent.id === id);
   };
-  const openTasks = data.tasks.filter((task) => val(task, "status") !== "done");
+  const openTasks = data.tasks.filter((task) => !isClosed(task));
   const unassignedCount = openTasks.filter(
     (task) => !val(task, "assigned_agent"),
   ).length;
@@ -1080,6 +1095,11 @@ export default function CrewWorkspace() {
       count: data.tasks.filter((x) => val(x, "assigned_agent") === agent.id)
         .length,
     }));
+  const releases = knownReleases(data.tasks);
+  const releaseOptions =
+    releaseFilter && releaseFilter !== noRelease && !releases.includes(releaseFilter)
+      ? [releaseFilter, ...releases]
+      : releases;
   const pending = data.reviews.filter((x) => val(x, "status") === "pending");
   const matches = (x: Row) =>
     [
@@ -1397,6 +1417,19 @@ export default function CrewWorkspace() {
                   </option>
                 ))}
               </select>
+              <select
+                aria-label="Filter by release"
+                value={releaseFilter}
+                onChange={(e) => setReleaseFilter(e.target.value)}
+              >
+                <option value="">All releases</option>
+                {releaseOptions.map((release) => (
+                  <option key={release} value={release}>
+                    Shipped in {release}
+                  </option>
+                ))}
+                <option value={noRelease}>No release</option>
+              </select>
               {boardFiltered && (
                 <button
                   type="button"
@@ -1405,6 +1438,7 @@ export default function CrewWorkspace() {
                       ...state,
                       assignment: "all",
                       hold: "all",
+                      release: "",
                     }))
                   }
                 >
@@ -1454,13 +1488,90 @@ export default function CrewWorkspace() {
           )}
           {view === "board" && (
             <div className="crew-board">
-              {statuses.map(([status, label]) => {
+              {boardStatuses.map(([status, label]) => {
+                // The Done column holds every closed task: Done and Won't do.
                 const tasks = data.tasks.filter(
                   (x) =>
-                    val(x, "status") === status &&
+                    (status === "done"
+                      ? isClosed(x)
+                      : val(x, "status") === status) &&
                     matches(x) &&
                     assignmentMatches(assignmentFilter, x, invalidAssignment) &&
-                    holdMatches(holdFilter, x),
+                    holdMatches(holdFilter, x) &&
+                    releaseMatches(releaseFilter, x),
+                );
+                // Grouped by release; older ones fold away unless a release
+                // is chosen or the owner asks for them.
+                const done =
+                  status === "done"
+                    ? doneColumn(tasks, showOlderDone || releaseFilter !== "")
+                    : null;
+                const card = (x: Row) => (
+                  <button
+                    className="crew-task-card"
+                    key={x.id}
+                    onClick={() => openItem("task", x)}
+                  >
+                    <div className="crew-tags">
+                      {val(x, "status") === "wont_do" && (
+                        <span className="crew-wont-do">Won't do</span>
+                      )}
+                      {!isClosed(x) && <HoldChip task={x} />}
+                      {val(x, "release") && (
+                        <span
+                          className="crew-release"
+                          title={`Shipped in release ${val(x, "release")}`}
+                        >
+                          Shipped in {val(x, "release")}
+                        </span>
+                      )}
+                      <ClaimChip task={x} />
+                      {wakeMissing.has(x.id) && <WakeMissingChip />}
+                      {pending.some((r) => val(r, "task") === x.id) && (
+                        <span className="crew-human">Human</span>
+                      )}
+                      {x.handoff_limited === true && (
+                        <span
+                          className="crew-human"
+                          title="Stopped after too many consecutive agent reassignments. Review it, then set Ready."
+                        >
+                          Handoff limit
+                        </span>
+                      )}
+                      {Number(x.comment_wake_generation) > 0 &&
+                        Number(x.comment_wake_generation) ===
+                          Number(x.wake_generation) && (
+                          <span title="Your comment wakes the assignee when the current execution finishes.">
+                            Comment wake pending
+                          </span>
+                        )}
+                      {list(x, "labels").map((l) => (
+                        <span className="crew-chip" key={l}>
+                          {l}
+                        </span>
+                      ))}
+                    </div>
+                    {thumbs[x.id] && (
+                      <CardThumbnail
+                        thumb={thumbs[x.id]}
+                        token={thumbToken}
+                      />
+                    )}
+                    <h3>{val(x, "title")}</h3>
+                    <p>{plainPreview(val(x, "description")).slice(0, 150)}</p>
+                    {invalidAssignment(x) && (
+                      <p className="crew-assignment-warning">
+                        Assigned agent is inactive or unavailable. Reassign
+                        this task.
+                      </p>
+                    )}
+                    <footer>
+                      <span className="crew-avatar">
+                        {name(val(x, "assigned_agent")).slice(0, 1)}
+                      </span>
+                      {name(val(x, "assigned_agent"))}
+                    </footer>
+                  </button>
                 );
                 return (
                   <section
@@ -1484,64 +1595,32 @@ export default function CrewWorkspace() {
                       </h2>
                       <Help topic={statusHelp[status]} />
                     </div>
-                    {tasks.map((x) => (
+                    {done
+                      ? done.groups.map((group) => (
+                          <div
+                            className="crew-release-group"
+                            key={group.release ? `r:${group.release}` : "none"}
+                            role="group"
+                            aria-label={group.release || "No release"}
+                          >
+                            <h3 className="crew-release-head">
+                              {group.release || "No release"}
+                              <span>{group.tasks.length}</span>
+                            </h3>
+                            {group.tasks.map(card)}
+                          </div>
+                        ))
+                      : tasks.map(card)}
+                    {done && done.older > 0 && (
                       <button
-                        className="crew-task-card"
-                        key={x.id}
-                        onClick={() => openItem("task", x)}
+                        type="button"
+                        className="crew-show-older"
+                        onClick={() => setShowOlderDone(true)}
+                        title="Closed tasks not changed in the last 7 days"
                       >
-                        <div className="crew-tags">
-                          {val(x, "status") !== "done" && (
-                            <HoldChip task={x} />
-                          )}
-                          <ClaimChip task={x} />
-                          {wakeMissing.has(x.id) && <WakeMissingChip />}
-                          {pending.some((r) => val(r, "task") === x.id) && (
-                            <span className="crew-human">Human</span>
-                          )}
-                          {x.handoff_limited === true && (
-                            <span
-                              className="crew-human"
-                              title="Stopped after too many consecutive agent reassignments. Review it, then set Ready."
-                            >
-                              Handoff limit
-                            </span>
-                          )}
-                          {Number(x.comment_wake_generation) > 0 &&
-                            Number(x.comment_wake_generation) ===
-                              Number(x.wake_generation) && (
-                              <span title="Your comment wakes the assignee when the current execution finishes.">
-                                Comment wake pending
-                              </span>
-                            )}
-                          {list(x, "labels").map((l) => (
-                            <span className="crew-chip" key={l}>
-                              {l}
-                            </span>
-                          ))}
-                        </div>
-                        {thumbs[x.id] && (
-                          <CardThumbnail
-                            thumb={thumbs[x.id]}
-                            token={thumbToken}
-                          />
-                        )}
-                        <h3>{val(x, "title")}</h3>
-                        <p>{plainPreview(val(x, "description")).slice(0, 150)}</p>
-                        {invalidAssignment(x) && (
-                          <p className="crew-assignment-warning">
-                            Assigned agent is inactive or unavailable. Reassign
-                            this task.
-                          </p>
-                        )}
-                        <footer>
-                          <span className="crew-avatar">
-                            {name(val(x, "assigned_agent")).slice(0, 1)}
-                          </span>
-                          {name(val(x, "assigned_agent"))}
-                        </footer>
+                        Show older ({done.older})
                       </button>
-                    ))}
+                    )}
                     {!tasks.length && (
                       <div className="crew-column-empty">
                         {query || boardFiltered ? (
@@ -1558,7 +1637,7 @@ export default function CrewWorkspace() {
                         ) : status === "needs_review" ? (
                           "Drafts sent for your approval appear here."
                         ) : (
-                          "Finished tasks appear here."
+                          "Finished tasks appear here, grouped by release."
                         )}
                       </div>
                     )}
@@ -2057,6 +2136,7 @@ function formValues(kind: Kind, row: Row | undefined, data: Data) {
             : "assigned_agent",
       ) || (kind === "note" ? data.buckets[0]?.id || "" : ""),
     status: val(row, "status") || "todo",
+    release: val(row, "release"),
     // On hold is `waiting` in the API (`on_hold` is only a write alias).
     readiness: val(row, "readiness") === "ready" ? "ready" : "waiting",
     waitingReason: val(row, "waiting_reason"),
@@ -2098,6 +2178,7 @@ function Editor({
     [links, setLinks] = useState(start.links);
   const [selection, setSelection] = useState(start.selection),
     [status, setStatus] = useState(start.status),
+    [release, setRelease] = useState(start.release),
     [readiness, setReadiness] = useState(start.readiness),
     [waitingReason, setWaitingReason] = useState(start.waitingReason),
     [labels, setLabels] = useState(start.labels),
@@ -2281,6 +2362,7 @@ function Editor({
     links,
     selection,
     status,
+    release,
     readiness,
     waitingReason,
     labels,
@@ -2293,6 +2375,7 @@ function Editor({
     links: setLinks,
     selection: setSelection,
     status: setStatus,
+    release: setRelease,
     readiness: setReadiness,
     waitingReason: setWaitingReason,
     labels: setLabels,
@@ -2336,6 +2419,7 @@ function Editor({
               readiness,
               waiting_reason: readiness !== "ready" ? waitingReason : "",
               ...(status === "needs_review" ? {} : { status }),
+              release: release.trim(),
               labels: JSON.parse(labels) as string[],
               links: links
                 .split("\n")
@@ -2877,6 +2961,21 @@ function Editor({
                     }}
                   />
                 </div>
+                <div className="crew-form-grid">
+                  <Field label="Release">
+                    <input
+                      value={release}
+                      onChange={(e) => setRelease(e.target.value)}
+                      placeholder="The release that shipped it, e.g. 0.19.0"
+                      maxLength={32}
+                    />
+                  </Field>
+                </div>
+                {row && approvalLine(row) && (
+                  <p className="crew-approval-line" role="note">
+                    {approvalLine(row)}
+                  </p>
+                )}
                 <div className="crew-form-grid">
                   <Field label="Hold" help={help("readiness")}>
                     <select

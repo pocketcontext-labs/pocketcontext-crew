@@ -162,7 +162,15 @@ export const statuses = [
   ["in_progress", "In progress"],
   ["needs_review", "Needs review"],
   ["done", "Done"],
+  ["wont_do", "Won't do"],
 ] as const;
+/** The board's four columns; the Done column also shows Won't do tasks. */
+export const boardStatuses = statuses.slice(0, 4) as unknown as readonly [
+  (typeof statuses)[0],
+  (typeof statuses)[1],
+  (typeof statuses)[2],
+  (typeof statuses)[3],
+];
 export function lineDiff(before: string, after: string) {
   const oldLines = before.split("\n"),
     newLines = after.split("\n");

@@ -11,7 +11,7 @@ reporting (see [SQL reads](#bounded-read-only-sql)).
 | buckets        | Name, purpose and responsible agent                                         |
 | notes          | One bucket, title, Markdown body, note-ID links, archive state              |
 | note_revisions | Immutable snapshots, version, actor, reported agent and reason              |
-| tasks          | Board status, assignment, creator attribution, labels, draft, note links and advisory claim |
+| tasks          | Board status, assignment, creator attribution, labels, draft, note links, advisory claim, release and approval mode |
 | events         | Immutable changes/comments, actor and reported attribution                  |
 | reviews        | Immutable draft and attachment snapshot with monotonic decision state       |
 | attachments    | Immutable files on a task or note: metadata, archive state; bytes in storage/ |
@@ -31,7 +31,8 @@ unknown fields, and fields the export hides or redacts such as webhook URLs and
 secrets, are rejected. Task reads accept `assigned_agent` (ID or unique exact
 name, empty string for unassigned), `status` (one value or a list), `readiness`
 (`ready`, or `on_hold`/`waiting`), `label` (exact element of labels) and
-`claim_state` (`live`, `expired` or `""` for no claim). The `session` collection
+`claim_state` (`live`, `expired` or `""` for no claim) and `release` (exact
+release, or `""` for tasks without one). The `session` collection
 takes `agent` (ID or exact name) and returns one object instead of items; see
 [project coder agents](#project-coder-agents).
 `webhook_bridges` reads accept `overdue: true`; see
@@ -583,8 +584,43 @@ name once with one shell command (`$CREW_SESSION`, else
 and use it as reported_agent; list the agent's Ready To do tasks; claim one only when
 the owner picks it; plan and wait for the owner's approval in the session (that
 approval is the review); implement and release per the repository's AGENTS.md;
-close with `Released in <version>: <what changed>, commit <sha>` and Done; or
-release with a hold reason when stopping early. An unknown agent is HTTP 404.
+close with `Released in <version>: <what changed>, commit <sha>`, then one
+task.update with `status: "done"`, `release: "<version>"`, `review_mode: "in_session"`
+and `approved_by` (the owner's name if known, else `owner`); set Won't do
+(`wont_do`) with a comment when the owner decides not to do a task; or release
+with a hold reason when stopping early. An unknown agent is HTTP 404.
+
+**Releases, in-session approval and Won't do (0.19.0).** Tasks have:
+
+- `status` gains `wont_do` (Won't do). Done and Won't do are terminal: setting
+  either ends a claim, neither ever wakes a bot (owner comments and Ready
+  included), both are left out of overdue wakes, a pending review blocks both, and
+  leaving either for an open status is a `reopened` wake cause. Moving between
+  Done and Won't do is not a reopening.
+- `release` (text, trimmed, at most 32 characters on one line, empty for none):
+  the release that shipped the task, for example `0.19.0`. Task reads filter it
+  exactly with `release`, and `""` selects tasks without one.
+- `review_mode`: `""` (the default, meaning a Crew review), `crew` or
+  `in_session` (the owner approved the work in a coding session). `in_session` is
+  accepted only when the task is or becomes Done (HTTP 400 otherwise). Setting it
+  makes Crew stamp `approved_at` with server time; `approved_by` (at most 100
+  characters, a reported name used only as attribution, never identity) defaults
+  to `owner`. `approved_at` is never written by clients, and `approved_by` is
+  refused without `in_session`. Later updates while still Done keep the stamp.
+- Leaving Done by any operation (task.update, a claim or review.request) clears
+  `review_mode`, `approved_by` and `approved_at`; switching to `crew` clears the
+  approval. The release is kept.
+- The task event records the trimmed `release` and `approved_by`, and on approval
+  `review_mode` and `approved_at`, or `approval_cleared: true` when cleared.
+
+The reader's status select offers Won't do and the task dialog has a Release field
+and, for an in-session approval, "Approved in session by <name>, <date>". The
+board keeps four columns: the Done column holds Done and Won't do tasks (Won't do
+cards carry a chip), grouped by release (newest release first, semantic versions
+compared numerically, "No release" last), showing tasks updated in the last 7 days
+with **Show older (N)** for the rest. Cards with a release show "Shipped in X", and
+the board filter bar has a release filter kept in the address
+(`#/tasks?release=<release>` or `release=none`).
 
 **Claims.** Tasks have `claimed_by` (the claimer's reported session name;
 attribution, not identity), `claim_until` (ISO UTC lease end) and a derived
@@ -607,8 +643,8 @@ attribution, not identity), `claim_until` (ISO UTC lease end) and a derived
 - `task.release` (optional `readiness` and `waiting_reason`) clears the claim, sets
   an In progress task back to To do and applies the readiness. The claimer, the owner
   in the reader, or anyone after the claim expired may release; another work client
-  gets 409 `not_claimer`. Setting Done (task.update or execution.complete with
-  mark_done) also clears the claim.
+  gets 409 `not_claimer`. Setting Done or Won't do (task.update, or
+  execution.complete with mark_done) also clears the claim.
 - Claims are advisory: they block no other write, owner edits included. They never
   send a webhook; the Grok-bot execution protocol is unchanged. An expired claim
   stays visible (`claim_state: "expired"`) until the task is claimed, released or

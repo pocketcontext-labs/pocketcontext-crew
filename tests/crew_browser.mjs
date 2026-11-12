@@ -409,6 +409,31 @@ try {
  await page.getByRole('button',{name:'Show all tasks',exact:true}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
+ // Releases: Won't do and a release put a card in the Done column under its release group.
+ await page.getByRole('button',{name:/Synthetic long description/}).click();
+ await dialog().getByLabel('Status').selectOption('wont_do');
+ await dialog().getByLabel('Release',{exact:true}).fill('0.19.0');
+ await dialog().getByRole('button',{name:'Save task'}).click();await saved();
+ const doneColumn=page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})});
+ const dropped=doneColumn.getByRole('button',{name:/Synthetic long description/});
+ await dropped.getByText("Won't do",{exact:true}).waitFor();
+ await dropped.getByText('Shipped in 0.19.0',{exact:true}).waitFor();
+ assert.deepEqual(await doneColumn.getByRole('group').evaluateAll(gs=>gs.map(g=>g.getAttribute('aria-label'))),['0.19.0','No release'],'Done groups by release, newest first, No release last');
+ const releaseFilter=page.getByRole('combobox',{name:'Filter by release'});
+ await releaseFilter.selectOption({label:'Shipped in 0.19.0'});
+ await page.waitForFunction(()=>location.hash==='#/tasks?release=0.19.0');
+ await cards(1);
+ await snap('crew-board-release-filter');
+ await page.reload();
+ await page.waitForFunction(()=>document.querySelector('select[aria-label="Filter by release"]')?.value==='0.19.0');
+ await cards(1);
+ await page.getByRole('button',{name:'Show all tasks',exact:true}).click();
+ await page.waitForFunction(()=>location.hash==='#/tasks');
+ await cards(2);
+ await page.getByRole('button',{name:/Synthetic long description/}).click();
+ await dialog().getByLabel('Status').selectOption('todo');
+ await dialog().getByLabel('Release',{exact:true}).fill('');
+ await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  // Old page addresses redirect in place, keeping the query, on navigation and on load.
  await assignment.selectOption({label:'Network (1)'});
  await page.waitForFunction(()=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(location.hash));

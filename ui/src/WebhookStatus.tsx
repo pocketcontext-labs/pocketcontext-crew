@@ -11,6 +11,7 @@ import Help, { HelpField } from "./Help";
 import type { HelpTopic } from "./helpContent";
 import { itemPath } from "./itemLink";
 import { isBot } from "./projectAgents";
+import { isClosed } from "./taskReleases";
 import { strandedSince, strandedWakes } from "./wakes";
 type WakeRule = {
   reason: string;
@@ -167,7 +168,7 @@ function activityWarning(
     const generation = Number(ex.generation);
     const moved =
       task.archived === true ||
-      val(task, "status") === "done" ||
+      isClosed(task) ||
       (!!val(task, "readiness") && val(task, "readiness") !== "ready") ||
       (Number.isFinite(generation) &&
         generation !== Number(task.wake_generation));
