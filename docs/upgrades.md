@@ -1,5 +1,35 @@
 # Crew upgrades and rollback
 
+## Crew 0.20.0 to 0.21.0
+
+Two data migrations. `1801400000_crew_artifacts.js` adds the empty
+`crew_artifacts` collection (shared pages) and lets attachments belong to an
+artifact (`parent_kind` gains `artifact`). `1801500000_crew_session_instructions.js`
+adds the empty `crew_session_revisions` collection, so every agent keeps using the
+built-in session instructions until someone saves a revision. Existing records and
+history are unchanged.
+
+1. Take a complete stopped backup first: `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` (when present), the matching 0.20.0 binary and,
+   with webhooks, the private webhook key. Hosted deployment prepares a verified
+   complete backup before replacement.
+2. Replace the binary or image (`CREW_REPLACE_VERSION=0.20.0` for the installer)
+   and upgrade paired clients with the server to 0.21.0.
+3. A reverse proxy or firewall that filters paths must pass `GET`/`HEAD /a/*`:
+   published artifact pages are served there without sign-in. Nothing is public
+   until the owner publishes an artifact.
+4. Run `skill` on each computer with a Crew profile and refresh MCP tool schemas.
+   Agents gain `artifact.create`/`artifact.update` (drafts only; publishing,
+   replacing and revoking are owner-browser-only) and `session.update`.
+5. `capabilities_digest` changes, so agents reread capabilities. Protocol 3 and the
+   managed instruction block stay unchanged; this upgrade does not pause delivery.
+
+Older binaries refuse the migrated database without changing it. Rollback requires
+restoring the complete pre-upgrade backup with the matching 0.20.0 binary or image;
+changes made after the backup, including published artifacts and saved
+instructions, are not preserved. From earlier versions, also read the intervening
+upgrade notes below.
+
 ## Crew 0.19.0 to 0.20.0
 
 One data migration (`1801300000_crew_review_choices.js`) adds server-managed task hold/claim start timestamps and
