@@ -1,19 +1,20 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
 import { copyText } from "./projectAgents";
 
 /**
  * Start a session: reads the external agent's session prompt and copies it,
  * for the owner to paste into a new Codex or Claude Code session. Crew starts
- * nothing itself.
+ * nothing itself. The full instructions open in a dialog of their own: they are
+ * long and hold code blocks, which a card is too narrow for.
  */
 export default function StartSession({
   agent,
-  markdown,
+  showInstructions,
 }: {
   agent: Row;
-  /** Renders the full instructions as Markdown. */
-  markdown: (text: string) => ReactNode;
+  /** Opens the full instructions in a dialog. */
+  showInstructions: (session: AgentSession) => void;
 }) {
   const [state, setState] = useState<
     "idle" | "loading" | "copied" | "manual" | "failed"
@@ -69,10 +70,14 @@ export default function StartSession({
         </p>
       )}
       {session?.instructions.trim() && (
-        <details className="crew-session-instructions">
-          <summary>Show full instructions</summary>
-          {markdown(session.instructions)}
-        </details>
+        <button
+          type="button"
+          className="crew-session-instructions"
+          aria-haspopup="dialog"
+          onClick={() => showInstructions(session)}
+        >
+          Show full instructions
+        </button>
       )}
     </div>
   );

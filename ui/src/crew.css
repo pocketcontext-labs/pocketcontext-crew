@@ -1092,12 +1092,25 @@ a.crew-logo:hover .product-brand span {
 .crew-session-error {
   color: #8b4a26;
 }
-.crew-session-instructions {
-  width: 100%;
-}
-.crew-session-instructions summary {
-  cursor: pointer;
+/* Opens the full instructions in a dialog; reads as a link under the button. */
+.crew-app .crew-session-instructions {
+  border: 0;
+  background: none;
+  padding: 0;
   color: #567257;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.crew-app .crew-session-instructions:hover {
+  background: none;
+  color: #2d4538;
+}
+/* Long lines and code blocks scroll inside their own box, not the dialog. */
+.crew-session-dialog > * {
+  min-width: 0;
+}
+.crew-session-dialog pre {
+  max-width: 100%;
 }
 /* How an agent is started: three choices in the agent form. */
 .crew-agent-start {

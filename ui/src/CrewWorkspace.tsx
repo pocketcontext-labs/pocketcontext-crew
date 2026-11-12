@@ -21,6 +21,7 @@ import {
   list,
   statuses,
   lineDiff,
+  type AgentSession,
   type ConnectionState,
   type Row,
 } from "./crewApi";
@@ -731,6 +732,11 @@ export default function CrewWorkspace() {
       />
     ) : null;
   const [dialog, setDialog] = useState<{ kind: Kind; row?: Row } | null>(null),
+    // An external agent's full session instructions, read by Start a session.
+    [instructions, setInstructions] = useState<{
+      name: string;
+      session: AgentSession;
+    } | null>(null),
     // Set per hash navigation and consumed once, so data refreshes never open a dialog.
     [pendingLink, setPendingLink] = useState(() =>
       parseItemHash(location.hash),
@@ -1822,7 +1828,9 @@ export default function CrewWorkspace() {
                     {agentKind(x) === "external" && (
                       <StartSession
                         agent={x}
-                        markdown={(text) => <Prose>{text}</Prose>}
+                        showInstructions={(session) =>
+                          setInstructions({ name: val(x, "name"), session })
+                        }
                       />
                     )}
                   </div>
@@ -1917,6 +1925,24 @@ export default function CrewWorkspace() {
           </button>
         </footer>
       </main>
+      {instructions && (
+        <Modal
+          title={`Session instructions for ${instructions.name}`}
+          actions={
+            <CopyLink
+              target={instructions.session.prompt}
+              label="Copy prompt"
+              copiedLabel="Prompt copied"
+            />
+          }
+          close={() => setInstructions(null)}
+          onEdit={() => undefined}
+        >
+          <div className="crew-dialog-body crew-session-dialog">
+            <Prose>{instructions.session.instructions}</Prose>
+          </div>
+        </Modal>
+      )}
       {dialog && (
         <Modal
           title={

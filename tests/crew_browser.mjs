@@ -475,6 +475,35 @@ try {
  assert.ok(m.sh>m.ch&&m.oy==='auto'&&m.oh>=Math.floor(m.ih*0.7)-2,'a long agent brief opens at the cap with a scrollbar: '+JSON.stringify(m));}
  await snapView('crew-agent-brief-1280');
  await close();await dialog().waitFor({state:'hidden'});
+ // A manually started agent's full session instructions open in their own
+ // dialog: nothing overlaps them, other cards keep their height and the page
+ // never scrolls sideways (they used to spill behind the neighbouring cards).
+ await page.getByRole('button',{name:/New agent/}).click();
+ await dialog().getByLabel('Name',{exact:true}).fill('synthetic-repo');
+ await dialog().getByRole('radio',{name:'I start it myself (no webhook)'}).check();
+ await dialog().getByRole('button',{name:'Save agent'}).click();await saved();
+ const pageOverflows=()=>page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1);
+ await page.getByRole('button',{name:'Start a session for synthetic-repo'}).click();
+ const showInstructions=page.getByRole('button',{name:'Show full instructions'});
+ await showInstructions.waitFor();
+ for(const width of [1024,1280,1440]){
+  await page.setViewportSize({width,height:900});
+  const networkHeight=await networkCard.evaluate(e=>e.getBoundingClientRect().height);
+  assert.equal(await pageOverflows(),false,`Agents horizontal overflow at ${width}`);
+  await showInstructions.click();
+  const instructions=page.getByRole('dialog',{name:'Session instructions for synthetic-repo'});
+  await instructions.getByRole('heading',{name:'1. Session name'}).waitFor();
+  assert.equal(await instructions.evaluate(d=>{const b=d.getBoundingClientRect();const top=document.elementFromPoint(b.left+b.width/2,b.top+Math.min(b.height/2,200));return d.contains(top);}),true,`the instructions are on top at ${width}`);
+  assert.equal(await instructions.evaluate(d=>d.scrollWidth<=d.clientWidth+1),true,`no sideways scroll in the instructions at ${width}`);
+  assert.equal(await instructions.locator('pre').first().evaluate(p=>p.scrollWidth>p.clientWidth&&getComputedStyle(p).overflowX==='auto'),true,`the shell command scrolls in its own box at ${width}`);
+  assert.equal(await pageOverflows(),false,`Agents horizontal overflow with instructions at ${width}`);
+  if(width===1024) await snapView('crew-session-instructions-1024');
+  await instructions.getByRole('button',{name:'Close dialog'}).click();
+  await instructions.waitFor({state:'hidden'});
+  assert.equal(await networkCard.evaluate(e=>e.getBoundingClientRect().height),networkHeight,`other cards keep their height at ${width}`);
+  assert.equal(await page.getByRole('button',{name:'Start a session for synthetic-repo'}).evaluate(b=>!!b.closest('.crew-agent-tile')),true,'Start a session stays in its tile');
+ }
+ await page.setViewportSize({width:1280,height:800});
  // Search boxes draw one focus ring, on the box, never a second one on the field inside.
  await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
  await page.waitForURL('**/#/tasks');
@@ -796,5 +825,5 @@ try {
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');
- console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, file previews (log, CSV, PDF with inert JavaScript, audio, video) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, logout.');
+ console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, session instructions dialog 1024/1280/1440, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, file previews (log, CSV, PDF with inert JavaScript, audio, video) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, logout.');
 }catch(error){ console.error('Synthetic browser page:', (await page.locator('body').innerText()).slice(0,2500)); await snap('crew-failure'); throw error; }finally{await browser.close();}

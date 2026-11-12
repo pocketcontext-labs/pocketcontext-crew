@@ -2860,8 +2860,25 @@ describe("project agents and coding sessions", () => {
     expect(session$).toHaveBeenCalledWith(project.id);
     expect(writeText).toHaveBeenCalledWith(session.prompt);
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByText("Show full instructions"));
-    expect(screen.getByText("one").tagName).toBe("STRONG");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show full instructions" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Session instructions for synthetic-repo",
+    });
+    // The instructions open in their own dialog, not inside the agent card.
+    expect(within(dialog).getByText("one").tagName).toBe("STRONG");
+    expect(
+      screen.getByText("one").closest(".crew-agent-tile"),
+    ).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Copy prompt" }));
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Prompt copied" }))
+        .toBeInTheDocument(),
+    );
+    expect(writeText).toHaveBeenLastCalledWith(session.prompt);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
   it("shows the prompt to copy by hand when the clipboard is unavailable", async () => {
     vi.spyOn(crewApi, "session").mockResolvedValue(session);
