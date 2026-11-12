@@ -572,33 +572,10 @@ a.crew-logo:hover .product-brand span {
   align-items: center;
   gap: 10px;
 }
-/* Releases: the shipped release on cards, Won't do as a quiet closed marker. */
-.crew-tags > .crew-release {
-  background: #e3eee0;
-  color: #3f6b48;
-}
+/* Won't do: a quiet closed marker. */
 .crew-tags > .crew-wont-do {
   background: #ecebe6;
   color: #6b675c;
-}
-/* The Done column groups closed tasks by release, newest release first. */
-.crew-release-group + .crew-release-group {
-  margin-top: 6px;
-}
-.crew-release-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 2px 8px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: #5d6a52;
-  overflow-wrap: anywhere;
-}
-.crew-release-head span {
-  font-weight: 400;
-  color: #8a937e;
 }
 .crew-app .crew-show-older {
   width: 100%;
@@ -3356,26 +3333,6 @@ a.crew-logo:hover .product-brand span {
   background: transparent;
   padding: 3px 4px;
   font-size: 12px;
-  text-decoration: underline;
-}
-.crew-app .crew-release-head button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  background: transparent;
-  padding: 1px 4px;
-  margin-left: -4px;
-  font: inherit;
-  letter-spacing: inherit;
-  color: inherit;
-  border-radius: 4px;
-  overflow-wrap: anywhere;
-  text-align: left;
-}
-.crew-app .crew-release-head button:hover,
-.crew-app .crew-release-head button[aria-pressed="true"] {
-  background: #edf2e9;
   text-decoration: underline;
 }
 @media (max-width: 680px) {

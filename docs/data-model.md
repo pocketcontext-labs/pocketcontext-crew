@@ -37,10 +37,12 @@ current; without rows, or when the latest is a default revision (empty text,
 is_default true), Crew's built-in template applies. The agent brief is not stored
 there; it is appended when the instructions are read. See [project coder agents](crew.md#project-coder-agents).
 Task `status` is `todo`, `in_progress`, `needs_review`, `done` or `wont_do`
-(terminal like done). Tasks also carry `release` (the shipping release, at most 32
-characters), `review_mode` (empty, `crew` or `in_session`), `approved_by` (reported
+(terminal like done). Tasks also carry `review_mode` (empty, `crew` or `in_session`), `approved_by` (reported
 name, attribution only) and the server-set `approved_at`; see
-[releases and in-session approval](crew.md#project-coder-agents).
+[in-session approval](crew.md#project-coder-agents). Since 0.23.0 tasks have no
+`release` field: the migration moved each release to the label `release-<value>`,
+and a write or read that names `release` is refused (HTTP 400,
+`release_field_removed`).
 
 Artifacts (0.21.0) are pages shared by link. The draft is `title`, `body`
 (Markdown) and `sources` (note and task IDs, shown only in Crew); `status` is
@@ -54,7 +56,10 @@ Since 0.22.0, `expires_at` (RFC 3339, empty never expires) ends a published
 link, `replaces` names the artifact whose link a draft updates, and `archived`,
 `archived_at` and `archived_by` archive artifacts instead of deleting them; reads
 add the derived `state` (`draft`, `published`, `expired`, `revoked` or
-`archived`). See [Artifacts](crew.md#artifacts).
+`archived`) and, since 0.23.0, `merged_into`/`merged_at` for an archived update
+draft whose content replaced a live link. A same-origin visit to `/a/<token>`
+(the owner's Open on the Shared page, `Sec-Fetch-Site: same-origin`) is not
+counted in `view_count`. See [Artifacts](crew.md#artifacts).
 
 Attachments carry `parent_kind` (task, note or artifact) and the parent ID as text, a
 protected single file (20 MiB, thumbs 1600x0 and 320x0, never exported), display

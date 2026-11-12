@@ -36,7 +36,7 @@ const pageEntries = {
     question: "What is the Tasks page?",
     what: "Every task and where it stands: To do, In progress, Needs review or Done. You or a connected agent can add tasks.",
     action:
-      "Use New task to add work, or open a card to change its status, assigned agent or draft. Filter by assignment to see one agent's tasks, unassigned work or tasks that need a new agent. Filters holds readiness, label, status, release and sort; search also understands release:0.20.0, label:, agent: and status:.",
+      "Use New task to add work, or open a card to change its status, assigned agent or draft. Filter by assignment to see one agent's tasks, unassigned work or tasks that need a new agent. Filters holds readiness, label, status and sort; search also understands label:, agent: and status:. To mark what shipped together, use a label such as release-0.23.0.",
   },
   memory: {
     name: "Notes",
@@ -127,7 +127,7 @@ const glossaryEntries = {
   done: {
     name: "Done",
     question: "What does Done mean?",
-    what: "Finished work, plus tasks set to Won't do, grouped by the release that shipped them. Approval doesn't put a task here: you or an agent marks it Done. A coding session that you approve in the terminal records the release and \"Approved in session\".",
+    what: "Finished work, plus tasks set to Won't do, most recently changed first; the last 7 days show unless you pick a label or Show older. Approval doesn't put a task here: you or an agent marks it Done. A coding session that you approve in the terminal adds a release label (for example release-0.23.0) and records \"Approved in session\".",
     action:
       "Set the status to Done once everything is finished, including anything outside Crew, or Won't do when you decide against it. Tasks from the last 7 days show first; Show older reveals the rest.",
   },

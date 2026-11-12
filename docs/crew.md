@@ -32,8 +32,9 @@ unknown fields, and fields the export hides or redacts such as webhook URLs and
 secrets, are rejected. Task reads accept `assigned_agent` (ID or unique exact
 name, empty string for unassigned), `status` (one value or a list), `readiness`
 (`ready`, or `on_hold`/`waiting`), `label` (exact element of labels) and
-`claim_state` (`live`, `expired` or `""` for no claim) and `release` (exact
-release, or `""` for tasks without one). The `session` collection
+`claim_state` (`live`, `expired` or `""` for no claim). A `release` filter is
+refused since 0.23.0 (`release_field_removed`); filter by the label
+`release-<version>` instead. The `session` collection
 takes `agent` (ID or exact name) and returns one object instead of items; see
 [project coder agents](#project-coder-agents).
 `webhook_bridges` reads accept `overdue: true`; see
@@ -493,7 +494,8 @@ and later edits stay private.
   actions below. Their results carry
   `token`, `link_path` (`/a/<token>`) and `link` (with a domain). The reader's
   **Shared** page (`#/shared`, `#/shared/<id>`) lists every artifact with its
-  state, link and Copy link, published time, expiry, views, last opened and
+  state, link with Copy link and Open (0.23.0: opens the public page in a new
+  tab; that same-origin visit is not counted as a view), published time, expiry, views, last opened and
   sources, plus Publish, Update content (same link), Set expiry, Edit draft,
   Revoke, Discard, Archive and Restore. Filters (Drafts, Live, Revoked/expired,
   Archived; Drafts and Live by default) stay in the address
@@ -516,6 +518,14 @@ and later edits stay private.
   expired token never works again: publishing again issues a new one. Every
   publish and replace event keeps the frozen snapshot it published (and the one
   it replaced), so earlier versions stay in history.
+- **Merged update drafts (0.23.0).** Reads add derived `merged_into` and
+  `merged_at`: on an archived update draft whose last archiving step was
+  `artifact.publish` with `mode: replace`, the artifact it went into and when
+  (from the draft's own events, so drafts merged under 0.22.0 show it too);
+  empty for a discarded draft, a merged draft that was restored and discarded,
+  and every other artifact. The Shared page shows "Merged into <title> on
+  <date>" instead of "Update of", and explains that Restore brings back the
+  draft only.
 - **Snapshot rule.** Publishing copies the title, body and the ordered list of
   image attachments into `published_*`. Editing a source note never changes the
   page; editing a published artifact's draft sets `pending_changes` until the
@@ -695,7 +705,7 @@ and use it as reported_agent; list the agent's Ready To do tasks; claim one only
 the owner picks it; plan and wait for the owner's approval in the session (that
 approval is the review); implement and release per the repository's AGENTS.md;
 close with `Released in <version>: <what changed>, commit <sha>`, then one
-task.update with `status: "done"`, `release: "<version>"`, `review_mode: "in_session"`
+task.update with `status: "done"`, the label `release-<version>` added to `labels`, `review_mode: "in_session"`
 and `approved_by` (the owner's name if known, else `owner`); set Won't do
 (`wont_do`) with a comment when the owner decides not to do a task; or release
 with a hold reason when stopping early. An unknown agent is HTTP 404.
@@ -738,16 +748,17 @@ and Cancel; a stale revision explains the conflict and offers Reload latest),
 rereads the session when it opens; **Copy prompt** copies the two-line prompt,
 which makes the session read the latest saved revision.
 
-**Releases, in-session approval and Won't do (0.19.0).** Tasks have:
+**In-session approval and Won't do (0.19.0; release labels since 0.23.0).** Tasks have:
 
 - `status` gains `wont_do` (Won't do). Done and Won't do are terminal: setting
   either ends a claim, neither ever wakes a bot (owner comments and Ready
   included), both are left out of overdue wakes, a pending review blocks both, and
   leaving either for an open status is a `reopened` wake cause. Moving between
   Done and Won't do is not a reopening.
-- `release` (text, trimmed, at most 32 characters on one line, empty for none):
-  the release that shipped the task, for example `0.19.0`. Task reads filter it
-  exactly with `release`, and `""` selects tasks without one.
+- No `release` field (removed in 0.23.0): a release is an ordinary label,
+  `release-<version>`. The 0.23.0 migration added that label to every task that
+  had a release (without changing `updated`) and dropped the column. Writes and
+  reads that still name `release` get HTTP 400 with `release_field_removed`.
 - `review_mode`: `""` (the default, meaning a Crew review), `crew` or
   `in_session` (the owner approved the work in a coding session). `in_session` is
   accepted only when the task is or becomes Done (HTTP 400 otherwise). Setting it
@@ -757,19 +768,17 @@ which makes the session read the latest saved revision.
   refused without `in_session`. Later updates while still Done keep the stamp.
 - Leaving Done by any operation (task.update, a claim or review.request) clears
   `review_mode`, `approved_by` and `approved_at`; switching to `crew` clears the
-  approval. The release is kept.
-- The task event records the trimmed `release` and `approved_by`, and on approval
+  approval. Labels are kept.
+- The task event records the trimmed `approved_by`, and on approval
   `review_mode` and `approved_at`, or `approval_cleared: true` when cleared.
 
-The reader's status select offers Won't do and the task dialog has a Release field
-and, for an in-session approval, "Approved in session by <name>, <date>". The
-board keeps four columns: the Done column holds Done and Won't do tasks (Won't do
-cards carry a chip), grouped by release (newest release first, semantic versions
-compared numerically, "No release" last), showing tasks updated in the last 7 days
-with **Show older (N)** for the rest. Cards with a release show "Shipped in X".
-Clicking a release header in the Done column filters the board to that release,
-kept in the address (`#/tasks?release=<release>` or `release=none`); the search
-token `release:<release>` and the Filters panel do the same.
+The reader's status select offers Won't do and the task dialog shows, for an
+in-session approval, "Approved in session by <name>, <date>". The board keeps four
+columns: the Done column holds Done and Won't do tasks (Won't do cards carry a
+chip) as one list, most recently updated first, showing tasks updated in the last
+7 days with **Show older (N)** for the rest; choosing a label (for example
+`release-0.21.0`) shows its older tasks too. A 0.22.0 address with
+`release=<release>` opens as the label filter `release-<release>`.
 
 **Claims.** Tasks have `claimed_at` (the original start, unchanged by renewal),
 `claimed_by` (the claimer's reported session name; attribution, not identity), `claim_until` (ISO UTC lease end) and a derived
@@ -831,12 +840,12 @@ Home and the board share the same over-three-days rule, exclude terminal tasks
 from hold views, and keep the age filter in the address (`held_over=3d`).
 
 The board also supports a case-insensitive single label filter (`label=…`), combined
-with assignment, hold, status and release filters. Click a label chip to filter.
+with assignment, hold and status filters. Click a label chip to filter.
 The board toolbar shows only search, the agent filter and a **Filters** button
 (with a count); the button opens a panel with readiness (On hold, Ready, on hold
-over 3 days), label, status, release and sort. Each filter set there shows as a
+over 3 days), label, status and sort. Each filter set there shows as a
 removable chip under the toolbar, with the number of matching tasks and **Clear
-all**. The search reads `release:`, `label:`, `agent:` and `status:` tokens
+all**. The search reads `label:`, `agent:` and `status:` tokens
 (quote values with spaces, e.g. `agent:"Build bot"`) and applies them like the
 corresponding filter; Enter turns them into chips in the address. The MCP `label`
 filter remains an exact match.

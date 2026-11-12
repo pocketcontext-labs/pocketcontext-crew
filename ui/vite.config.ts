@@ -55,5 +55,8 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
+    // Above the 5 s async wait in test-setup.ts, so a slow wait fails with
+    // its own message instead of the test timeout.
+    testTimeout: 20000,
   },
 });

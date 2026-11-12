@@ -180,6 +180,13 @@ def artifact_scenario(pc, headers, write, read):
     assert raw_http(pc, 'HEAD', '/a/' + token)[0] == 200
     viewed = read('artifacts', id=draft['id'])[0]
     assert viewed['view_count'] == 1 and viewed['last_viewed_at'], viewed
+    # The owner's Open from the Shared page (a same-origin navigation) serves the
+    # same page without counting a view; a cross-site visitor is counted.
+    status, _, owner_page = raw_http(pc, 'GET', '/a/' + token, headers={'Sec-Fetch-Site': 'same-origin'})
+    assert status == 200 and owner_page == page, status
+    assert read('artifacts', id=draft['id'])[0]['view_count'] == 1
+    assert raw_http(pc, 'GET', '/a/' + token, headers={'Sec-Fetch-Site': 'cross-site'})[0] == 200
+    assert read('artifacts', id=draft['id'])[0]['view_count'] == 2
     # Unknown and malformed tokens get the same plain 404.
     unknown = raw_http(pc, 'GET', '/a/' + 'Z' * 32)
     malformed = raw_http(pc, 'GET', '/a/short')
@@ -239,6 +246,18 @@ def artifact_lifecycle(pc, headers, write, read, live):
     assert 'Plans start at 15.' in page, page
     gone = read('artifacts', id=update['id'], archived=True)[0]
     assert gone['archived'], gone
+    # 0.23.0: the archived update draft says it was merged, and into what.
+    assert gone['merged_into'] == live['id'] and gone['merged_at'], gone
+    assert read('artifacts', id=live['id'])[0]['merged_into'] == '', 'only the draft is merged'
+    # A discarded update draft has no merge; neither has a merged draft that was
+    # restored and then discarded.
+    dropped = write('artifact.create', {'title': 'Pricing, dropped', 'replaces': live['id']})
+    dropped = write('artifact.archive', {}, dropped, agent=False)
+    assert dropped['state'] == 'archived' and dropped['merged_into'] == '' and dropped['merged_at'] == '', dropped
+    back = write('artifact.restore', {}, gone, agent=False)
+    assert back['state'] == 'draft' and back['merged_into'] == '', back
+    again = write('artifact.archive', {}, back, agent=False)
+    assert again['merged_into'] == '', again
     history = [e for e in read('events', parent=live['id']) if e['action'] == 'artifact.replace']
     assert history[0]['changes']['previous']['title'] == before['published_title'], history[0]
     assert history[0]['changes']['snapshot']['body'] == 'Plans start at 15.' and history[0]['changes']['from'] == update['id'], history[0]
@@ -684,27 +703,28 @@ def cli_session_instructions_scenario(cli, write, project, session):
 
 
 def cli_release_scenario(cli, write, project):
-    """0.19.0: a session closes a task with its release and in-session approval."""
+    """A session closes a task with a release label and in-session approval (labels since 0.23.0)."""
     session = 'synthetic-cli-project · Codex · s/3 · cccccccc'
     ticket = write('task.create', {'title': 'Synthetic release ticket', 'assigned_agent': project['id'], 'readiness': 'ready'})
     claimed = write('task.claim', {'assigned_agent': project['id']}, ticket, reported_agent=session)
     refused = write('task.update', {'review_mode': 'in_session'}, claimed, expect=1, reported_agent=session)
     assert 'requires status done' in refused, refused
-    closed = write('task.update', {'status': 'done', 'release': '0.19.0', 'review_mode': 'in_session',
+    refused = write('task.update', {'status': 'done', 'release': '0.19.0'}, claimed, expect=1, reported_agent=session)
+    assert 'release_field_removed' in refused, refused
+    closed = write('task.update', {'status': 'done', 'labels': ['release-0.19.0'], 'review_mode': 'in_session',
                                    'approved_by': 'Synthetic Owner'}, claimed, reported_agent=session)
-    assert (closed['status'], closed['release'], closed['review_mode'], closed['approved_by'], closed['claim_state']) == \
-        ('done', '0.19.0', 'in_session', 'Synthetic Owner', ''), closed
+    assert (closed['status'], closed['labels'], closed['review_mode'], closed['approved_by'], closed['claim_state']) == \
+        ('done', ['release-0.19.0'], 'in_session', 'Synthetic Owner', ''), closed
+    assert 'release' not in closed, closed
     assert closed['approved_at'], closed
-    shipped = cli('read', {'collection': 'tasks', 'release': '0.19.0', 'fields': ['title', 'approved_at']})['items']
+    shipped = cli('read', {'collection': 'tasks', 'label': 'release-0.19.0', 'fields': ['title', 'approved_at']})['items']
     assert [t['title'] for t in shipped] == ['Synthetic release ticket'] and shipped[0]['approved_at'] == closed['approved_at'], shipped
     dropped = write('task.create', {'title': 'Synthetic dropped ticket', 'assigned_agent': project['id']})
     dropped = write('task.update', {'status': 'wont_do'}, dropped, reported_agent=session)
     closed_titles = {t['title'] for t in cli('read', {'collection': 'tasks', 'status': ['done', 'wont_do'], 'assigned_agent': project['id'], 'fields': ['title']})['items']}
     assert closed_titles >= {'Synthetic release ticket', 'Synthetic dropped ticket'}, closed_titles
-    unreleased = {t['id'] for t in cli('read', {'collection': 'tasks', 'release': '', 'fields': ['title']})['items']}
-    assert dropped['id'] in unreleased and closed['id'] not in unreleased, unreleased
-    rows = cli('query', {'sql': "SELECT status, release, review_mode, approved_by FROM tasks WHERE id = '%s'" % closed['id']})['rows']
-    assert rows == [['done', '0.19.0', 'in_session', 'Synthetic Owner']], rows
+    rows = cli('query', {'sql': "SELECT status, review_mode, approved_by FROM tasks WHERE id = '%s'" % closed['id']})['rows']
+    assert rows == [['done', 'in_session', 'Synthetic Owner']], rows
     changes = [e['changes'] for e in cli('read', {'collection': 'events', 'parent': closed['id'], 'fields': ['action', 'changes']})['items']
                if e['action'] == 'task.update']
     assert changes and changes[0].get('approved_at') == closed['approved_at'] and changes[0].get('claim_cleared') is True, changes

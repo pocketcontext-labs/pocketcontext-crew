@@ -105,8 +105,6 @@ export type ViewState = {
   assignment: string;
   /** On hold or Ready (open tasks only), or all. */
   hold: HoldFilter;
-  /** "" for every release, "none" for tasks without one, or a release. */
-  release: string;
   label: string;
   status: string;
   heldOver: string;
@@ -118,26 +116,24 @@ export const defaultViewState: ViewState = {
   bucketSort: "name",
   assignment: "all",
   hold: "all",
-  release: "",
   label: "",
   status: "",
   heldOver: "",
   taskSort: "updated",
 };
 const recordId = /^[a-z0-9]{15}$/;
+const validLabel = (v: string) => v.trim().length > 0 && v.length <= 200;
+const legacyReleaseLabel = (release: string | null) =>
+  release?.trim() && validLabel("release-" + release.trim())
+    ? "release-" + release.trim()
+    : null;
 const assignments = ["unassigned", "invalid"];
-// A release filter: trimmed, one line, at most 32 characters like the server's.
-// eslint-disable-next-line no-control-regex
-const validRelease = (v: string) =>
-  v.length > 0 &&
-  v.length <= 32 &&
-  v === v.trim() &&
-  !/[\u0000-\u001f\u007f]/.test(v);
 
 /**
  * Reads `#/notes?bucket=<id>&sort=<notes>&buckets=<buckets>` and
- * `#/tasks?agent=<id|unassigned|invalid>&hold=<on_hold|ready>&release=<release|none>`, or their older `#/memory` and `#/team`
- * forms. A missing, repeated or invalid value falls back to its default; unknown
+ * `#/tasks?agent=<id|unassigned|invalid>&hold=<on_hold|ready>&label=<label>`, or their older `#/memory` and `#/team`
+ * forms. A 0.22.0 `release=<release>` link becomes the label release-<release>
+ * (tasks have no release field since 0.23.0). A missing, repeated or invalid value falls back to its default; unknown
  * parameters are ignored. Whether an id still names an active record is for the
  * page to decide.
  */
@@ -162,8 +158,10 @@ export function viewStateFromHash(hash: string): ViewState {
         "hold",
         (v) => v !== "all" && (holdFilters as readonly string[]).includes(v),
       ) ?? defaultViewState.hold) as HoldFilter,
-      release: one("release", validRelease) ?? defaultViewState.release,
-      label: one("label", (v) => v.trim().length > 0 && v.length <= 200) ?? "",
+      label:
+        one("label", validLabel) ??
+        legacyReleaseLabel(one("release", (v) => v !== "none")) ??
+        "",
       status: one("status", (v) => boardColumns.includes(v)) ?? "",
       heldOver: one("held_over", (v) => v === "3d") ?? "",
       taskSort:
@@ -188,8 +186,6 @@ export function viewStateHash(view: View, state: ViewState): string {
     params.set("agent", state.assignment);
   if (view === "board" && state.hold !== defaultViewState.hold)
     params.set("hold", state.hold);
-  if (view === "board" && state.release && validRelease(state.release))
-    params.set("release", state.release);
   if (view === "board") {
     if (state.label) params.set("label", state.label);
     if (state.status) params.set("status", state.status);

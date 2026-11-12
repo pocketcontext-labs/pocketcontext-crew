@@ -2,12 +2,13 @@ package crewruntime
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
 
-// Task releases, in-session approval and Won't do (0.19.0). All records are
+// In-session approval (release labels since 0.23.0) and Won't do (0.19.0). All records are
 // synthetic.
 
 func deliveryCauses(t *testing.T, a *testApp, task string) []map[string]bool {
@@ -117,7 +118,7 @@ func TestInSessionApproval(t *testing.T) {
 	agent := crewWrite(t, a, false, "agent.create", "", 0, map[string]any{"name": "synthetic-approval-project", "kind": "external"}, 200)
 	task := newTask(t, a, map[string]any{"title": "Synthetic shipped ticket", "assigned_agent": agent["id"], "readiness": "ready"})
 	id := task["id"].(string)
-	if task["release"] != "" || task["review_mode"] != "" || task["approved_by"] != "" || task["approved_at"] != "" {
+	if _, ok := task["release"]; ok || task["review_mode"] != "" || task["approved_by"] != "" || task["approved_at"] != "" {
 		t.Fatal("new task carries release or approval", task)
 	}
 	sessionWrite(t, a, false, "task.claim", id, taskRevision(t, a, id), map[string]any{"assigned_agent": agent["id"]}, "session-a", 200)
@@ -128,14 +129,13 @@ func TestInSessionApproval(t *testing.T) {
 	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "review_mode": "in_session", "approved_at": "2026-01-01 00:00:00.000Z"}, "session-a", 400)
 	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "review_mode": "session"}, "session-a", 400)
 	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"approved_by": "Synthetic Owner"}, "session-a", 400)
-	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"release": strings.Repeat("9", 33)}, "session-a", 400)
-	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"release": "0.19.0\nx"}, "session-a", 400)
+	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"release": "0.19.0"}, "session-a", 400)
 	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"approved_by": strings.Repeat("a", 101), "status": "done", "review_mode": "in_session"}, "session-a", 400)
-	// The close step: Done with the release and in-session approval in one
-	// update. The release is trimmed and approved_by defaults to owner.
+	// The close step: Done with a release label and in-session approval in
+	// one update. approved_by defaults to owner.
 	before := time.Now().Add(-time.Second)
-	closed := sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "release": " 0.19.0 ", "review_mode": "in_session"}, "session-a", 200)
-	if closed["status"] != "done" || closed["release"] != "0.19.0" || closed["review_mode"] != "in_session" || closed["approved_by"] != "owner" || closed["claim_state"] != "" {
+	closed := sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "labels": []string{"release-0.19.0"}, "review_mode": "in_session"}, "session-a", 200)
+	if closed["status"] != "done" || closed["review_mode"] != "in_session" || closed["approved_by"] != "owner" || closed["claim_state"] != "" {
 		t.Fatal("in-session close", closed)
 	}
 	stamped := apiWebhookRecord(t, a, "tasks", id).GetDateTime("approved_at").Time()
@@ -144,7 +144,7 @@ func TestInSessionApproval(t *testing.T) {
 	}
 	events := eventsOf(t, a, id, "task.update")
 	last := events[len(events)-1].GetString("changes")
-	for _, part := range []string{`"release":"0.19.0"`, `"review_mode":"in_session"`, `"approved_by":"owner"`, `"approved_at":"`} {
+	for _, part := range []string{`"review_mode":"in_session"`, `"approved_by":"owner"`, `"approved_at":"`} {
 		if !strings.Contains(last, part) {
 			t.Fatalf("event changes lack %s: %s", part, last)
 		}
@@ -155,34 +155,20 @@ func TestInSessionApproval(t *testing.T) {
 	if named["approved_by"] != "Synthetic Owner" || !apiWebhookRecord(t, a, "tasks", id).GetDateTime("approved_at").Time().Equal(stamped) {
 		t.Fatal("approved_by change restamped or not trimmed", named)
 	}
-	// The release filter is exact; an empty string selects tasks without one.
+	// The release label finds the task.
 	newTask(t, a, map[string]any{"title": "Synthetic unreleased ticket"})
-	newTask(t, a, map[string]any{"title": "Synthetic older ticket", "release": "0.18.0"})
-	if got := readTasks(t, a, map[string]any{"release": "0.19.0"}); len(got) != 1 || got[0] != "Synthetic shipped ticket" {
-		t.Fatal("release filter", got)
+	if got := readTasks(t, a, map[string]any{"label": "release-0.19.0"}); len(got) != 1 || got[0] != "Synthetic shipped ticket" {
+		t.Fatal("release label filter", got)
 	}
-	if got := readTasks(t, a, map[string]any{"release": ""}); len(got) != 1 || got[0] != "Synthetic unreleased ticket" {
-		t.Fatal("empty release filter", got)
-	}
-	if got := readTasks(t, a, map[string]any{"release": "0.19", "label": "none"}); len(got) != 0 {
-		t.Fatal("release filter is not exact", got)
-	}
-	if got := readTasks(t, a, map[string]any{"release": "0.18.0", "status": "todo", "label": "synthetic-missing"}); len(got) != 0 {
-		t.Fatal("release with label", got)
-	}
-	raw, _ := json.Marshal(map[string]any{"collection": "notes", "release": "0.19.0"})
-	a.request(t, "POST", "/api/crew/read", a.token, string(raw), 400)
-	raw, _ = json.Marshal(map[string]any{"collection": "tasks", "release": 19})
-	a.request(t, "POST", "/api/crew/read", a.token, string(raw), 400)
 	// SQL sees the new columns.
-	raw, _ = json.Marshal(map[string]any{"sql": "SELECT release, review_mode, approved_by FROM tasks WHERE id = '" + id + "'"})
+	raw, _ := json.Marshal(map[string]any{"sql": "SELECT labels, review_mode, approved_by FROM tasks WHERE id = '" + id + "'"})
 	rows := a.request(t, "POST", "/api/crew/query", a.token, string(raw), 200)["rows"].([]any)
-	if len(rows) != 1 || rows[0].([]any)[0] != "0.19.0" || rows[0].([]any)[1] != "in_session" || rows[0].([]any)[2] != "Synthetic Owner" {
+	if len(rows) != 1 || !strings.Contains(fmt.Sprint(rows[0].([]any)[0]), "release-0.19.0") || rows[0].([]any)[1] != "in_session" || rows[0].([]any)[2] != "Synthetic Owner" {
 		t.Fatal("SQL view", rows)
 	}
-	// Leaving Done clears the approval but keeps the release.
+	// Leaving Done clears the approval but keeps the release label.
 	reopened := sessionWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "todo"}, "", 200)
-	if reopened["review_mode"] != "" || reopened["approved_by"] != "" || reopened["approved_at"] != "" || reopened["release"] != "0.19.0" {
+	if reopened["review_mode"] != "" || reopened["approved_by"] != "" || reopened["approved_at"] != "" || !strings.Contains(fmt.Sprint(reopened["labels"]), "release-0.19.0") {
 		t.Fatal("leaving Done kept the approval", reopened)
 	}
 	events = eventsOf(t, a, id, "task.update")
@@ -190,7 +176,7 @@ func TestInSessionApproval(t *testing.T) {
 		t.Fatal("approval clearing not audited", last)
 	}
 	// Created Done with an approver; switching to crew clears the approval.
-	direct := newTask(t, a, map[string]any{"title": "Synthetic direct close", "status": "done", "review_mode": "in_session", "approved_by": "Synthetic Owner", "release": "0.19.0"})
+	direct := newTask(t, a, map[string]any{"title": "Synthetic direct close", "status": "done", "review_mode": "in_session", "approved_by": "Synthetic Owner", "labels": []string{"release-0.19.0"}})
 	if direct["approved_by"] != "Synthetic Owner" || direct["approved_at"] == "" {
 		t.Fatal("create with in-session approval", direct)
 	}

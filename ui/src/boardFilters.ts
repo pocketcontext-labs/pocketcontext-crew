@@ -1,6 +1,6 @@
 import { boardStatuses, list, val, type Row } from "./crewApi";
 import type { ViewState } from "./itemLink";
-import { isClosed, noRelease, releaseMatches } from "./taskReleases";
+import { isClosed } from "./closedTasks";
 
 export const longHoldMs = 3 * 24 * 60 * 60 * 1000;
 export const heldSince = (task: Row) =>
@@ -47,17 +47,17 @@ export function knownLabels(tasks: Row[]) {
 }
 
 /** Search keys the Tasks board reads out of its search text. */
-export const searchKeys = ["release", "label", "agent", "status"] as const;
+export const searchKeys = ["label", "agent", "status"] as const;
 export type SearchKey = (typeof searchKeys)[number];
 export type SearchToken = { key: SearchKey; value: string; raw: string };
 export type BoardSearch = { text: string; tokens: SearchToken[] };
 
-const tokenPattern = /(^|\s)(release|label|agent|status):("([^"]*)"?|\S*)/gi;
+const tokenPattern = /(^|\s)(label|agent|status):("([^"]*)"?|\S*)/gi;
 
 /**
  * Splits board search text into free text and `key:value` filter tokens
- * (`release:0.20.0`, `label:bug`, `agent:"Build bot"`, `status:done`). A key
- * with no value yet (`release:`) is dropped, so typing never empties the board.
+ * (`label:bug`, `agent:"Build bot"`, `status:done`). A key
+ * with no value yet (`label:`) is dropped, so typing never empties the board.
  */
 export function parseBoardSearch(input: string): BoardSearch {
   const tokens: SearchToken[] = [];
@@ -88,9 +88,6 @@ export function normalizeStatus(value: string) {
   return statusAliases[key] ?? key;
 }
 
-const releaseValue = (value: string) =>
-  value.toLowerCase() === noRelease ? noRelease : value;
-
 /** Agents as the board knows them: id and display name. */
 export type AgentName = { id: string; name: string };
 
@@ -108,7 +105,6 @@ function agentIds(value: string, agents: AgentName[]) {
  */
 export function tokensMatch(tokens: SearchToken[], task: Row, agents: AgentName[]) {
   return tokens.every(({ key, value }) => {
-    if (key === "release") return releaseMatches(releaseValue(value), task);
     if (key === "label") return labelMatches(value, task);
     if (key === "status") return statusMatches(normalizeStatus(value), task);
     const assigned = val(task, "assigned_agent");
@@ -132,8 +128,7 @@ export function commitBoardSearch(
     const { key, value } = token;
     const status = normalizeStatus(value);
     const ids = key === "agent" ? agentIds(value, agents) : [];
-    if (key === "release") changes.release = releaseValue(value);
-    else if (key === "label") changes.label = value;
+    if (key === "label") changes.label = value;
     else if (key === "status" && boardStatuses.some(([s]) => s === status))
       changes.status = status;
     else if (key === "agent" && value.toLowerCase() === "unassigned")
@@ -171,12 +166,6 @@ export function filterChips(state: ViewState): FilterChip[] {
       boardStatuses.find(([s]) => s === state.status)?.[1] ?? state.status;
     chips.push({ key: "status", label: `Status ${name}`, clear: { status: "" } });
   }
-  if (state.release)
-    chips.push({
-      key: "release",
-      label: state.release === noRelease ? "No release" : `Release ${state.release}`,
-      clear: { release: "" },
-    });
   if (state.taskSort !== "updated")
     chips.push({
       key: "sort",
@@ -190,7 +179,6 @@ export function filterChips(state: ViewState): FilterChip[] {
 export const clearedBoard: Partial<ViewState> = {
   assignment: "all",
   hold: "all",
-  release: "",
   label: "",
   status: "",
   heldOver: "",

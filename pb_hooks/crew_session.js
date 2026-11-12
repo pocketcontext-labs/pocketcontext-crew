@@ -90,7 +90,7 @@ function defaultBody(name) {
     "",
     "## 6. Close",
     "",
-    "When the owner has explicitly approved the result in this session, comment on the task: Released in <version>: <what changed>, commit <sha>, and state that the owner approved it in this session. Then, in one task.update, set the task Done with the release and the in-session approval: data {\"status\":\"done\",\"release\":\"<version>\",\"review_mode\":\"in_session\",\"approved_by\":\"<the owner's name if you know it, else owner>\"}. Crew records when it was approved, and Done also ends the claim. Never set Done without the owner's explicit approval in this session.",
+    "When the owner has explicitly approved the result in this session, comment on the task: Released in <version>: <what changed>, commit <sha>, and state that the owner approved it in this session. Then, in one task.update, set the task Done with a release label and the in-session approval: data {\"status\":\"done\",\"labels\":[<the task's current labels>,\"release-<version>\"],\"review_mode\":\"in_session\",\"approved_by\":\"<the owner's name if you know it, else owner>\"}. Crew records when it was approved, and Done also ends the claim. Never set Done without the owner's explicit approval in this session.",
     "",
     "If the owner decides not to do a task, comment on it why and set it Won't do (task.update with status wont_do), which also ends the claim.",
     "",

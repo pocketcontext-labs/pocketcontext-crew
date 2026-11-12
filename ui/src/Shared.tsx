@@ -195,7 +195,7 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
             key={`${row.id}-${row.revision}`}
             row={row}
             link={links[row.id]}
-            target={byId[val(row, "replaces")]}
+            target={byId[val(row, "merged_into") || val(row, "replaces")]}
             focused={row.id === focus}
             notes={notes}
             tasks={tasks}
@@ -238,6 +238,9 @@ function ArtifactCard({
   const state = artifactState(row);
   const pending = row.pending_changes === true;
   const updates = val(row, "replaces");
+  // An archived update draft whose content went live (Update content, same
+  // link) says so; a discarded one keeps "Update of".
+  const mergedInto = val(row, "merged_into");
   const targetLive = !!target && artifactState(target) === "published";
   const [editing, setEditing] = useState(false);
   const [choosing, setChoosing] = useState(false);
@@ -301,7 +304,24 @@ function ArtifactCard({
           <span className="crew-artifact-pending">Changes not live</span>
         )}
       </header>
-      {updates && (
+      {mergedInto && (
+        <>
+          <p className="crew-artifact-update">
+            Merged into{" "}
+            {target ? (
+              <a href={`#/shared/${target.id}`}>{val(target, "title")}</a>
+            ) : (
+              "an unavailable artifact"
+            )}
+            {val(row, "merged_at") ? ` on ${when(row.merged_at, false)}` : ""}
+          </p>
+          <p className="crew-artifact-note">
+            {targetLive ? "Its content is live in that link. " : ""}Restore
+            brings back this draft only; the link does not change.
+          </p>
+        </>
+      )}
+      {updates && !mergedInto && (
         <p className="crew-artifact-update">
           Update of:{" "}
           {target ? (
@@ -352,6 +372,17 @@ function ArtifactCard({
           <button type="button" onClick={() => void copy()}>
             {copied === "copied" ? "Link copied" : "Copy link"}
           </button>
+          {/* Opens what recipients see in a new tab; Crew does not count it
+              as a view (same-origin navigation). */}
+          <a
+            className="crew-artifact-open"
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${val(row, "title")} in a new tab`}
+          >
+            Open
+          </a>
           {copied === "failed" && (
             <span role="alert" className="crew-copy-error">
               Could not copy automatically. Copy it from the box.

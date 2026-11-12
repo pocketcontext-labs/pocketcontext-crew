@@ -192,6 +192,12 @@ func artifactPage(re *core.RequestEvent) error {
 		return nil
 	}
 	_, _ = re.Response.Write(page)
+	// The owner's Open on the Shared page is a same-origin navigation; it
+	// is not a recipient view. Visitors from mail, chat or the address bar
+	// arrive cross-site or with no initiator and are counted.
+	if re.Request.Header.Get("Sec-Fetch-Site") == "same-origin" {
+		return nil
+	}
 	// A view is counted with one statement, outside the record's revision,
 	// so it never overwrites a concurrent draft edit.
 	_, _ = re.App.DB().NewQuery("UPDATE crew_artifacts SET view_count=view_count+1, last_viewed_at={:at} WHERE id={:id}").

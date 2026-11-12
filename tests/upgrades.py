@@ -233,14 +233,14 @@ def rehearse(target, previous, root):
             # 0.18.0: every existing agent is a bot and no task carries a claim.
             assert current.execute("SELECT kind, count(*) FROM crew_agents GROUP BY kind").fetchall() == [('bot', 2)]
             assert current.execute("SELECT count(*) FROM crew_tasks WHERE claimed_by != '' OR claim_until != ''").fetchone() == (0,)
-            # 0.19.0: tasks keep their status and gain an empty release and approval;
-            # status accepts wont_do.
-            assert current.execute("SELECT status, release, review_mode, approved_by, approved_at FROM crew_tasks").fetchall() == [('needs_review', '', '', '', '')]
+            # 0.19.0: tasks keep their status and gain an empty approval; status
+            # accepts wont_do. 0.23.0 drops the release column again (labels).
+            assert current.execute("SELECT status, review_mode, approved_by, approved_at FROM crew_tasks").fetchall() == [('needs_review', '', '', '')]
             fields = json.loads(current.execute("SELECT fields FROM _collections WHERE name='crew_tasks'").fetchone()[0])
             status_field = next(f for f in fields if f['name'] == 'status')
             assert status_field['values'] == ['todo', 'in_progress', 'needs_review', 'done', 'wont_do'], status_field
             assert {f['name']: f['type'] for f in fields if f['name'] in ('release', 'review_mode', 'approved_by', 'approved_at')} == {
-                'release': 'text', 'review_mode': 'select', 'approved_by': 'text', 'approved_at': 'date'}
+                'review_mode': 'select', 'approved_by': 'text', 'approved_at': 'date'}
             assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801200000_crew_task_release.js'").fetchone() == (1,)
             assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801300000_crew_review_choices.js'").fetchone() == (1,)
             # 0.20.0 freezes legacy hold time and preserves old reviews.
@@ -260,6 +260,9 @@ def rehearse(target, previous, root):
             artifact_fields = {f['name']: f['type'] for f in json.loads(current.execute("SELECT fields FROM _collections WHERE name='crew_artifacts'").fetchone()[0])}
             assert {k: artifact_fields.get(k) for k in ('expires_at', 'replaces', 'archived', 'archived_at', 'archived_by')} == {
                 'expires_at': 'text', 'replaces': 'text', 'archived': 'bool', 'archived_at': 'text', 'archived_by': 'text'}, artifact_fields
+            # 0.23.0: the task release column is gone (releases are labels).
+            assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801700000_crew_task_release_labels.js'").fetchone() == (1,)
+            assert 'release' not in [row[1] for row in current.execute('PRAGMA table_info("crew_tasks")')]
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()

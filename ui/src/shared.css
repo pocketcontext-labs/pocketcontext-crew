@@ -79,6 +79,21 @@
     Consolas,
     monospace;
 }
+/* Open looks like the Copy link button beside it. */
+.crew-app a.crew-artifact-open {
+  display: inline-flex;
+  align-items: center;
+  font: inherit;
+  border: 1px solid #dce2d8;
+  background: #fffefb;
+  padding: 9px 14px;
+  border-radius: 7px;
+  color: #2d4538;
+  text-decoration: none;
+}
+.crew-app a.crew-artifact-open:hover {
+  background: #edf2e9;
+}
 .crew-artifact-preview {
   margin-top: 14px;
   padding: 14px 16px;

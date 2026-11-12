@@ -151,9 +151,10 @@ readiness and waiting_reason) ends it. HTTP 409 `already_claimed` names
 Done or Won't do (`wont_do`) ends the claim. Never set Done without the owner's
 explicit approval in the session, and never leave a task In progress without a live
 claim. Claims are advisory and never wake anyone. Close an approved task in one
-task.update: `{"status":"done","release":"<version>","review_mode":"in_session",
-"approved_by":"<owner's name if known, else owner>"}`; Crew records when it was
-approved. If the owner decides not to do a task, comment why and set `wont_do`.
+task.update: `{"status":"done","labels":[<current labels>,"release-<version>"],
+"review_mode":"in_session","approved_by":"<owner's name if known, else owner>"}`;
+Crew records when it was approved. Tasks have no release field since 0.23.0: a
+release is the label `release-<version>`. If the owner decides not to do a task, comment why and set `wont_do`.
 
 Session instructions are saved in Crew per external agent, with immutable
 revisions; the session read returns `body` (the editable part; the agent brief is

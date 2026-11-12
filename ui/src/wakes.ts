@@ -1,5 +1,5 @@
 import { val, type Row } from "./crewApi";
-import { isClosed } from "./taskReleases";
+import { isClosed } from "./closedTasks";
 
 /** A wake whose receipt deadline passed, on an open task someone else filed. */
 export type StrandedWake = { bridge: Row; task: Row };

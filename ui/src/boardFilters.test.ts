@@ -12,7 +12,6 @@ import {
   statusMatches,
   tokensMatch,
 } from "./boardFilters";
-import { releaseMatches } from "./taskReleases";
 import { claimLabel, claimOf, claimTitle } from "./projectAgents";
 import { defaultViewState, viewStateFromHash, viewStateHash } from "./itemLink";
 import type { Row } from "./crewApi";
@@ -89,11 +88,10 @@ it("keeps full claim attribution in the tooltip and makes the chip short", () =>
   expect(claimTitle(claim)).toContain("pane/1 · abcdef12");
   expect(claimTitle(claim)).toContain("Started");
 });
-it("splits board search into free text and release, label, agent and status tokens", () => {
-  expect(parseBoardSearch("  fix release:0.20.0 Label:Bug  login ")).toEqual({
+it("splits board search into free text and label, agent and status tokens", () => {
+  expect(parseBoardSearch("  fix Label:Bug  login ")).toEqual({
     text: "fix login",
     tokens: [
-      { key: "release", value: "0.20.0", raw: "release:0.20.0" },
       { key: "label", value: "Bug", raw: "Label:Bug" },
     ],
   });
@@ -102,8 +100,10 @@ it("splits board search into free text and release, label, agent and status toke
     { key: "status", value: "in-progress", raw: "status:in-progress" },
   ]);
   // A key with no value yet, or a key inside a word, is not a filter.
-  expect(parseBoardSearch("release:")).toEqual({ text: "", tokens: [] });
-  expect(parseBoardSearch("prerelease:x")).toEqual({ text: "prerelease:x", tokens: [] });
+  expect(parseBoardSearch("label:")).toEqual({ text: "", tokens: [] });
+  expect(parseBoardSearch("prelabel:x")).toEqual({ text: "prelabel:x", tokens: [] });
+  // Tasks have no release field since 0.23.0: release: is plain text.
+  expect(parseBoardSearch("release:0.20.0")).toEqual({ text: "release:0.20.0", tokens: [] });
   expect(normalizeStatus("In progress")).toBe("in_progress");
   expect(normalizeStatus("to-do")).toBe("todo");
   expect(normalizeStatus("review")).toBe("needs_review");
@@ -115,16 +115,14 @@ it("matches search tokens exactly like the corresponding filters", () => {
   ];
   const shipped = row({
     status: "done",
-    release: "0.20.0",
-    labels: ["Bug"],
+    labels: ["Bug", "release-0.20.0"],
     assigned_agent: "agent0000000001",
   });
-  const open = row({ status: "todo", release: "", labels: [], assigned_agent: "" });
+  const open = row({ status: "todo", labels: [], assigned_agent: "" });
   const match = (text: string, task: Row) =>
     tokensMatch(parseBoardSearch(text).tokens, task, agents);
-  expect(match("release:0.20.0", shipped)).toBe(releaseMatches("0.20.0", shipped));
-  expect(match("release:0.20.0", open)).toBe(false);
-  expect(match("release:none", open)).toBe(true);
+  expect(match("label:release-0.20.0", shipped)).toBe(true);
+  expect(match("label:release-0.20.0", open)).toBe(false);
   expect(match("label:bug status:done agent:build", shipped)).toBe(true);
   expect(match("agent:design", shipped)).toBe(false);
   expect(match("agent:unassigned", open)).toBe(true);
@@ -138,11 +136,10 @@ it("commits search tokens it can resolve into board filters and keeps the rest",
     { id: "agent0000000003", name: "twin" },
   ];
   expect(
-    commitBoardSearch("login release:0.20.0 label:Bug status:review agent:build", agents),
+    commitBoardSearch("login label:Bug status:review agent:build", agents),
   ).toEqual({
     text: "login",
     changes: {
-      release: "0.20.0",
       label: "Bug",
       status: "needs_review",
       assignment: "agent0000000001",
@@ -153,9 +150,9 @@ it("commits search tokens it can resolve into board filters and keeps the rest",
     text: "x status:wont_do agent:twin",
     changes: {},
   });
-  expect(commitBoardSearch("release:NONE agent:unassigned", agents).changes).toEqual({
-    release: "none",
-    assignment: "unassigned",
+  expect(commitBoardSearch("release:0.20.0 agent:unassigned", agents)).toEqual({
+    text: "release:0.20.0",
+    changes: { assignment: "unassigned" },
   });
 });
 it("shows one removable chip per panel filter and clears each on its own", () => {
@@ -167,7 +164,6 @@ it("shows one removable chip per panel filter and clears each on its own", () =>
     heldOver: "3d",
     label: "Bug",
     status: "done",
-    release: "0.20.0",
     taskSort: "held" as const,
   };
   const chips = filterChips(state);
@@ -175,7 +171,6 @@ it("shows one removable chip per panel filter and clears each on its own", () =>
     "On hold · over 3 days",
     "Label Bug",
     "Status Done",
-    "Release 0.20.0",
     "Sort: Oldest hold first",
   ]);
   for (const chip of chips) {
@@ -185,7 +180,6 @@ it("shows one removable chip per panel filter and clears each on its own", () =>
     );
   }
   expect(filterChips({ ...defaultViewState, hold: "ready" })[0].label).toBe("Ready");
-  expect(filterChips({ ...defaultViewState, release: "none" })[0].label).toBe("No release");
   expect(filterChips({ ...state, ...clearedBoard })).toEqual([]);
   expect({ ...state, ...clearedBoard }.assignment).toBe("all");
 });

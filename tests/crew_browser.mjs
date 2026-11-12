@@ -464,55 +464,50 @@ try {
  await page.getByRole('button',{name:'Remove filter Sort: Oldest hold first'}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await page.setViewportSize({width:1280,height:800});
- // Releases: Won't do and a release put a card in the Done column under its release group.
+ // Won't do puts a card in the Done column; releases are plain labels (0.23.0): no release field, filter, header or token.
  await page.getByRole('button',{name:/Synthetic long description/}).click();
  await dialog().getByLabel('Status').selectOption('wont_do');
- await dialog().getByLabel('Release',{exact:true}).fill('0.19.0');
+ assert.equal(await dialog().getByLabel('Release',{exact:true}).count(),0,'no Release field');
+ const releaseLabels=dialog().getByRole('combobox',{name:'Labels',exact:true});
+ await releaseLabels.fill('release-0.19.0');await releaseLabels.press('Enter');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  const doneColumn=page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})});
  const dropped=doneColumn.getByRole('button',{name:/Synthetic long description/});
  await dropped.getByText("Won't do",{exact:true}).waitFor();
- await dropped.getByText('Shipped in 0.19.0',{exact:true}).waitFor();
- assert.deepEqual(await doneColumn.getByRole('group').evaluateAll(gs=>gs.map(g=>g.getAttribute('aria-label'))),['0.19.0','No release'],'Done groups by release, newest first, No release last');
- // No release dropdown on the toolbar: the Done release header sets the release chip.
- assert.equal(await page.locator('.crew-toolbar select[aria-label="Filter by release"]').count(),0);
- await doneColumn.getByRole('button',{name:'Show only release 0.19.0'}).click();
- await page.waitForFunction(()=>location.hash==='#/tasks?release=0.19.0');
+ assert.equal(await dropped.getByText(/Shipped in/).count(),0);
+ assert.equal(await doneColumn.getByRole('group').count(),0,'Done is a plain list');
+ await filtersButton.click();
+ assert.equal(await filtersPanel.getByRole('combobox',{name:'Filter by release'}).count(),0);
+ await page.keyboard.press('Escape');
+ await dropped.getByRole('button',{name:'Filter by label release-0.19.0',exact:true}).click();
+ await page.waitForFunction(()=>location.hash==='#/tasks?label=release-0.19.0');
  await cards(1);
- const releaseChip=page.getByRole('button',{name:'Remove filter Release 0.19.0',exact:true});
+ const releaseChip=page.getByRole('button',{name:'Remove filter Label release-0.19.0',exact:true});
  await releaseChip.waitFor();
- await snap('crew-board-release-filter');
+ await snap('crew-board-release-label');
+ // A 0.22.0 release link opens as its label.
+ await page.evaluate(()=>{location.hash='#/tasks?release=0.19.0';});
  await page.reload();
  await releaseChip.waitFor();
  await cards(1);
- await filtersButton.click();
- assert.equal(await filtersPanel.getByRole('combobox',{name:'Filter by release'}).inputValue(),'0.19.0');
- await filtersPanel.getByRole('combobox',{name:'Filter by hold'}).selectOption('ready');
- await page.waitForFunction(()=>location.hash==='#/tasks?hold=ready&release=0.19.0');
- assert.equal(await filtersButton.innerText(),'Filters · 2');
- await page.keyboard.press('Escape');
- // Each chip removes on its own.
  await releaseChip.click();
- await page.waitForFunction(()=>location.hash==='#/tasks?hold=ready');
- await page.getByRole('button',{name:'Remove filter Ready',exact:true}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
- // release:0.19.0 in the search filters like the release chip; Enter makes it one.
+ // release: in the search is plain text; label: filters and Enter makes it a chip.
  const taskSearch=page.getByRole('searchbox',{name:'Search tasks'});
- await taskSearch.fill('release:0.19.0');
+ await taskSearch.fill('label:release-0.19.0');
  await cards(1);
  assert.equal(await page.evaluate(()=>location.hash),'#/tasks');
  await taskSearch.press('Enter');
- await page.waitForFunction(()=>location.hash==='#/tasks?release=0.19.0');
+ await page.waitForFunction(()=>location.hash==='#/tasks?label=release-0.19.0');
  await releaseChip.waitFor();
  assert.equal(await taskSearch.inputValue(),'');
- await cards(1);
  await page.getByRole('button',{name:'Clear all',exact:true}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
  await page.getByRole('button',{name:/Synthetic long description/}).click();
  await dialog().getByLabel('Status').selectOption('todo');
- await dialog().getByLabel('Release',{exact:true}).fill('');
+ await dialog().getByRole('button',{name:'Remove label release-0.19.0',exact:true}).click();
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  // Old page addresses redirect in place, keeping the query, on navigation and on load.
  await assignment.selectOption({label:'Network (1)'});
@@ -1058,6 +1053,15 @@ try {
  const artifactLink=await artifactLinkBox.inputValue();
  assert.match(artifactLink,/\/a\/[A-Za-z0-9]{32}$/,'a 32-character token link');
  await snap('crew-shared');
+ // Open shows the public page in a new tab and is not counted as a recipient view.
+ await artifactCard.getByText('0 views').waitFor();
+ const [ownerTab]=await Promise.all([page.context().waitForEvent('page'),artifactCard.getByRole('link',{name:/^Open .* in a new tab$/}).click()]);
+ await ownerTab.waitForLoadState();
+ assert.equal(ownerTab.url(),artifactLink);
+ await ownerTab.getByRole('heading',{name:'Synthetic partner pricing'}).waitFor();
+ await ownerTab.close();
+ await page.reload();
+ await artifactCard.getByText('0 views').waitFor();
  const visitor=await browser.newContext({viewport:{width:390,height:844}});
  const visitorPage=await visitor.newPage();
  const visitorRequests=[];visitorPage.on('request',r=>visitorRequests.push(r.url()));

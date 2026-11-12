@@ -26,7 +26,8 @@ PREVIOUS = '0.8.0'
 LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js', '1801000000_crew_attachments.js',
                     '1801100000_crew_project_agents.js', '1801200000_crew_task_release.js', '1801300000_crew_review_choices.js',
                     '1801400000_crew_artifacts.js',
-                    '1801500000_crew_session_instructions.js', '1801600000_crew_artifact_lifecycle.js'}
+                    '1801500000_crew_session_instructions.js', '1801600000_crew_artifact_lifecycle.js',
+                    '1801700000_crew_task_release_labels.js'}
 
 
 def settled(operation, *args):
@@ -141,17 +142,17 @@ def rehearse(target, previous, root):
     claimed = data('write', json.dumps({'action': 'task.claim', 'id': ticket['id'], 'expected_revision': ticket['revision'],
                                         'reported_agent': 'Synthetic session', 'data': {'assigned_agent': 'Build'}}))
     assert claimed['claim_state'] == 'live' and claimed['claimed_by'] == 'Synthetic session', claimed
-    # 0.19.0: the claimed task closes with its release and in-session approval,
-    # and the release filter finds it; Won't do is a status.
+    # 0.19.0/0.23.0: the claimed task closes with a release label and in-session
+    # approval, and the label filter finds it; Won't do is a status.
     closed = data('write', json.dumps({'action': 'task.update', 'id': claimed['id'], 'expected_revision': claimed['revision'],
                                        'reported_agent': 'Synthetic session',
-                                       'data': {'status': 'done', 'release': '0.19.0', 'review_mode': 'in_session'}}))
-    assert closed['release'] == '0.19.0' and closed['approved_by'] == 'owner' and closed['approved_at'] and closed['claim_state'] == '', closed
-    shipped = data('read', json.dumps({'collection': 'tasks', 'release': '0.19.0', 'fields': ['title']}))['items']
+                                       'data': {'status': 'done', 'labels': ['release-0.19.0'], 'review_mode': 'in_session'}}))
+    assert closed['labels'] == ['release-0.19.0'] and 'release' not in closed and closed['approved_by'] == 'owner' and closed['approved_at'] and closed['claim_state'] == '', closed
+    shipped = data('read', json.dumps({'collection': 'tasks', 'label': 'release-0.19.0', 'fields': ['title']}))['items']
     assert [t['title'] for t in shipped] == ['Upgrade ticket'], shipped
     dropped = data('write', json.dumps({'action': 'task.create', 'reported_agent': 'Synthetic upgrade',
                                         'data': {'title': 'Upgrade idea', 'status': 'wont_do'}}))
-    assert dropped['status'] == 'wont_do' and dropped['release'] == '' and dropped['review_mode'] == '', dropped
+    assert dropped['status'] == 'wont_do' and dropped['review_mode'] == '', dropped
     run('stop')
 
     # Identity alone did not rewrite the configuration format or lose the data.

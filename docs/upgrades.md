@@ -1,5 +1,32 @@
 # Crew upgrades and rollback
 
+## Crew 0.22.0 to 0.23.0
+
+One data migration (`1801700000_crew_task_release_labels.js`) moves each task's
+`release` into the label `release-<value>` (skipped when the task already has it;
+the task's revision increments, `updated` doesn't change) and drops the `release`
+column. Other records and history are unchanged; earlier task events keep the
+`release` they recorded.
+
+1. Take a complete stopped backup first: `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` (when present), the matching 0.22.0 binary and,
+   with webhooks, the private webhook key. Hosted deployment prepares a verified
+   complete backup before replacement.
+2. Replace the binary or image (`CREW_REPLACE_VERSION=0.22.0` for the installer)
+   and upgrade paired clients with the server to 0.23.0.
+3. Run `skill` on each computer with a Crew profile and refresh MCP tool schemas
+   (`crew_read` loses the `release` filter). Writes and reads that still send
+   `release` get HTTP 400 `release_field_removed`; routines that stamped a
+   release should add the label `release-<version>` instead. Saved session
+   instructions edited before 0.23.0 may still say `release`: update them.
+4. `capabilities_digest` changes, so agents reread capabilities. Protocol 3 and the
+   managed instruction block stay unchanged; this upgrade does not pause delivery.
+
+Older binaries refuse the migrated database without changing it. Rollback requires
+restoring the complete pre-upgrade backup with the matching 0.22.0 binary or image;
+changes made after the backup are not preserved. From earlier versions, also read
+the intervening upgrade notes below.
+
 ## Crew 0.21.0 to 0.22.0
 
 One data migration (`1801600000_crew_artifact_lifecycle.js`) adds `expires_at`,

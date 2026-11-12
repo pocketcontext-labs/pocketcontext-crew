@@ -11,7 +11,7 @@ import Help, { HelpField } from "./Help";
 import type { HelpTopic } from "./helpContent";
 import { itemPath } from "./itemLink";
 import { isBot } from "./projectAgents";
-import { isClosed } from "./taskReleases";
+import { isClosed } from "./closedTasks";
 import { strandedSince, strandedWakes } from "./wakes";
 type WakeRule = {
   reason: string;

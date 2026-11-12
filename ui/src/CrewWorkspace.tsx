@@ -44,10 +44,7 @@ import {
   approvalLine,
   doneColumn,
   isClosed,
-  knownReleases,
-  noRelease,
-  releaseMatches,
-} from "./taskReleases";
+} from "./closedTasks";
 import StartSession from "./StartSession";
 import SessionInstructions from "./SessionInstructions";
 import {
@@ -974,12 +971,10 @@ export default function CrewWorkspace() {
   const setAssignmentFilter = (value: string) => updateBoard({ assignment: value });
   const holdFilter = viewState.hold;
   const setHoldFilter = (value: HoldFilter) => updateBoard({ hold: value, heldOver: "" });
-  const releaseFilter = viewState.release;
-  const setReleaseFilter = (value: string) => updateBoard({ release: value });
   // Panel filters show as chips under the toolbar; the Filters button counts them.
   const chips = filterChips(viewState);
   const boardFiltered = assignmentFilter !== "all" || chips.length > 0;
-  // `release:`, `label:`, `agent:` and `status:` in the search act as filters.
+  // `label:`, `agent:` and `status:` in the search act as filters.
   const boardSearch = parseBoardSearch(query);
   const agentNames = data.agents.map((agent) => ({ id: agent.id, name: val(agent, "name") }));
   const clearBoard = () => {
@@ -1187,11 +1182,6 @@ export default function CrewWorkspace() {
         .length,
     }));
   const labelsAvailable = knownLabels(data.tasks);
-  const releases = knownReleases(data.tasks);
-  const releaseOptions =
-    releaseFilter && releaseFilter !== noRelease && !releases.includes(releaseFilter)
-      ? [releaseFilter, ...releases]
-      : releases;
   const pending = data.reviews.filter((x) => val(x, "status") === "pending");
   const matches = (x: Row) =>
     [
@@ -1210,15 +1200,15 @@ export default function CrewWorkspace() {
       matches(x) &&
       assignmentMatches(assignmentFilter, x, invalidAssignment) &&
       holdMatches(holdFilter, x) &&
-      releaseMatches(releaseFilter, x) &&
       labelMatches(viewState.label, x) &&
       statusMatches(viewState.status, x) &&
       (!viewState.heldOver || isLongHeld(x)),
   );
   const boardSearched = boardSearch.text !== "" || boardSearch.tokens.length > 0;
-  // A release chosen by search shows that release's older tasks too.
-  const releaseChosen =
-    releaseFilter !== "" || boardSearch.tokens.some((t) => t.key === "release");
+  // A label chosen (filter or search) shows its older closed tasks too, so a
+  // release-0.21.0 label finds that release's work.
+  const labelChosen =
+    viewState.label !== "" || boardSearch.tokens.some((t) => t.key === "label");
   // Note count and latest note update per bucket, for the cards and their sorts.
   const bucketStats = new Map<string, { count: number; latest: string }>();
   for (const note of data.notes) {
@@ -1483,8 +1473,8 @@ export default function CrewWorkspace() {
                 <input
                   type="search"
                   aria-label="Search tasks"
-                  placeholder="Search tasks, or release:0.20.0…"
-                  title="Search titles, descriptions and labels. release:, label:, agent: and status: filter; Enter turns them into filter chips."
+                  placeholder="Search tasks, or label:bug…"
+                  title="Search titles, descriptions and labels. label:, agent: and status: filter; Enter turns them into filter chips."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -1619,22 +1609,6 @@ export default function CrewWorkspace() {
                       </select>
                     </label>
                     <label className="crew-field">
-                      <span>Release</span>
-                      <select
-                        aria-label="Filter by release"
-                        value={releaseFilter}
-                        onChange={(e) => setReleaseFilter(e.target.value)}
-                      >
-                        <option value="">All releases</option>
-                        {releaseOptions.map((release) => (
-                          <option key={release} value={release}>
-                            {release}
-                          </option>
-                        ))}
-                        <option value={noRelease}>No release</option>
-                      </select>
-                    </label>
-                    <label className="crew-field">
                       <span>Sort</span>
                       <select
                         aria-label="Sort tasks"
@@ -1741,11 +1715,11 @@ export default function CrewWorkspace() {
                 tasks.sort((a, b) => viewState.taskSort === "held"
                   ? (onHold(a) && !isClosed(a) ? heldSince(a) || Infinity : Infinity) - (onHold(b) && !isClosed(b) ? heldSince(b) || Infinity : Infinity)
                   : val(b, "updated").localeCompare(val(a, "updated")));
-                // Grouped by release; older ones fold away unless a release
-                // is chosen or the owner asks for them.
+                // Older closed tasks fold away unless a label is chosen or
+                // the owner asks for them.
                 const done =
                   status === "done"
-                    ? doneColumn(tasks, showOlderDone || releaseChosen || viewState.status === "done")
+                    ? doneColumn(tasks, showOlderDone || labelChosen || viewState.status === "done")
                     : null;
                 const card = (x: Row) => (
                   <div
@@ -1763,14 +1737,6 @@ export default function CrewWorkspace() {
                         <span className="crew-wont-do">Won't do</span>
                       )}
                       {!isClosed(x) && <HoldChip task={x} />}
-                      {val(x, "release") && (
-                        <span
-                          className="crew-release"
-                          title={`Shipped in release ${val(x, "release")}`}
-                        >
-                          Shipped in {val(x, "release")}
-                        </span>
-                      )}
                       <ClaimChip task={x} />
                       {wakeMissing.has(x.id) && <WakeMissingChip />}
                       {pending.some((r) => val(r, "task") === x.id) && (
@@ -1843,29 +1809,7 @@ export default function CrewWorkspace() {
                       </h2>
                       <Help topic={statusHelp[status]} />
                     </div>
-                    {done
-                      ? done.groups.map((group) => (
-                          <div
-                            className="crew-release-group"
-                            key={group.release ? `r:${group.release}` : "none"}
-                            role="group"
-                            aria-label={group.release || "No release"}
-                          >
-                            <h3 className="crew-release-head">
-                              <button
-                                type="button"
-                                aria-label={`Show only ${group.release ? `release ${group.release}` : "tasks without a release"}`}
-                                aria-pressed={releaseFilter === (group.release || noRelease)}
-                                onClick={() => updateBoard({ release: group.release || noRelease })}
-                              >
-                                {group.release || "No release"}
-                                <span>{group.tasks.length}</span>
-                              </button>
-                            </h3>
-                            {group.tasks.map(card)}
-                          </div>
-                        ))
-                      : tasks.map(card)}
+                    {(done ? done.tasks : tasks).map(card)}
                     {done && done.older > 0 && (
                       <button
                         type="button"
@@ -1892,7 +1836,7 @@ export default function CrewWorkspace() {
                         ) : status === "needs_review" ? (
                           "Drafts sent for your approval appear here."
                         ) : (
-                          "Finished tasks appear here, grouped by release."
+                          "Finished tasks appear here."
                         )}
                       </div>
                     )}
@@ -2408,7 +2352,6 @@ function formValues(kind: Kind, row: Row | undefined, data: Data) {
             : "assigned_agent",
       ) || (kind === "note" ? data.buckets[0]?.id || "" : ""),
     status: val(row, "status") || "todo",
-    release: val(row, "release"),
     // On hold is `waiting` in the API (`on_hold` is only a write alias).
     readiness: val(row, "readiness") === "ready" ? "ready" : "waiting",
     waitingReason: val(row, "waiting_reason"),
@@ -2450,7 +2393,6 @@ function Editor({
     [links, setLinks] = useState(start.links);
   const [selection, setSelection] = useState(start.selection),
     [status, setStatus] = useState(start.status),
-    [release, setRelease] = useState(start.release),
     [readiness, setReadiness] = useState(start.readiness),
     [waitingReason, setWaitingReason] = useState(start.waitingReason),
     [labels, setLabels] = useState(start.labels),
@@ -2634,7 +2576,6 @@ function Editor({
     links,
     selection,
     status,
-    release,
     readiness,
     waitingReason,
     labels,
@@ -2647,7 +2588,6 @@ function Editor({
     links: setLinks,
     selection: setSelection,
     status: setStatus,
-    release: setRelease,
     readiness: setReadiness,
     waitingReason: setWaitingReason,
     labels: setLabels,
@@ -2691,7 +2631,6 @@ function Editor({
               readiness,
               waiting_reason: readiness !== "ready" ? waitingReason : "",
               ...(status === "needs_review" ? {} : { status }),
-              release: release.trim(),
               labels: JSON.parse(labels) as string[],
               links: links
                 .split("\n")
@@ -3138,16 +3077,6 @@ function Editor({
                       onEdit();
                     }}
                   />
-                </div>
-                <div className="crew-form-grid">
-                  <Field label="Release">
-                    <input
-                      value={release}
-                      onChange={(e) => setRelease(e.target.value)}
-                      placeholder="The release that shipped it, e.g. 0.19.0"
-                      maxLength={32}
-                    />
-                  </Field>
                 </div>
                 {row && approvalLine(row) && (
                   <p className="crew-approval-line" role="note">

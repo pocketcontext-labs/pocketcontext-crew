@@ -54,6 +54,7 @@ describe("Shared", () => {
     render(<Shared notes={[note]} tasks={[]} Prose={Prose} />);
     expect(await screen.findByText("Pricing")).toBeInTheDocument();
     expect(screen.getByText(PUBLISH_RISK)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /in a new tab/ })).toBeNull();
     expect(screen.getByRole("link", { name: "Source note" })).toHaveAttribute(
       "href",
       expect.stringContaining(note.id),
@@ -99,6 +100,12 @@ describe("Shared", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Changes not live")).toBeInTheDocument();
     expect(screen.getByText(/3 views/)).toBeInTheDocument();
+    // Open shows what recipients see in a new tab, without referrer or opener.
+    const open = screen.getByRole("link", { name: "Open Live in a new tab" });
+    expect(open).toHaveAttribute("href", "https://crew.example.com/a/t");
+    expect(open).toHaveAttribute("target", "_blank");
+    expect(open).toHaveAttribute("rel", "noopener noreferrer");
+    expect(open).toHaveTextContent("Open");
     fireEvent.click(
       screen.getByRole("button", { name: "Update content (same link)" }),
     );
@@ -174,6 +181,7 @@ describe("Shared", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /^Revoked\/expired/ }));
     expect(await screen.findByText("Gone")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /in a new tab/ })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Publish again with a new link" }),
     ).toBeInTheDocument();
@@ -239,6 +247,61 @@ describe("Shared", () => {
         expect.objectContaining({ id: "art000000000005" }),
       ),
     );
+  });
+
+  it("says Merged into for an archived update draft whose content went live, and Update of for a discarded one", async () => {
+    history.replaceState(null, "", "#/shared?show=live,archived");
+    read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
+      Promise.resolve(
+        f?.archived
+          ? [
+              {
+                id: "art000000000007",
+                revision: 3,
+                title: "Merged revision",
+                status: "draft",
+                state: "archived",
+                archived: true,
+                replaces: "art000000000006",
+                merged_into: "art000000000006",
+                merged_at: "2026-11-12 10:00:00.000Z",
+              },
+              {
+                id: "art000000000008",
+                revision: 2,
+                title: "Discarded revision",
+                status: "draft",
+                state: "archived",
+                archived: true,
+                replaces: "art000000000006",
+                merged_into: "",
+              },
+            ]
+          : [
+              {
+                id: "art000000000006",
+                revision: 2,
+                title: "Live original",
+                status: "published",
+                state: "published",
+                published_revision: 2,
+              },
+            ],
+      ),
+    );
+    artifactLinks.mockResolvedValue([]);
+    render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
+    const merged = (await screen.findByText("Merged revision")).closest("li")!;
+    const discarded = screen.getByText("Discarded revision").closest("li")!;
+    expect(merged).toHaveTextContent(/Merged into Live original on \S/);
+    expect(merged).not.toHaveTextContent("Update of:");
+    expect(merged).toHaveTextContent(
+      "Its content is live in that link. Restore brings back this draft only; the link does not change.",
+    );
+    expect(merged.querySelector('a[href="#/shared/art000000000006"]')).not.toBeNull();
+    expect(discarded).toHaveTextContent("Update of: Live original");
+    expect(discarded).not.toHaveTextContent("Merged into");
+    history.replaceState(null, "", "#/");
   });
 
   it("turns expiry choices into times", () => {

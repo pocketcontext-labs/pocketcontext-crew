@@ -34,7 +34,6 @@ const fields = {
     "archived",
     "readiness",
     "waiting_reason",
-    "release",
     "review_mode",
     "approved_by",
   ],
@@ -42,6 +41,10 @@ const fields = {
 function bad(m) {
   throw new BadRequestError(m);
 }
+// Crew 0.23.0 removed the task release field; releases are labels now.
+// Name the replacement instead of the generic unsupported-field error.
+const RELEASE_REMOVED =
+  "Tasks have no release field since Crew 0.23.0 (release_field_removed); use a label such as release-0.23.0";
 // Advisory task claims (0.18.0). A claim records the claiming session's
 // reported name (attribution only) and a lease; it never wakes anyone.
 function claimUntil() {
@@ -206,7 +209,7 @@ function validateData(app, col, d, r) {
       get(app, "notes", id);
     }
 }
-// Releases and in-session approval (0.19.0). review_mode in_session records
+// In-session approval (0.19.0). review_mode in_session records
 // that the owner approved the work in a coding session instead of a Crew
 // review; it is valid only on a Done task. The server stamps approved_at;
 // approved_by is a reported name (attribution only, never identity) that
@@ -228,7 +231,6 @@ function hasApproval(r) {
 }
 function taskApproval(r, values, op) {
   const out = { ...values };
-  trimmedText(out, "release", 32);
   trimmedText(out, "approved_by", 100);
   if (
     out.review_mode !== undefined &&
@@ -319,7 +321,7 @@ const derivedFields = {
   notes: ["path", "url"],
   session_revisions: ["edited_by"],
   upload_links: ["state"],
-  artifacts: ["pending_changes", "state", "expired", "path"],
+  artifacts: ["pending_changes", "state", "expired", "path", "merged_into", "merged_at"],
   settings: ["storage_used_bytes", "max_file_bytes", "max_active_attachments"],
 };
 const redactedFields = ["url", "secret", "secret_ciphertext"];
@@ -394,6 +396,7 @@ function actionableOverdue(app, r) {
 }
 function read(e) {
   const b = e.requestInfo().body;
+  if (b && b.release !== undefined) bad(RELEASE_REMOVED);
   only(b, [
     "collection",
     "id",
@@ -412,7 +415,6 @@ function read(e) {
     "overdue",
     "agent",
     "claim_state",
-    "release",
   ]);
   if (b.collection === "capabilities")
     return e.json(200, capabilities.describe(b.id));
@@ -441,7 +443,6 @@ function read(e) {
     "readiness",
     "label",
     "claim_state",
-    "release",
   ])
     if (b[k] !== undefined && col !== "tasks")
       bad(k + " filter is only supported for tasks");
@@ -499,14 +500,6 @@ function read(e) {
         "COALESCE([[claimed_by]],'')='' AND COALESCE([[claim_until]],'')=''",
       );
     } else bad("claim_state must be live, expired or an empty string");
-  }
-  if (b.release !== undefined) {
-    // Exact release; an empty string selects tasks without a release.
-    if (typeof b.release !== "string" || b.release.length > 32)
-      bad("release must be a string of at most 32 characters");
-    params.release = b.release.trim();
-    clauses.push("release={:release}");
-    sql.push("COALESCE([[release]],'')={:release}");
   }
   if (b.changed_since !== undefined) {
     params.since = sinceFilter(b.changed_since);
@@ -666,7 +659,7 @@ function read(e) {
               : attachments.collections.includes(col)
                 ? attachments.exported(r, e.app)
                 : col === "artifacts"
-                  ? artifacts.exported(r)
+                  ? artifacts.exported(r, e.app)
                   : col === "tasks" || col === "notes"
                     ? webhooks.linkedExport(e.app, col, r)
                     : col === "session_revisions"
@@ -780,6 +773,7 @@ function write(e, isAgent) {
         bad("Unsupported operation");
       // On hold is the reader's name for waiting; it is stored as waiting.
       if (kind === "task" && d.readiness === "on_hold") d.readiness = "waiting";
+      if (kind === "task" && d.release !== undefined) bad(RELEASE_REMOVED);
       let r =
         op === "create"
           ? new Record(app.findCollectionByNameOrId("crew_" + col))
@@ -1238,8 +1232,8 @@ function write(e, isAgent) {
         )
           changes.claim_until = r.getString("claim_until");
         else if (values.claimed_by === "") changes.claim_cleared = true;
-        for (const k of ["release", "approved_by"])
-          if (d[k] !== undefined) changes[k] = r.getString(k);
+        if (d.approved_by !== undefined)
+          changes.approved_by = r.getString("approved_by");
         if (approved.stamped) {
           changes.review_mode = "in_session";
           changes.approved_by = r.getString("approved_by");

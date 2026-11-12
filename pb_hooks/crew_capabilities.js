@@ -171,12 +171,6 @@ function document() {
       description:
         "Hold reason. Crew sets it on automatic holds (Draft edited, Review withdrawn, Bot hand-off limit reached); going Ready clears it unless the same write sets one.",
     },
-    release: {
-      type: "string",
-      maxLength: 32,
-      description:
-        "The release that shipped the task, for example 0.19.0; trimmed, empty for none.",
-    },
     review_mode: {
       enum: ["", "crew", "in_session"],
       description:
@@ -982,6 +976,15 @@ function document() {
         description:
           "Published, and the draft title or body differs from what the link shows.",
       },
+      merged_into: {
+        type: "string",
+        description:
+          "Derived. An archived update draft whose content replaced a live link (Publish, Update content): that artifact's id. Empty for a discarded draft and every other artifact.",
+      },
+      merged_at: {
+        type: "string",
+        description: "Derived. When the draft was merged (its publish event time); empty otherwise.",
+      },
       path: { type: "string", description: "Reader link #/shared/<id>." },
     },
     attachments: {
@@ -1380,12 +1383,6 @@ function readDiscovery() {
           "webhook_bridges only, true: unresolved parent wakes past their deadline (task.wake, no parent receipt) for the task's current wake generation, on active tasks that are not done or won't do and were not created by their recipient. Rows are history; nothing retries.",
       },
       label: { type: "string", description: "Tasks with this exact label" },
-      release: {
-        type: "string",
-        maxLength: 32,
-        description:
-          "Tasks shipped in this exact release; empty string selects tasks without a release",
-      },
       claim_state: {
         enum: ["", "live", "expired"],
         description: "Tasks only: claim state (empty string: no claim)",

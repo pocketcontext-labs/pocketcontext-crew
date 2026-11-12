@@ -101,17 +101,42 @@ function pendingChanges(r) {
       r.getString("body") !== r.getString("published_body"))
   );
 }
-function exported(r) {
+// merged_into/merged_at (0.23.0, derived): an archived update draft whose
+// last archiving step was Publish → Update content (same link) names the
+// artifact it went into and when; a discarded update draft has neither. Read
+// from the draft's own events, so drafts merged under 0.22.0 show it too.
+function merged(app, r) {
+  if (!app || !r.getBool("archived") || !r.getString("replaces")) return null;
+  const row = new DynamicModel({ action: "", mode: "", into_id: "", created: "" });
+  try {
+    app
+      .db()
+      .newQuery(
+        "SELECT action, COALESCE(json_extract(changes,'$.mode'),'') AS mode, COALESCE(json_extract(changes,'$.into'),'') AS into_id, created FROM crew_events WHERE parent={:id} AND action IN ('artifact.publish','artifact.archive','artifact.restore') ORDER BY created DESC, rowid DESC LIMIT 1",
+      )
+      .bind({ id: r.id })
+      .one(row);
+  } catch (_) {
+    return null;
+  }
+  if (row.action !== "artifact.publish" || row.mode !== "replace" || !row.into_id)
+    return null;
+  return { into: row.into_id, at: row.created };
+}
+function exported(r, app) {
   const out = r.publicExport();
   delete out.token;
   out.pending_changes = pendingChanges(r);
   out.state = state(r);
   out.expired = out.state === "expired";
   out.path = "#/shared/" + r.id;
+  const m = merged(app, r);
+  out.merged_into = m ? m.into : "";
+  out.merged_at = m ? m.at : "";
   return out;
 }
 function withLink(app, r) {
-  const out = exported(r);
+  const out = exported(r, app);
   const token = r.getString("token");
   if (!token || out.state !== "published") return out;
   out.token = token;
@@ -364,7 +389,7 @@ function handle(app, b, actor, isAgent, files) {
       };
       if (values.replaces) logged.replaces = values.replaces;
       audit(app, r, b.action, ctx, logged);
-      return exported(r);
+      return exported(r, app);
     };
     return webhooks.idempotent(
       app,
@@ -401,7 +426,7 @@ function handle(app, b, actor, isAgent, files) {
       if (logged.body !== undefined) logged.body = "(edited)";
       if (pendingChanges(r)) logged.pending_changes = true;
       audit(app, r, b.action, ctx, logged);
-      return exported(r);
+      return exported(r, app);
     });
   }
   // Owner browser only from here (write() refuses work clients first). No
@@ -432,7 +457,7 @@ function handle(app, b, actor, isAgent, files) {
     r.set("revision", r.getInt("revision") + 1);
     app.save(r);
     audit(app, r, b.action, ctx, {});
-    return exported(r);
+    return exported(r, app);
   }
   if (current === "archived")
     bad("Artifact is archived; restore it before changing it");
@@ -448,7 +473,7 @@ function handle(app, b, actor, isAgent, files) {
     r.set("revision", r.getInt("revision") + 1);
     app.save(r);
     audit(app, r, b.action, ctx, logged);
-    return exported(r);
+    return exported(r, app);
   }
   if (b.action === "artifact.set_expiry") {
     if (current !== "published")
@@ -527,7 +552,7 @@ function handle(app, b, actor, isAgent, files) {
     r.set("revision", r.getInt("revision") + 1);
     app.save(r);
     audit(app, r, b.action, ctx, {});
-    return exported(r);
+    return exported(r, app);
   }
   bad("Unknown action");
 }

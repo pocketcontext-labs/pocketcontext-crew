@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { ConnectionPending, skillCommand } from "./Connect";
 import Help from "./Help";
 import { boardStatuses, val, type ConnectionState, type Row } from "./crewApi";
-import { isClosed } from "./taskReleases";
+import { isClosed } from "./closedTasks";
 import { longHolds, statusMatches } from "./boardFilters";
 export { longHolds } from "./boardFilters";
 import {
