@@ -1709,7 +1709,7 @@ export default function CrewWorkspace() {
                     updateBoard({ taskSort: e.target.value as ViewState["taskSort"] })
                   }
                 >
-                  <option value="updated">Last updated, newest first</option>
+                  <option value="updated">Last updated</option>
                   <option value="held">Oldest hold first</option>
                 </select>
               </label>

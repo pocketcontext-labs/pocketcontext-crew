@@ -598,8 +598,9 @@ try {
  await dialog().getByLabel('Agent brief',{exact:true}).fill(longBrief);
  await dialog().getByRole('button',{name:'Save agent'}).click();await saved();
  const networkCard=page.locator('.crew-agent-card').filter({hasText:'Network'});
- assert.equal(await networkCard.locator('p').evaluate(p=>{const s=getComputedStyle(p),line=parseFloat(s.lineHeight);return s.whiteSpace==='normal'&&p.clientHeight<=line*7+1&&Math.abs(p.clientHeight/line-Math.round(p.clientHeight/line))<0.05&&p.scrollHeight>p.clientHeight;}),true,'the agent card clamps its brief to whole lines');
- assert.equal(await networkCard.locator('p').getAttribute('title'),longBrief,'the card keeps the full brief on hover');
+ assert.equal(await networkCard.locator('p').evaluate(p=>{const s=getComputedStyle(p),line=parseFloat(s.lineHeight);return s.whiteSpace==='pre-line'&&p.clientHeight<=line*7+1&&Math.abs(p.clientHeight/line-Math.round(p.clientHeight/line))<0.05&&p.scrollHeight>p.clientHeight;}),true,'the agent card clamps its brief to whole lines');
+ // One paragraph (single line breaks) reads as one, as Markdown renders it.
+ assert.equal(await networkCard.locator('p').getAttribute('title'),longBrief.replace(/\n/g,' '),'the card keeps the full brief on hover');
  await snapView('crew-agents-1280');
  await networkCard.click();
  // A filled-in brief opens in Read (rendered Markdown); Edit shows the source.

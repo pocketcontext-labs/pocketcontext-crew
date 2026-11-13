@@ -3623,7 +3623,12 @@ a.crew-logo:hover .product-brand span {
   outline: 2px solid #487d55;
   outline-offset: 1px;
 }
-/* Board sort: its own toolbar control beside Filters, showing the order. */
+/* Board sort: its own toolbar control beside Filters, showing the order.
+   The board search gives up some width so one row still fits at 1024. */
+.crew-toolbar .crew-search {
+  flex: 1 1 220px;
+  min-width: min(200px, 100%);
+}
 .crew-sort {
   display: inline-flex;
   align-items: center;

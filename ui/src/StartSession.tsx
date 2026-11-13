@@ -156,7 +156,15 @@ export default function StartSession({
     }
   };
   return (
-    <div className="crew-session">
+    <div
+      className="crew-session"
+      onKeyDown={(e) => {
+        // Escape closes the guide from anywhere in it or on its buttons.
+        if (e.key !== "Escape" || !guide) return;
+        e.stopPropagation();
+        setGuide(false);
+      }}
+    >
       <div className="crew-session-row">
         {showAgent && <AgentChip agent={agent} agents={agents ?? [agent]} />}
         <button
@@ -205,19 +213,12 @@ function SessionGuide({
 }) {
   const [off, setOff] = useState(guideOff);
   const [copied, setCopied] = useState(false);
-  const panel = useRef<HTMLDivElement>(null);
   return (
     <div
       id={id}
-      ref={panel}
       className="crew-session-guide"
       role="region"
       aria-label={`How to start a session as ${name}`}
-      onKeyDown={(e) => {
-        if (e.key !== "Escape") return;
-        e.stopPropagation();
-        close();
-      }}
     >
       <ol>
         <li>
