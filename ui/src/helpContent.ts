@@ -201,11 +201,11 @@ const glossaryEntries = {
       "Write it here and save. Changing a draft withdraws any pending approval for it.",
   },
   "send-for-approval": {
-    name: "Send draft for approval",
-    question: "What does sending a draft for approval do?",
+    name: "Request approval",
+    question: "What does Request approval do?",
     what: "Puts a snapshot of the exact saved draft in Approvals and moves the task to Needs review. Nothing leaves Crew.",
     action:
-      "Save the draft first. If it changes afterwards, send it again: an earlier approval doesn't carry over.",
+      "Save the draft first. If it changes afterwards, request approval again: an earlier approval doesn't carry over.",
   },
   reason: {
     name: "Reason for change",

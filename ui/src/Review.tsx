@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ComponentType } from "react";
+import { useId, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
   AttachmentsProvider,
   FileTile,
@@ -305,15 +305,29 @@ export function ReviewDecision({
 export function ReviewRequest({
   busy,
   submit,
+  help,
 }: {
   busy: boolean;
   submit: (options: ReviewOption[]) => void;
+  /** The standard "?" shown right after the button. */
+  help?: ReactNode;
 }) {
   const [options, setOptions] = useState<ReviewOption[]>([]);
   const [nextKey, setNextKey] = useState(1);
   const valid = options.every((o) => o.label.trim() && o.body.trim());
   return (
     <div className="crew-review-request">
+      <div className="crew-review-actions">
+        <button
+          type="button"
+          className="crew-review-submit"
+          disabled={busy || !valid}
+          onClick={() => submit(options)}
+        >
+          Request approval
+        </button>
+        {help}
+      </div>
       <details>
         <summary>Review alternatives (optional)</summary>
         <p>
@@ -377,14 +391,30 @@ export function ReviewRequest({
           Add review option
         </button>
       </details>
-      <button
-        type="button"
-        className="crew-review-submit"
-        disabled={busy || !valid}
-        onClick={() => submit(options)}
-      >
-        Send draft for approval
-      </button>
+    </div>
+  );
+}
+
+/** Request approval while it can't be sent yet: disabled, with why. */
+export function ReviewRequestBlocked({
+  hint,
+  help,
+}: {
+  hint: string;
+  help?: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="crew-review-request">
+      <div className="crew-review-actions">
+        <button type="button" className="crew-review-submit" disabled aria-describedby={id}>
+          Request approval
+        </button>
+        {help}
+        <span id={id} className="crew-review-hint">
+          {hint}
+        </span>
+      </div>
     </div>
   );
 }

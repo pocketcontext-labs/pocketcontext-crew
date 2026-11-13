@@ -36,7 +36,7 @@ import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
 import LabelsInput from "./LabelsInput";
 import { markdownText } from "./markdownText";
-import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest } from "./Review";
+import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest, ReviewRequestBlocked } from "./Review";
 import { decisionSummary, objects } from "./reviews";
 import { strandedWakes } from "./wakes";
 import {
@@ -2960,16 +2960,20 @@ function Editor({
   const reviewPending = data.reviews.some(
     (x) => val(x, "task") === row?.id && val(x, "status") === "pending",
   );
+  const reviewHelp = <Help topic="send-for-approval" />;
   const reviewState = reviewPending ? (
-    <p className="crew-review-state">
-      Waiting for your approval. <a href={viewHashes.reviews}>Approvals</a>
-    </p>
+    <div className="crew-review-actions">
+      <p className="crew-review-state">
+        Waiting for your approval. <a href={viewHashes.reviews}>Approvals</a>
+      </p>
+      {reviewHelp}
+    </div>
   ) : draft !== savedDraft ? (
-    <p className="crew-review-state">Save your draft first</p>
+    <ReviewRequestBlocked hint="Save your draft first." help={reviewHelp} />
   ) : !savedDraft.trim() ? (
-    <p className="crew-review-state">Add a draft to request approval</p>
+    <ReviewRequestBlocked hint="Save a draft first." help={reviewHelp} />
   ) : (
-    <ReviewRequest busy={busy} submit={(options) => void save("review.request", options.length ? { options } : {}, row)} />
+    <ReviewRequest busy={busy} help={reviewHelp} submit={(options) => void save("review.request", options.length ? { options } : {}, row)} />
   );
   const buckets = data.buckets.find((x) => x.id === val(row, "bucket"));
   // A coding session's claim; the owner may always release it (In progress goes back to To do).
@@ -3376,10 +3380,7 @@ function Editor({
                   status={inlineStatus("draft")}
                 />
                 {row && !readOnly && (
-                  <div className="crew-review-row">
-                    {reviewState}
-                    <Help topic="send-for-approval" />
-                  </div>
+                  <div className="crew-review-row">{reviewState}</div>
                 )}
               </>
             )}

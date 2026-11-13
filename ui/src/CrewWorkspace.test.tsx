@@ -467,16 +467,18 @@ it("requires saving a changed draft before submitting it for review", async () =
   fireEvent.click(screen.getByRole("button", { name: /Launch post/ }));
   const dialog = screen.getByRole("dialog");
   expect(
-    within(dialog).getByRole("button", { name: "Send draft for approval" }),
+    within(dialog).getByRole("button", { name: "Request approval" }),
   ).toBeEnabled();
   fireEvent.change(
     within(dialog).getByLabelText("Draft for review"),
     { target: { value: "Different draft" } },
   );
   expect(
-    within(dialog).queryByRole("button", { name: "Send draft for approval" }),
-  ).toBeNull();
-  expect(within(dialog).getByText("Save your draft first")).toBeInTheDocument();
+    within(dialog).getByRole("button", { name: "Request approval" }),
+  ).toBeDisabled();
+  expect(
+    within(dialog).getByRole("button", { name: "Request approval" }),
+  ).toHaveAccessibleDescription("Save your draft first.");
   expect(crewApi.write).not.toHaveBeenCalled();
 });
 it("requires restoring the owning bucket before an inherited archived note", async () => {
@@ -1440,10 +1442,10 @@ it("shows an archived task read-only and explains how to restore it", async () =
   expect(dialog.queryByRole("button", { name: "Save task" })).toBeNull();
   expect(dialog.queryByRole("button", { name: "Archive task" })).toBeNull();
   expect(
-    dialog.queryByRole("button", { name: "Send draft for approval" }),
+    dialog.queryByRole("button", { name: "Request approval" }),
   ).toBeNull();
-  expect(dialog.queryByText("Add a draft to request approval")).toBeNull();
-  expect(dialog.queryByText("Save your draft first")).toBeNull();
+  expect(dialog.queryByText("Save a draft first.")).toBeNull();
+  expect(dialog.queryByText("Save your draft first.")).toBeNull();
   expect(dialog.queryByText(/Waiting for your approval/)).toBeNull();
   fireEvent.click(dialog.getByRole("tab", { name: "Activity" }));
   expect(dialog.queryByRole("button", { name: "Add comment" })).toBeNull();
@@ -1789,7 +1791,7 @@ describe("simple dialogs", () => {
     fixtures.reviews = [];
     const dialog = await openTask({});
     fireEvent.click(
-      dialog.getByRole("button", { name: "Send draft for approval" }),
+      dialog.getByRole("button", { name: "Request approval" }),
     );
     await waitFor(() =>
       expect(crewApi.write).toHaveBeenCalledWith(
@@ -1804,10 +1806,13 @@ describe("simple dialogs", () => {
   it("explains in one line when a draft cannot be sent yet", async () => {
     fixtures.reviews = [];
     const dialog = await openTask({ draft: "" });
+    const request = dialog.getByRole("button", { name: "Request approval" });
+    expect(request).toBeDisabled();
+    expect(request).toHaveAccessibleDescription("Save a draft first.");
+    // The standard "?" sits in the same row as the button.
     expect(
-      dialog.getByText("Add a draft to request approval"),
-    ).toBeInTheDocument();
-    expect(dialog.queryByRole("button", { name: /^Send draft/ })).toBeNull();
+      request.parentElement?.querySelector(".crew-help-button"),
+    ).toHaveAccessibleName("What does Request approval do?");
   });
 
   it("points to Approvals while a review is pending", async () => {
@@ -1818,7 +1823,7 @@ describe("simple dialogs", () => {
       "#/approvals",
     );
     expect(
-      dialog.queryByRole("button", { name: "Send draft for approval" }),
+      dialog.queryByRole("button", { name: "Request approval" }),
     ).toBeNull();
   });
 });

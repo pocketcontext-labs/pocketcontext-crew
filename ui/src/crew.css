@@ -1741,8 +1741,8 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-review-state {
   font-size: 13px;
-  color: #75612f;
-  margin: -6px 0 18px;
+  color: #3f4d38;
+  margin: 0;
 }
 .crew-review-state a {
   color: inherit;
@@ -2633,11 +2633,27 @@ a.crew-logo:hover .product-brand span {
   align-items: center;
   gap: 8px;
 }
+/* Request approval: its own row under the draft, spaced like a section. */
 .crew-review-row {
+  margin: 0 0 18px;
+}
+.crew-review-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+.crew-review-hint {
+  font-size: 12px;
+  color: #6b7964;
+}
+.crew-review-request details {
+  margin: 10px 0 0;
+}
+/* The "?" keeps its own look on hover; no button background square. */
+.crew-app .crew-help-button:hover,
+.crew-dialog .crew-help-button:hover {
+  background: transparent;
 }
 .crew-column-empty p {
   margin: 0 0 10px;

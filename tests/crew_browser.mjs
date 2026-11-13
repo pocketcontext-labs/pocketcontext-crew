@@ -98,7 +98,20 @@ try {
  await dialog().getByLabel('Draft for review',{exact:true}).fill('A synthetic draft for the owner to publish manually.');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
- await dialog().getByRole('button',{name:'Send draft for approval'}).click();await saved();
+ // Request approval is a real button with the standard "?" on its row; an unsaved draft disables it with a hint.
+ {const request=dialog().getByRole('button',{name:'Request approval',exact:true});
+ const draftBox=dialog().getByLabel('Draft for review',{exact:true});const savedDraft=await draftBox.inputValue();
+ await draftBox.fill('');
+ assert.equal(await request.isDisabled(),true,'an unsaved draft disables Request approval');
+ await dialog().getByText('Save your draft first.',{exact:true}).waitFor();
+ await draftBox.fill(savedDraft);
+ assert.equal(await request.isEnabled(),true,'the saved draft enables Request approval');
+ const help=dialog().getByRole('button',{name:'What does Request approval do?',exact:true});
+ const box=async l=>l.evaluate(e=>{const r=e.getBoundingClientRect();return r.top+r.height/2;});
+ assert.ok(Math.abs(await box(help)-await box(request))<=2,'the ? is centred on the button row');
+ await help.click();await dialog().locator('.crew-help-popover').waitFor();
+ await help.click();await dialog().locator('.crew-help-popover').waitFor({state:'hidden'});
+ await request.click();await saved();}
  await page.locator('.crew-human').filter({hasText:'Human'}).waitFor();
  await snap('crew-board-desktop');
  await page.getByRole('link',{name:/^Approvals/}).click();

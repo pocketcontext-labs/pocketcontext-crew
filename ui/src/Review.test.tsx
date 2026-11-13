@@ -255,7 +255,7 @@ it("lets browser owners submit named review alternatives", () => {
   fireEvent.click(screen.getByText("Review alternatives (optional)"));
   fireEvent.click(screen.getByRole("button", { name: "Add review option" }));
   expect(
-    screen.getByRole("button", { name: "Send draft for approval" }),
+    screen.getByRole("button", { name: "Request approval" }),
   ).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Option 1 label"), {
     target: { value: "A · LinkedIn" },
@@ -264,7 +264,7 @@ it("lets browser owners submit named review alternatives", () => {
     target: { value: "A draft" },
   });
   fireEvent.click(
-    screen.getByRole("button", { name: "Send draft for approval" }),
+    screen.getByRole("button", { name: "Request approval" }),
   );
   expect(submit).toHaveBeenCalledWith([
     { key: "option-1", label: "A · LinkedIn", body: "A draft" },
