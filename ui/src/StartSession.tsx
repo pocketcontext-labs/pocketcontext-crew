@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
 import { copyText } from "./projectAgents";
 
@@ -99,9 +99,22 @@ export default function StartSession({
   );
 }
 
+/** How long a confirmation toast stays (with an action to reach: View). */
+export const toastMs = 6000;
+/** The fade before a toast leaves; skipped with reduced motion. */
+const toastFadeMs = 200;
+const reducedMotion = () =>
+  typeof window !== "undefined" &&
+  !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
 /**
  * The toast after Start a session: View opens the session instructions; when
  * the copy failed it shows the prompt to copy by hand. No Undo: nothing to undo.
+ *
+ * A confirmation closes by itself after 6 s, shown by a bar along its bottom
+ * edge that shrinks over the same time. Hover or keyboard focus inside it
+ * pauses both; leaving resumes them with the time that was left. A toast that
+ * needs action (manual copy, failure) never auto-hides.
  */
 export function SessionToast({
   start,
@@ -112,22 +125,53 @@ export function SessionToast({
   view: () => void;
   dismiss: () => void;
 }) {
+  const autoHide = start.state === "copied";
   const [hovered, setHovered] = useState(false);
-  // A plain confirmation leaves by itself; one that needs action stays.
+  const [focused, setFocused] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const paused = hovered || focused;
+  // Time left on the countdown, kept across pauses.
+  const remaining = useRef(toastMs);
+  const close = useCallback(() => {
+    if (reducedMotion()) return dismiss();
+    setLeaving(true);
+  }, [dismiss]);
   useEffect(() => {
-    if (start.state !== "copied" || hovered) return;
-    const timer = setTimeout(dismiss, 10_000);
+    if (!leaving) return;
+    const timer = setTimeout(dismiss, toastFadeMs);
     return () => clearTimeout(timer);
-  }, [start, hovered, dismiss]);
+  }, [leaving, dismiss]);
+  useEffect(() => {
+    if (!autoHide || paused || leaving) return;
+    const began = Date.now();
+    const timer = setTimeout(close, remaining.current);
+    return () => {
+      clearTimeout(timer);
+      remaining.current = Math.max(0, remaining.current - (Date.now() - began));
+    };
+  }, [autoHide, paused, leaving, close]);
   return (
     <div
-      className={`crew-toast${start.state === "copied" ? "" : " crew-toast-alert"}`}
-      role={start.state === "copied" ? "status" : "alert"}
+      className={`crew-toast${autoHide ? "" : " crew-toast-alert"}${leaving ? " crew-toast-leaving" : ""}${paused ? " crew-toast-paused" : ""}`}
+      role={autoHide ? "status" : "alert"}
+      aria-live={autoHide ? "polite" : "assertive"}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onFocus={() => setHovered(true)}
-      onBlur={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+          setFocused(false);
+      }}
     >
+      <button
+        type="button"
+        className="crew-toast-close"
+        aria-label="Dismiss"
+        title="Dismiss"
+        onClick={dismiss}
+      >
+        <span aria-hidden="true">×</span>
+      </button>
       {start.state === "copied" && (
         <p>Copied the session prompt for {start.name}.</p>
       )}
@@ -152,16 +196,20 @@ export function SessionToast({
           connection and try again.
         </p>
       )}
-      <div className="crew-toast-actions">
-        {start.session && (
+      {start.session && (
+        <div className="crew-toast-actions">
           <button type="button" aria-haspopup="dialog" onClick={view}>
             View
           </button>
-        )}
-        <button type="button" className="crew-quiet" onClick={dismiss}>
-          Dismiss
-        </button>
-      </div>
+        </div>
+      )}
+      {autoHide && (
+        <span
+          className="crew-toast-countdown"
+          aria-hidden="true"
+          style={{ animationDuration: `${toastMs}ms` }}
+        />
+      )}
     </div>
   );
 }

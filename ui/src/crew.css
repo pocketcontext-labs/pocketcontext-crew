@@ -1171,6 +1171,65 @@ a.crew-logo:hover .product-brand span {
   justify-content: flex-end;
   gap: 8px;
 }
+/* The toast's text leaves room for the close icon in its corner. */
+.crew-toast {
+  padding-right: 40px;
+  overflow: hidden;
+}
+.crew-app .crew-toast-close,
+.crew-toast-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #5d6a52;
+  font-size: 18px;
+  line-height: 1;
+}
+/* Time left before a confirmation closes: shrinks to nothing, pauses on hover
+   or focus. Reduced motion keeps a still bar and the same timeout. */
+.crew-toast-countdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: #487d55;
+  transform-origin: left center;
+  animation-name: crew-toast-countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.crew-toast-paused .crew-toast-countdown {
+  animation-play-state: paused;
+}
+@keyframes crew-toast-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.crew-toast {
+  transition: opacity 200ms ease;
+}
+.crew-toast-leaving {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-toast-countdown {
+    animation: none;
+  }
+  .crew-toast {
+    transition: none;
+  }
+}
 /* Long lines and code blocks scroll inside their own box, not the dialog. */
 .crew-session-dialog > * {
   min-width: 0;
