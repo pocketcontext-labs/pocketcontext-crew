@@ -429,6 +429,15 @@ try {
  await page.getByRole('button',{name:'Clear all',exact:true}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
+ // The assigned agent in a card footer filters by that agent without opening the card.
+ await page.locator('.crew-task-card footer').getByRole('button',{name:'Filter by agent Network',exact:true}).click();
+ await page.waitForFunction(()=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(location.hash));
+ await cards(1);
+ assert.equal(await dialog().count(),0,'clicking the card agent does not open the task');
+ assert.equal(await assignment.locator('option:checked').innerText(),'Network (1)','the card agent and the assignment select share one filter');
+ await page.getByRole('button',{name:'Clear all',exact:true}).click();
+ await page.waitForFunction(()=>location.hash==='#/tasks');
+ await cards(2);
  // Labels are independent keyboard controls; filtering combines with assignment and survives history/reload.
  await page.getByRole('button',{name:/Synthetic long description/}).click();
  const labelsInput=dialog().getByRole('combobox',{name:'Labels',exact:true});

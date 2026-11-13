@@ -430,7 +430,7 @@ it("derives Human from a pending request while preserving the assigned agent", a
     screen.getByText("Human", { selector: ".crew-human" }),
   ).toBeInTheDocument();
   expect(
-    screen.getByText("Network", { selector: "footer" }),
+    screen.getByRole("button", { name: "Filter by agent Network" }),
   ).toBeInTheDocument();
   expect(crewApi.write).not.toHaveBeenCalled();
 });
@@ -573,9 +573,8 @@ it("preserves an inactive assignment visibly without offering new inactive assig
   );
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  expect(
-    screen.getByText("Network", { selector: "footer" }),
-  ).toBeInTheDocument();
+  expect(document.querySelector(".crew-task-card footer")).toHaveTextContent("Network");
+  expect(screen.queryByRole("button", { name: /^Filter by agent/ })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /Launch post/ }));
   const select = within(screen.getByRole("dialog")).getByLabelText(
     /Assigned agent/,
@@ -3568,6 +3567,27 @@ it("combines label filtering with assignment, keeps hidden assignee labels filte
   fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
   expect(document.querySelectorAll(".crew-task-card")).toHaveLength(3);
   expect(location.hash).toBe("#/tasks");
+});
+it("filters the board by the assigned agent in a card footer without opening the card", async () => {
+  fixtures.reviews = [];
+  fixtures.tasks = [
+    { ...task, title: "Mine", status: "todo", labels: [] },
+    { ...task, id: "task00000000002", title: "Nobody's", assigned_agent: "", status: "todo", labels: [] },
+  ];
+  history.replaceState(null, "", "/#/tasks");
+  render(<CrewWorkspace />);
+  const card = (await screen.findByText("Mine")).closest(".crew-task-card") as HTMLElement;
+  const unassigned = screen.getByText("Nobody's").closest(".crew-task-card") as HTMLElement;
+  expect(within(unassigned).queryByRole("button", { name: /^Filter by agent/ })).toBeNull();
+  const chip = within(card).getByRole("button", { name: `Filter by agent ${agent.name}` });
+  expect(chip).toHaveAttribute("title", `Filter by agent ${agent.name}`);
+  fireEvent.keyDown(chip, { key: "Enter" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  fireEvent.click(chip);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(location.hash).toBe(`#/tasks?agent=${agent.id}`);
+  expect(document.querySelectorAll(".crew-task-card")).toHaveLength(1);
+  expect(screen.getByRole("combobox", { name: "Filter by assignment" })).toHaveValue(agent.id);
 });
 it("filters the board from Ready, On hold and Won't do chips without opening the card", async () => {
   fixtures.tasks = [

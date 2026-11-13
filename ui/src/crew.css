@@ -3648,6 +3648,30 @@ a.crew-logo:hover .product-brand span {
   outline: 2px solid #487d55;
   outline-offset: 1px;
 }
+/* The assigned agent in a card footer filters the board, like a chip. */
+.crew-app .crew-task-card .crew-card-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: -3px -6px;
+  padding: 3px 8px 3px 4px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.crew-app .crew-task-card .crew-card-agent:hover {
+  background: #2a3a1f0f;
+  border-color: #c9d3bd;
+  text-decoration: none;
+}
+.crew-app .crew-task-card .crew-card-agent:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: 1px;
+}
 /* Board sort: its own toolbar control beside Filters, showing the order.
    The board search gives up some width so one row still fits at 1024. */
 .crew-toolbar .crew-search {

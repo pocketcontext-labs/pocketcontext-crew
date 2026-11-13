@@ -1985,10 +1985,25 @@ export default function CrewWorkspace() {
                       </p>
                     )}
                     <footer>
-                      <span className="crew-avatar">
-                        {name(val(x, "assigned_agent")).slice(0, 1)}
-                      </span>
-                      {name(val(x, "assigned_agent"))}
+                      {val(x, "assigned_agent") && !invalidAssignment(x) ? (
+                        <FilterChipButton
+                          className="crew-card-agent"
+                          label={`Filter by agent ${name(val(x, "assigned_agent"))}`}
+                          onFilter={() => setAssignmentFilter(val(x, "assigned_agent"))}
+                        >
+                          <span className="crew-avatar" aria-hidden="true">
+                            {name(val(x, "assigned_agent")).slice(0, 1)}
+                          </span>
+                          {name(val(x, "assigned_agent"))}
+                        </FilterChipButton>
+                      ) : (
+                        <>
+                          <span className="crew-avatar">
+                            {name(val(x, "assigned_agent")).slice(0, 1)}
+                          </span>
+                          {name(val(x, "assigned_agent"))}
+                        </>
+                      )}
                     </footer>
                   </div>
                 );
