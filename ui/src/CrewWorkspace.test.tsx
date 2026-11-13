@@ -3633,6 +3633,44 @@ it("says a pending review is why a task is in Needs review", async () => {
     "Needs review: a draft is waiting for your decision in Approvals.",
   );
 });
+it("filters the board in one click from the agent row, in sync with the select", async () => {
+  fixtures.reviews = [];
+  fixtures.tasks = [
+    { ...task, title: "Mine open", status: "todo", labels: [] },
+    { ...task, id: "task00000000002", title: "Mine done", status: "done", labels: [] },
+    { ...task, id: "task00000000003", title: "Nobody's", assigned_agent: "", status: "todo", labels: [] },
+  ];
+  history.replaceState(null, "", "/#/tasks");
+  render(<CrewWorkspace />);
+  await screen.findByText("Mine open");
+  const row = within(screen.getByRole("group", { name: "Filter by agent" }));
+  const all = row.getByRole("button", { name: "All agents, 2 open" });
+  expect(all).toHaveAttribute("aria-pressed", "true");
+  const mine = row.getByRole("button", { name: `${agent.name}, 1 open` });
+  const nobody = row.getByRole("button", { name: "Unassigned, 1 open" });
+  fireEvent.click(mine);
+  expect(mine).toHaveAttribute("aria-pressed", "true");
+  expect(all).toHaveAttribute("aria-pressed", "false");
+  expect(location.hash).toBe(`#/tasks?agent=${agent.id}`);
+  expect(screen.getByRole("combobox", { name: "Filter by assignment" })).toHaveValue(agent.id);
+  expect(screen.queryByText("Nobody's")).toBeNull();
+  fireEvent.click(mine);
+  expect(location.hash).toBe("#/tasks");
+  expect(all).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(nobody);
+  expect(screen.queryByText("Mine open")).toBeNull();
+  fireEvent.click(all);
+  expect(document.querySelectorAll(".crew-task-card")).toHaveLength(3);
+});
+it("hides the Unassigned chip when every open task has an agent", async () => {
+  fixtures.reviews = [];
+  fixtures.tasks = [{ ...task, title: "Mine open", status: "todo", labels: [] }];
+  history.replaceState(null, "", "/#/tasks");
+  render(<CrewWorkspace />);
+  await screen.findByText("Mine open");
+  const row = within(screen.getByRole("group", { name: "Filter by agent" }));
+  expect(row.queryByRole("button", { name: /^Unassigned/ })).toBeNull();
+});
 it("filters the board by the assigned agent in a card footer without opening the card", async () => {
   fixtures.reviews = [];
   fixtures.tasks = [

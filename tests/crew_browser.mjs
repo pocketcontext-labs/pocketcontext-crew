@@ -466,6 +466,19 @@ try {
  await page.getByRole('button',{name:'Clear all',exact:true}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
+ // The agent row filters in one click; clicking the chip again shows every task.
+ {const row=page.getByRole('group',{name:'Filter by agent'});
+ const network=row.getByRole('button',{name:/^Network, \d+ open$/});
+ await network.click();
+ await page.waitForFunction(()=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(location.hash));
+ await cards(1);
+ assert.equal(await network.getAttribute('aria-pressed'),'true');
+ assert.equal(await assignment.locator('option:checked').innerText(),'Network (1)','the agent row and the select share one filter');
+ await network.click();
+ await page.waitForFunction(()=>location.hash==='#/tasks');
+ await cards(2);
+ assert.equal(await row.getByRole('button',{name:/^All agents, /}).getAttribute('aria-pressed'),'true');
+ assert.equal(await row.evaluate(e=>getComputedStyle(e).flexWrap),'nowrap','the agent row scrolls instead of wrapping');}
  // The assigned agent in a card footer filters by that agent without opening the card.
  await page.locator('.crew-task-card footer').getByRole('button',{name:'Filter by agent Network',exact:true}).click();
  await page.waitForFunction(()=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(location.hash));

@@ -4104,3 +4104,57 @@ a.crew-logo:hover .product-brand span {
 .crew-status-hint.is-pending {
   display: block;
 }
+/* Tasks: one compact chip per agent under the toolbar. It scrolls sideways
+   on narrow screens instead of wrapping. */
+.crew-agent-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  margin: -12px 0 20px;
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.crew-app .crew-agent-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 4px;
+  min-height: 30px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: #33402c;
+  background: #fffffb;
+  border: 1px solid #dfe4d6;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.crew-app .crew-agent-chip:not(:has(.crew-avatar)) {
+  padding-left: 12px;
+}
+.crew-app .crew-agent-chip .crew-avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+.crew-agent-chip-count {
+  font-size: 11px;
+  color: #6b7964;
+  font-variant-numeric: tabular-nums;
+}
+.crew-app .crew-agent-chip:hover {
+  background: #f1f4ec;
+  border-color: #7f9670;
+}
+.crew-app .crew-agent-chip[aria-pressed="true"] {
+  background: #e3eee0;
+  border-color: #527040;
+  color: #23301d;
+  font-weight: 600;
+}
+.crew-app .crew-agent-chip:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: 1px;
+}

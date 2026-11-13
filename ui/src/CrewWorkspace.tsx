@@ -1831,6 +1831,64 @@ export default function CrewWorkspace() {
               </div>
             </div>
           )}
+          {view === "board" && data.agents.length > 0 && (
+            // One click per agent, like the Notes bucket cards; the same
+            // assignment filter as the select and the card footers.
+            <div className="crew-agent-row" role="group" aria-label="Filter by agent">
+              <button
+                type="button"
+                className="crew-agent-chip"
+                aria-pressed={assignmentFilter === "all"}
+                aria-label={`All agents, ${openTasks.length} open`}
+                onClick={() => setAssignmentFilter("all")}
+              >
+                All
+                <span className="crew-agent-chip-count" aria-hidden="true">
+                  {openTasks.length}
+                </span>
+              </button>
+              {agentOptions.map(({ agent }) => {
+                const agentName = val(agent, "name");
+                const count = openTasks.filter((x) => val(x, "assigned_agent") === agent.id).length;
+                const selected = assignmentFilter === agent.id;
+                return (
+                  <button
+                    type="button"
+                    key={agent.id}
+                    className="crew-agent-chip"
+                    aria-pressed={selected}
+                    aria-label={`${agentName}, ${count} open`}
+                    title={selected ? "Show all agents" : `Filter by agent ${agentName}`}
+                    onClick={() => setAssignmentFilter(selected ? "all" : agent.id)}
+                  >
+                    <span className="crew-avatar" aria-hidden="true">
+                      {agentInitials(agentName, data.agents)}
+                    </span>
+                    {agentName}
+                    <span className="crew-agent-chip-count" aria-hidden="true">
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+              {unassignedCount > 0 && (
+                <button
+                  type="button"
+                  className="crew-agent-chip"
+                  aria-pressed={assignmentFilter === "unassigned"}
+                  aria-label={`Unassigned, ${unassignedCount} open`}
+                  onClick={() =>
+                    setAssignmentFilter(assignmentFilter === "unassigned" ? "all" : "unassigned")
+                  }
+                >
+                  Unassigned
+                  <span className="crew-agent-chip-count" aria-hidden="true">
+                    {unassignedCount}
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
           {view === "board" && (boardFiltered || boardSearched) && (
             <div className="crew-filter-chips" role="group" aria-label="Active filters">
               {chips.map((chip) => (
