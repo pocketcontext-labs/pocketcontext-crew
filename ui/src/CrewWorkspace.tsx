@@ -11,8 +11,6 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import Brand from "./Brand";
 import { api } from "./api";
 import {
@@ -93,9 +91,6 @@ import {
   isFileEvent,
   namePasted,
   filesOf,
-  ProseImage,
-  ProseLink,
-  proseUrlTransform,
   useItemAttachments,
   useStagedFiles,
   withdrawnNotice,
@@ -137,6 +132,7 @@ import {
   sharedFocusFromHash,
 } from "./itemLink";
 import Shared from "./Shared";
+import Prose from "./Prose";
 import Archive, { type RestoreItem } from "./Archive";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
@@ -257,23 +253,6 @@ const plainPreview = (markdown: string) =>
     .replace(/\*(\S[^*\n]*)\*/g, "$1")
     .replace(/\n{2,}/g, "\n")
     .trim();
-function Prose({ children }: { children: string }) {
-  return (
-    <div className="crew-prose">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        urlTransform={proseUrlTransform}
-        components={{
-          // Same-item attachments only; external images never load.
-          img: ({ src, alt }) => <ProseImage src={src} alt={alt} />,
-          a: ({ children, href }) => <ProseLink href={href}>{children}</ProseLink>,
-        }}
-      >
-        {children}
-      </ReactMarkdown>
-    </div>
-  );
-}
 /**
  * On hold (with its reason on hover) or Ready; not shown for Done tasks.
  * With `onFilter` (board cards) the chip is a button that filters the board

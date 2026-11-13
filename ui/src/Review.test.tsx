@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -11,6 +12,7 @@ import { ReviewContent, ReviewDecision, ReviewRequest } from "./Review";
 import { decisionSummary, localFilePaths, reviewFiles } from "./reviews";
 import { attachmentsApi, type Attachment } from "./attachmentsApi";
 import type { Row } from "./crewApi";
+import RealProse from "./Prose";
 const Prose = ({ children }: { children: string }) => (
   <div className="crew-prose">
     <p>{children}</p>
@@ -250,4 +252,69 @@ it("detects relative file paths followed by sentence punctuation", () => {
     "./draft.png",
     "../deck.pdf",
   ]);
+});
+it("keeps the draft's images and the file grid in place while typing a decision note", async () => {
+  let renders = 0;
+  const CountingProse = ({ children }: { children: string }) => {
+    renders++;
+    return <RealProse>{children}</RealProse>;
+  };
+  render(
+    <ReviewDecision
+      row={{
+        ...review,
+        options: [],
+        draft: "Concept\n\n![concept](attachment:att000000000001)",
+        attachments: [{ id: "att000000000001", sha256: "att000000000001" }],
+      }}
+      busy={false}
+      error=""
+      attachments={[file("att000000000001")]}
+      loaded
+      Prose={CountingProse}
+      when={() => "now"}
+      save={vi.fn()}
+    />,
+  );
+  const loaded = (name: string, scope = screen) =>
+    waitFor(() => {
+      const el = scope.getByRole("img", { name });
+      expect(el.tagName).toBe("IMG");
+      return el;
+    });
+  const draftImage = await loaded("concept");
+  const gallery = screen.getByRole("region", { name: "Files submitted for review" });
+  const thumb = await loaded("att000000000001.png", within(gallery) as unknown as typeof screen);
+  const before = renders;
+  const note = screen.getByLabelText("Decision note");
+  for (const value of ["L", "Lo", "Looks good"])
+    fireEvent.change(note, { target: { value } });
+  expect(renders).toBe(before);
+  expect(screen.getByRole("img", { name: "concept" })).toBe(draftImage);
+  expect(within(gallery).getByRole("img", { name: "att000000000001.png" })).toBe(thumb);
+  expect(draftImage.getAttribute("src")).toBe(screen.getByRole("img", { name: "concept" }).getAttribute("src"));
+});
+it("does not remount Markdown images when the page re-renders", async () => {
+  const { rerender } = render(
+    <ReviewContent
+      row={{ ...review, draft: "![concept](attachment:att000000000001)", attachments: [{ id: "att000000000001", sha256: "att000000000001" }] }}
+      attachments={[file("att000000000001")]}
+      Prose={RealProse}
+    />,
+  );
+  const image = await waitFor(() => {
+    const el = screen.getByRole("img", { name: "concept" });
+    expect(el.tagName).toBe("IMG");
+    return el;
+  });
+  rerender(
+    <ReviewContent
+      row={{ ...review, draft: "![concept](attachment:att000000000001)", attachments: [{ id: "att000000000001", sha256: "att000000000001" }] }}
+      attachments={[file("att000000000001")]}
+      Prose={RealProse}
+    >
+      <p>Changed beside the draft</p>
+    </ReviewContent>,
+  );
+  expect(screen.getByRole("img", { name: "concept" })).toBe(image);
 });

@@ -1,4 +1,4 @@
-import { useId, useState, type ComponentType } from "react";
+import { useId, useRef, useState, type ComponentType } from "react";
 import { AttachmentsProvider, ProseImage, ProseLink } from "./Attachments";
 import type { Attachment } from "./attachmentsApi";
 import { val, type Row } from "./crewApi";
@@ -172,7 +172,9 @@ export function ReviewDecision({
     row?: Row,
   ) => Promise<void>;
 }) {
-  const [note, setNote] = useState("");
+  // Uncontrolled: typing a note re-renders nothing, so the draft and its
+  // images stay put.
+  const note = useRef<HTMLTextAreaElement>(null);
   const [choices, setChoices] = useState<OptionDecision[]>([]);
   const options = reviewOptions(row),
     pending = val(row, "status") === "pending";
@@ -193,7 +195,7 @@ export function ReviewDecision({
       "review.decide",
       {
         decision,
-        note,
+        note: note.current?.value ?? "",
         ...(options.length ? { option_decisions: decisions } : {}),
       },
       row,
@@ -239,9 +241,9 @@ export function ReviewDecision({
           <label className="crew-option-note">
             Decision note
             <textarea
-              value={note}
+              ref={note}
+              defaultValue=""
               maxLength={20000}
-              onChange={(e) => setNote(e.target.value)}
               placeholder="Feedback for the next revision"
             />
           </label>
