@@ -3072,7 +3072,10 @@ describe("project agents and coding sessions", () => {
     const guide = screen.getByRole("dialog", {
       name: "Start a coding session as synthetic-repo",
     });
-    expect(card.innerHTML).toBe(before);
+    // Only the button's label confirms the copy for a moment.
+    expect(card.innerHTML).toBe(
+      before.replace(">⧉</span>Copy coding prompt<", ">✓</span>Copied<"),
+    );
     expect(guide.querySelector("textarea")).toBeNull();
     expect(within(guide).getByLabelText("Session prompt for synthetic-repo").textContent).toBe(
       session.prompt,
@@ -3108,7 +3111,8 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(help);
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(card.innerHTML).toBe(before);
+    // The label returns after its short "Copied".
+    await waitFor(() => expect(card.innerHTML).toBe(before), { timeout: 3000 });
     fireEvent.click(within(toast).getByRole("button", { name: "View" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Session instructions for synthetic-repo",
@@ -3140,9 +3144,13 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(within(toast).getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Copy prompt for a coding agent as synthetic-repo" }),
-    ).toHaveTextContent("Copy prompt for a coding agent");
+    const button = screen.getByRole("button", {
+      name: "Copy prompt for a coding agent as synthetic-repo",
+    });
+    expect(button).toHaveTextContent("Copied");
+    await waitFor(() => expect(button).toHaveTextContent("Copy coding prompt"), {
+      timeout: 3000,
+    });
   });
   it("offers Start a session on Home for active manually started agents only", async () => {
     const session$ = vi.spyOn(crewApi, "session").mockResolvedValue(session);
@@ -3155,7 +3163,7 @@ describe("project agents and coding sessions", () => {
     const row = within(await screen.findByRole("region", { name: "Start a session" }));
     const buttons = row.getAllByRole("button");
     expect(buttons.map((b) => b.textContent)).toEqual([
-      "Copy prompt for a coding agent",
+      "⧉Copy prompt for a coding agent",
       "?",
     ]);
     // The agent shows as one: avatar, name and an Agent tag.

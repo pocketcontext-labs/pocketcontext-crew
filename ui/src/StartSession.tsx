@@ -77,18 +77,32 @@ export default function StartSession({
   agent,
   agents,
   showAgent = false,
-  onStart,
+  compact = false,
+  onStart: notify,
 }: {
   agent: Row;
   /** Every agent, for unique avatar initials. */
   agents?: Row[];
   /** Show the agent chip beside the button (Home; the Agents card already names it). */
   showAgent?: boolean;
+  /** A card footer: the short label "Copy coding prompt" keeps the ? on the same row. */
+  compact?: boolean;
   onStart: (start: SessionStart) => void;
 }) {
   const name = val(agent, "name");
   const cached = useRef<AgentSession | undefined>(undefined);
   const [loading, setLoading] = useState(false);
+  // A short "Copied" on the button itself, like the other copy actions.
+  const [copied, setCopied] = useState(0);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(0), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  const onStart = (start: SessionStart) => {
+    if (start.state === "copied") setCopied((n) => n + 1);
+    notify(start);
+  };
   const [guide, setGuide] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [guideLoaded, guideOff, setGuideOff] = useSessionGuideOff();
@@ -162,7 +176,16 @@ export default function StartSession({
           aria-label={`Copy prompt for a coding agent as ${name}`}
           onClick={start}
         >
-          {loading ? "Preparing…" : "Copy prompt for a coding agent"}
+          <span className="crew-session-copy-icon" aria-hidden="true">
+            {copied ? "✓" : "⧉"}
+          </span>
+          {loading
+            ? "Preparing…"
+            : copied
+              ? "Copied"
+              : compact
+                ? "Copy coding prompt"
+                : "Copy prompt for a coding agent"}
         </button>
         <div className="crew-help">
           <button

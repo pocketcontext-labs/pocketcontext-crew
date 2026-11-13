@@ -3981,8 +3981,26 @@ a.crew-logo:hover .product-brand span {
   border-radius: 0;
 }
 .crew-agent-tile > .crew-session {
-  padding: 10px 23px 14px;
+  padding: 12px 23px;
   border-top: 1px solid #edf0e7;
+}
+/* The card footer: button and ? on one centred row, normal secondary size. */
+.crew-agent-tile .crew-session-row {
+  flex-wrap: nowrap;
+}
+.crew-app .crew-agent-tile .crew-session-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.crew-session-copy-icon {
+  display: inline-block;
+  min-width: 1em;
+  text-align: center;
 }
 /* Download beside Remove under an image, and under review files. */
 .crew-attachment-actions {

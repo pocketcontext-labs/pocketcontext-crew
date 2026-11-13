@@ -2391,6 +2391,7 @@ export default function CrewWorkspace() {
                       <StartSession
                         agent={x}
                         agents={data.agents}
+                        compact
                         onStart={setSessionStart}
                       />
                     )}

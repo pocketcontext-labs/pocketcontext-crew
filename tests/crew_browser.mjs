@@ -733,8 +733,13 @@ try {
  assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),before,'nothing stays on the card after Start a session');
  assert.equal(await tile.getByText(/Codex|Claude Code|Show full instructions/).count(),0,'no tool names or extra links on the card');
  await toast.getByRole('button',{name:'Dismiss'}).click();await toast.waitFor({state:'hidden'});}
- for(const width of [1024,1280,1440]){
+ for(const width of [390,1024,1280,1440]){
   await page.setViewportSize({width,height:900});
+  // The card footer keeps Copy coding prompt and its ? on one centred row (after the short "Copied").
+  await page.waitForFunction(()=>document.querySelector('.crew-agent-tile .crew-session-copy')?.textContent==='⧉Copy coding prompt');
+  {const footer=await page.locator('.crew-agent-tile .crew-session-row').first().evaluate(r=>{const b=r.querySelector('.crew-session-copy').getBoundingClientRect();const h=r.querySelector('.crew-help-button').getBoundingClientRect();return {label:r.querySelector('.crew-session-copy').textContent,centred:Math.abs((b.top+b.bottom)/2-(h.top+h.bottom)/2)<=2,beside:h.left>=b.right};});
+  assert.deepEqual(footer,{label:'⧉Copy coding prompt',centred:true,beside:true},`button and ? share a row at ${width}`);}
+  if(width===390) continue;
   const networkHeight=await networkCard.evaluate(e=>e.getBoundingClientRect().height);
   assert.equal(await pageOverflows(),false,`Agents horizontal overflow at ${width}`);
   await showInstructions.click();
@@ -809,7 +814,7 @@ try {
   await page.goto(base+'/#/');
   const row=page.getByRole('region',{name:'Start a session'});
   const homeStart=row.getByRole('button',{name:'Copy prompt for a coding agent as synthetic-repo'});
-  assert.equal(await homeStart.innerText(),'Copy prompt for a coding agent');
+  assert.equal(await homeStart.innerText(),'⧉Copy prompt for a coding agent');
   await row.getByText('Agent',{exact:true}).waitFor();
   assert.equal(await row.getByRole('button',{name:/^Copy prompt for a coding agent as /}).count(),1,'only manual agents appear on Home');
   await row.getByRole('button',{name:'How to start a session as synthetic-repo'}).click();
