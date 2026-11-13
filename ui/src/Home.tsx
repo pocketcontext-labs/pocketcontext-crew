@@ -231,7 +231,8 @@ export default function Home({
             <StartSession
               key={agent.id}
               agent={agent}
-              label={`Start a session · ${val(agent, "name")}`}
+              agents={data.agents}
+              showAgent
               onStart={onStartSession}
             />
           ))}

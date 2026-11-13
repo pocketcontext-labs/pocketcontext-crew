@@ -622,7 +622,7 @@ try {
  await dialog().getByRole('button',{name:'Save agent'}).click();await saved();
  const pageOverflows=()=>page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1);
  // One click copies; a toast confirms, and View opens the instructions.
- const startButton=page.getByRole('button',{name:'Start a session for synthetic-repo'});
+ const startButton=page.getByRole('button',{name:'Copy prompt for a coding agent as synthetic-repo'});
  const toast=page.locator('.crew-toast');
  const showInstructions={click:async()=>{
   await startButton.click();
@@ -632,8 +632,21 @@ try {
  }};
  await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:base}).catch(()=>{});
  {const tile=page.locator('.crew-agent-tile').filter({has:startButton});const before=await tile.evaluate(e=>e.getBoundingClientRect().height);
+ // The first click also opens the three-step guide with the copied prompt;
+ // "Don't show this again" keeps it closed across reloads, ? opens it again.
+ await startButton.click();
+ await toast.getByText('Copied the session prompt for synthetic-repo. Paste it into a new session in your coding agent.').waitFor();
+ const guide=page.getByRole('region',{name:'How to start a session as synthetic-repo'});
+ await guide.getByText('Open your coding agent.').waitFor();
+ assert.match(await guide.getByRole('textbox',{name:'Session prompt for synthetic-repo'}).inputValue(),/synthetic-repo/);
+ await guide.getByRole('checkbox',{name:"Don't show this again"}).check();
+ await guide.getByRole('button',{name:'Got it'}).click();
+ await guide.waitFor({state:'hidden'});
+ await toast.getByRole('button',{name:'Dismiss'}).click();await toast.waitFor({state:'hidden'});
+ await page.reload();await startButton.waitFor();
  await startButton.click();
  await toast.getByText('Copied the session prompt for synthetic-repo.').waitFor();
+ assert.equal(await guide.count(),0,'the guide stays off after a reload');
  assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),before,'nothing stays on the card after Start a session');
  assert.equal(await tile.getByText(/Codex|Claude Code|Show full instructions/).count(),0,'no tool names or extra links on the card');
  await toast.getByRole('button',{name:'Dismiss'}).click();await toast.waitFor({state:'hidden'});}
@@ -652,7 +665,7 @@ try {
   await instructions.getByRole('button',{name:'Close dialog'}).click();
   await instructions.waitFor({state:'hidden'});
   assert.equal(await networkCard.evaluate(e=>e.getBoundingClientRect().height),networkHeight,`other cards keep their height at ${width}`);
-  assert.equal(await page.getByRole('button',{name:'Start a session for synthetic-repo'}).evaluate(b=>!!b.closest('.crew-agent-tile')),true,'Start a session stays in its tile');
+  assert.equal(await page.getByRole('button',{name:'Copy prompt for a coding agent as synthetic-repo'}).evaluate(b=>!!b.closest('.crew-agent-tile')),true,'Start a session stays in its tile');
  }
  // Session instructions are saved in Crew: edit by hand, restore from history,
  // restore the default and copy prompts. The clipboard is captured in the page.
@@ -712,9 +725,14 @@ try {
   await page.getByRole(width<700?'banner':'navigation').waitFor().catch(()=>{});
   await page.goto(base+'/#/');
   const row=page.getByRole('region',{name:'Start a session'});
-  const homeStart=row.getByRole('button',{name:'Start a session for synthetic-repo'});
-  assert.equal(await homeStart.innerText(),'Start a session · synthetic-repo');
-  assert.equal(await row.getByRole('button').count(),1,'only manual agents appear on Home');
+  const homeStart=row.getByRole('button',{name:'Copy prompt for a coding agent as synthetic-repo'});
+  assert.equal(await homeStart.innerText(),'Copy prompt for a coding agent');
+  await row.getByText('Agent',{exact:true}).waitFor();
+  assert.equal(await row.getByRole('button',{name:/^Copy prompt for a coding agent as /}).count(),1,'only manual agents appear on Home');
+  await row.getByRole('button',{name:'How to start a session as synthetic-repo'}).click();
+  await row.getByRole('region',{name:'How to start a session as synthetic-repo'}).waitFor();
+  await page.keyboard.press('Escape');
+  await row.getByRole('region',{name:'How to start a session as synthetic-repo'}).waitFor({state:'hidden'});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Home overflow at ${width}`);
   await homeStart.click();
   await page.locator('.crew-toast').getByText('Copied the session prompt for synthetic-repo.').waitFor();

@@ -3748,3 +3748,89 @@ a.crew-logo:hover .product-brand span {
   width: 100%;
   margin: 10px 0;
 }
+/* Start a session: agent chip, the copy button and its ? guide toggle. */
+.crew-session-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.crew-agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  border: 1px solid #dfe4d6;
+  border-radius: 999px;
+  background: #fffefb;
+  font-size: 13px;
+  color: #24412f;
+}
+.crew-agent-chip .crew-avatar {
+  width: auto;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 13px;
+  font-size: 12px;
+}
+.crew-agent-chip small {
+  font-size: 10px;
+  color: #617c4d;
+  background: #eef0e7;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.crew-agent-chip:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: 2px;
+}
+.crew-app .crew-session-help {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  font-weight: 600;
+}
+.crew-session-guide {
+  max-width: 520px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid #dfe4d6;
+  border-radius: 8px;
+  background: #fbfcf8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.crew-session-guide ol {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+.crew-session-guide li + li {
+  margin-top: 4px;
+}
+.crew-session-guide-prompt {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.crew-session-guide-prompt textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.crew-session-guide-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+.crew-session-guide-footer label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

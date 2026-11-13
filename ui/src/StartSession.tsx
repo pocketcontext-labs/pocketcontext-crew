@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { markdownSummary } from "./markdownText";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
 import { copyText } from "./projectAgents";
 
@@ -13,31 +14,98 @@ export type SessionStart = {
   session?: Promise<AgentSession>;
 };
 
+const guideOffKey = "pocketcontext.crew.session_guide_off";
+// A per-browser convenience: the guide's "Don't show this again".
+function guideOff() {
+  try {
+    return localStorage.getItem(guideOffKey) === "1";
+  } catch {
+    return false;
+  }
+}
+function setGuideOff(off: boolean) {
+  try {
+    if (off) localStorage.setItem(guideOffKey, "1");
+    else localStorage.removeItem(guideOffKey);
+  } catch {
+    /* Optional storage: the choice lasts until reload. */
+  }
+}
+
+/** The shortest name prefix (up to three letters) no other agent shares. */
+export function agentInitials(name: string, agents: Row[]) {
+  const letters = name.trim();
+  const others = agents
+    .map((agent) => val(agent, "name").trim().toLowerCase())
+    .filter((other) => other !== letters.toLowerCase());
+  for (let size = 1; size < 3; size++) {
+    const prefix = letters.slice(0, size).toLowerCase();
+    if (!others.some((other) => other.startsWith(prefix)))
+      return letters.slice(0, size);
+  }
+  return letters.slice(0, 3);
+}
+
 /**
- * Start a session (0.24.0): one click copies the external agent's session
- * prompt for the owner to paste into a new agent session; Crew starts nothing
- * itself. The session is read when the button renders, so the copy runs inside
- * the click (phones refuse a clipboard write after an await). The result is a
- * toast owned by the workspace; the card keeps only its button.
+ * An agent as the Agents page shows it: avatar, name and an Agent tag, with
+ * the first line of its brief (plain text) on hover or focus.
+ */
+export function AgentChip({ agent, agents }: { agent: Row; agents: Row[] }) {
+  const name = val(agent, "name");
+  const summary = markdownSummary(val(agent, "brief"));
+  return (
+    <span
+      className="crew-agent-chip"
+      tabIndex={summary ? 0 : undefined}
+      title={summary || undefined}
+      aria-label={`Agent ${name}${summary ? `: ${summary}` : ""}`}
+    >
+      <span className="crew-avatar" aria-hidden="true">
+        {agentInitials(name, agents)}
+      </span>
+      <span aria-hidden="true">{name}</span>
+      <small aria-hidden="true">Agent</small>
+    </span>
+  );
+}
+
+/**
+ * Start a session (0.24.0; clearer in 0.25.0): one click copies the external
+ * agent's session prompt for the owner to paste into a new coding-agent
+ * session; Crew starts nothing itself. The session is read when the button
+ * renders, so the copy runs inside the click (phones refuse a clipboard write
+ * after an await). The result is a toast owned by the workspace.
+ *
+ * The first click also opens a short inline guide (three steps and the copied
+ * prompt) until the owner ticks "Don't show this again"; the ? button opens it
+ * again at any time.
  */
 export default function StartSession({
   agent,
-  label = "Start a session",
+  agents,
+  showAgent = false,
   onStart,
 }: {
   agent: Row;
-  /** Visible text; the accessible name always includes the agent. */
-  label?: string;
+  /** Every agent, for unique avatar initials. */
+  agents?: Row[];
+  /** Show the agent chip beside the button (Home; the Agents card already names it). */
+  showAgent?: boolean;
   onStart: (start: SessionStart) => void;
 }) {
   const name = val(agent, "name");
   const cached = useRef<AgentSession | undefined>(undefined);
   const [loading, setLoading] = useState(false);
+  const [guide, setGuide] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const guideId = useId();
   useEffect(() => {
     let alive = true;
     void crewApi.session(agent.id).then(
       (session) => {
-        if (alive) cached.current = session;
+        if (!alive) return;
+        cached.current = session;
+        setPrompt(session.prompt);
       },
       () => undefined,
     );
@@ -50,12 +118,14 @@ export default function StartSession({
   const refresh = () => {
     const next = crewApi.session(agent.id).then((session) => {
       cached.current = session;
+      setPrompt(session.prompt);
       return session;
     });
     next.catch(() => undefined);
     return next;
   };
   const start = async () => {
+    if (!guideOff()) setGuide(true);
     const ready = cached.current;
     if (ready) {
       const copying = copyText(ready.prompt);
@@ -87,14 +157,115 @@ export default function StartSession({
   };
   return (
     <div className="crew-session">
-      <button
-        type="button"
-        disabled={loading}
-        aria-label={`Start a session for ${name}`}
-        onClick={() => void start()}
-      >
-        {loading ? "Preparing…" : label}
-      </button>
+      <div className="crew-session-row">
+        {showAgent && <AgentChip agent={agent} agents={agents ?? [agent]} />}
+        <button
+          type="button"
+          disabled={loading}
+          aria-label={`Copy prompt for a coding agent as ${name}`}
+          onClick={() => void start()}
+        >
+          {loading ? "Preparing…" : "Copy prompt for a coding agent"}
+        </button>
+        <button
+          type="button"
+          className="crew-session-help"
+          aria-label={`How to start a session as ${name}`}
+          title="How it works"
+          aria-expanded={guide}
+          aria-controls={guideId}
+          onClick={() => setGuide((open) => !open)}
+        >
+          ?
+        </button>
+      </div>
+      {guide && (
+        <SessionGuide
+          id={guideId}
+          name={name}
+          prompt={prompt}
+          close={() => setGuide(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The three-step guide beside Start a session, with the prompt to paste. */
+function SessionGuide({
+  id,
+  name,
+  prompt,
+  close,
+}: {
+  id: string;
+  name: string;
+  prompt: string;
+  close: () => void;
+}) {
+  const [off, setOff] = useState(guideOff);
+  const [copied, setCopied] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  return (
+    <div
+      id={id}
+      ref={panel}
+      className="crew-session-guide"
+      role="region"
+      aria-label={`How to start a session as ${name}`}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        e.stopPropagation();
+        close();
+      }}
+    >
+      <ol>
+        <li>
+          <strong>Copy the prompt.</strong> The button copies two lines that
+          tell a coding agent to act as {name} in Crew.
+        </li>
+        <li>
+          <strong>Open your coding agent.</strong> Start a new session in Codex,
+          Claude Code or another coding agent, in the repository you want to
+          work on.
+        </li>
+        <li>
+          <strong>Paste and send.</strong> The agent connects to Crew, picks up{" "}
+          {name}'s Ready tasks, and works by the instructions you keep in Crew.
+        </li>
+      </ol>
+      <div className="crew-session-guide-prompt">
+        <textarea
+          readOnly
+          aria-label={`Session prompt for ${name}`}
+          value={prompt || "Loading the prompt…"}
+          rows={2}
+          onFocus={(e) => e.currentTarget.select()}
+        />
+        <button
+          type="button"
+          disabled={!prompt}
+          onClick={() => void copyText(prompt).then((ok) => setCopied(ok))}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <div className="crew-session-guide-footer">
+        <label>
+          <input
+            type="checkbox"
+            checked={off}
+            onChange={(e) => {
+              setOff(e.target.checked);
+              setGuideOff(e.target.checked);
+            }}
+          />
+          Don't show this again
+        </label>
+        <button type="button" onClick={close}>
+          Got it
+        </button>
+      </div>
     </div>
   );
 }
@@ -173,7 +344,10 @@ export function SessionToast({
         <span aria-hidden="true">×</span>
       </button>
       {start.state === "copied" && (
-        <p>Copied the session prompt for {start.name}.</p>
+        <p>
+          Copied the session prompt for {start.name}. Paste it into a new
+          session in your coding agent.
+        </p>
       )}
       {start.state === "manual" && (
         <>

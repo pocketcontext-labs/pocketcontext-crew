@@ -46,7 +46,11 @@ import {
   doneColumn,
   isClosed,
 } from "./closedTasks";
-import StartSession, { SessionToast, type SessionStart } from "./StartSession";
+import StartSession, {
+  SessionToast,
+  agentInitials,
+  type SessionStart,
+} from "./StartSession";
 import SessionInstructions from "./SessionInstructions";
 import {
   clearedBoard,
@@ -253,19 +257,6 @@ const plainPreview = (markdown: string) =>
     .replace(/\*(\S[^*\n]*)\*/g, "$1")
     .replace(/\n{2,}/g, "\n")
     .trim();
-/** The shortest name prefix (up to three letters) no other agent shares. */
-function agentInitials(name: string, agents: Row[]) {
-  const letters = name.trim();
-  const others = agents
-    .map((agent) => val(agent, "name").trim().toLowerCase())
-    .filter((other) => other !== letters.toLowerCase());
-  for (let size = 1; size < 3; size++) {
-    const prefix = letters.slice(0, size).toLowerCase();
-    if (!others.some((other) => other.startsWith(prefix)))
-      return letters.slice(0, size);
-  }
-  return letters.slice(0, 3);
-}
 function Prose({ children }: { children: string }) {
   return (
     <div className="crew-prose">
@@ -2340,7 +2331,11 @@ export default function CrewWorkspace() {
                       </p>
                     </button>
                     {agentKind(x) === "external" && (
-                      <StartSession agent={x} onStart={setSessionStart} />
+                      <StartSession
+                        agent={x}
+                        agents={data.agents}
+                        onStart={setSessionStart}
+                      />
                     )}
                   </div>
                 ))}
