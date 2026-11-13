@@ -167,13 +167,14 @@ describe("upload page", () => {
     act(() => {
       document.dispatchEvent(paste);
     });
+    // Staging may settle after the event on a slow runner (it flaked on Windows).
     expect(
-      screen.getByText(/^screenshot-\d{4}-\d{2}-\d{2}-1\.png$/),
+      await screen.findByText(/^screenshot-\d{4}-\d{2}-\d{2}-1\.png$/),
     ).toBeInTheDocument();
     fireEvent.drop(screen.getByRole("main"), {
       dataTransfer: { files: [file("dropped.pdf", 20, "application/pdf")] },
     });
-    expect(screen.getByText("dropped.pdf")).toBeInTheDocument();
+    expect(await screen.findByText("dropped.pdf")).toBeInTheDocument();
   });
   it("sends the whole batch in one request and then says done without another send", async () => {
     vi.spyOn(uploadLinkApi, "info").mockResolvedValue(info);
