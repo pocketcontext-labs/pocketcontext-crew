@@ -204,6 +204,26 @@ describe("Lightbox zoom", () => {
     expect(link).toHaveAttribute("href", items[0].src);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link).toHaveClass("crew-lightbox-original");
+    expect(link.closest(".crew-lightbox-actions")).not.toBeNull();
+  });
+
+  it("gives every toolbar control its own label", () => {
+    const { v } = open([{ ...items[0], onDownload: vi.fn() }, items[1]]);
+    const toolbar = v.getByRole("toolbar", { name: "Zoom" });
+    const labels = [...toolbar.querySelectorAll("button, a")].map(
+      (el) => el.textContent?.replace(/[↗⤓]/g, "").trim(),
+    );
+    expect(labels).toEqual([
+      "−",
+      "+",
+      "Fit",
+      "Fit width",
+      "Actual size",
+      "Open original",
+      "Download",
+    ]);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });
 

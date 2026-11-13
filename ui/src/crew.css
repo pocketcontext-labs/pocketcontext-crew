@@ -3342,8 +3342,8 @@ a.crew-logo:hover .product-brand span {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 6px 8px;
+  justify-content: flex-start;
+  gap: 6px 16px;
   padding: 0 max(14px, env(safe-area-inset-right)) 10px
     max(14px, env(safe-area-inset-left));
 }
@@ -3375,13 +3375,31 @@ a.crew-logo:hover .product-brand span {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+.crew-lightbox-fit,
+.crew-lightbox-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Open original and Download sit together on the right. */
+.crew-lightbox-actions {
+  margin-left: auto;
+}
+/* A link styled exactly like the toolbar's buttons. */
 .crew-lightbox-original {
   display: inline-flex;
   align-items: center;
+  box-sizing: border-box;
   color: inherit;
+  background: #ffffff1a;
+  border: 1px solid #ffffff33;
   border-radius: 8px;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
+}
+.crew-lightbox-original:hover {
+  background: #ffffff33;
+  color: inherit;
+  text-decoration: none;
 }
 .crew-lightbox-original:focus-visible {
   outline: 2px solid #b9dcc0;

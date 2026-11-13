@@ -430,52 +430,57 @@ export default function Lightbox({
             +
           </button>
         </span>
-        <button
-          type="button"
-          aria-label="Fit to screen"
-          aria-pressed={zoom === "fit"}
-          disabled={isBroken}
-          onClick={() => setZoom("fit")}
-        >
-          Fit
-        </button>
-        <button
-          type="button"
-          aria-label="Fit width"
-          aria-pressed={zoom === "width"}
-          disabled={isBroken}
-          onClick={() => setZoom("width")}
-        >
-          Fit width
-        </button>
-        <button
-          type="button"
-          aria-label="Actual size"
-          aria-pressed={zoom === 1}
-          disabled={isBroken}
-          onClick={() => setScale(1)}
-        >
-          100%
-        </button>
-        <a
-          className="crew-lightbox-original"
-          href={item.src}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Open original
-        </a>
-        {item.onDownload && (
+        <span className="crew-lightbox-fit" role="group" aria-label="Fit">
           <button
             type="button"
-            className="crew-lightbox-download"
-            aria-label={`Download ${item.alt}`}
-            title={`Download ${item.alt}`}
-            onClick={item.onDownload}
+            aria-label="Fit to screen"
+            aria-pressed={zoom === "fit"}
+            disabled={isBroken}
+            onClick={() => setZoom("fit")}
           >
-            <span aria-hidden="true">⤓ </span>Download
+            Fit
           </button>
-        )}
+          <button
+            type="button"
+            aria-label="Fit width"
+            aria-pressed={zoom === "width"}
+            disabled={isBroken}
+            onClick={() => setZoom("width")}
+          >
+            Fit width
+          </button>
+          <button
+            type="button"
+            aria-label="Actual size"
+            aria-pressed={zoom === 1}
+            disabled={isBroken}
+            onClick={() => setScale(1)}
+          >
+            Actual size
+          </button>
+        </span>
+        <span className="crew-lightbox-actions">
+          <a
+            className="crew-lightbox-original"
+            href={item.src}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open the original in a new tab"
+          >
+            <span aria-hidden="true">↗ </span>Open original
+          </a>
+          {item.onDownload && (
+            <button
+              type="button"
+              className="crew-lightbox-download"
+              aria-label={`Download ${item.alt}`}
+              title={`Download ${item.alt}`}
+              onClick={item.onDownload}
+            >
+              <span aria-hidden="true">⤓ </span>Download
+            </button>
+          )}
+        </span>
       </div>
       <div
         ref={stageRef}
