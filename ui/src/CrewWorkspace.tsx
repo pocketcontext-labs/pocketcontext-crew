@@ -655,6 +655,10 @@ function RelatedLink({
     </span>
   );
 }
+/**
+ * Related, the same on tasks and notes (Read and Edit): links with Remove,
+ * Linked from, and the search that adds a link. Read-only hides the controls.
+ */
 function RelatedItems({
   data,
   currentId,
@@ -693,6 +697,9 @@ function RelatedItems({
         <span>Related</span>
         {!readOnly && <Help topic="related-memory" />}
       </legend>
+      {!linked.length && !linkedFrom.length && (
+        <p className="crew-related-empty">No related items</p>
+      )}
       {linked.length > 0 && (
         <ul className="crew-related-linked" aria-label="Links">
           {linked.map((item) => (
@@ -701,13 +708,14 @@ function RelatedItems({
               {!readOnly && (
                 <button
                   type="button"
-                  className="crew-quiet"
+                  className="crew-related-remove"
                   aria-label={`Remove ${item.row ? val(item.row, "title") : "unavailable item"}`}
+                  title="Remove link"
                   onClick={() =>
                     setLinks(ids.filter((x) => x !== item.id).join("\n"))
                   }
                 >
-                  Remove
+                  <span aria-hidden="true">×</span>
                 </button>
               )}
             </li>
@@ -760,9 +768,6 @@ function RelatedItems({
         </ul>
       )}
       {needle && !results.length && <p>No matching tasks or notes.</p>}
-      {!candidates.length && !linked.length && !linkedFrom.length && (
-        <p>Nothing to link yet.</p>
-      )}
     </fieldset>
   );
 }
@@ -2833,9 +2838,11 @@ function Editor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row]);
   const initial = initialRef.current;
-  const dirty = (Object.keys(current) as (keyof typeof current)[]).some(
+  const changed = (Object.keys(current) as (keyof typeof current)[]).filter(
     (key) => current[key] !== initial[key],
   );
+  const dirty = changed.length > 0;
+  const onlyLinksChanged = changed.length === 1 && changed[0] === "links";
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (readOnly || inlineUploads > 0) return;
@@ -3104,45 +3111,36 @@ function Editor({
                 </div>
               </div>
             </div>
-            {(() => {
-              const rel = relatedItems(data, row?.id, list(row, "links"));
-              if (!rel.linked.length && !rel.linkedFrom.length) return null;
-              return (
-                <section className="crew-linked-notes" aria-label="Related">
-                  <h3>Related</h3>
-                  {rel.linked.length > 0 && (
-                    <ul className="crew-related-linked">
-                      {rel.linked.map((item) => (
-                        <li key={item.id}>
-                          <RelatedLink item={item} open={openRelated} />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {rel.linkedFrom.length > 0 && (
-                    <>
-                      <h4 className="crew-related-heading">Linked from</h4>
-                      <ul className="crew-related-linked">
-                        {rel.linkedFrom.map((item) => (
-                          <li key={item.id}>
-                            <RelatedLink item={item} open={openRelated} />
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
-                </section>
-              );
-            })()}
+            <RelatedItems
+              data={data}
+              currentId={row.id}
+              links={links}
+              readOnly={readOnly}
+              open={openRelated}
+              setLinks={(next) => {
+                setLinks(next);
+                onEdit();
+              }}
+            />
           </article>
           {filesSection}
           {more}
           {bar(
-            dirty && (
-              <button className="crew-primary" onClick={() => setTab("edit")}>
-                Continue editing to save
-              </button>
-            ),
+            dirty &&
+              (onlyLinksChanged ? (
+                // Linking from Read saves here, like Remove and add on a task.
+                <button
+                  className="crew-primary"
+                  disabled={busy || readOnly}
+                  onClick={(e) => submit(e)}
+                >
+                  Save note
+                </button>
+              ) : (
+                <button className="crew-primary" onClick={() => setTab("edit")}>
+                  Continue editing to save
+                </button>
+              )),
           )}
         </div>
       )}

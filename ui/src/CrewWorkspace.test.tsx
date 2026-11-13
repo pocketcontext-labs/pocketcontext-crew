@@ -1689,7 +1689,7 @@ describe("simple dialogs", () => {
     fixtures.notes = [linkedNote];
     const dialog = await openNote();
     // The note doesn't list the task, but the task links here.
-    const from = dialog.getByRole("region", { name: "Related" });
+    const from = dialog.getByRole("group", { name: "Related" });
     expect(within(from).getByText("Linked from")).toBeInTheDocument();
     const link = within(from).getByRole("link", { name: "Ship the launch" });
     expect(link).toHaveAttribute("href", task.path);
@@ -1698,6 +1698,42 @@ describe("simple dialogs", () => {
       target: { value: "ship" },
     });
     fireEvent.click(dialog.getByRole("button", { name: "Task Ship the launch" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Save note" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "note.update",
+        expect.objectContaining({ links: [task.id] }),
+        expect.anything(),
+        "",
+      ),
+    );
+  });
+
+  it("links and unlinks from the note's Read view with the same Related as tasks", async () => {
+    const task: Row = {
+      id: "task00000000078",
+      title: "Ship the docs",
+      status: "todo",
+      readiness: "ready",
+      labels: [],
+      links: [],
+      revision: 1,
+      path: "#/tasks/ship-the-docs-task00000000078",
+    };
+    fixtures.tasks = [task];
+    fixtures.notes = [linkedNote];
+    const dialog = await openNote();
+    const related = dialog.getByRole("group", { name: "Related" });
+    expect(within(related).getByText("No related items")).toBeInTheDocument();
+    expect(within(related).getByRole("button", { name: "What are related tasks and notes?" })).toBeInTheDocument();
+    fireEvent.change(within(related).getByLabelText("Link a task or note"), {
+      target: { value: "docs" },
+    });
+    fireEvent.click(within(related).getByRole("button", { name: "Task Ship the docs" }));
+    expect(within(related).queryByText("No related items")).toBeNull();
+    const remove = within(related).getByRole("button", { name: "Remove Ship the docs" });
+    expect(remove).toHaveClass("crew-related-remove");
+    expect(dialog.queryByRole("button", { name: "Continue editing to save" })).toBeNull();
     fireEvent.click(dialog.getByRole("button", { name: "Save note" }));
     await waitFor(() =>
       expect(crewApi.write).toHaveBeenCalledWith(

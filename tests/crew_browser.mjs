@@ -146,6 +146,23 @@ try {
  await dialog().getByLabel('Status',{exact:true}).selectOption('done');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('.crew-task-card').count(),1);
+ // Related is one component: link a task from a note's Read view; the task lists the note under Linked from.
+ await page.getByRole('navigation').getByRole('link',{name:'Notes',exact:true}).click();
+ await page.getByRole('button',{name:/Synthetic launch voice/}).click();
+ {const related=dialog().getByRole('group',{name:'Related'});
+ await related.getByText('No related items',{exact:true}).waitFor();
+ await related.getByRole('button',{name:'What are related tasks and notes?'}).waitFor();
+ await related.getByLabel('Link a task or note').fill('launch post');
+ await related.getByRole('button',{name:'Task Synthetic launch post',exact:true}).click();
+ await related.getByRole('button',{name:'Remove Synthetic launch post',exact:true}).waitFor();
+ await dialog().getByRole('button',{name:'Save note',exact:true}).click();await saved();}
+ await page.getByRole('button',{name:/Synthetic launch voice/}).click();
+ await dialog().getByRole('group',{name:'Related'}).getByRole('list',{name:'Links'}).getByRole('link',{name:'Synthetic launch post'}).waitFor();
+ await close();await dialog().waitFor({state:'hidden'});
+ await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await page.getByRole('button',{name:/Synthetic launch post/}).click();
+ await dialog().getByRole('group',{name:'Related'}).getByRole('list',{name:'Linked from'}).getByRole('link',{name:'Synthetic launch voice'}).waitFor();
+ await close();await dialog().waitFor({state:'hidden'});
  // Global search: live grouped results, keyboard choice, the results page, reload and Back.
  const searchBox=page.getByRole('combobox',{name:'Search Crew'});
  const results=page.getByRole('listbox',{name:'Search results'});
