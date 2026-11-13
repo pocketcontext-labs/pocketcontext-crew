@@ -1,7 +1,17 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import { markdownSummary } from "./markdownText";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
 import { copyText } from "./projectAgents";
+import { useSessionGuideOff } from "./sessionGuide";
 
 /** What one click on Start a session did, for the workspace toast. */
 export type SessionStart = {
@@ -13,24 +23,6 @@ export type SessionStart = {
   /** The session for View: the read made by this start. */
   session?: Promise<AgentSession>;
 };
-
-const guideOffKey = "pocketcontext.crew.session_guide_off";
-// A per-browser convenience: the guide's "Don't show this again".
-function guideOff() {
-  try {
-    return localStorage.getItem(guideOffKey) === "1";
-  } catch {
-    return false;
-  }
-}
-function setGuideOff(off: boolean) {
-  try {
-    if (off) localStorage.setItem(guideOffKey, "1");
-    else localStorage.removeItem(guideOffKey);
-  } catch {
-    /* Optional storage: the choice lasts until reload. */
-  }
-}
 
 /** The shortest name prefix (up to three letters) no other agent shares. */
 export function agentInitials(name: string, agents: Row[]) {
@@ -76,9 +68,10 @@ export function AgentChip({ agent, agents }: { agent: Row; agents: Row[] }) {
  * renders, so the copy runs inside the click (phones refuse a clipboard write
  * after an await). The result is a toast owned by the workspace.
  *
- * The first click also opens a short inline guide (three steps and the copied
- * prompt) until the owner ticks "Don't show this again"; the ? button opens it
- * again at any time.
+ * Since 0.26.0 the first click also opens a small dialog (three steps and the
+ * prompt) until the owner ticks "Don't show this again", a server setting; the
+ * ? help icon opens it at any time. Nothing is added to the page's flow, so
+ * agent cards keep their height.
  */
 export default function StartSession({
   agent,
@@ -98,7 +91,7 @@ export default function StartSession({
   const [loading, setLoading] = useState(false);
   const [guide, setGuide] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const guideId = useId();
+  const [guideLoaded, guideOff, setGuideOff] = useSessionGuideOff();
   useEffect(() => {
     let alive = true;
     void crewApi.session(agent.id).then(
@@ -124,8 +117,7 @@ export default function StartSession({
     next.catch(() => undefined);
     return next;
   };
-  const start = async () => {
-    if (!guideOff()) setGuide(true);
+  const copy = async () => {
     const ready = cached.current;
     if (ready) {
       const copying = copyText(ready.prompt);
@@ -155,43 +147,43 @@ export default function StartSession({
       setLoading(false);
     }
   };
+  const start = () => {
+    if (guideLoaded && !guideOff) setGuide(true);
+    void copy();
+  };
   return (
-    <div
-      className="crew-session"
-      onKeyDown={(e) => {
-        // Escape closes the guide from anywhere in it or on its buttons.
-        if (e.key !== "Escape" || !guide) return;
-        e.stopPropagation();
-        setGuide(false);
-      }}
-    >
+    <div className="crew-session">
       <div className="crew-session-row">
         {showAgent && <AgentChip agent={agent} agents={agents ?? [agent]} />}
         <button
           type="button"
+          className="crew-session-copy"
           disabled={loading}
           aria-label={`Copy prompt for a coding agent as ${name}`}
-          onClick={() => void start()}
+          onClick={start}
         >
           {loading ? "Preparing…" : "Copy prompt for a coding agent"}
         </button>
-        <button
-          type="button"
-          className="crew-session-help"
-          aria-label={`How to start a session as ${name}`}
-          title="How it works"
-          aria-expanded={guide}
-          aria-controls={guideId}
-          onClick={() => setGuide((open) => !open)}
-        >
-          ?
-        </button>
+        <div className="crew-help">
+          <button
+            type="button"
+            className="crew-help-button"
+            aria-label={`How to start a session as ${name}`}
+            title="How it works"
+            aria-haspopup="dialog"
+            onClick={() => setGuide(true)}
+          >
+            <span aria-hidden="true">?</span>
+          </button>
+        </div>
       </div>
       {guide && (
         <SessionGuide
-          id={guideId}
           name={name}
           prompt={prompt}
+          off={guideOff}
+          setOff={(off) => void setGuideOff(off).catch(() => undefined)}
+          copy={() => void copy()}
           close={() => setGuide(false)}
         />
       )}
@@ -199,31 +191,104 @@ export default function StartSession({
   );
 }
 
-/** The three-step guide beside Start a session, with the prompt to paste. */
+const focusable =
+  'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The guide dialog: three steps, the prompt in full (wrapped, read-only) with
+ * a copy icon, and "Don't show this again" beside Got it. Focus moves in, is
+ * kept inside while it is open and returns to the control that opened it.
+ */
 function SessionGuide({
-  id,
   name,
   prompt,
+  off,
+  setOff,
+  copy,
   close,
 }: {
-  id: string;
   name: string;
   prompt: string;
+  off: boolean;
+  setOff: (off: boolean) => void;
+  copy: () => void;
   close: () => void;
 }) {
-  const [off, setOff] = useState(guideOff);
-  const [copied, setCopied] = useState(false);
-  return (
-    <div
-      id={id}
-      className="crew-session-guide"
-      role="region"
-      aria-label={`How to start a session as ${name}`}
+  const ref = useRef<HTMLDialogElement>(null);
+  const done = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  useLayoutEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = ref.current;
+    if (dialog && typeof dialog.showModal === "function" && !dialog.open)
+      dialog.showModal();
+    done.current?.focus({ preventScroll: true });
+    return () => {
+      if (dialog?.open && typeof dialog.close === "function") dialog.close();
+      previous?.focus?.({ preventScroll: true });
+    };
+  }, []);
+  const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
+    e.stopPropagation();
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    } else if (e.key === "Tab") {
+      // A modal dialog already traps focus; this covers browsers without one.
+      const nodes = Array.from(
+        ref.current?.querySelectorAll<HTMLElement>(focusable) ?? [],
+      );
+      if (!nodes.length) return;
+      const first = nodes[0],
+        last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+  return createPortal(
+    <dialog
+      ref={ref}
+      className="crew-dialog crew-session-guide"
+      aria-labelledby={titleId}
+      open={
+        typeof HTMLDialogElement.prototype.showModal !== "function"
+          ? true
+          : undefined
+      }
+      onKeyDown={onKeyDown}
+      onCancel={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.target === e.currentTarget) close();
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
     >
+      <header>
+        <h2 id={titleId}>Start a coding session as {name}</h2>
+        <button
+          type="button"
+          className="crew-session-guide-close"
+          aria-label="Close"
+          title="Close"
+          onClick={close}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </header>
       <ol>
         <li>
-          <strong>Copy the prompt.</strong> The button copies two lines that
-          tell a coding agent to act as {name} in Crew.
+          <strong>Copy the prompt.</strong> The button copies the two lines
+          below, which tell a coding agent to act as {name} in Crew.
         </li>
         <li>
           <strong>Open your coding agent.</strong> Start a new session in Codex,
@@ -236,38 +301,43 @@ function SessionGuide({
         </li>
       </ol>
       <div className="crew-session-guide-prompt">
-        <textarea
-          readOnly
-          aria-label={`Session prompt for ${name}`}
-          value={prompt || "Loading the prompt…"}
-          rows={2}
-          onFocus={(e) => e.currentTarget.select()}
-        />
+        <pre aria-label={`Session prompt for ${name}`}>
+          <code>{prompt || "Loading the prompt…"}</code>
+        </pre>
         <button
           type="button"
+          className="crew-session-guide-copy"
           disabled={!prompt}
-          onClick={() => void copyText(prompt).then((ok) => setCopied(ok))}
+          aria-label={`Copy session prompt for ${name}`}
+          title="Copy"
+          onClick={copy}
         >
-          {copied ? "Copied" : "Copy"}
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+            <path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5" />
+          </svg>
         </button>
       </div>
-      <div className="crew-session-guide-footer">
+      <footer>
         <label>
           <input
             type="checkbox"
             checked={off}
-            onChange={(e) => {
-              setOff(e.target.checked);
-              setGuideOff(e.target.checked);
-            }}
+            onChange={(e) => setOff(e.target.checked)}
           />
           Don't show this again
         </label>
-        <button type="button" onClick={close}>
+        <button
+          ref={done}
+          type="button"
+          className="crew-primary"
+          onClick={close}
+        >
           Got it
         </button>
-      </div>
-    </div>
+      </footer>
+    </dialog>,
+    document.body,
   );
 }
 

@@ -513,6 +513,16 @@ export const attachmentsApi = {
     link.click();
     link.remove();
   },
+  /**
+   * A 5-minute address that shows one HTML or SVG attachment in the sandboxed
+   * preview (the frame sends no credentials; the token is for this file only).
+   */
+  async previewLink(id: string): Promise<{ url: string; expires_at: string }> {
+    return pb.send("/api/crew/attachment-preview", {
+      method: "POST",
+      body: { id },
+    });
+  },
   /** Test hook: forget the cached token. */
   resetFileToken() {
     cachedToken = { value: "", at: 0, owner: "" };

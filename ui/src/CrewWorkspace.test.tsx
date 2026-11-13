@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetSessionGuideForTests } from "./sessionGuide";
 import CrewWorkspace from "./CrewWorkspace";
 import { crewApi, type Row } from "./crewApi";
 import { attachmentsApi } from "./attachmentsApi";
@@ -57,6 +58,8 @@ beforeEach(() => {
     notes: [],
     events: [],
     note_revisions: [],
+    // The session guide is off unless a test turns it on.
+    settings: [{ id: "settings0000001", revision: 1, session_guide_off: true }],
   };
   vi.spyOn(crewApi, "connection").mockResolvedValue({
     kind: "mcp",
@@ -76,6 +79,7 @@ afterEach(() => {
   cleanup();
   history.replaceState(null, "", "/");
   vi.restoreAllMocks();
+  resetSessionGuideForTests();
 });
 /** Opens the board's Filters panel (if closed) and returns it. */
 function openFilters() {
@@ -2995,56 +2999,82 @@ describe("project agents and coding sessions", () => {
     ).toBeNull();
   });
   it("Start a session copies the prompt in one click and confirms it in a toast", async () => {
+    fixtures.settings = [{ id: "settings0000001", revision: 1, session_guide_off: false }];
     const session$ = vi.spyOn(crewApi, "session").mockResolvedValue(session);
     const writeText = mockClipboard(async () => undefined);
+    vi.mocked(crewApi.write).mockResolvedValue({
+      id: "settings0000001",
+      revision: 2,
+      session_guide_off: true,
+    });
     history.replaceState(null, "", "/#/agents");
     render(<CrewWorkspace />);
     // The session is read as the card renders, so the click copies at once.
     await waitFor(() => expect(session$).toHaveBeenCalledWith(project.id));
+    await waitFor(() => expect(crewApi.read).toHaveBeenCalledWith("settings"));
     const card = screen
       .getByRole("heading", { name: "synthetic-repo" })
       .closest(".crew-agent-tile") as HTMLElement;
     const before = card.innerHTML;
-    fireEvent.click(
-      screen.getByRole("button", { name: "Copy prompt for a coding agent as synthetic-repo" }),
-    );
+    const copy = screen.getByRole("button", {
+      name: "Copy prompt for a coding agent as synthetic-repo",
+    });
+    copy.focus();
+    fireEvent.click(copy);
     expect(writeText).toHaveBeenCalledWith(session.prompt);
     const toast = await screen.findByRole("status");
     expect(toast).toHaveTextContent(
       "Copied the session prompt for synthetic-repo. Paste it into a new session in your coding agent.",
     );
     expect(within(toast).queryByRole("button", { name: /Undo/ })).toBeNull();
-    // The first start opens the guide with the prompt it copied; "Don't show
-    // this again" keeps it closed, and the card is as before.
-    const guide = within(card).getByRole("region", {
-      name: "How to start a session as synthetic-repo",
+    // The first start opens the guide dialog with the prompt in full (no
+    // text area) and one copy icon; the card itself does not change.
+    const guide = screen.getByRole("dialog", {
+      name: "Start a coding session as synthetic-repo",
     });
-    expect(
-      within(guide).getByRole("textbox", { name: "Session prompt for synthetic-repo" }),
-    ).toHaveValue(session.prompt);
+    expect(card.innerHTML).toBe(before);
+    expect(guide.querySelector("textarea")).toBeNull();
+    expect(within(guide).getByLabelText("Session prompt for synthetic-repo").textContent).toBe(
+      session.prompt,
+    );
     expect(guide).toHaveTextContent(/Codex, Claude Code or another coding agent/);
+    expect(within(guide).getAllByRole("button", { name: /Copy/ })).toHaveLength(1);
+    expect(document.activeElement).toBe(within(guide).getByRole("button", { name: "Got it" }));
+    fireEvent.click(within(guide).getByRole("button", { name: "Copy session prompt for synthetic-repo" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+    // "Don't show this again" is saved on the server.
     fireEvent.click(within(guide).getByRole("checkbox", { name: "Don't show this again" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "settings.update",
+        { session_guide_off: true },
+        expect.objectContaining({ id: "settings0000001", revision: 1 }),
+      ),
+    );
     fireEvent.click(within(guide).getByRole("button", { name: "Got it" }));
-    expect(localStorage.getItem("pocketcontext.crew.session_guide_off")).toBe("1");
-    expect(card.innerHTML).toBe(before);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Copy prompt for a coding agent as synthetic-repo" }),
-    );
-    await act(async () => undefined);
-    expect(card.innerHTML).toBe(before);
-    // The ? button opens it again; Escape closes it.
-    fireEvent.click(
-      within(card).getByRole("button", { name: "How to start a session as synthetic-repo" }),
-    );
-    fireEvent.keyDown(within(card).getByRole("region"), { key: "Escape" });
-    expect(card.innerHTML).toBe(before);
     expect(screen.queryByRole("dialog")).toBeNull();
+    // Focus returns to the button that opened it.
+    expect(document.activeElement).toBe(copy);
+    fireEvent.click(copy);
+    await act(async () => undefined);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // The ? help icon (the shared help look) opens it again; Escape and ×
+    // close it.
+    const help = within(card).getByRole("button", { name: "How to start a session as synthetic-repo" });
+    expect(help).toHaveClass("crew-help-button");
+    fireEvent.click(help);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(help);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(card.innerHTML).toBe(before);
     fireEvent.click(within(toast).getByRole("button", { name: "View" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Session instructions for synthetic-repo",
     });
-    // One read when the card rendered and one per start, none to open View.
-    expect(session$).toHaveBeenCalledTimes(3);
+    // One read when the card rendered and one per copy, none to open View.
+    expect(session$).toHaveBeenCalledTimes(4);
     expect(screen.queryByRole("status")).toBeNull();
     expect(within(dialog).getByText("one").tagName).toBe("STRONG");
     expect(screen.getByText("one").closest(".crew-agent-tile")).toBeNull();

@@ -6,10 +6,11 @@ require (
 	ganigeorgiev.com/pocketbase/dbx v1.13.0
 	ganigeorgiev.com/pocketbase/pocketbase v0.41.1
 	github.com/dop251/goja v0.0.0-20261023121931-6ace4dde0b29
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/jsonschema-go v0.4.3
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/modelcontextprotocol/go-sdk v1.7.0
-	github.com/pocketcontext-labs/pocketcontext-core v0.2.0
+	github.com/pocketcontext-labs/pocketcontext-core v0.2.1
 	github.com/tailscale/tailcat v0.7.0
 	github.com/yuin/goldmark v1.8.6
 	golang.org/x/image v0.47.0
@@ -48,7 +49,6 @@ require (
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/go4org/hashtriemap v0.0.0-20260824042624-45fcf11fca0e // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect

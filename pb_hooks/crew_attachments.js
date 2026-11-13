@@ -29,6 +29,7 @@ const ACTIONS = [
   "upload_link.create",
   "upload_link.revoke",
   "storage.update",
+  "settings.update",
 ];
 const TEXT_FIELDS = {
   task: ["description", "draft"],
@@ -656,6 +657,25 @@ function handle(app, e, b, actor, isAgent, files, h) {
       app.save(s);
       audit(app, s.id, b.action, ctx, {
         storage_limit_bytes: { old, new: value },
+      });
+      return exported(s, app);
+    });
+  }
+  if (b.action === "settings.update") {
+    // Reader preferences of the one owner (0.26.0): session_guide_off is the
+    // session guide's "Don't show this again", kept across browsers.
+    only(d, ["session_guide_off"]);
+    const s = get(app, "crew_settings", b.id);
+    if (typeof d.session_guide_off !== "boolean")
+      bad("session_guide_off must be true or false");
+    return webhooks.idempotent(app, b, () => {
+      check(s, b);
+      const old = s.getBool("session_guide_off");
+      s.set("session_guide_off", d.session_guide_off);
+      s.set("revision", s.getInt("revision") + 1);
+      app.save(s);
+      audit(app, s.id, b.action, ctx, {
+        session_guide_off: { old, new: d.session_guide_off },
       });
       return exported(s, app);
     });

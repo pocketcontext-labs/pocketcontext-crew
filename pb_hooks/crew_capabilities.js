@@ -662,6 +662,11 @@ function document() {
         "Instance storage limit in bytes (default 5 GiB; archived files count). Change it only when the owner asks.",
     },
   );
+  op("settings.update", { session_guide_off: bool }, ["session_guide_off"], {
+    revision: "settings",
+    description:
+      "Reader preference: session_guide_off hides the Start a session guide (the owner's \"Don't show this again\"). Change it only when the owner asks.",
+  });
   op("execution.validate", event, ["event_id", "epoch", "generation"], {
     result: {
       type: "object",
@@ -1033,6 +1038,7 @@ function document() {
       singleton: str,
       storage_limit_bytes: num,
       storage_used_bytes: num,
+      session_guide_off: bool,
       max_file_bytes: num,
       max_active_attachments: num,
     },
@@ -1159,6 +1165,7 @@ function document() {
       attachment: "attachments",
       upload_link: "upload_links",
       storage: "settings",
+      settings: "settings",
       artifact: "artifacts",
     }[prefix];
     if (prefix === "webhook")

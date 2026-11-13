@@ -306,3 +306,89 @@
     padding: 6px 8px;
   }
 }
+
+/* HTML and SVG in a sandboxed frame (0.26.0), scaled down to fit. */
+.crew-html-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.crew-html-preview .crew-preview-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px 14px;
+}
+.crew-html-widths {
+  display: inline-flex;
+}
+.crew-html-widths button {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  border: 1px solid #ccd6c9;
+  background: #fffefb;
+  color: #2d4538;
+  cursor: pointer;
+}
+.crew-html-widths button:first-child {
+  border-radius: 7px 0 0 7px;
+}
+.crew-html-widths button:last-child {
+  border-left: 0;
+  border-radius: 0 7px 7px 0;
+}
+.crew-file-preview .crew-html-widths button[aria-pressed="true"],
+.crew-file-preview .crew-html-widths button[aria-pressed="true"]:hover {
+  background: #2c4b36;
+  border-color: #2c4b36;
+  color: #fff;
+}
+.crew-html-widths button:focus-visible,
+.crew-html-preview .crew-preview-toolbar a:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: 2px;
+}
+.crew-html-preview .crew-preview-toolbar a {
+  font-size: 13px;
+  color: #2f5a3d;
+}
+.crew-html-isolated {
+  margin-left: auto;
+  font-size: 12px;
+  color: #5f6f59;
+}
+.crew-html-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #e0e5d7;
+  border-radius: 8px;
+  background: #fff;
+}
+.crew-html-stage iframe {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  transform-origin: top center;
+  border: 0;
+  background: #fff;
+}
+
+/* Previous / next through a list of files (review files, 0.26.0). */
+.crew-file-preview-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #5f6f59;
+  font-variant-numeric: tabular-nums;
+}
+.crew-file-preview .crew-file-preview-nav button {
+  padding: 2px 10px 4px;
+  font-size: 18px;
+  line-height: 1;
+}

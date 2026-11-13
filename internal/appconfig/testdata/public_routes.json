@@ -1436,6 +1436,41 @@
  },
  {
   "method": "DELETE",
+  "path": "/api/crew/attachment-preview",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/crew/attachment-preview",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/api/crew/attachment-preview",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/api/crew/attachment-preview",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/crew/attachment-preview",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/api/crew/attachment-preview",
+  "allow": true
+ },
+ {
+  "method": "PUT",
+  "path": "/api/crew/attachment-preview",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
   "path": "/api/crew/attachment-read",
   "allow": false
  },

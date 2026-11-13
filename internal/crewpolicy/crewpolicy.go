@@ -108,6 +108,8 @@ func Policy() appserver.Policy {
 		Legacy:           Legacy,
 		Hosted:           HostedBudget,
 		AllowPublicUIDev: true,
+		// The reader frames the sandboxed HTML attachment preview (same origin).
+		ReaderFramesSelf: true,
 	}
 }
 
@@ -176,6 +178,9 @@ func PublicRoute(method, p string) bool {
 			return true
 		// The one-time upload link endpoints: token-scoped, upload only.
 		case "/api/crew/upload-link/info", "/api/crew/upload-link/upload":
+			return true
+		// Signs a 5-minute preview link for one HTML or SVG attachment (signed in).
+		case "/api/crew/attachment-preview":
 			return true
 		}
 	}

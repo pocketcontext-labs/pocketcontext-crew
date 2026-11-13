@@ -263,6 +263,9 @@ def rehearse(target, previous, root):
             # 0.23.0: the task release column is gone (releases are labels).
             assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801700000_crew_task_release_labels.js'").fetchone() == (1,)
             assert 'release' not in [row[1] for row in current.execute('PRAGMA table_info("crew_tasks")')]
+            # 0.26.0: the session guide's "Don't show this again" is a setting, off by default.
+            assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801800000_crew_session_guide_setting.js'").fetchone() == (1,)
+            assert current.execute('SELECT session_guide_off FROM crew_settings').fetchall() == [(0,)]
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()

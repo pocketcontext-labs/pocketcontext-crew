@@ -1,20 +1,6 @@
 .crew-review-content .crew-prose p {
   white-space: pre-wrap;
 }
-.crew-review-gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 1rem;
-}
-.crew-review-gallery figure {
-  margin: 0;
-  min-width: 0;
-}
-.crew-review-gallery figcaption {
-  overflow-wrap: anywhere;
-  font-size: 0.85rem;
-  margin-top: 0.3rem;
-}
 .crew-review-option {
   border: 1px solid var(--line, #d7ded6);
   border-radius: 0.5rem;

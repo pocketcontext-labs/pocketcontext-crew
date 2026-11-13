@@ -1,11 +1,13 @@
 import { useId, useRef, useState, type ComponentType } from "react";
 import {
   AttachmentsProvider,
-  DownloadLink,
+  FileTile,
+  fromAttachment,
   ProseImage,
   ProseLink,
+  useAttachmentsContext,
 } from "./Attachments";
-import type { Attachment } from "./attachmentsApi";
+import { attachmentsApi, type Attachment } from "./attachmentsApi";
 import { val, type Row } from "./crewApi";
 import {
   decisionSummary,
@@ -35,7 +37,7 @@ export function ReviewContent({
   const files = reviewFiles(row, attachments);
   const missing = missingReviewEvidence(row, files, loaded);
   return (
-    <AttachmentsProvider attachments={files}>
+    <AttachmentsProvider attachments={files} stepThroughAll>
       <div className="crew-review-content">
         {missing.length > 0 && (
           <div className="crew-alert" role="alert">
@@ -59,27 +61,30 @@ export function ReviewContent({
         {files.length > 0 && (
           <section aria-label="Files submitted for review">
             <h3>Files submitted for review</h3>
-            <div className="crew-review-gallery">
-              {files.map((file) => (
-                <figure key={file.id}>
-                  {file.image ? (
-                    <ProseImage src={`attachment:${file.id}`} alt={file.name} />
-                  ) : (
-                    <ProseLink href={`attachment:${file.id}`}>
-                      {file.name}
-                    </ProseLink>
-                  )}
-                  <figcaption>
-                    {file.name}
-                    <DownloadLink attachment={file} />
-                  </figcaption>
-                </figure>
-              ))}
-            </div>
+            <ReviewFileTiles files={files} />
           </section>
         )}
       </div>
     </AttachmentsProvider>
+  );
+}
+
+/** Each submitted file once, as a tile; the viewer steps through them all. */
+function ReviewFileTiles({ files }: { files: Attachment[] }) {
+  const ctx = useAttachmentsContext();
+  const ids = files.map((f) => f.id);
+  return (
+    <ul className="crew-file-tiles">
+      {files.map((file) => (
+        <FileTile
+          key={file.id}
+          file={fromAttachment(file)}
+          token={ctx?.token ?? ""}
+          onOpen={() => ctx?.open(file.id, ids)}
+          onDownload={() => void attachmentsApi.download(file)}
+        />
+      ))}
+    </ul>
   );
 }
 

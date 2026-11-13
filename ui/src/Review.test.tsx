@@ -10,7 +10,7 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ReviewContent, ReviewDecision, ReviewRequest } from "./Review";
 import { decisionSummary, localFilePaths, reviewFiles } from "./reviews";
-import { attachmentsApi, type Attachment } from "./attachmentsApi";
+import { attachmentsApi, formatBytes, type Attachment } from "./attachmentsApi";
 import type { Row } from "./crewApi";
 import RealProse from "./Prose";
 const Prose = ({ children }: { children: string }) => (
@@ -173,16 +173,64 @@ it("shows only snapshot files, including archived evidence, in draft-reference o
   ];
   expect(reviewFiles(row, files).map((x) => x.id)).toEqual(["second", "first"]);
   render(<ReviewContent row={row} attachments={files} Prose={Prose} />);
-  expect(
-    screen
-      .getAllByRole("button", { name: /^Open image:/ })
-      .map((x) => x.getAttribute("aria-label")),
-  ).toEqual(["Open image: second.png", "Open image: first.png"]);
-  expect(screen.queryByText("later.png")).not.toBeInTheDocument();
-  fireEvent.click(
-    screen.getByRole("button", { name: "Open image: first.png" }),
+  const gallery = within(
+    screen.getByRole("region", { name: "Files submitted for review" }),
   );
-  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  // Each file once, as a tile with its name, type and size.
+  expect(
+    gallery
+      .getAllByRole("button", { name: /^Open / })
+      .map((x) => x.getAttribute("aria-label")),
+  ).toEqual(["Open second.png", "Open first.png"]);
+  expect(gallery.getAllByText("second.png")).toHaveLength(1);
+  expect(gallery.getAllByText(/^PNG · /)).toHaveLength(2);
+  expect(screen.queryByText("later.png")).not.toBeInTheDocument();
+  fireEvent.click(gallery.getByRole("button", { name: "Open first.png" }));
+  const viewer = await screen.findByRole("dialog");
+  // The viewer steps through every submitted file.
+  expect(viewer).toHaveTextContent("2 / 2");
+  fireEvent.keyDown(viewer, { key: "ArrowRight" });
+  expect(await screen.findByRole("dialog")).toHaveTextContent("1 / 2");
+  expect(screen.getByRole("dialog")).toHaveTextContent("second.png");
+});
+it("steps from an image to an HTML file, which opens in the sandboxed preview", async () => {
+  const preview = vi
+    .spyOn(attachmentsApi, "previewLink")
+    .mockResolvedValue({ url: "/api/crew/attachment?id=page&preview=signed", expires_at: "" });
+  const row = {
+    ...review,
+    draft: "",
+    attachments: [
+      { id: "shot", sha256: "shot" },
+      { id: "page", sha256: "page" },
+    ],
+  };
+  render(
+    <ReviewContent
+      row={row}
+      attachments={[
+        file("shot"),
+        file("page", { name: "homepage.html", image: false, media_type: "text/html" }),
+      ]}
+      Prose={Prose}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Open shot.png" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Next file" }));
+  const frame = await screen.findByTitle("Preview of homepage.html");
+  expect(preview).toHaveBeenCalledWith("page");
+  expect(frame.tagName).toBe("IFRAME");
+  expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
+  expect(frame.getAttribute("src")).toBe("/api/crew/attachment?id=page&preview=signed");
+  expect(screen.getByRole("link", { name: "Open in new tab" })).toHaveAttribute("rel", "noopener noreferrer");
+  expect(screen.getByText("Preview runs isolated from Crew")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Mobile" }));
+  expect(screen.getByRole("button", { name: "Mobile" })).toHaveAttribute("aria-pressed", "true");
+  expect(frame.style.width).toBe("390px");
+  fireEvent.click(screen.getByRole("button", { name: "Previous file" }));
+  // Back to the image, in the zoomable image viewer.
+  expect(await screen.findByRole("toolbar", { name: "Zoom" })).toBeInTheDocument();
+  expect(screen.queryByTitle("Preview of homepage.html")).toBeNull();
 });
 it("warns for legacy local paths and unresolved snapshot evidence", () => {
   render(
@@ -284,14 +332,18 @@ it("keeps the draft's images and the file grid in place while typing a decision 
     });
   const draftImage = await loaded("concept");
   const gallery = screen.getByRole("region", { name: "Files submitted for review" });
-  const thumb = await loaded("att000000000001.png", within(gallery) as unknown as typeof screen);
+  const thumb = await waitFor(() => {
+    const el = gallery.querySelector("img");
+    expect(el).not.toBeNull();
+    return el!;
+  });
   const before = renders;
   const note = screen.getByLabelText("Decision note");
   for (const value of ["L", "Lo", "Looks good"])
     fireEvent.change(note, { target: { value } });
   expect(renders).toBe(before);
   expect(screen.getByRole("img", { name: "concept" })).toBe(draftImage);
-  expect(within(gallery).getByRole("img", { name: "att000000000001.png" })).toBe(thumb);
+  expect(gallery.querySelector("img")).toBe(thumb);
   expect(draftImage.getAttribute("src")).toBe(screen.getByRole("img", { name: "concept" }).getAttribute("src"));
 });
 it("does not remount Markdown images when the page re-renders", async () => {
@@ -337,12 +389,13 @@ it("offers a one-click download for every file submitted for review", () => {
     />,
   );
   const gallery = screen.getByRole("region", { name: "Files submitted for review" });
-  fireEvent.click(within(gallery).getByRole("link", { name: "Download concept 14 – café.png" }));
+  fireEvent.click(within(gallery).getByRole("button", { name: "Download concept 14 – café.png" }));
   expect(download).toHaveBeenCalledWith(
     expect.objectContaining({ id: "att000000000001", name: "concept 14 – café.png" }),
   );
-  expect(within(gallery).getByRole("link", { name: "Download brief.pdf" })).toHaveAttribute(
-    "download",
-    "brief.pdf",
+  fireEvent.click(within(gallery).getByRole("button", { name: "Download brief.pdf" }));
+  expect(download).toHaveBeenLastCalledWith(
+    expect.objectContaining({ id: "att000000000002", name: "brief.pdf" }),
   );
+  expect(within(gallery).getByText("PDF · " + formatBytes(file("x").size))).toBeInTheDocument();
 });

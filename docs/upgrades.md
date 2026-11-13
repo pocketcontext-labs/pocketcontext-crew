@@ -1,5 +1,29 @@
 # Crew upgrades and rollback
 
+## Crew 0.25.0 to 0.26.0
+
+One data migration (`1801800000_crew_session_guide_setting.js`) adds the setting
+`session_guide_off` (false) to `crew_settings`. Nothing else in the data changes.
+
+1. Take a complete stopped backup first: `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` (when present), the matching 0.25.0 binary and,
+   with webhooks, the private webhook key. Hosted deployment prepares a verified
+   complete backup before replacement.
+2. Replace the binary or image (`CREW_REPLACE_VERSION=0.25.0` for the installer)
+   and upgrade paired clients with the server to 0.26.0.
+3. Refresh MCP tool schemas: `settings.update` is a new operation, so
+   `capabilities_digest` changes and agents reread capabilities. Protocol 3 and the
+   managed instruction block stay unchanged; this upgrade does not pause delivery.
+4. Path-filtering proxies must pass `POST /api/crew/attachment-preview` (signed in)
+   and must not strip the `preview` query of `GET /api/crew/attachment`.
+
+The session guide shows once more in each browser until "Don't show this again" is
+ticked; a browser that kept the old choice carries it over. Older binaries refuse
+the migrated database without changing it. Rollback requires restoring the
+complete pre-upgrade backup with the matching 0.25.0 binary or image; changes made
+after the backup are not preserved. From 0.24.1 or earlier, also read the notes
+below.
+
 ## Crew 0.24.1 to 0.25.0
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

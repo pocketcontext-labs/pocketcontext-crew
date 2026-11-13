@@ -20,6 +20,13 @@ export type LightboxItem = {
   onDownload?: () => void;
 };
 
+/** Where the open file sits in a list of files the viewer steps through. */
+export type FileNav = {
+  index: number;
+  count: number;
+  go: (step: number) => void;
+};
+
 const focusable =
   'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
@@ -62,10 +69,14 @@ export default function Lightbox({
   index: start,
   onClose,
   onLoadError,
+  nav,
 }: {
   items: LightboxItem[];
   index: number;
   onClose: () => void;
+  /** Stepping through a mixed list of files (0.26.0): this image is one of
+   *  them; arrows, swipes and the buttons move through the whole list. */
+  nav?: FileNav;
   /** Called once per image that fails to load (for example, an expired token);
    *  the caller may pass items with fresh addresses. */
   onLoadError?: (item: LightboxItem) => void;
@@ -198,8 +209,12 @@ export default function Lightbox({
   }, []);
 
   if (!item) return null;
+  const total = nav ? nav.count : count;
+  const position = nav ? nav.index : index;
+  const unit = nav ? "file" : "image";
   const go = (step: number) => {
-    if (count < 2) return;
+    if (total < 2) return;
+    if (nav) return nav.go(step);
     setIndex((i) => (i + step + count) % count);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
@@ -208,10 +223,10 @@ export default function Lightbox({
     if (e.key === "Escape") {
       e.preventDefault();
       onClose();
-    } else if (e.key === "ArrowRight" && count > 1) {
+    } else if (e.key === "ArrowRight" && total > 1) {
       e.preventDefault();
       go(1);
-    } else if (e.key === "ArrowLeft" && count > 1) {
+    } else if (e.key === "ArrowLeft" && total > 1) {
       e.preventDefault();
       go(-1);
     } else if (plain && (e.key === "+" || e.key === "=")) {
@@ -326,7 +341,9 @@ export default function Lightbox({
   const endDrag = () => {
     drag.current = null;
   };
-  const label = `Image ${index + 1} of ${count}: ${item.alt}`;
+  const label = nav
+    ? `File ${position + 1} of ${total}: ${item.alt}`
+    : `Image ${index + 1} of ${count}: ${item.alt}`;
   const percent = `${Math.round(scale * 100)}%`;
   const imgStyle =
     zoomed && nw
@@ -375,7 +392,7 @@ export default function Lightbox({
     >
       <div className="crew-lightbox-bar">
         <span className="crew-lightbox-count" aria-live="polite">
-          {count > 1 ? `${index + 1} / ${count}` : ""}
+          {total > 1 ? `${position + 1} / ${total}` : ""}
           <span className="crew-visually-hidden">{label}</span>
         </span>
         <span className="crew-lightbox-name" title={item.alt}>
@@ -502,12 +519,12 @@ export default function Lightbox({
           />
         )}
       </div>
-      {count > 1 && (
+      {total > 1 && (
         <>
           <button
             type="button"
             className="crew-lightbox-prev"
-            aria-label="Previous image"
+            aria-label={`Previous ${unit}`}
             onClick={() => go(-1)}
           >
             ‹
@@ -515,7 +532,7 @@ export default function Lightbox({
           <button
             type="button"
             className="crew-lightbox-next"
-            aria-label="Next image"
+            aria-label={`Next ${unit}`}
             onClick={() => go(1)}
           >
             ›

@@ -36,7 +36,12 @@ describe("previewKind", () => {
     expect(previewKind(file("main.py", "application/octet-stream"))).toBe(
       "text",
     );
-    expect(previewKind(file("page.html", "text/html"))).toBe("text");
+    // HTML and SVG run only in the sandboxed preview; by name alone, text.
+    expect(previewKind(file("page.html", "text/html"))).toBe("html");
+    expect(previewKind(file("logo.svg", "image/svg+xml"))).toBe("html");
+    expect(previewKind(file("page.html", "application/octet-stream"))).toBe(
+      "text",
+    );
     expect(previewKind(file("a.zip", "application/zip"))).toBe("none");
     expect(previewKind(file("blob.bin", "application/octet-stream"))).toBe(
       "none",

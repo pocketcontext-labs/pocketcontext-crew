@@ -35,7 +35,7 @@ import {
   type Thumb,
   type UploadLink,
 } from "./attachmentsApi";
-import Lightbox, { type LightboxItem } from "./Lightbox";
+import Lightbox, { type FileNav, type LightboxItem } from "./Lightbox";
 import type { Row } from "./crewApi";
 import { connectSectionHash } from "./itemLink";
 import "./upload.css";
@@ -65,11 +65,12 @@ export type ItemFile = {
 type AttachmentsContextValue = {
   files: ItemFile[];
   token: string;
-  open: (id: string) => void;
+  /** Opens a file; with `sequence` (file ids), the viewer steps through them. */
+  open: (id: string, sequence?: string[]) => void;
 };
 const AttachmentsContext = createContext<AttachmentsContextValue | null>(null);
 
-const fromAttachment = (a: Attachment): ItemFile => ({
+export const fromAttachment = (a: Attachment): ItemFile => ({
   id: a.id,
   name: a.name,
   image: isImage(a),
@@ -664,17 +665,21 @@ export function AttachmentsProvider({
   attachments,
   staged = [],
   enabled = true,
+  stepThroughAll = false,
   children,
 }: {
   attachments: Attachment[];
   staged?: StagedFile[];
   enabled?: boolean;
+  /** Every open steps through all the files (a review's submitted files). */
+  stepThroughAll?: boolean;
   children: ReactNode;
 }) {
   const token = useFileToken(enabled && attachments.length > 0);
-  const [viewing, setViewing] = useState<
-    { kind: "image"; id: string } | { kind: "file"; id: string } | null
-  >(null);
+  const [viewing, setViewing] = useState<{
+    id: string;
+    sequence?: string[];
+  } | null>(null);
   const [fresh, setFresh] = useState("");
   const files: ItemFile[] = [
     ...attachments.map(fromAttachment),
@@ -690,12 +695,30 @@ export function AttachmentsProvider({
     })),
   ];
   const images = files.filter((f) => f.image && !f.archived);
-  const open = (id: string) => {
+  const open = (id: string, sequence?: string[]) => {
     const file = files.find((f) => f.id === id);
     if (!file) return;
-    setViewing({ kind: file.image ? "image" : "file", id });
+    const steps = (
+      sequence ?? (stepThroughAll ? files.map((f) => f.id) : undefined)
+    )?.filter((s) => files.some((f) => f.id === s && !f.archived));
+    setViewing({ id, sequence: steps && steps.length > 1 ? steps : undefined });
   };
-  const lightboxItems: LightboxItem[] = images.map((f) => ({
+  const current = viewing ? files.find((f) => f.id === viewing.id) : undefined;
+  const sequence = viewing?.sequence;
+  const nav: FileNav | undefined =
+    sequence && viewing
+      ? {
+          index: Math.max(0, sequence.indexOf(viewing.id)),
+          count: sequence.length,
+          go: (step) => {
+            const i = Math.max(0, sequence.indexOf(viewing.id));
+            const next =
+              sequence[(i + step + sequence.length) % sequence.length];
+            setViewing({ id: next, sequence });
+          },
+        }
+      : undefined;
+  const toLightbox = (f: ItemFile): LightboxItem => ({
     id: f.id,
     alt: f.name,
     width: f.width,
@@ -712,15 +735,28 @@ export function AttachmentsProvider({
         link.remove();
       } else void attachmentsApi.download({ id: f.id, name: f.name });
     },
-  }));
-  const previewing =
-    viewing?.kind === "file"
-      ? files.find((f) => f.id === viewing.id)?.attachment
-      : undefined;
+  });
+  const lightboxItems = images.map(toLightbox);
+  const showImage = current?.image === true;
+  const previewing = current && !current.image ? current.attachment : undefined;
   return (
     <AttachmentsContext.Provider value={{ files, token, open }}>
       {children}
-      {viewing?.kind === "image" && lightboxItems.length > 0 && (
+      {showImage && nav && current && (
+        <Lightbox
+          key={current.id}
+          items={[toLightbox(current)]}
+          index={0}
+          nav={nav}
+          onClose={() => setViewing(null)}
+          onLoadError={() =>
+            void attachmentsApi
+              .fileToken({ force: true })
+              .then(setFresh, () => undefined)
+          }
+        />
+      )}
+      {showImage && !nav && viewing && lightboxItems.length > 0 && (
         <Lightbox
           items={lightboxItems}
           index={Math.max(
@@ -737,8 +773,10 @@ export function AttachmentsProvider({
       )}
       {previewing && (
         <AttachmentPreview
+          key={previewing.id}
           attachment={previewing}
           token={token}
+          nav={nav}
           onClose={() => setViewing(null)}
         />
       )}
@@ -843,6 +881,91 @@ export function DownloadLink({
 
 const typeLabel = (type: string) => type.split(";")[0] || "file";
 
+/** A short file-type label for tiles: the extension (HTML, PDF), else the type. */
+export function fileKindLabel(name: string, type: string) {
+  const base = name.split(/[\\/]/).pop() || "";
+  const dot = base.lastIndexOf(".");
+  const ext = dot > 0 ? base.slice(dot + 1) : "";
+  if (ext && ext.length <= 5) return ext.toUpperCase();
+  const sub = typeLabel(type).split("/")[1] || "";
+  return sub && sub !== "octet-stream" ? sub.toUpperCase().slice(0, 5) : "FILE";
+}
+
+/**
+ * One file as a uniform tile (0.26.0): a preview cropped from the top (images)
+ * or a file-type badge, then the name on one line and its type and size. The
+ * tile opens the viewer; a corner button downloads the original. Used for
+ * review files and for task and note attachments, so files look the same
+ * everywhere.
+ */
+export function FileTile({
+  file,
+  token,
+  onOpen,
+  onDownload,
+  children,
+}: {
+  file: ItemFile;
+  token: string;
+  onOpen?: () => void;
+  onDownload?: () => void;
+  /** Extra controls under the tile (Remove). */
+  children?: ReactNode;
+}) {
+  const kind = fileKindLabel(file.name, file.media_type);
+  const preview = file.image ? (
+    file.blob ? (
+      <img src={file.blob} alt="" />
+    ) : (
+      <ProtectedImage id={file.id} thumb="320x0" alt="" token={token} />
+    )
+  ) : (
+    <span className="crew-file-tile-badge" aria-hidden="true">
+      {kind}
+    </span>
+  );
+  const body = (
+    <>
+      <span className="crew-file-tile-preview">{preview}</span>
+      <span className="crew-file-tile-name">{file.name}</span>
+      <span className="crew-file-tile-meta">
+        {kind} · {formatBytes(file.size)}
+      </span>
+    </>
+  );
+  return (
+    <li className="crew-file-tile">
+      {onOpen ? (
+        <button
+          type="button"
+          className="crew-file-tile-open"
+          aria-label={`Open ${file.name}`}
+          title={file.name}
+          onClick={onOpen}
+        >
+          {body}
+        </button>
+      ) : (
+        <span className="crew-file-tile-open" title={file.name}>
+          {body}
+        </span>
+      )}
+      {onDownload && (
+        <button
+          type="button"
+          className="crew-file-tile-download"
+          aria-label={`Download ${file.name}`}
+          title={`Download ${file.name}`}
+          onClick={onDownload}
+        >
+          <span aria-hidden="true">⤓</span>
+        </button>
+      )}
+      {children && <span className="crew-file-tile-actions">{children}</span>}
+    </li>
+  );
+}
+
 /**
  * The Files section of a task or note dialog: add (button, drop, paste in the
  * dialog), progress and retry, image grid, file rows, removed files.
@@ -872,8 +995,6 @@ export function AttachmentsSection({
   const [dragging, setDragging] = useState(false);
   const active = (item?.attachments ?? []).filter((a) => !a.archived);
   const removed = (item?.attachments ?? []).filter((a) => a.archived);
-  const images = active.filter(isImage);
-  const others = active.filter((a) => !isImage(a));
   const add = (files: File[]) => {
     if (!files.length || readOnly) return;
     if (parent && item) item.addFiles(files);
@@ -1008,91 +1129,21 @@ export function AttachmentsSection({
           ))}
         </ul>
       )}
-      {(images.length > 0 || stagedFiles.some((s) => s.image)) && (
-        <ul className="crew-attachment-grid" aria-label="Images">
-          {images.map((a) => (
-            <li key={a.id}>
-              <button
-                type="button"
-                className="crew-attachment-thumb"
-                aria-label={`Open image ${a.name}`}
-                onClick={() => ctx?.open(a.id)}
-              >
-                <ProtectedImage
-                  id={a.id}
-                  thumb="320x0"
-                  alt={a.name}
-                  token={ctx?.token ?? ""}
-                />
-              </button>
-              <span className="crew-attachment-caption" title={a.name}>
-                {a.name}
-              </span>
-              <span className="crew-attachment-actions">
-                <DownloadLink attachment={a} />
-                {!readOnly && (
-                  <button
-                    type="button"
-                    className="crew-quiet"
-                    aria-label={`Remove ${a.name}`}
-                    onClick={() => remove(a)}
-                  >
-                    Remove
-                  </button>
-                )}
-              </span>
-            </li>
-          ))}
-          {stagedFiles
-            .filter((s) => s.image)
-            .map((s) => (
-              <li key={`new-${s.key}`}>
-                <button
-                  type="button"
-                  className="crew-attachment-thumb"
-                  aria-label={`Open image ${s.file.name}`}
-                  onClick={() => ctx?.open(`new-${s.key}`)}
-                >
-                  <span className="crew-image-box">
-                    <img src={s.url} alt={s.file.name} />
-                  </span>
-                </button>
-                <span className="crew-attachment-caption" title={s.file.name}>
-                  {s.file.name}
-                </span>
-                {staged?.errors[s.key] && (
-                  <span className="crew-upload-error" role="alert">
-                    {staged.errors[s.key]}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="crew-quiet"
-                  aria-label={`Remove ${s.file.name}`}
-                  onClick={() => (onUnstage ?? staged?.unstage)?.(s.key)}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-        </ul>
-      )}
-      {(others.length > 0 || stagedFiles.some((s) => !s.image)) && (
-        <ul className="crew-attachment-files" aria-label="Other files">
-          {others.map((a) => (
-            <li key={a.id}>
-              <button
-                type="button"
-                className="crew-attachment-name"
-                aria-label={`Open ${a.name}`}
-                onClick={() => ctx?.open(a.id)}
-              >
-                {a.name}
-              </button>
-              <small>
-                {formatBytes(a.size)} · {typeLabel(a.media_type)}
-              </small>
-              <DownloadLink attachment={a} />
+      {(active.length > 0 || stagedFiles.length > 0) && (
+        <ul className="crew-file-tiles" aria-label="Files">
+          {active.map((a) => (
+            <FileTile
+              key={a.id}
+              file={fromAttachment(a)}
+              token={ctx?.token ?? ""}
+              onOpen={() =>
+                ctx?.open(
+                  a.id,
+                  active.map((x) => x.id),
+                )
+              }
+              onDownload={() => void attachmentsApi.download(a)}
+            >
               {!readOnly && (
                 <button
                   type="button"
@@ -1103,31 +1154,37 @@ export function AttachmentsSection({
                   Remove
                 </button>
               )}
-            </li>
+            </FileTile>
           ))}
-          {stagedFiles
-            .filter((s) => !s.image)
-            .map((s) => (
-              <li key={`new-${s.key}`}>
-                <span className="crew-attachment-name">{s.file.name}</span>
-                <small>
-                  {formatBytes(s.file.size)} · {typeLabel(s.file.type)}
-                </small>
-                {staged?.errors[s.key] && (
-                  <span className="crew-upload-error" role="alert">
-                    {staged.errors[s.key]}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="crew-quiet"
-                  aria-label={`Remove ${s.file.name}`}
-                  onClick={() => (onUnstage ?? staged?.unstage)?.(s.key)}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
+          {stagedFiles.map((s) => (
+            <FileTile
+              key={`new-${s.key}`}
+              file={{
+                id: `new-${s.key}`,
+                name: s.file.name,
+                image: s.image,
+                media_type: s.file.type,
+                size: s.file.size,
+                blob: s.url || undefined,
+              }}
+              token=""
+              onOpen={s.image ? () => ctx?.open(`new-${s.key}`) : undefined}
+            >
+              {staged?.errors[s.key] && (
+                <span className="crew-upload-error" role="alert">
+                  {staged.errors[s.key]}
+                </span>
+              )}
+              <button
+                type="button"
+                className="crew-quiet"
+                aria-label={`Remove ${s.file.name}`}
+                onClick={() => (onUnstage ?? staged?.unstage)?.(s.key)}
+              >
+                Remove
+              </button>
+            </FileTile>
+          ))}
         </ul>
       )}
       {parent && !readOnly && allowUploadLink && (

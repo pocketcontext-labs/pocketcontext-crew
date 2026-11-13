@@ -30,6 +30,7 @@ import {
   TEXT_PREVIEW_LIMIT,
   type PreviewKind,
 } from "./previewFormats";
+import type { FileNav } from "./Lightbox";
 import "./preview.css";
 
 // pdf.js and its worker load only when a PDF is opened.
@@ -42,18 +43,22 @@ const focusable =
  * Preview of a non-image attachment (images open in the lightbox): text,
  * logs, code, YAML, JSON (pretty), CSV/TSV (table) and Markdown up to 2 MiB of
  * strict UTF-8; video and audio players; PDF through a lazily loaded pdf.js;
- * name, size, type and Download for everything else. Nothing in a file is
- * executed or framed; bytes are fetched same-origin with a file token.
+ * HTML and SVG in a sandboxed frame (HtmlPreview); name, size, type and
+ * Download for everything else. Nothing else in a file is executed or framed;
+ * bytes are fetched same-origin with a file token.
  */
 export function AttachmentPreview({
   attachment,
   token,
   onClose,
+  nav,
 }: {
   attachment: Attachment;
   /** A current file token for protected URLs (download links work without). */
   token?: string;
   onClose: () => void;
+  /** Stepping through a list of files (0.26.0): previous / next and arrows. */
+  nav?: FileNav;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -74,6 +79,18 @@ export function AttachmentPreview({
     if (e.key === "Escape") {
       e.preventDefault();
       onClose();
+    } else if (
+      nav &&
+      nav.count > 1 &&
+      (e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+      !e.altKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !(e.target as HTMLElement).closest?.("pre, table, input, .crew-pdf")
+    ) {
+      // Arrows still scroll text, tables and PDFs when those have focus.
+      e.preventDefault();
+      nav.go(e.key === "ArrowRight" ? 1 : -1);
     } else if (e.key === "Tab") {
       // A modal dialog already traps focus; this covers browsers without one.
       const nodes = Array.from(
@@ -127,6 +144,29 @@ export function AttachmentPreview({
           </p>
         </div>
         <div className="crew-file-preview-actions">
+          {nav && nav.count > 1 && (
+            <span className="crew-file-preview-nav">
+              <button
+                type="button"
+                aria-label="Previous file"
+                title="Previous file"
+                onClick={() => nav.go(-1)}
+              >
+                ‹
+              </button>
+              <span aria-live="polite">
+                {nav.index + 1} / {nav.count}
+              </span>
+              <button
+                type="button"
+                aria-label="Next file"
+                title="Next file"
+                onClick={() => nav.go(1)}
+              >
+                ›
+              </button>
+            </span>
+          )}
           <DownloadButton attachment={attachment} token={token} />
           <button
             ref={closeRef}
@@ -209,6 +249,8 @@ function PreviewBody({
       return <MediaPreview attachment={attachment} kind={kind} token={token} />;
     case "pdf":
       return <PdfBody attachment={attachment} token={token} />;
+    case "html":
+      return <HtmlPreview attachment={attachment} />;
     case "text":
     case "json":
     case "csv":
@@ -224,6 +266,120 @@ function PreviewBody({
         </Unavailable>
       );
   }
+}
+
+/** The preview widths: a desktop and a phone viewport. */
+const htmlWidths = { desktop: 1440, mobile: 390 } as const;
+/** Ask for a new address before the 5-minute one expires (Open in new tab). */
+const previewRefreshMs = 4 * 60 * 1000;
+
+/**
+ * An HTML or SVG file in a sandboxed frame (0.26.0). The frame has only
+ * allow-scripts, and the server adds its own CSP sandbox with no network, so
+ * the page runs in an opaque origin: it cannot read Crew's storage or DOM,
+ * call Crew, navigate this window, open windows, submit forms or load anything
+ * from outside the file. The address is signed for this one file and expires
+ * in 5 minutes; Open in new tab keeps the same sandbox.
+ */
+function HtmlPreview({ attachment }: { attachment: Attachment }) {
+  const [link, setLink] = useState<Loaded<string>>({ state: "loading" });
+  const [width, setWidth] = useState<keyof typeof htmlWidths>("desktop");
+  const stage = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      attachmentsApi.previewLink(attachment.id).then(
+        (result) => alive && setLink({ state: "ready", value: result.url }),
+        () =>
+          alive &&
+          setLink((current) =>
+            current.state === "ready"
+              ? current
+              : { state: "error", message: "The preview could not be opened." },
+          ),
+      );
+    void load();
+    const timer = setInterval(() => void load(), previewRefreshMs);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [attachment.id]);
+  useLayoutEffect(() => {
+    const node = stage.current;
+    if (!node) return;
+    const measure = () =>
+      setBox({ width: node.clientWidth, height: node.clientHeight });
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [link.state]);
+  // The first address is kept for the frame, so a refresh never reloads it.
+  const [frameUrl, setFrameUrl] = useState("");
+  useEffect(() => {
+    if (link.state === "ready" && !frameUrl) setFrameUrl(link.value);
+  }, [link, frameUrl]);
+  if (link.state === "loading")
+    return <p className="crew-preview-note">Opening {attachment.name}…</p>;
+  if (link.state === "error")
+    return <Unavailable attachment={attachment}>{link.message}</Unavailable>;
+  const target = htmlWidths[width];
+  // Scale the viewport down to fit; never up.
+  const scale = box.width > 0 ? Math.min(1, box.width / target) : 1;
+  return (
+    <div className="crew-html-preview">
+      <div className="crew-preview-toolbar">
+        <div
+          className="crew-html-widths"
+          role="group"
+          aria-label="Preview width"
+        >
+          {(Object.keys(htmlWidths) as (keyof typeof htmlWidths)[]).map(
+            (key) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={width === key}
+                onClick={() => setWidth(key)}
+              >
+                {key === "desktop" ? "Desktop" : "Mobile"}
+              </button>
+            ),
+          )}
+        </div>
+        <a
+          href={link.value}
+          target="_blank"
+          rel="noopener noreferrer"
+          referrerPolicy="no-referrer"
+        >
+          Open in new tab
+        </a>
+        <span className="crew-html-isolated">
+          Preview runs isolated from Crew
+        </span>
+      </div>
+      <div className="crew-html-stage" ref={stage}>
+        {frameUrl && (
+          <iframe
+            title={`Preview of ${attachment.name}`}
+            src={frameUrl}
+            sandbox="allow-scripts"
+            referrerPolicy="no-referrer"
+            loading="eager"
+            style={{
+              width: `${target}px`,
+              height: box.height ? `${box.height / scale}px` : "100%",
+              transform: scale < 1 ? `scale(${scale})` : undefined,
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
 }
 
 type Loaded<T> =

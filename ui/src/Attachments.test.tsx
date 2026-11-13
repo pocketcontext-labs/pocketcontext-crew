@@ -21,6 +21,7 @@ import { crewApi, type Row } from "./crewApi";
 import {
   AttachmentError,
   attachmentsApi,
+  formatBytes,
   screenshotName,
   type Attachment,
 } from "./attachmentsApi";
@@ -134,7 +135,7 @@ describe("Files section", () => {
     ];
     const dialog = await openTask();
     const open = await dialog.findByRole("button", {
-      name: "Open image img1.png",
+      name: "Open img1.png",
     });
     await waitFor(() =>
       expect(open.querySelector("img")).toHaveAttribute(
@@ -147,17 +148,19 @@ describe("Files section", () => {
       dialog.getByRole("button", { name: "Open app.log" }),
     ).toBeInTheDocument();
     expect(
-      dialog.getByRole("link", { name: "Download app.log" }),
+      dialog.getByRole("button", { name: "Download app.log" }),
     ).toBeInTheDocument();
+    // Every file is one same-size tile with its type and size.
+    const tiles = dialog.getByRole("list", { name: "Files" });
+    expect(tiles.querySelectorAll(".crew-file-tile")).toHaveLength(2);
+    expect(within(tiles).getByText("LOG · " + formatBytes(attachments[1].size))).toBeInTheDocument();
     // Images download in one click too, under their own name.
     const download = vi
       .spyOn(attachmentsApi, "download")
       .mockResolvedValue(undefined);
-    const imageDownload = dialog.getByRole("link", {
+    const imageDownload = dialog.getByRole("button", {
       name: "Download img1.png",
     });
-    expect(imageDownload).toHaveAttribute("download", "img1.png");
-    expect(imageDownload.getAttribute("href")).toContain("download=1");
     fireEvent.click(imageDownload);
     expect(download).toHaveBeenCalledWith(
       expect.objectContaining({ id: "img1", name: "img1.png" }),
@@ -195,7 +198,7 @@ describe("Files section", () => {
       target: { files: [png("a.png"), png("b.png")] },
     });
     expect(
-      await dialog.findByRole("button", { name: "Open image a.png" }),
+      await dialog.findByRole("button", { name: "Open a.png" }),
     ).toBeInTheDocument();
     expect(
       await dialog.findByText("b.png is larger than 20 MiB"),
@@ -207,7 +210,7 @@ describe("Files section", () => {
     ]);
     fireEvent.click(dialog.getByRole("button", { name: "Retry b.png" }));
     expect(
-      await dialog.findByRole("button", { name: "Open image b.png" }),
+      await dialog.findByRole("button", { name: "Open b.png" }),
     ).toBeInTheDocument();
     expect(dialog.queryByText("b.png is larger than 20 MiB")).toBeNull();
   });
@@ -295,7 +298,7 @@ describe("Files section", () => {
     );
     await waitFor(() => expect(restore).toHaveBeenCalled());
     expect(
-      await dialog.findByRole("button", { name: "Open image img1.png" }),
+      await dialog.findByRole("button", { name: "Open img1.png" }),
     ).toBeInTheDocument();
   });
   it("says when a file change withdrew the pending approval and takes the new revision", async () => {
@@ -394,7 +397,7 @@ describe("Files section", () => {
     });
     const dialog = await openTask();
     expect(
-      await dialog.findByRole("button", { name: "Open image img1.png" }),
+      await dialog.findByRole("button", { name: "Open img1.png" }),
     ).toBeInTheDocument();
     expect(dialog.queryByRole("button", { name: "Add files" })).toBeNull();
     expect(
@@ -541,7 +544,7 @@ describe("paste and drop into Markdown", () => {
     // Staged images preview locally, in the text and in Files.
     expect(
       dialog
-        .getByRole("button", { name: `Open image ${first}` })
+        .getByRole("button", { name: `Open ${first}` })
         .querySelector("img"),
     ).toHaveAttribute("src", "blob:local-1");
     // A third file, then the first removed: placeholders renumber on save.

@@ -204,6 +204,7 @@ All run on `POST /api/crew/write` (reader) and `POST /api/crew/agent-write`
 | `upload_link.create` | none | `task` or `note`, `expires_in_minutes` (1–1440, default 15), `max_files` (1–20, default 10) | link record plus `token`, `path` (`#/upload/<token>`) and `url` (with a domain); reader route only |
 | `upload_link.revoke` | link id, its revision | `{}` | link record |
 | `storage.update` | settings id, its revision | `storage_limit_bytes` (1 MiB to 1 TiB) | settings record |
+| `settings.update` | settings id, its revision | `session_guide_off` (boolean; the reader's "Don't show this again" for the Start a session guide) | settings record |
 
 `attachment.add` saves each file independently: a file that fails (see codes
 below) is reported in `results` while the others are saved; HTTP 200 when at
@@ -224,7 +225,7 @@ history (`changes`: `attachment`, `name`, `size`, `media_type`, `image`,
 restore append `attachment.archive` / `attachment.restore` (`attachment`,
 `name`). `upload_link.create` / `upload_link.revoke` append to the item too;
 `storage.update` appends to the settings record (`storage_limit_bytes: {old,
-new}`).
+new}`), and `settings.update` likewise (`session_guide_off: {old, new}`).
 
 Attachment writes (other than a review withdrawal) do not change the task's or note's own revision, so an open
 edit form never conflicts with an upload. Read the attachments collection (or
@@ -322,6 +323,17 @@ Prose such as `attachment: see below` is not a reference.
   work as usual. `crew_read {collection: "settings"}` returns the storage limit
   with derived `storage_used_bytes`, `max_file_bytes` and
   `max_active_attachments`.
+- HTML and SVG preview (reader, 0.26.0): `POST /api/crew/attachment-preview`
+  `{id}` (signed in) returns `{url, expires_at}` for one HTML or SVG attachment;
+  the url is `GET /api/crew/attachment?id=ID&preview=TOKEN`, valid for that one
+  attachment for 5 minutes, needing no other credentials. It is served inline
+  with `Content-Security-Policy: sandbox allow-scripts; default-src 'none';
+  script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:;
+  font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none';
+  base-uri 'none'; frame-ancestors 'self'`, nosniff, no-referrer and no-store,
+  and the reader frames it with `sandbox="allow-scripts"` only. The page runs in
+  an opaque origin with no network. Without `preview`, HTML and SVG remain
+  downloads with an opaque type.
 - Bytes for work clients: `POST /api/crew/attachment-read` (signed in; MCP
   proxy and CLI) with `{id, variant, offset?, max_bytes?}`:
   - `original`: base64 bytes from `offset`; `max_bytes` defaults to 1 MiB, at

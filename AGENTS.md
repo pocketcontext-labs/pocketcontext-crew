@@ -39,7 +39,12 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   noindex/no-referrer/no-store; images only from the published list.
 - Attachments are immutable protected files under storage/. Archive, never
   purge; only `/api/crew/attachment` (signed in) serves bytes, with nosniff and
-  a download disposition for every non-image; work clients get bounded reads
+  a download disposition for every non-image. One exception: the HTML/SVG
+  preview (`?preview=`, a 5-minute token signed for one attachment by
+  `POST /api/crew/attachment-preview`) is served inline only inside a CSP
+  sandbox (`allow-scripts`, no same-origin, no network, no forms,
+  `frame-ancestors 'self'`) and framed by the reader with `sandbox="allow-scripts"`
+  only; never widen that sandbox; work clients get bounded reads
   from `/api/crew/attachment-read`, never URLs or storage names.
 - External platforms run agents. Crew never posts, sends or pays.
 - Keep runtime credentials and OAuth state private and out of Git and knowledge.

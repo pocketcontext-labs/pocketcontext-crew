@@ -633,18 +633,38 @@ try {
  }};
  await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:base}).catch(()=>{});
  {const tile=page.locator('.crew-agent-tile').filter({has:startButton});const before=await tile.evaluate(e=>e.getBoundingClientRect().height);
- // The first click also opens the three-step guide with the copied prompt;
- // "Don't show this again" keeps it closed across reloads, ? opens it again.
+ // The first click also opens the guide dialog with the copied prompt
+ // (0.26.0): the card keeps its height, the prompt is shown in full without a
+ // text area, Escape and × close it, and "Don't show this again" is saved on
+ // the server, so it holds after a reload; ? opens it again.
+ const otherTile=page.locator('.crew-agent-tile').filter({has:networkCard});
+ assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),await otherTile.evaluate(e=>e.getBoundingClientRect().height),'agent cards in a row keep equal height');
  await startButton.click();
  await toast.getByText('Copied the session prompt for synthetic-repo. Paste it into a new session in your coding agent.').waitFor();
- const guide=page.getByRole('region',{name:'How to start a session as synthetic-repo'});
+ const guide=page.getByRole('dialog',{name:'Start a coding session as synthetic-repo'});
  await guide.getByText('Open your coding agent.').waitFor();
- assert.match(await guide.getByRole('textbox',{name:'Session prompt for synthetic-repo'}).inputValue(),/synthetic-repo/);
+ assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),before,'the guide never changes the card');
+ assert.equal(await guide.locator('textarea').count(),0,'no text area in the guide');
+ const promptBox=guide.getByLabel('Session prompt for synthetic-repo',{exact:true});
+ assert.match(await promptBox.innerText(),/synthetic-repo/);
+ assert.equal(await promptBox.evaluate(p=>p.scrollHeight<=p.clientHeight+1&&p.scrollWidth<=p.clientWidth+1),true,'the whole prompt is visible without scrolling');
+ assert.equal(await guide.evaluate(d=>{const b=d.getBoundingClientRect();return d.contains(document.elementFromPoint(b.left+b.width/2,b.top+20));}),true,'the guide is on top');
+ await snapView('crew-session-guide-1280');
+ await page.keyboard.press('Escape');await guide.waitFor({state:'hidden'});
+ await tile.getByRole('button',{name:'How to start a session as synthetic-repo'}).click();
+ await guide.getByRole('button',{name:'Close'}).click();await guide.waitFor({state:'hidden'});
+ await startButton.click();await guide.waitFor();
  await guide.getByRole('checkbox',{name:"Don't show this again"}).check();
+ for(let i=0;i<50&&!writeActions.includes('settings.update');i++) await page.waitForTimeout(100);
+ assert.ok(writeActions.includes('settings.update'),'the guide preference is saved on the server');
  await guide.getByRole('button',{name:'Got it'}).click();
  await guide.waitFor({state:'hidden'});
+ assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Copy prompt for a coding agent as synthetic-repo','focus returns to the button');
  await toast.getByRole('button',{name:'Dismiss'}).click();await toast.waitFor({state:'hidden'});
+ // Saved on the server, not in this browser.
+ await page.evaluate(()=>localStorage.removeItem('pocketcontext.crew.session_guide_off'));
  await page.reload();await startButton.waitFor();
+ await page.waitForTimeout(300);
  await startButton.click();
  await toast.getByText('Copied the session prompt for synthetic-repo.').waitFor();
  assert.equal(await guide.count(),0,'the guide stays off after a reload');
@@ -731,9 +751,16 @@ try {
   await row.getByText('Agent',{exact:true}).waitFor();
   assert.equal(await row.getByRole('button',{name:/^Copy prompt for a coding agent as /}).count(),1,'only manual agents appear on Home');
   await row.getByRole('button',{name:'How to start a session as synthetic-repo'}).click();
-  await row.getByRole('region',{name:'How to start a session as synthetic-repo'}).waitFor();
+  const homeGuide=page.getByRole('dialog',{name:'Start a coding session as synthetic-repo'});
+  await homeGuide.waitFor();
+  if(width===390){
+   const box=await homeGuide.boundingBox();
+   assert.ok(box.x>=12&&box.x+box.width<=390-12,'the guide fits a phone with margins: '+JSON.stringify(box));
+   assert.equal(await homeGuide.getByLabel('Session prompt for synthetic-repo',{exact:true}).evaluate(p=>p.scrollWidth<=p.clientWidth+1),true,'the prompt wraps on a phone');
+   await snapView('crew-session-guide-390');
+  }
   await page.keyboard.press('Escape');
-  await row.getByRole('region',{name:'How to start a session as synthetic-repo'}).waitFor({state:'hidden'});
+  await homeGuide.waitFor({state:'hidden'});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Home overflow at ${width}`);
   await homeStart.click();
   await page.locator('.crew-toast').getByText('Copied the session prompt for synthetic-repo.').waitFor();
@@ -776,8 +803,8 @@ try {
  const descValue=await desc.inputValue();
  assert.match(descValue,/^Steps:\n1\. Open the editor\n!\[[^\]]+\]\(attachment:new-1\)\n2\. Press save\n!\[[^\]]+\]\(attachment:new-2\)$/,'pasted references land at the caret: '+JSON.stringify(descValue));
  assert.match(descValue,/!\[screenshot-\d{4}-\d{2}-\d{2}-1\.png\]\(attachment:new-1\)[\s\S]*!\[screenshot-\d{4}-\d{2}-\d{2}-2\.png\]\(attachment:new-2\)/,'two staged placeholders');
- await allLoaded('.crew-dialog .crew-attachment-thumb img');
- assert.equal(await dialog().locator('.crew-attachment-thumb img').count(),2,'two staged thumbnails');
+ await allLoaded('.crew-dialog .crew-file-tile-preview img');
+ assert.equal(await dialog().locator('.crew-file-tile-preview img').count(),2,'two staged thumbnails');
  await dialog().getByRole('tablist',{name:'Description view'}).getByRole('tab',{name:'Read'}).click();
  await allLoaded('.crew-dialog .crew-inline-image img');
  assert.ok((await dialog().locator('.crew-inline-image img').first().getAttribute('src')).startsWith('blob:'),'staged previews are local');
@@ -796,7 +823,7 @@ try {
  assert.match(await inline.first().getAttribute('src'),/thumb=1600x0&token=/);
  assert.equal(await inline.first().getAttribute('width'),'1200');
  assert.equal(await inline.first().getAttribute('height'),'700');
- await allLoaded('.crew-dialog .crew-attachment-thumb img');
+ await allLoaded('.crew-dialog .crew-file-tile-preview img');
  await snapView('attachments-task-inline-1440');
  await dialog().locator('.crew-attachments').scrollIntoViewIfNeeded();
  await snapView('attachments-task-files-1440');
@@ -1037,8 +1064,8 @@ try {
  await guestSnap('upload-page-used-390');
  await phone.close();
  await phoneCard.click();
- await page.waitForFunction(()=>document.querySelectorAll('.crew-dialog .crew-attachment-thumb img').length===2);
- await allLoaded('.crew-dialog .crew-attachment-thumb img');
+ await page.waitForFunction(()=>document.querySelectorAll('.crew-dialog .crew-file-tile-preview img').length===2);
+ await allLoaded('.crew-dialog .crew-file-tile-preview img');
  await dialog().locator('.crew-attachments').scrollIntoViewIfNeeded();
  await snapView('upload-link-task-files-1440');
  await close();await dialog().waitFor({state:'hidden'});
@@ -1098,8 +1125,14 @@ try {
  await page.goto(base+'/#/approvals');
  await page.getByRole('button',{name:'Review draft: Synthetic review alternatives'}).click();
  await dialog().getByRole('region',{name:'Files submitted for review'}).waitFor();
- await allLoaded('.crew-review-gallery img');
- assert.equal(await dialog().locator('.crew-review-gallery img').count(),2,'both snapshot images are visible');
+ const reviewTiles=dialog().getByRole('region',{name:'Files submitted for review'}).locator('.crew-file-tile');
+ await allLoaded('.crew-dialog .crew-file-tiles img');
+ assert.equal(await reviewTiles.count(),2,'each snapshot file appears once');
+ assert.equal(await dialog().getByRole('region',{name:'Files submitted for review'}).locator('img').count(),2,'both snapshot images are visible');
+ {const boxes=await reviewTiles.evaluateAll(t=>t.map(e=>{const b=e.getBoundingClientRect();return [Math.round(b.width),Math.round(b.height),Math.round(b.top)];}));
+ assert.ok(boxes.every(b=>b[0]===boxes[0][0]&&b[1]===boxes[0][1]&&b[2]===boxes[0][2]),'equal tiles in one row: '+JSON.stringify(boxes));
+ assert.ok(boxes[0][1]<=190,'a tile row stays short: '+JSON.stringify(boxes));}
+ await snapView('review-file-tiles-1440');
  assert.equal(await dialog().locator('.crew-draft-snapshot p').first().evaluate(p=>getComputedStyle(p).whiteSpace),'pre-wrap','review line breaks are preserved');
  const optionApproval=dialog().getByRole('button',{name:'Approve selected options'});
  assert.equal(await optionApproval.isDisabled(),true,'undecided options cannot be approved');
@@ -1112,6 +1145,60 @@ try {
  await dialog().getByRole('tab',{name:'Reviews',exact:true}).click();
  await dialog().getByText('Approved: Draft A · LinkedIn, Draft A · X; Rejected: Draft B · LinkedIn, Draft B · X',{exact:true}).waitFor();
  await close();await dialog().waitFor({state:'hidden'});
+ // HTML attachments open in a sandboxed preview (0.26.0): the page's own
+ // scripts and links work, but it cannot reach Crew, the network, the top
+ // window, new windows or forms, in the frame or in a new tab.
+ {
+ const hostile=`<!doctype html><html><head><title>Synthetic hostile page</title></head><body>
+<button id="press" onclick="this.textContent='pressed'">press</button><a id="jump" href="#below">jump</a><p id="below">below</p>
+<form id="post" method="post" action="/api/crew/write"><input name="action" value="task.create"></form>
+<pre id="out">running</pre><script>
+const out=[];const probe=(name,fn)=>{try{const v=fn();out.push(name+':'+(v===undefined||v===null||v===''?'empty':'open'));}catch(e){out.push(name+':blocked');}};
+probe('cookie',()=>document.cookie);
+probe('localStorage',()=>localStorage.length+1);
+probe('parent',()=>parent.document.title);
+probe('top',()=>{if(window===top)return '';top.location.href='/#/hacked';return 'x';});
+probe('open',()=>window.open('about:blank'));
+probe('form',()=>{document.getElementById('post').submit();return '';});
+Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetch:open',()=>'apiFetch:blocked'),
+ fetch('https://example.com/').then(()=>'netFetch:open',()=>'netFetch:blocked')]).then(r=>{out.push(...r);out.push('origin:'+self.origin);document.getElementById('out').textContent=out.join(' ');});
+</script></body></html>`;
+ const htmlTask=await boardWrite('task.create',{title:'Synthetic HTML prototype',files:[{name:'hostile.html',content_base64:Buffer.from(hostile).toString('base64')}]});
+ const crewRequests=[];const watchCrew=r=>{if(r.url().startsWith(base+'/api/')&&!/attachment(-preview)?\b/.test(r.url()))crewRequests.push(r.url());};
+ await page.goto(base+'/#/tasks/'+htmlTask.id);await page.reload();
+ await dialog().getByRole('button',{name:'Open hostile.html'}).click();
+ const viewer=page.getByRole('dialog',{name:'File: hostile.html'});
+ await viewer.getByText('Preview runs isolated from Crew').waitFor();
+ const frameEl=viewer.locator('iframe[title="Preview of hostile.html"]');
+ assert.equal(await frameEl.getAttribute('sandbox'),'allow-scripts','only allow-scripts');
+ page.on('request',watchCrew);
+ const writesBefore=writeActions.length;const urlBefore=page.url();
+ const frame=page.frameLocator('iframe[title="Preview of hostile.html"]');
+ await frame.locator('#out').filter({hasText:'origin:'}).waitFor();
+ const results=await frame.locator('#out').innerText();
+ for(const probe of ['cookie:blocked','localStorage:blocked','parent:blocked','top:blocked','open:empty','apiFetch:blocked','netFetch:blocked','origin:null'])
+  assert.ok(results.includes(probe),`sandboxed preview: ${probe} in ${results}`);
+ // Its own scripts and links work inside the frame.
+ await frame.locator('#press').click();await frame.getByText('pressed').waitFor();
+ await frame.locator('#jump').click();
+ await page.waitForTimeout(300);
+ assert.equal(page.url(),urlBefore,'the preview never navigates Crew');
+ assert.equal(writeActions.length,writesBefore,'the preview writes nothing');
+ assert.deepEqual(crewRequests,[],'the preview calls no Crew API');
+ await viewer.getByRole('button',{name:'Mobile'}).click();
+ assert.equal(Math.round(await frameEl.evaluate(f=>f.getBoundingClientRect().width)),390,'mobile width');
+ await snapView('html-preview-1440');
+ // Open in new tab keeps the sandbox.
+ const tabUrl=await viewer.getByRole('link',{name:'Open in new tab'}).getAttribute('href');
+ const tab=await browser.newPage();
+ await tab.goto(base+tabUrl);
+ assert.deepEqual(await tab.evaluate(()=>{let storage='open';try{localStorage.length;}catch{storage='blocked';}return [self.origin,storage];}),['null','blocked'],'a new tab is sandboxed too');
+ await tab.locator('#out').filter({hasText:'origin:null'}).waitFor();
+ await tab.close();
+ page.off('request',watchCrew);
+ await viewer.getByRole('button',{name:'Close file preview'}).click();
+ await close();await dialog().waitFor({state:'hidden'});
+ }
  // Legacy snapshots can contain local paths; simulate only their read response.
  const legacyTask=await boardWrite('task.create',{title:'Synthetic legacy missing image',draft:'Legacy draft'});
  const legacyReview=await boardWrite('review.request',{},legacyTask.id,legacyTask.revision);

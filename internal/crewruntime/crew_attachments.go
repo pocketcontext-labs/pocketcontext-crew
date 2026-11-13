@@ -688,10 +688,14 @@ func cappedJPEG(src image.Image, maxWidth, limit int) ([]byte, error) {
 }
 
 // attachmentFile serves the protected bytes: GET /api/crew/attachment?id=ID
-// [&thumb=1600x0|320x0][&download=1][&token=FILE_TOKEN]. Verified images are
+// [&thumb=1600x0|320x0][&download=1][&token=FILE_TOKEN|&preview=TOKEN]. Verified images are
 // inline unless download=1; every other file is an attachment download with
 // a passive or opaque type. nosniff and a sandbox CSP always apply.
 func attachmentFile(re *core.RequestEvent) error {
+	// &preview=TOKEN: the sandboxed HTML/SVG preview (crew_attachment_preview.go).
+	if token := re.Request.URL.Query().Get("preview"); token != "" {
+		return attachmentPreviewFile(re, token)
+	}
 	if attachmentAuth(re) == nil {
 		return re.UnauthorizedError("Sign in to read attachments.", nil)
 	}
@@ -896,4 +900,5 @@ func registerAttachmentRoutes(e *core.ServeEvent) {
 	e.Router.Bind(&hook.Handler[*core.RequestEvent]{Id: uploadGuardIdent, Func: uploadLinkGuard})
 	e.Router.GET("/api/crew/attachment", attachmentFile)
 	e.Router.POST("/api/crew/attachment-read", attachmentRead).Bind(apis.RequireAuth("users"))
+	registerAttachmentPreviewRoutes(e)
 }

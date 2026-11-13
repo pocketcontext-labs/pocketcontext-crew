@@ -24,6 +24,7 @@ export type PreviewKind =
   | "video"
   | "audio"
   | "pdf"
+  | "html"
   | "csv"
   | "tsv"
   | "json"
@@ -58,6 +59,9 @@ export function previewKind(
   const type = String(a.media_type || "").toLowerCase();
   const ext = extensionOf(a.name || "");
   if (type === "application/pdf") return "pdf";
+  // HTML and SVG (stored with their own type) open in the sandboxed preview;
+  // anything else that only looks like HTML by name stays text.
+  if (type === "text/html" || type === "image/svg+xml") return "html";
   if (type === "text/tab-separated-values" || ext === "tsv") return "tsv";
   if (type === "text/csv" || ext === "csv") return "csv";
   if (type === "application/json" || ext === "json") return "json";
