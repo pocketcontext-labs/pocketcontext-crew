@@ -339,8 +339,9 @@ it("gives agents with the same first letter distinct initials", async () => {
   expect((await card("Network")).querySelector(".crew-avatar")).toHaveTextContent(/^N$/);
   expect(screen.queryByText(/Edit brief and responsibilities/)).toBeNull();
 });
-it("previews a multi-line brief as one clamped paragraph with the full brief on hover", async () => {
-  const brief = "Save decisions.\n\n- Not every activity\n  - Ask first";
+it("previews a Markdown brief as clamped plain text, one line per block, with the full text on hover", async () => {
+  const brief =
+    "Save decisions.\n\n## Standing approval\n- Not every **activity**\n  - Ask first";
   fixtures.agents = [{ ...agent, brief }];
   history.replaceState(null, "", "/#/agents");
   render(<CrewWorkspace />);
@@ -348,10 +349,10 @@ it("previews a multi-line brief as one clamped paragraph with the full brief on 
     "button",
   )!;
   const preview = card.querySelector("p")!;
-  expect(preview.textContent).toBe(
-    "Save decisions. - Not every activity - Ask first",
-  );
-  expect(preview).toHaveAttribute("title", brief);
+  const text = "Save decisions.\nStanding approval\n• Not every activity\n• Ask first";
+  expect(preview.textContent).toBe(text);
+  expect(preview.textContent).not.toMatch(/[#*]/);
+  expect(preview).toHaveAttribute("title", text);
 });
 it("sizes a long agent brief once its dialog is shown, and on rewrap", async () => {
   const observers: ResizeObserverCallback[] = [];

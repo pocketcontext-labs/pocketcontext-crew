@@ -37,6 +37,7 @@ import Help, {
 import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
 import LabelsInput from "./LabelsInput";
+import { markdownText } from "./markdownText";
 import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest } from "./Review";
 import { decisionSummary, objects } from "./reviews";
 import { strandedWakes } from "./wakes";
@@ -2213,9 +2214,10 @@ export default function CrewWorkspace() {
                           {agentKindCardLabel[agentKind(x)]}
                         </small>
                       )}
-                      {/* A preview: one paragraph clamped to whole lines. */}
-                      <p title={val(x, "brief") || undefined}>
-                        {val(x, "brief").replace(/\s+/g, " ").trim()}
+                      {/* A preview: the brief as plain text, one line per
+                          block, clamped to whole lines. */}
+                      <p title={markdownText(val(x, "brief")) || undefined}>
+                        {markdownText(val(x, "brief"))}
                       </p>
                     </button>
                     {agentKind(x) === "external" && (

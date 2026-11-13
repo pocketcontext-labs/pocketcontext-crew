@@ -1072,7 +1072,7 @@ a.crew-logo:hover .product-brand span {
 .crew-agent-card p {
   font-size: 12px;
   line-height: 1.5;
-  white-space: normal;
+  white-space: pre-line;
   overflow-wrap: anywhere;
   color: #6c7a61;
   display: -webkit-box;
