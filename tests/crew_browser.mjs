@@ -441,6 +441,9 @@ try {
  await labelsInput.fill('');}
  await labelsInput.fill('Synthetic-board');await labelsInput.press('Enter');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
+ // Hovered filter chips tint and keep their text plain (no link underline).
+ {const chip=page.getByRole('button',{name:'Filter by label Synthetic-board',exact:true});await chip.hover();
+ assert.deepEqual(await chip.evaluate(e=>{const c=getComputedStyle(e);return {line:c.textDecorationLine,cursor:c.cursor,tint:c.boxShadow!=='none'};}),{line:'none',cursor:'pointer',tint:true},'a hovered chip is tinted, not underlined');}
  await page.getByRole('button',{name:'Filter by label Synthetic-board',exact:true}).focus();
  await page.keyboard.press('Enter');
  await cards(1);
