@@ -131,6 +131,13 @@ const glossaryEntries = {
     action:
       "Set the status to Done once everything is finished, including anything outside Crew, or Won't do when you decide against it. Tasks from the last 7 days show first; Show older reveals the rest.",
   },
+  status: {
+    name: "Status",
+    question: "What do the statuses mean?",
+    what: "To do: not started. In progress: being worked on. Needs review: a saved draft is waiting for your decision in Approvals. Done: finished. Won't do: decided against.",
+    action:
+      "Pick any status except Needs review: Crew sets that one itself when you or an agent requests approval for the saved draft, so there is always a snapshot to decide on. Your decision, withdrawing the request or editing the draft moves the task back to In progress.",
+  },
   readiness: {
     name: "Hold (On hold or Ready)",
     question: "What do On hold and Ready mean?",

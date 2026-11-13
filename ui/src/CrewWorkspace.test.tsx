@@ -3568,6 +3568,30 @@ it("combines label filtering with assignment, keeps hidden assignee labels filte
   expect(document.querySelectorAll(".crew-task-card")).toHaveLength(3);
   expect(location.hash).toBe("#/tasks");
 });
+it("explains the statuses and why Needs review can't be picked", async () => {
+  fixtures.reviews = [];
+  fixtures.tasks = [{ ...task, title: "Plain", status: "todo", labels: [] }];
+  render(<CrewWorkspace />);
+  fireEvent.click(await screen.findByRole("button", { name: /Plain/ }));
+  const dialog = within(screen.getByRole("dialog"));
+  const status = dialog.getByRole("combobox", { name: "Status" });
+  expect(within(status).getByRole("option", { name: "Needs review" })).toBeDisabled();
+  expect(status).toHaveAccessibleDescription(
+    "Needs review is set by requesting approval for a saved draft, not by hand.",
+  );
+  fireEvent.click(dialog.getByRole("button", { name: "What do the statuses mean?" }));
+  expect(document.querySelector(".crew-help-popover")).toHaveTextContent(
+    /Pick any status except Needs review: Crew sets that one itself when you or an agent requests approval/,
+  );
+});
+it("says a pending review is why a task is in Needs review", async () => {
+  render(<CrewWorkspace />);
+  fireEvent.click(await screen.findByRole("button", { name: /Launch post/ }));
+  const status = within(screen.getByRole("dialog")).getByRole("combobox", { name: "Status" });
+  expect(status).toHaveAccessibleDescription(
+    "Needs review: a draft is waiting for your decision in Approvals.",
+  );
+});
 it("filters the board by the assigned agent in a card footer without opening the card", async () => {
   fixtures.reviews = [];
   fixtures.tasks = [

@@ -2764,6 +2764,7 @@ function Editor({
   // approval) replaces the fields the owner has not changed.
   const baseRow = useRef(row);
   const initialRef = useRef(start);
+  const hintId = useId();
   useEffect(() => {
     let alive = true;
     if (row && (kind === "note" || kind === "task"))
@@ -3293,22 +3294,35 @@ function Editor({
                   </div>
                 )}
                 <div className="crew-form-grid">
-                  <Field label="Status">
-                    <select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value)}
+                  <div className="crew-status-field">
+                    <Field label="Status" help={help("status")}>
+                      <select
+                        value={status}
+                        aria-describedby={`${hintId}-status`}
+                        onChange={(e) => setStatus(e.target.value)}
+                      >
+                        {statuses.map(([key, label]) => (
+                          <option
+                            key={key}
+                            value={key}
+                            disabled={key === "needs_review"}
+                          >
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    {/* Native options can't explain themselves: the hint shows on
+                        focus, and always while a review is pending. */}
+                    <p
+                      id={`${hintId}-status`}
+                      className={reviewPending ? "crew-status-hint is-pending" : "crew-status-hint"}
                     >
-                      {statuses.map(([key, label]) => (
-                        <option
-                          key={key}
-                          value={key}
-                          disabled={key === "needs_review"}
-                        >
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                      {reviewPending
+                        ? "Needs review: a draft is waiting for your decision in Approvals."
+                        : "Needs review is set by requesting approval for a saved draft, not by hand."}
+                    </p>
+                  </div>
                   <LabelsInput
                     value={JSON.parse(labels) as string[]}
                     disabled={readOnly}

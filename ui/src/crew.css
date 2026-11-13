@@ -4056,3 +4056,16 @@ a.crew-logo:hover .product-brand span {
   gap: 6px;
   font-size: 12px;
 }
+/* Status: a short hint under the field explains why Needs review can't be
+   picked. Shown on focus, and always while a review is pending. */
+.crew-status-hint {
+  display: none;
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #5f6f59;
+}
+.crew-status-field:focus-within .crew-status-hint,
+.crew-status-hint.is-pending {
+  display: block;
+}

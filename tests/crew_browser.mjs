@@ -136,7 +136,14 @@ try {
  await dialog().locator('.crew-timeline strong').filter({hasText:/^Comment$/}).first().waitFor();
  assert.equal(await dialog().getByText('task.comment',{exact:true}).count(),0,'Activity uses plain labels');
  await dialog().getByRole('tablist',{name:'Record views'}).getByRole('tab',{name:'Edit',exact:true}).click();
- await dialog().getByLabel('Status').selectOption('done');
+ // Status has the standard help, which explains why Needs review can't be picked; focus shows the hint.
+ await dialog().getByRole('button',{name:'What do the statuses mean?',exact:true}).click();
+ assert.match(await dialog().locator('.crew-help-popover').innerText(),/Pick any status except Needs review/);
+ await page.keyboard.press('Escape');await dialog().locator('.crew-help-popover').waitFor({state:'hidden'});
+ assert.equal(await dialog().count(),1,'Escape closes the help, not the task');
+ await dialog().getByLabel('Status',{exact:true}).focus();
+ await dialog().getByText('Needs review is set by requesting approval for a saved draft, not by hand.',{exact:true}).waitFor();
+ await dialog().getByLabel('Status',{exact:true}).selectOption('done');
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('.crew-task-card').count(),1);
  // Global search: live grouped results, keyboard choice, the results page, reload and Back.
@@ -505,7 +512,7 @@ try {
  await page.setViewportSize({width:1280,height:800});
  // Won't do puts a card in the Done column; releases are plain labels (0.23.0): no release field, filter, header or token.
  await page.getByRole('button',{name:/Synthetic long description/}).click();
- await dialog().getByLabel('Status').selectOption('wont_do');
+ await dialog().getByLabel('Status',{exact:true}).selectOption('wont_do');
  assert.equal(await dialog().getByLabel('Release',{exact:true}).count(),0,'no Release field');
  const releaseLabels=dialog().getByRole('combobox',{name:'Labels',exact:true});
  await releaseLabels.fill('release-0.19.0');await releaseLabels.press('Enter');
@@ -551,7 +558,7 @@ try {
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
  await page.getByRole('button',{name:/Synthetic long description/}).click();
- await dialog().getByLabel('Status').selectOption('todo');
+ await dialog().getByLabel('Status',{exact:true}).selectOption('todo');
  await dialog().getByRole('button',{name:'Remove label release-0.19.0',exact:true}).click();
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  // Old page addresses redirect in place, keeping the query, on navigation and on load.
