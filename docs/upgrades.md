@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.24.1 to 0.25.0
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.25.0. Reader changes only: the
+Start a session button now reads "Copy prompt for a coding agent", the board's Sort
+moved out of Filters, and the Archive page has tabs (old `#/archive` links still
+open it). Rollback to 0.24.1 needs no restore. From 0.23.1 or earlier, follow the
+0.23.1 to 0.24.0 notes first.
+
 ## Crew 0.24.0 to 0.24.1
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

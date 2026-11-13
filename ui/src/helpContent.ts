@@ -36,7 +36,7 @@ const pageEntries = {
     question: "What is the Tasks page?",
     what: "Every task and where it stands: To do, In progress, Needs review or Done. You or a connected agent can add tasks.",
     action:
-      "Use New task to add work, or open a card to change its status, assigned agent or draft. Filter by assignment to see one agent's tasks, unassigned work or tasks that need a new agent. Filters holds readiness, label, status and sort; search also understands label:, agent: and status:. To mark what shipped together, use a label such as release-0.23.0.",
+      "Use New task to add work, or open a card to change its status, assigned agent or draft. Filter by assignment to see one agent's tasks, unassigned work or tasks that need a new agent. Sort sits beside Filters; Filters holds readiness, label and status, and clicking a label, Ready, On hold or Won't do chip on a card filters by it. Search also understands label:, agent: and status:. To mark what shipped together, use a label such as release-0.23.0.",
   },
   memory: {
     name: "Notes",

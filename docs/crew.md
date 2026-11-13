@@ -759,15 +759,29 @@ and Cancel; a stale revision explains the conflict and offers Reload latest),
 prompt** copies the two-line prompt, which makes the session read the latest saved
 revision.
 
-**Start a session (one click since 0.24.0).** Each manually started agent has a
-Start a session button under its card on the Agents page and, labelled
-`Start a session · <name>`, on Home (active manual agents only; bots, people and
+**Start a session (one click since 0.24.0; clearer since 0.25.0).** Each manually
+started agent has a **Copy prompt for a coding agent** button under its card on the
+Agents page and on Home, where an agent chip (avatar, name, Agent tag, first line of
+the brief on hover) names the agent (active manual agents only; bots, people and
 inactive agents never appear, and there are no counts). The reader reads the
 session when the button renders, so the click copies `prompt` straight away (a
 phone refuses a clipboard write that waits for the network). A toast confirms
-"Copied the session prompt for <name>." with **View** (opens the Session
-instructions dialog with the session read by that start) and **Dismiss**; if the
-copy fails the toast shows the prompt to copy by hand. Nothing stays on the card.
+"Copied the session prompt for <name>. Paste it into a new session in your coding
+agent." with **View** (opens the Session instructions dialog with the session read
+by that start) and an × to dismiss; it closes by itself after 6 seconds, shown by a
+shrinking bar, and pauses while hovered or focused. If the copy fails the toast
+shows the prompt to copy by hand and stays. The first click also opens a three-step
+guide under the button with the copied prompt, until "Don't show this again" (kept
+in that browser); the **?** beside the button opens it again.
+
+**Archive page (0.25.0).** One category at a time (Tasks, Notes, Buckets, Inactive
+agents) with counts, title search, a label (tasks) or bucket (notes) filter and sort
+by archived date or title, all kept in the address (`#/archive?tab=notes&q=…`). Rows
+say when and by whom the record was archived; 50 show at a time with Show more.
+Notes hidden by an archived bucket are one group per bucket with **Restore bucket**.
+**Restore selected** restores one record at a time and reports any that fail.
+Search and filters cover the whole archive: the reader already reads every archived
+record for item dialogs, links and the Shared page.
 
 **In-session approval and Won't do (0.19.0; release labels since 0.23.0).** Tasks have:
 

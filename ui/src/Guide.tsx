@@ -139,9 +139,9 @@ export default function Guide() {
             and set them Ready; those are what its sessions work on.
           </li>
           <li>
-            <strong>Start a session from its card.</strong> Start a session
-            copies a short prompt to paste into a new Codex or Claude Code
-            session.
+            <strong>Start a session from its card.</strong> Copy prompt for
+            a coding agent copies a short prompt to paste into a new Codex or
+            Claude Code session; the ? beside it shows the steps.
           </li>
           <li>
             <strong>Its instructions are saved in Crew.</strong> Open Show full
