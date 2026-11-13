@@ -3503,3 +3503,46 @@ it("combines label filtering with assignment, keeps hidden assignee labels filte
   expect(document.querySelectorAll(".crew-task-card")).toHaveLength(3);
   expect(location.hash).toBe("#/tasks");
 });
+it("filters the board from Ready, On hold and Won't do chips without opening the card", async () => {
+  fixtures.tasks = [
+    { ...task, id: "taskready000001", title: "Ready one", status: "todo", readiness: "ready", labels: ["Bug"] },
+    { ...task, id: "taskhold0000001", title: "Held one", status: "todo", readiness: "waiting", labels: [] },
+    { ...task, id: "taskwont0000001", title: "Dropped one", status: "wont_do", labels: [] },
+  ];
+  history.replaceState(null, "", "/#/tasks");
+  render(<CrewWorkspace />);
+  const ready = (await screen.findByText("Ready one")).closest(".crew-task-card") as HTMLElement;
+  fireEvent.click(within(ready).getByRole("button", { name: "Filter by readiness Ready" }));
+  expect(location.hash).toContain("hold=ready");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByText("Held one")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Remove filter Ready" }));
+  const held = (await screen.findByText("Held one")).closest(".crew-task-card") as HTMLElement;
+  const holdChip = within(held).getByRole("button", { name: "Filter by readiness On hold" });
+  fireEvent.keyDown(holdChip, { key: "Enter" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  fireEvent.click(holdChip);
+  expect(location.hash).toContain("hold=on_hold");
+  expect(screen.queryByText("Ready one")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Remove filter On hold" }));
+  const dropped = (await screen.findByText("Dropped one")).closest(".crew-task-card") as HTMLElement;
+  fireEvent.click(within(dropped).getByRole("button", { name: "Filter by status Won't do" }));
+  expect(location.hash).toContain("status=wont_do");
+  expect(screen.getByRole("button", { name: "Remove filter Status Won't do" })).toBeInTheDocument();
+  expect(screen.queryByText("Ready one")).toBeNull();
+  expect(screen.getByText("Dropped one")).toBeInTheDocument();
+});
+it("keeps Sort as its own toolbar control, outside Filters, and not counted as a filter", async () => {
+  history.replaceState(null, "", "/#/tasks");
+  render(<CrewWorkspace />);
+  const sort = await screen.findByRole("combobox", { name: "Sort tasks" });
+  expect(sort).toHaveValue("updated");
+  expect(screen.getByRole("button", { name: "Filters" })).toBeInTheDocument();
+  fireEvent.change(sort, { target: { value: "held" } });
+  expect(location.hash).toContain("sort=held");
+  expect(screen.getByRole("button", { name: "Filters" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+  const panel = screen.getByRole("group", { name: "Task filters" });
+  expect(within(panel).queryByRole("combobox", { name: "Sort tasks" })).toBeNull();
+  expect(within(panel).getByRole("combobox", { name: "Filter by status" })).toBeInTheDocument();
+});

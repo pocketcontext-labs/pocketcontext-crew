@@ -1,4 +1,4 @@
-import { boardStatuses, list, val, type Row } from "./crewApi";
+import { list, statuses, val, type Row } from "./crewApi";
 import type { ViewState } from "./itemLink";
 import { isClosed } from "./closedTasks";
 
@@ -129,7 +129,7 @@ export function commitBoardSearch(
     const status = normalizeStatus(value);
     const ids = key === "agent" ? agentIds(value, agents) : [];
     if (key === "label") changes.label = value;
-    else if (key === "status" && boardStatuses.some(([s]) => s === status))
+    else if (key === "status" && statuses.some(([s]) => s === status))
       changes.status = status;
     else if (key === "agent" && value.toLowerCase() === "unassigned")
       changes.assignment = "unassigned";
@@ -163,15 +163,9 @@ export function filterChips(state: ViewState): FilterChip[] {
     chips.push({ key: "label", label: `Label ${state.label}`, clear: { label: "" } });
   if (state.status) {
     const name =
-      boardStatuses.find(([s]) => s === state.status)?.[1] ?? state.status;
+      statuses.find(([s]) => s === state.status)?.[1] ?? state.status;
     chips.push({ key: "status", label: `Status ${name}`, clear: { status: "" } });
   }
-  if (state.taskSort !== "updated")
-    chips.push({
-      key: "sort",
-      label: "Sort: Oldest hold first",
-      clear: { taskSort: "updated" },
-    });
   return chips;
 }
 

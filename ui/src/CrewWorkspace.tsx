@@ -282,15 +282,86 @@ function Prose({ children }: { children: string }) {
     </div>
   );
 }
-/** On hold (with its reason on hover) or Ready; not shown for Done tasks. */
-function HoldChip({ task }: { task: Row }) {
-  if (!onHold(task)) return val(task, "status") === "todo" ? <span className="crew-ready-chip">Ready</span> : null;
+/**
+ * On hold (with its reason on hover) or Ready; not shown for Done tasks.
+ * With `onFilter` (board cards) the chip is a button that filters the board
+ * by that readiness, like a label chip.
+ */
+function HoldChip({
+  task,
+  onFilter,
+}: {
+  task: Row;
+  onFilter?: (hold: "ready" | "on_hold") => void;
+}) {
+  if (!onHold(task)) {
+    if (val(task, "status") !== "todo") return null;
+    return onFilter ? (
+      <FilterChipButton
+        className="crew-ready-chip"
+        label="Filter by readiness Ready"
+        onFilter={() => onFilter("ready")}
+      >
+        Ready
+      </FilterChipButton>
+    ) : (
+      <span className="crew-ready-chip">Ready</span>
+    );
+  }
   const reason = val(task, "waiting_reason").trim();
-  return (
-    <span className="crew-hold-chip" title={reason || undefined}>
+  const content = (
+    <>
       On hold{heldDuration(task) ? ` ${heldDuration(task)}` : ""}
       {reason && <span className="sr-only">: {reason}</span>}
+    </>
+  );
+  return onFilter ? (
+    <FilterChipButton
+      className="crew-hold-chip"
+      label="Filter by readiness On hold"
+      title={reason || undefined}
+      onFilter={() => onFilter("on_hold")}
+    >
+      {content}
+    </FilterChipButton>
+  ) : (
+    <span className="crew-hold-chip" title={reason || undefined}>
+      {content}
     </span>
+  );
+}
+/**
+ * A card chip that filters the board: it never opens the card under it
+ * (click, Enter and Space stop at the chip) and shares one hover and focus
+ * style with every other filter chip.
+ */
+function FilterChipButton({
+  className,
+  label,
+  title,
+  onFilter,
+  children,
+}: {
+  className: string;
+  label: string;
+  title?: string;
+  onFilter: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`crew-chip-filter ${className}`}
+      aria-label={label}
+      title={title ?? label}
+      onClick={(e) => {
+        e.stopPropagation();
+        onFilter();
+      }}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      {children}
+    </button>
   );
 }
 /** A coding session's claim: live with its end time on hover, or expired. */
@@ -1625,6 +1696,19 @@ export default function CrewWorkspace() {
                   </optgroup>
                 )}
               </select>
+              <label className="crew-sort" title="Sort tasks">
+                <span>Sort</span>
+                <select
+                  aria-label="Sort tasks"
+                  value={viewState.taskSort}
+                  onChange={(e) =>
+                    updateBoard({ taskSort: e.target.value as ViewState["taskSort"] })
+                  }
+                >
+                  <option value="updated">Last updated, newest first</option>
+                  <option value="held">Oldest hold first</option>
+                </select>
+              </label>
               <div
                 className="crew-filters"
                 ref={filtersRef}
@@ -1716,24 +1800,11 @@ export default function CrewWorkspace() {
                         onChange={(e) => updateBoard({ status: e.target.value })}
                       >
                         <option value="">All statuses</option>
-                        {boardStatuses.map(([value, label]) => (
+                        {statuses.map(([value, label]) => (
                           <option key={value} value={value}>
                             {label}
                           </option>
                         ))}
-                      </select>
-                    </label>
-                    <label className="crew-field">
-                      <span>Sort</span>
-                      <select
-                        aria-label="Sort tasks"
-                        value={viewState.taskSort}
-                        onChange={(e) =>
-                          updateBoard({ taskSort: e.target.value as ViewState["taskSort"] })
-                        }
-                      >
-                        <option value="updated">Last updated, newest first</option>
-                        <option value="held">Oldest hold first</option>
                       </select>
                     </label>
                     <button
@@ -1835,7 +1906,7 @@ export default function CrewWorkspace() {
                 // the owner asks for them.
                 const done =
                   status === "done"
-                    ? doneColumn(tasks, showOlderDone || labelChosen || viewState.status === "done")
+                    ? doneColumn(tasks, showOlderDone || labelChosen || viewState.status === "done" || viewState.status === "wont_do")
                     : null;
                 const card = (x: Row) => (
                   <div
@@ -1850,9 +1921,20 @@ export default function CrewWorkspace() {
                   >
                     <div className="crew-tags">
                       {val(x, "status") === "wont_do" && (
-                        <span className="crew-wont-do">Won't do</span>
+                        <FilterChipButton
+                          className="crew-wont-do"
+                          label="Filter by status Won't do"
+                          onFilter={() => updateBoard({ status: "wont_do" })}
+                        >
+                          Won't do
+                        </FilterChipButton>
                       )}
-                      {!isClosed(x) && <HoldChip task={x} />}
+                      {!isClosed(x) && (
+                        <HoldChip
+                          task={x}
+                          onFilter={(hold) => updateBoard({ hold, heldOver: "" })}
+                        />
+                      )}
                       <ClaimChip task={x} />
                       {wakeMissing.has(x.id) && <WakeMissingChip />}
                       {pending.some((r) => val(r, "task") === x.id) && (
@@ -1874,11 +1956,14 @@ export default function CrewWorkspace() {
                           </span>
                         )}
                       {list(x, "labels").filter((l) => !val(x, "assigned_agent") || l.toLowerCase() !== name(val(x, "assigned_agent")).toLowerCase()).map((l) => (
-                        <button type="button" className="crew-chip crew-label-filter" key={l}
-                          aria-label={`Filter by label ${l}`}
-                          onClick={(e) => { e.stopPropagation(); updateBoard({ label: l }); }}>
+                        <FilterChipButton
+                          className="crew-chip crew-label-filter"
+                          key={l}
+                          label={`Filter by label ${l}`}
+                          onFilter={() => updateBoard({ label: l })}
+                        >
                           {l}
-                        </button>
+                        </FilterChipButton>
                       ))}
                     </div>
                     {thumbs[x.id] && (

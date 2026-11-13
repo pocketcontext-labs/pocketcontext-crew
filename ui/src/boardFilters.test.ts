@@ -145,10 +145,11 @@ it("commits search tokens it can resolve into board filters and keeps the rest",
       assignment: "agent0000000001",
     },
   });
-  // Won't do is not a board column; an ambiguous agent names no single filter.
+  // Won't do is a status filter (shown in the Done column); an ambiguous
+  // agent names no single filter.
   expect(commitBoardSearch("status:wont_do agent:twin x", agents)).toEqual({
-    text: "x status:wont_do agent:twin",
-    changes: {},
+    text: "x agent:twin",
+    changes: { status: "wont_do" },
   });
   expect(commitBoardSearch("release:0.20.0 agent:unassigned", agents)).toEqual({
     text: "release:0.20.0",
@@ -171,7 +172,6 @@ it("shows one removable chip per panel filter and clears each on its own", () =>
     "On hold · over 3 days",
     "Label Bug",
     "Status Done",
-    "Sort: Oldest hold first",
   ]);
   for (const chip of chips) {
     const next = { ...state, ...chip.clear };

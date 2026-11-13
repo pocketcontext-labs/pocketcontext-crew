@@ -450,20 +450,21 @@ try {
  await filtersButton.click();
  const filtersPanel=page.getByRole('group',{name:'Task filters'});
  assert.equal(await filtersPanel.getByRole('combobox',{name:'Filter by label'}).inputValue(),'synthetic-board');
- assert.equal(await filtersPanel.getByRole('combobox',{name:'Sort tasks'}).inputValue(),'updated');
+ assert.equal(await filtersPanel.getByRole('combobox',{name:'Sort tasks'}).count(),0,'Sort is not a filter');
+ assert.equal(await page.getByRole('combobox',{name:'Sort tasks'}).inputValue(),'updated');
  await page.keyboard.press('Escape');
  await filtersPanel.waitFor({state:'hidden'});
  await page.getByRole('button',{name:'Clear all',exact:true}).click();await cards(2);
  assert.equal(await filtersButton.innerText(),'Filters');
  await page.goBack();await cards(1);
  await page.goForward();await cards(2);
- // At 1024 the toolbar is one row: search, agent filter and Filters, nothing else.
+ // At 1024 the toolbar is one row: search, agent filter, Sort and Filters, nothing else.
  await page.setViewportSize({width:1024,height:800});
  const toolbar=await page.locator('.crew-toolbar').evaluate(t=>({
   controls:[...t.querySelectorAll('input,select,button')].filter(e=>e.offsetParent!==null).map(e=>e.getAttribute('aria-label')||e.textContent.trim()),
   oneRow:(r=>r.every(x=>x.top<r[0].bottom&&x.bottom>r[0].top))([...t.children].map(c=>c.getBoundingClientRect())),
  }));
- assert.deepEqual(toolbar,{controls:['Search tasks','Filter by assignment','Filters'],oneRow:true},'one toolbar row at 1024');
+ assert.deepEqual(toolbar,{controls:['Search tasks','Filter by assignment','Sort tasks','Filters'],oneRow:true},'one toolbar row at 1024');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'no horizontal scroll at 1024');
  await filtersButton.click();
  assert.equal(await filtersPanel.evaluate(p=>{const r=p.getBoundingClientRect();return r.left>=0&&r.right<=window.innerWidth;}),true,'Filters panel fits at 1024');
@@ -473,12 +474,17 @@ try {
  await page.setViewportSize({width:390,height:844});
  await filtersButton.click();
  assert.equal(await filtersPanel.evaluate(p=>{const r=p.getBoundingClientRect();return r.left>=0&&r.right<=window.innerWidth;}),true,'Filters panel fits at phone width');
- await filtersPanel.getByRole('combobox',{name:'Sort tasks'}).selectOption('held');
- await page.getByRole('button',{name:'Remove filter Sort: Oldest hold first'}).waitFor();
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'board filters fit at phone width');
  await snap('crew-board-filters-390');
  await page.keyboard.press('Escape');
- await page.getByRole('button',{name:'Remove filter Sort: Oldest hold first'}).click();
+ // Sort stays a labelled toolbar control at phone width, outside Filters.
+ const sortTasks=page.getByRole('combobox',{name:'Sort tasks'});
+ assert.equal(await sortTasks.isVisible(),true,'Sort is visible at phone width');
+ await sortTasks.selectOption('held');
+ await page.waitForFunction(()=>location.hash==='#/tasks?sort=held');
+ assert.equal(await filtersButton.innerText(),'Filters','sort is not counted as a filter');
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'sort fits at phone width');
+ await sortTasks.selectOption('updated');
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await page.setViewportSize({width:1280,height:800});
  // Won't do puts a card in the Done column; releases are plain labels (0.23.0): no release field, filter, header or token.
@@ -491,6 +497,12 @@ try {
  const doneColumn=page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})});
  const dropped=doneColumn.getByRole('button',{name:/Synthetic long description/});
  await dropped.getByText("Won't do",{exact:true}).waitFor();
+ // Every filter chip on a card filters: Won't do filters by status, not opening the card.
+ await dropped.getByRole('button',{name:"Filter by status Won't do",exact:true}).click();
+ await page.waitForFunction(()=>location.hash==='#/tasks?status=wont_do');
+ assert.equal(await dialog().count(),0,'a status chip does not open the card');
+ await page.getByRole('button',{name:"Remove filter Status Won't do",exact:true}).click();
+ await page.waitForFunction(()=>location.hash==='#/tasks');
  assert.equal(await dropped.getByText(/Shipped in/).count(),0);
  assert.equal(await doneColumn.getByRole('group').count(),0,'Done is a plain list');
  await filtersButton.click();

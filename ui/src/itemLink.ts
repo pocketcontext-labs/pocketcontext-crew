@@ -165,7 +165,7 @@ export function viewStateFromHash(hash: string): ViewState {
         one("label", validLabel) ??
         legacyReleaseLabel(one("release", (v) => v !== "none")) ??
         "",
-      status: one("status", (v) => boardColumns.includes(v)) ?? "",
+      status: one("status", (v) => statusFilters.includes(v)) ?? "",
       heldOver: one("held_over", (v) => v === "3d") ?? "",
       taskSort:
         one("sort", (v) => v === "held") === "held" ? "held" : "updated",
@@ -207,6 +207,8 @@ export function viewStateHash(view: View, state: ViewState): string {
 }
 
 const boardColumns = ["todo", "in_progress", "needs_review", "done"];
+/** The status filter: the four columns, plus Won't do (in the Done column). */
+const statusFilters = [...boardColumns, "wont_do"];
 
 /**
  * A Tasks address that asks the board to bring one status column into view

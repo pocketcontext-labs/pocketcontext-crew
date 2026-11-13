@@ -3526,3 +3526,63 @@ a.crew-logo:hover .product-brand span {
     max-width: none;
   }
 }
+/* Card chips that filter the board (labels, Ready, On hold, Won't do): one
+   size, cursor, hover and focus. Hover darkens the border and keeps each
+   chip's own color. Other chips (claims, Human, Handoff limit) stay plain. */
+.crew-app .crew-tags > .crew-chip-filter {
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 1px 8px;
+  border: 1px solid #dfe4d6;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.crew-app .crew-tags > .crew-chip-filter.crew-ready-chip,
+.crew-app .crew-tags > .crew-chip-filter.crew-ready-chip:hover {
+  background: #e3eee0;
+  border-color: #c9dcc4;
+}
+.crew-app .crew-tags > .crew-chip-filter.crew-hold-chip,
+.crew-app .crew-tags > .crew-chip-filter.crew-hold-chip:hover {
+  background: #f6eedb;
+  border-color: #e8d9b4;
+}
+.crew-app .crew-tags > .crew-chip-filter.crew-wont-do,
+.crew-app .crew-tags > .crew-chip-filter.crew-wont-do:hover {
+  background: #ecebe6;
+  border-color: #d9d7cf;
+}
+.crew-app .crew-tags > .crew-chip-filter.crew-label-filter:hover {
+  background: #eef0e7;
+}
+.crew-app .crew-tags > .crew-chip-filter.crew-chip-filter:hover {
+  border-color: #7f9670;
+  text-decoration: underline;
+}
+.crew-app .crew-tags > .crew-chip-filter:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: 1px;
+}
+/* Board sort: its own toolbar control beside Filters, showing the order. */
+.crew-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #617c4d;
+}
+@media (max-width: 680px) {
+  .crew-sort > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .crew-sort select {
+    max-width: 150px;
+  }
+}
