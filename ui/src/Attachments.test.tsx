@@ -149,6 +149,19 @@ describe("Files section", () => {
     expect(
       dialog.getByRole("link", { name: "Download app.log" }),
     ).toBeInTheDocument();
+    // Images download in one click too, under their own name.
+    const download = vi
+      .spyOn(attachmentsApi, "download")
+      .mockResolvedValue(undefined);
+    const imageDownload = dialog.getByRole("link", {
+      name: "Download img1.png",
+    });
+    expect(imageDownload).toHaveAttribute("download", "img1.png");
+    expect(imageDownload.getAttribute("href")).toContain("download=1");
+    fireEvent.click(imageDownload);
+    expect(download).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "img1", name: "img1.png" }),
+    );
     expect(dialog.getByText("Removed files (1)")).toBeInTheDocument();
     expect(
       dialog.getByRole("button", { name: "Restore old.png" }),

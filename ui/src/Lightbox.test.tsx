@@ -206,3 +206,22 @@ describe("Lightbox zoom", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 });
+
+describe("Download", () => {
+  it("saves the original in one click next to Open original, when offered", () => {
+    const onDownload = vi.fn();
+    const { v } = open([{ ...items[0], onDownload }, items[1]]);
+    const download = v.getByRole("button", { name: "Download tall.png" });
+    expect(download).toHaveAttribute("title", "Download tall.png");
+    expect(download).toHaveTextContent("Download");
+    fireEvent.click(download);
+    expect(onDownload).toHaveBeenCalledTimes(1);
+    expect(v.getByRole("link", { name: "Open original" })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+    cleanup();
+    const plain = open(items);
+    expect(plain.v.queryByRole("button", { name: /^Download/ })).toBeNull();
+  });
+});

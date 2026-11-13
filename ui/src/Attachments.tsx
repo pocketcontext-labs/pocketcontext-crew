@@ -701,6 +701,17 @@ export function AttachmentsProvider({
     width: f.width,
     height: f.height,
     src: f.blob || attachmentUrl(f.id, { token: fresh || token }),
+    onDownload: () => {
+      // A staged file (not uploaded yet) saves its local copy.
+      if (f.blob) {
+        const link = document.createElement("a");
+        link.href = f.blob;
+        link.download = f.name;
+        document.body.append(link);
+        link.click();
+        link.remove();
+      } else void attachmentsApi.download({ id: f.id, name: f.name });
+    },
   }));
   const previewing =
     viewing?.kind === "file"
@@ -805,7 +816,15 @@ function UploadLinkButton({ parent }: { parent: ParentRef }) {
   );
 }
 
-function DownloadLink({ attachment }: { attachment: Attachment }) {
+/**
+ * One-click download of the original file under its own name: the server
+ * answers `download=1` with an attachment disposition carrying that name.
+ */
+export function DownloadLink({
+  attachment,
+}: {
+  attachment: Pick<Attachment, "id" | "name">;
+}) {
   return (
     <a
       className="crew-attachment-download"
@@ -1009,16 +1028,19 @@ export function AttachmentsSection({
               <span className="crew-attachment-caption" title={a.name}>
                 {a.name}
               </span>
-              {!readOnly && (
-                <button
-                  type="button"
-                  className="crew-quiet"
-                  aria-label={`Remove ${a.name}`}
-                  onClick={() => remove(a)}
-                >
-                  Remove
-                </button>
-              )}
+              <span className="crew-attachment-actions">
+                <DownloadLink attachment={a} />
+                {!readOnly && (
+                  <button
+                    type="button"
+                    className="crew-quiet"
+                    aria-label={`Remove ${a.name}`}
+                    onClick={() => remove(a)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </span>
             </li>
           ))}
           {stagedFiles

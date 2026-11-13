@@ -16,6 +16,8 @@ export type LightboxItem = {
   alt: string;
   width?: number;
   height?: number;
+  /** Saves the original file under its own name (one click). */
+  onDownload?: () => void;
 };
 
 const focusable =
@@ -446,6 +448,17 @@ export default function Lightbox({
         >
           Open original
         </a>
+        {item.onDownload && (
+          <button
+            type="button"
+            className="crew-lightbox-download"
+            aria-label={`Download ${item.alt}`}
+            title={`Download ${item.alt}`}
+            onClick={item.onDownload}
+          >
+            <span aria-hidden="true">⤓ </span>Download
+          </button>
+        )}
       </div>
       <div
         ref={stageRef}

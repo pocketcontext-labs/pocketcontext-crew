@@ -1,5 +1,10 @@
 import { useId, useRef, useState, type ComponentType } from "react";
-import { AttachmentsProvider, ProseImage, ProseLink } from "./Attachments";
+import {
+  AttachmentsProvider,
+  DownloadLink,
+  ProseImage,
+  ProseLink,
+} from "./Attachments";
 import type { Attachment } from "./attachmentsApi";
 import { val, type Row } from "./crewApi";
 import {
@@ -64,7 +69,10 @@ export function ReviewContent({
                       {file.name}
                     </ProseLink>
                   )}
-                  <figcaption>{file.name}</figcaption>
+                  <figcaption>
+                    {file.name}
+                    <DownloadLink attachment={file} />
+                  </figcaption>
                 </figure>
               ))}
             </div>

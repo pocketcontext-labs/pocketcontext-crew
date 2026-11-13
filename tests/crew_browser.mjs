@@ -808,6 +808,10 @@ try {
  await page.waitForFunction(()=>/-2\.png$/.test(document.querySelector('.crew-lightbox-stage img')?.alt||''));
  await allLoaded('.crew-lightbox-stage img');
  await snapView('attachments-lightbox-1440');
+ // Download saves the original file under its own name in one click.
+ {const name=await viewer.locator('.crew-lightbox-stage img').getAttribute('alt');
+ const [file]=await Promise.all([page.waitForEvent('download'),viewer.getByRole('button',{name:`Download ${name}`}).click()]);
+ assert.equal(file.suggestedFilename(),name,'the viewer downloads the original name');}
  await page.keyboard.press('Escape');
  await viewer.waitFor({state:'hidden'});
  assert.equal(await page.getByRole('dialog').count(),1,'Escape closes only the viewer');

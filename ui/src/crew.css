@@ -3834,3 +3834,19 @@ a.crew-logo:hover .product-brand span {
   align-items: center;
   gap: 6px;
 }
+/* Download beside Remove under an image, and under review files. */
+.crew-attachment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.crew-review-gallery figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+}
+.crew-review-gallery .crew-attachment-download {
+  font-size: 12px;
+}

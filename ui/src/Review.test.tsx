@@ -318,3 +318,31 @@ it("does not remount Markdown images when the page re-renders", async () => {
   );
   expect(screen.getByRole("img", { name: "concept" })).toBe(image);
 });
+it("offers a one-click download for every file submitted for review", () => {
+  const download = vi.spyOn(attachmentsApi, "download").mockResolvedValue(undefined);
+  render(
+    <ReviewContent
+      row={{
+        ...review,
+        attachments: [
+          { id: "att000000000001", sha256: "att000000000001" },
+          { id: "att000000000002", sha256: "att000000000002" },
+        ],
+      }}
+      attachments={[
+        file("att000000000001", { name: "concept 14 – café.png" }),
+        file("att000000000002", { name: "brief.pdf", image: false, media_type: "application/pdf" }),
+      ]}
+      Prose={Prose}
+    />,
+  );
+  const gallery = screen.getByRole("region", { name: "Files submitted for review" });
+  fireEvent.click(within(gallery).getByRole("link", { name: "Download concept 14 – café.png" }));
+  expect(download).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "att000000000001", name: "concept 14 – café.png" }),
+  );
+  expect(within(gallery).getByRole("link", { name: "Download brief.pdf" })).toHaveAttribute(
+    "download",
+    "brief.pdf",
+  );
+});
