@@ -55,6 +55,7 @@ export function viewFromHash(hash: string): View {
   if (/^#\/connect\?/.test(hash)) return "connect";
   if (/^#\/shared\/[a-z0-9]{15}$/.test(hash)) return "shared";
   if (/^#\/shared\?/.test(hash)) return "shared";
+  if (/^#\/archive\?/.test(hash)) return "archive";
   const link = parseItemHash(hash);
   if (link) return link.kind === "task" ? "board" : "memory";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);

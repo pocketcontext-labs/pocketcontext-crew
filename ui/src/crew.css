@@ -3645,3 +3645,106 @@ a.crew-logo:hover .product-brand span {
     max-width: 150px;
   }
 }
+/* Archive: one category at a time, compact rows, paged. */
+.crew-archive-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid #e0e5d8;
+  margin: 0 0 14px;
+}
+.crew-app .crew-archive-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 12px;
+  color: #5d6a52;
+}
+.crew-app .crew-archive-tabs button.active {
+  border-bottom-color: #487d55;
+  color: #24412f;
+  font-weight: 600;
+}
+.crew-archive-count {
+  color: #7e8a71;
+  font-weight: 400;
+}
+.crew-archive-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 10px;
+}
+.crew-archive-toolbar .crew-search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.crew-archive-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: #617c4d;
+}
+.crew-archive-bulk label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.crew-archive-bulk button {
+  margin-left: auto;
+}
+.crew-archive-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.crew-archive .crew-archive-row {
+  justify-content: flex-start;
+  min-height: 52px;
+  padding: 8px 0;
+  box-sizing: border-box;
+}
+.crew-archive .crew-archive-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.crew-archive .crew-archive-row strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.crew-archive .crew-archive-row > button {
+  padding: 6px 12px;
+}
+.crew-archive-group .crew-archive-row strong {
+  white-space: normal;
+}
+.crew-app .crew-archive-group .crew-archive-row > div > button {
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 11px;
+  color: #487d55;
+  text-decoration: underline;
+}
+.crew-archive-group-notes {
+  margin: 0 0 8px;
+  padding: 0 0 0 22px;
+  font-size: 12px;
+  color: #6c7a61;
+}
+.crew-archive-empty {
+  color: #738068;
+  font-size: 12px;
+}
+.crew-app .crew-archive-more {
+  width: 100%;
+  margin: 10px 0;
+}

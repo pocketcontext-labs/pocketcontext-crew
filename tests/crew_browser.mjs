@@ -79,7 +79,11 @@ try {
  assert.equal(await page.getByRole('button',{name:/Synthetic launch voice/}).count(),0);
  await page.getByRole('link',{name:'Archive',exact:true}).click();
  await page.locator('nav a[aria-current=page]').filter({hasText:'Archive'}).waitFor();
- await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByRole('button',{name:'Restore'}).click();
+ await page.getByRole('tab',{name:/^Notes \(/}).click();
+ await page.waitForURL('**/#/archive?tab=notes');
+ await page.getByRole('searchbox',{name:'Search archived notes by title'}).fill('launch voice');
+ await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByText(/^Archived today at .+ · /).waitFor();
+ await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByRole('button',{name:'Restore Synthetic launch voice'}).click();
  await page.getByText('Restored. Prior approvals were not reactivated.').waitFor();
  await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
  await page.getByRole('button',{name:'New task'}).click();

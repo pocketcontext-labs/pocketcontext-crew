@@ -496,15 +496,24 @@ it("requires restoring the owning bucket before an inherited archived note", asy
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
   await openPage("Archive");
+  fireEvent.click(screen.getByRole("tab", { name: /^Notes/ }));
+  // A note hidden by its archived bucket is grouped under the bucket, with
+  // the bucket's Restore instead of a disabled one per note.
   expect(
-    screen.getByText(
-      "Hidden by its archived bucket. Restore the bucket first.",
-    ),
+    screen.getByText(/1 note hidden by archived bucket/),
   ).toBeInTheDocument();
-  const noteRow = screen.getByText("Voice").closest(".crew-archive-row")!;
-  expect(
-    within(noteRow as HTMLElement).getByRole("button", { name: "Restore" }),
-  ).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Restore Voice" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Show notes" }));
+  expect(screen.getByText("Voice")).toBeInTheDocument();
+  vi.mocked(crewApi.write).mockResolvedValue({ id: bucket.id, revision: 2 });
+  fireEvent.click(screen.getByRole("button", { name: "Restore bucket" }));
+  await waitFor(() =>
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "bucket.update",
+      { archived: false },
+      expect.objectContaining({ id: bucket.id }),
+    ),
+  );
 });
 it("renders draft Markdown without loading remote images or executing HTML", async () => {
   fixtures.reviews = [

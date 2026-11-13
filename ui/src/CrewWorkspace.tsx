@@ -133,6 +133,7 @@ import {
   sharedFocusFromHash,
 } from "./itemLink";
 import Shared from "./Shared";
+import Archive, { type RestoreItem } from "./Archive";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
   ["board", "Tasks", "▦"],
@@ -1277,7 +1278,10 @@ export default function CrewWorkspace() {
       setNotice(`That ${kind} couldn't be opened. It may have just changed; try again.`);
     }
   };
-  const perform = async (work: () => Promise<unknown>, message = "Saved.") => {
+  const perform = async (
+    work: () => Promise<unknown>,
+    message: string | (() => string) = "Saved.",
+  ) => {
     setBusy(true);
     busyRef.current = true;
     loadFailed.current = false;
@@ -1287,7 +1291,7 @@ export default function CrewWorkspace() {
       await work();
       await load();
       setSaves((n) => n + 1);
-      setNotice(message);
+      setNotice(typeof message === "function" ? message() : message);
       return true;
     } catch (e) {
       setError(
@@ -1300,6 +1304,36 @@ export default function CrewWorkspace() {
       setBusy(false);
       busyRef.current = false;
     }
+  };
+  // Archive restores (one row, a bucket or a selection) run one at a time;
+  // failures are reported by title and the rest still restore.
+  const restoreArchived = (items: RestoreItem[]) => {
+    const failed: string[] = [];
+    let reason = "";
+    return perform(
+      async () => {
+        for (const { collection, row } of items) {
+          try {
+            await crewApi.write(
+              `${collection === "buckets" ? "bucket" : collection === "agents" ? "agent" : collection === "tasks" ? "task" : "note"}.update`,
+              { archived: false },
+              row,
+            );
+          } catch (e) {
+            failed.push(val(row, "title") || val(row, "name"));
+            reason ||= e instanceof Error ? e.message : "";
+          }
+        }
+        if (failed.length === items.length)
+          throw new Error(
+            `Could not restore ${failed.join(", ")}.${reason ? ` ${reason}` : ""}`,
+          );
+      },
+      () =>
+        failed.length
+          ? `Restored ${items.length - failed.length} of ${items.length}. Could not restore ${failed.join(", ")}.${reason ? ` ${reason}` : ""}`
+          : `${items.length === 1 ? "Restored" : `Restored ${items.length} items`}. Prior approvals were not reactivated.`,
+    );
   };
   const save = async (
     action: string,
@@ -2318,48 +2352,12 @@ export default function CrewWorkspace() {
           )}
           {view === "archive" && (
             <>
-              {(["notes", "tasks", "buckets", "agents"] as const).map((c) => (
-                <section className="crew-archive-section" key={c}>
-                  <h2>
-                    {c === "agents" ? "Inactive agents" : `Archived ${c}`}
-                  </h2>
-                  {!archived[c].length && (
-                    <p>
-                      {c === "agents"
-                        ? "No inactive agents. Deactivated agents appear here."
-                        : `No archived ${c}. Anything you archive appears here and can be restored.`}
-                    </p>
-                  )}
-                  {archived[c].map((x) => (
-                    <div className="crew-archive-row" key={x.id}>
-                      <div>
-                        <strong>{val(x, "title") || val(x, "name")}</strong>
-                        <small>
-                          {c === "notes" && !x.archived
-                            ? "Hidden by its archived bucket. Restore the bucket first."
-                            : `Revision ${x.revision}`}
-                        </small>
-                      </div>
-                      <button
-                        disabled={busy || (c === "notes" && !x.archived)}
-                        onClick={() =>
-                          void perform(
-                            () =>
-                              crewApi.write(
-                                `${c === "buckets" ? "bucket" : c === "agents" ? "agent" : c === "tasks" ? "task" : "note"}.update`,
-                                { archived: false },
-                                x,
-                              ),
-                            "Restored. Prior approvals were not reactivated.",
-                          )
-                        }
-                      >
-                        Restore
-                      </button>
-                    </div>
-                  ))}
-                </section>
-              ))}
+              <Archive
+                archived={archived}
+                buckets={data.buckets}
+                busy={busy}
+                restore={(items) => void restoreArchived(items)}
+              />
               <p className="crew-footnote">
                 Archived records remain in history and backups. Permanent
                 deletion is not available.
