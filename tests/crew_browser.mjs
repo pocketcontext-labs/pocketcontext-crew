@@ -100,6 +100,7 @@ try {
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
  // Request approval is a real button with the standard "?" on its row; an unsaved draft disables it with a hint.
  {const request=dialog().getByRole('button',{name:'Request approval',exact:true});
+ await dialog().getByRole('tablist',{name:'Draft for review view'}).getByRole('tab',{name:'Edit',exact:true}).click();
  const draftBox=dialog().getByLabel('Draft for review',{exact:true});const savedDraft=await draftBox.inputValue();
  await draftBox.fill('');
  assert.equal(await request.isDisabled(),true,'an unsaved draft disables Request approval');

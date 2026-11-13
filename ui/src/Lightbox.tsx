@@ -467,7 +467,7 @@ export default function Lightbox({
             rel="noopener noreferrer"
             title="Open the original in a new tab"
           >
-            <span aria-hidden="true">↗ </span>Open original
+            <span aria-hidden="true">↗</span>Open original
           </a>
           {item.onDownload && (
             <button

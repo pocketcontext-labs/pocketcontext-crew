@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.26.0 to 0.27.0
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.27.0. Reader changes only: the
+Tasks board has an agent row, "Send draft for approval" is now **Request approval**,
+the viewer's "100%" fit button is **Actual size**, and agent cards read **Copy coding
+prompt**. Rollback to 0.26.0 needs no restore. From 0.25.0 or earlier, follow the
+0.25.0 to 0.26.0 notes first.
+
 ## Crew 0.25.0 to 0.26.0
 
 One data migration (`1801800000_crew_session_guide_setting.js`) adds the setting

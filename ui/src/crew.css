@@ -1783,12 +1783,9 @@ a.crew-logo:hover .product-brand span {
   grid-template-columns: 1fr 1fr;
   gap: 15px;
 }
+/* Request approval: a normal secondary button, the "?" beside it. */
 .crew-dialog .crew-review-submit {
-  margin: -4px 0 18px;
-  width: 100%;
-  background: #eee6c8;
-  border-color: #e0d3a2;
-  color: #75612f;
+  margin: 0;
 }
 .crew-tabs {
   display: flex;
@@ -3424,6 +3421,7 @@ a.crew-logo:hover .product-brand span {
 .crew-lightbox-original {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   box-sizing: border-box;
   color: inherit;
   background: #ffffff1a;

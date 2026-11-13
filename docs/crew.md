@@ -621,9 +621,14 @@ review); append-only events record them. Link arrays hold
 task or note IDs (since 0.24.0): an unknown or malformed ID is a 400 naming it
 (`unknown_link`) and a record cannot link to itself (`self_link`). The reader
 shows a record's links under Related and the records that link to it under
-Linked from, so a relationship appears on both sides. Human is reserved as a derived pending-review label, not editable data.
+Linked from, so a relationship appears on both sides. Since 0.27.0 tasks and notes
+share one Related section (help, Remove, Linked from, search to add a link), and a
+note's Read view can add and remove links and save them directly. Human is reserved as a derived pending-review label, not editable data.
 
-Creating a review snapshots the task draft and moves it to needs_review. Editing
+Creating a review snapshots the task draft and moves it to needs_review; it is the
+only way in (a status update to needs_review is refused). The reader's **Request
+approval** button is disabled with "Save a draft first." until a saved draft exists,
+and the Status field's help says why Needs review can't be picked by hand. Editing
 the draft (which puts the task on hold with hold reason `Draft edited`) or
 archiving the task withdraws its pending reviews atomically. A work client
 requesting review with its own execution proof completes that execution
@@ -772,10 +777,12 @@ prompt** copies the two-line prompt, which makes the session read the latest sav
 revision.
 
 **Start a session (one click since 0.24.0; clearer since 0.25.0).** Each manually
-started agent has a **Copy prompt for a coding agent** button under its card on the
-Agents page and on Home, where an agent chip (avatar, name, Agent tag, first line of
+started agent has a copy button under its card on the Agents page (**Copy coding
+prompt** since 0.27.0, so its **?** stays on the same row) and **Copy prompt for a
+coding agent** on Home, where an agent chip (avatar, name, Agent tag, first line of
 the brief on hover) names the agent (active manual agents only; bots, people and
-inactive agents never appear, and there are no counts). The reader reads the
+inactive agents never appear, and there are no counts). After a copy the button
+shows **Copied** for 2 seconds. The reader reads the
 session when the button renders, so the click copies `prompt` straight away (a
 phone refuses a clipboard write that waits for the network). A toast confirms
 "Copied the session prompt for <name>. Paste it into a new session in your coding
@@ -895,7 +902,10 @@ removable chip under the toolbar, with the number of matching tasks and **Clear
 all**. The search reads `label:`, `agent:` and `status:` tokens
 (quote values with spaces, e.g. `agent:"Build bot"`) and applies them like the
 corresponding filter; Enter turns them into chips in the address. The MCP `label`
-filter remains an exact match.
+filter remains an exact match. Since 0.27.0 a row of agent chips under the toolbar
+(All, each active agent with its open-task count, and Unassigned when open tasks have
+no agent) and the agent in a card's footer set the same assignment filter in one
+click; clicking the selected chip again shows every task.
 
 The wake rule: an on-hold task never wakes a bot, whatever changes. Creating it,
 assigning or reassigning it, reopening it, review outcomes and comments
