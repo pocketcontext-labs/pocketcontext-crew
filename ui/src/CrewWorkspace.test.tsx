@@ -3449,8 +3449,11 @@ it("explains project agents and coding sessions in the Guide", async () => {
   expect(screen.getByRole("heading", { name: "Claim" })).toBeInTheDocument();
 });
 describe("release labels and Won't do on the board", () => {
+  // One base time, so tasks "a day old" tie exactly: separate Date.now() calls
+  // can straddle a millisecond and flip the newest-first order (flaked in CI).
+  let base = Date.now();
   const days = (n: number) =>
-    new Date(Date.now() - n * 86_400_000).toISOString().replace("T", " ");
+    new Date(base - n * 86_400_000).toISOString().replace("T", " ");
   const closed = (id: string, title: string, extra: Partial<Row>): Row => ({
     ...task,
     id,
@@ -3461,6 +3464,7 @@ describe("release labels and Won't do on the board", () => {
     ...extra,
   });
   beforeEach(() => {
+    base = Date.now();
     fixtures.reviews = [];
     fixtures.tasks = [
       { ...task, id: "task00000000001", title: "Planned", status: "todo", labels: [] },
