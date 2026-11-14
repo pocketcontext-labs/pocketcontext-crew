@@ -905,7 +905,8 @@ corresponding filter; Enter turns them into chips in the address. The MCP `label
 filter remains an exact match. Since 0.27.0 a row of agent chips under the toolbar
 (All, each active agent with its open-task count, and Unassigned when open tasks have
 no agent) and the agent in a card's footer set the same assignment filter in one
-click; clicking the selected chip again shows every task.
+click; clicking the selected chip again shows every task. Since 0.27.1 the row wraps
+onto more lines instead of scrolling sideways, so every agent stays visible on a phone.
 
 The wake rule: an on-hold task never wakes a bot, whatever changes. Creating it,
 assigning or reassigning it, reopening it, review outcomes and comments

@@ -4120,17 +4120,16 @@ a.crew-logo:hover .product-brand span {
 .crew-status-hint.is-pending {
   display: block;
 }
-/* Tasks: one compact chip per agent under the toolbar. It scrolls sideways
-   on narrow screens instead of wrapping. */
+/* Tasks: one compact chip per agent under the toolbar. Chip rows wrap onto
+   more lines so every agent stays visible; they never scroll sideways. */
 .crew-agent-row {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   margin: -12px 0 20px;
   padding: 2px;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  min-width: 0;
 }
 .crew-app .crew-agent-chip {
   flex: none;
@@ -4138,7 +4137,8 @@ a.crew-logo:hover .product-brand span {
   align-items: center;
   gap: 6px;
   padding: 3px 10px 3px 4px;
-  min-height: 30px;
+  min-height: 32px;
+  max-width: 100%;
   font-size: 12px;
   white-space: nowrap;
   color: #33402c;
@@ -4173,4 +4173,21 @@ a.crew-logo:hover .product-brand span {
 .crew-app .crew-agent-chip:focus-visible {
   outline: 2px solid #487d55;
   outline-offset: 1px;
+}
+/* Phones: tighter chips so more agents fit on each wrapped line. */
+@media (max-width: 420px) {
+  .crew-agent-row {
+    gap: 6px;
+  }
+  .crew-app .crew-agent-chip {
+    gap: 4px;
+    padding: 3px 8px 3px 3px;
+  }
+  .crew-app .crew-agent-chip:not(:has(.crew-avatar)) {
+    padding-left: 10px;
+  }
+  .crew-app .crew-agent-chip .crew-avatar {
+    width: 20px;
+    height: 20px;
+  }
 }

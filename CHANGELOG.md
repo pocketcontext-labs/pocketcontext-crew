@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.27.1](docs/releases/0.27.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.27.1) · The Tasks agent row wraps on phones instead of scrolling sideways, so every agent is visible.
 - **[0.27.0](docs/releases/0.27.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.27.0) · One-click agent row on the board, clickable card agents, one Related section, Status help, a real Request approval button and the grouped viewer toolbar.
 - **[0.26.0](docs/releases/0.26.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.26.0) · Sandboxed preview for HTML and SVG attachments, uniform file tiles and the Start a session guide as a dialog.
 - **[0.25.0](docs/releases/0.25.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.25.0) · Archive page with tabs, search, filters and Restore selected; clearer Start a session; every card chip filters; one-click downloads.

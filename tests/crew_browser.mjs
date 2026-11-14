@@ -479,7 +479,7 @@ try {
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
  assert.equal(await row.getByRole('button',{name:/^All agents, /}).getAttribute('aria-pressed'),'true');
- assert.equal(await row.evaluate(e=>getComputedStyle(e).flexWrap),'nowrap','the agent row scrolls instead of wrapping');}
+ assert.equal(await row.evaluate(e=>getComputedStyle(e).flexWrap),'wrap','the agent row wraps instead of scrolling');}
  // The assigned agent in a card footer filters by that agent without opening the card.
  await page.locator('.crew-task-card footer').getByRole('button',{name:'Filter by agent Network',exact:true}).click();
  await page.waitForFunction(()=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(location.hash));
@@ -1164,6 +1164,22 @@ try {
  const boardAgent=await boardWrite('agent.create',{name:'Synthetic-board-agent',kind:'external'});
  const boardTask=await boardWrite('task.create',{title:'Synthetic compact claim',assigned_agent:boardAgent.id,readiness:'ready',labels:['Synthetic-board-agent','Synthetic-board','Bug']});
  await boardWrite('task.claim',{assigned_agent:boardAgent.id},boardTask.id,boardTask.revision);
+ // With many agents, the agent row wraps at 390: every chip is on screen and nothing scrolls sideways.
+ {const extra=[];for(const name of ['Attend','Build','Design','Implement','Learn','Network-two','Sell'])extra.push(await boardWrite('agent.create',{name:`Synthetic ${name}`,kind:'external'}));
+ await page.setViewportSize({width:390,height:844});
+ await page.goto(base+'/#/tasks');await page.reload();
+ const row=page.getByRole('group',{name:'Filter by agent'});
+ await row.getByRole('button',{name:/^Synthetic Sell, /}).waitFor();
+ const chips=await row.locator('.crew-agent-chip').evaluateAll(list=>list.map(c=>{const r=c.getBoundingClientRect();return {name:c.getAttribute('aria-label'),left:r.left,right:r.right,height:r.height};}));
+ assert.ok(chips.length>=9,`All plus at least 8 agents (${chips.length})`);
+ assert.match(chips[0].name,/^All agents, /,'All stays first');
+ for(const chip of chips){assert.ok(chip.left>=0&&chip.right<=390,`${chip.name} inside the 390 viewport`);assert.ok(chip.height>=32,`${chip.name} tap target at least 32 px`);}
+ assert.equal(await row.evaluate(e=>getComputedStyle(e).flexWrap),'wrap','the agent row wraps');
+ assert.equal(await row.evaluate(e=>e.scrollWidth<=e.clientWidth),true,'the agent row has no horizontal overflow');
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'the Tasks page has no horizontal overflow at 390');
+ await snapView('crew-board-agent-row-390');
+ await page.setViewportSize({width:1440,height:1000});
+ for(const agent of extra)await boardWrite('agent.update',{archived:true},agent.id,agent.revision);}
  await page.goto(base+'/#/tasks?label=synthetic-board');
  const claimCard=page.locator('.crew-task-card').filter({hasText:'Synthetic compact claim'});
  await claimCard.waitFor();
