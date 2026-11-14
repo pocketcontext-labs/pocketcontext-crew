@@ -55,6 +55,8 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   backup/restore gates before deployment. Deploy the exact tested OCI digest;
   a desired `:latest` reference must resolve to a digest before replacement.
 - No databases, generated ui/dist, bin, credentials or user data in commits.
+- A release adds `docs/releases/<version>.md`, one line at the top of
+  `CHANGELOG.md` and the pinned release link in README.md's "Shipped in the open".
 - Historical upstream docs (docs/releases/upstream/, docs/release-validation-*)
   describe inherited infrastructure, not a Crew release.
 

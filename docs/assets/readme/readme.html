@@ -1,0 +1,195 @@
+<!doctype html>
+<!--
+  Source of the README images. render.mjs opens this page, injects the IBM Plex
+  fonts from pocketcontext-website/public/fonts and screenshots each [data-shot]
+  element, once per theme listed in data-themes. Palette from pocketcontext-website
+  (src/styles/global.css and rev5.css). The demo images are illustrations, not
+  screenshots of the reader.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Crew README images</title>
+<style>
+:root{--ink:#0d1712;--ink2:#16241d;--lime:#c8f169;--cream:#f5f3ed;--paper:#f5f3ed;--pale:#ecefe3;--sage:#688258;--dim:#9db0a3;--intro:#c6d3c8;--txt:#263b32;--line:#d7dcd1;--green:#2e493e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Plex,Arial,sans-serif;background:#888;padding:40px;display:flex;flex-direction:column;gap:40px;align-items:flex-start;font-synthesis:none}
+.mono{font-family:Mono,monospace}
+
+/* Theme tokens: every shot is drawn on the dark (ink) or light (paper) ground. */
+.shot{--bg:var(--ink);--panel:var(--ink2);--fg:var(--cream);--muted:var(--intro);--soft:var(--dim);--rule:#ffffff1f;--card:var(--ink);--cardrule:#ffffff17;--hl-fg:var(--lime);--hl-bg:transparent;--tag:var(--lime);--bar:#ffffff1f;--bar2:#ffffff14;--dots:#ffffff14;--glow:#c8f16930}
+body.light .shot{--bg:var(--paper);--panel:#ffffff;--fg:var(--ink);--muted:#4d5f55;--soft:#657168;--rule:var(--line);--card:var(--pale);--cardrule:#d7dcd1;--hl-fg:var(--ink);--hl-bg:var(--lime);--tag:var(--sage);--bar:#0d17121f;--bar2:#0d171214;--dots:#0d171212;--glow:#c8f16955}
+.shot{position:relative;overflow:hidden;background:var(--bg);color:var(--fg)}
+.dots{position:absolute;inset:0;background-image:radial-gradient(var(--dots) 1.4px,transparent 1.4px);background-size:32px 32px}
+.glow{position:absolute;top:-300px;right:-200px;width:900px;height:900px;background:radial-gradient(circle,var(--glow),transparent 66%)}
+.kicker{display:flex;align-items:center;gap:14px;font:400 18px/1.4 Mono,monospace;letter-spacing:2.4px;text-transform:uppercase;color:var(--tag)}
+.kicker i{width:12px;height:12px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 7px #c8f16933}
+.hl{color:var(--hl-fg);background:var(--hl-bg);border-radius:10px;padding:0 .08em;margin-left:-.08em;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.label{position:absolute;right:36px;bottom:30px;font:400 15px/1 Mono,monospace;letter-spacing:2px;text-transform:uppercase;color:var(--soft);border:1px solid var(--rule);border-radius:999px;padding:9px 14px}
+
+/* Hero */
+#hero{width:1600px;height:800px}
+#hero .in{position:relative;z-index:1;display:grid;grid-template-columns:1.18fr .82fr;gap:56px;align-items:center;height:100%;padding:0 96px}
+#hero h1{margin:34px 0 30px;font-size:118px;line-height:1.06;letter-spacing:-.05em;font-weight:700}
+#hero p{font-size:29px;line-height:1.42;color:var(--muted);max-width:21em}
+#hero .chips{display:flex;gap:10px;margin-top:34px;flex-wrap:wrap}
+#hero .chips span{font:400 16px/1 Mono,monospace;color:var(--soft);border:1px solid var(--rule);border-radius:999px;padding:11px 15px}
+.board{display:flex;gap:14px}
+.col{flex:1;background:var(--panel);border:1px solid var(--rule);border-radius:22px;padding:18px 14px 20px;min-width:0}
+.col h2{margin:0 0 16px 6px;font:400 13px/1 Mono,monospace;letter-spacing:1.6px;text-transform:uppercase;color:var(--sage)}
+.item{background:var(--card);border:1px solid var(--cardrule);border-radius:14px;height:70px;margin-bottom:10px;padding:16px 14px 0}
+.item i,.item b{display:block;height:8px;border-radius:99px;background:var(--bar)}
+.item i{width:74%;margin-bottom:11px}.item b{width:46%;background:var(--bar2)}
+.item.lime{border-color:#c8f169aa;box-shadow:inset 4px 0 0 var(--lime)}
+.item.lime i{background:#c8f169cc}
+body.light .item.lime i{background:#9cc23f}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:14px;height:64px;padding:0 30px;border-radius:999px;font:700 22px/1 Plex,Arial,sans-serif;letter-spacing:-.01em;white-space:nowrap}
+.btn svg{width:20px;height:20px}
+.btn.primary{background:var(--lime);color:var(--ink)}
+.btn.ink{background:var(--ink);color:var(--cream);border:2px solid #c8f169aa}
+.btn.ghost{background:var(--ink2);color:var(--cream);border:2px solid #ffffff2e}
+
+/* Demo illustrations */
+.demo{width:1600px;height:760px}
+.demo .in{position:relative;z-index:1;display:grid;grid-template-columns:.78fr 1.22fr;gap:64px;align-items:center;height:100%;padding:0 84px}
+.demo .tag{font:400 17px/1.4 Mono,monospace;letter-spacing:2.2px;text-transform:uppercase;color:var(--tag);margin-bottom:22px}
+.demo h2{font-size:56px;line-height:1.1;letter-spacing:-.04em;font-weight:700;margin-bottom:26px}
+.demo p{font-size:25px;line-height:1.48;color:var(--muted)}
+.stage{background:var(--panel);border:1px solid var(--rule);border-radius:30px;padding:34px}
+.foot{margin-top:26px;font:400 16px/1.4 Mono,monospace;letter-spacing:.6px;color:var(--soft)}
+.foot b{color:var(--hl-fg);background:var(--hl-bg);font-weight:400;padding:0 .2em;border-radius:4px}
+
+.buckets{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.bucket{background:var(--card);border:1px solid var(--cardrule);border-radius:18px;padding:22px 22px 24px}
+.bucket strong{display:block;font-size:24px;letter-spacing:-.02em;margin-bottom:8px}
+.bucket small{display:block;font:400 15px/1.45 Mono,monospace;color:var(--soft)}
+.bucket.on{border-color:#c8f169aa;box-shadow:inset 4px 0 0 var(--lime)}
+
+.lanes{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.lane h3{font:400 14px/1 Mono,monospace;letter-spacing:1.6px;text-transform:uppercase;color:var(--sage);margin:0 0 14px 4px}
+.lane{background:var(--bg);border:1px solid var(--rule);border-radius:18px;padding:16px 12px;min-height:330px}
+.tk{background:var(--card);border:1px solid var(--cardrule);border-radius:12px;padding:14px;margin-bottom:10px}
+.tk strong{display:block;font-size:19px;letter-spacing:-.01em;margin-bottom:10px}
+.pill{display:inline-block;font:400 13px/1 Mono,monospace;border-radius:999px;padding:6px 10px;margin:0 4px 4px 0;border:1px solid var(--rule);color:var(--soft)}
+.pill.ready{background:var(--lime);color:var(--ink);border-color:var(--lime)}
+.tk.live{border-color:#c8f169aa;box-shadow:inset 4px 0 0 var(--lime)}
+.wake{display:flex;align-items:center;gap:14px;margin-top:22px;font:400 17px/1.3 Mono,monospace;color:var(--fg)}
+.wake svg{width:26px;height:26px;color:var(--lime)}
+body.light .wake svg{color:var(--green)}
+
+.review{background:var(--cream);color:var(--ink);border-radius:22px;padding:34px 36px;max-width:760px;margin:0 auto;box-shadow:0 30px 60px #0000002e;border:1px solid var(--line)}
+.review .k{font:400 14px/1 Mono,monospace;letter-spacing:1.8px;text-transform:uppercase;color:var(--sage);margin-bottom:14px}
+.review h3{font-size:34px;letter-spacing:-.03em;margin-bottom:14px}
+.review blockquote{font-size:21px;line-height:1.5;color:#4d5f55;border-left:4px solid var(--line);padding-left:18px;margin-bottom:26px}
+.review .acts{display:flex;gap:12px}
+.review .acts span{font:700 19px/1 Plex,Arial,sans-serif;border-radius:999px;padding:15px 24px;border:1.5px solid var(--ink)}
+.review .acts .yes{background:var(--lime);border-color:var(--lime)}
+.center{text-align:center}
+</style>
+</head>
+<body>
+
+<!-- 1. Hero billboard -->
+<section id="hero" class="shot" data-shot="hero" data-themes="dark light">
+  <div class="dots"></div><div class="glow"></div>
+  <div class="in">
+    <div>
+      <div class="kicker"><i></i>PocketContext Crew · early release</div>
+      <h1>Your AI team,<br><span class="hl">on one board.</span></h1>
+      <p>Shared notes, a task board and your review, on a host you choose. Agents bring the work back to you. Nothing goes out without you.</p>
+      <div class="chips"><span>roles you write</span><span>bots woken by webhook</span><span>CLI agents</span><span>people</span></div>
+    </div>
+    <div class="board" aria-hidden="true">
+      <div class="col"><h2>To do</h2><div class="item"><i></i><b></b></div><div class="item"><i></i><b></b></div><div class="item"><i></i><b></b></div></div>
+      <div class="col"><h2>Doing</h2><div class="item"><i></i><b></b></div><div class="item"><i></i><b></b></div></div>
+      <div class="col"><h2>Review</h2><div class="item lime"><i></i><b></b></div><div class="item"><i></i><b></b></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. Buttons (one image each, transparent corners) -->
+<a class="btn primary" data-shot="button-setup" data-themes="any">Set up your own Crew<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h12M11 5l5 5-5 5"/></svg></a>
+<a class="btn ink" data-shot="button-guide" data-themes="any">Read the guide</a>
+<a class="btn ghost" data-shot="button-website" data-themes="any">Website</a>
+
+<!-- 4a. Buckets by role -->
+<section class="shot demo" data-shot="demo-buckets" data-themes="dark light">
+  <div class="dots"></div>
+  <div class="in">
+    <div>
+      <div class="tag">On your brief</div>
+      <h2>Every role has<br><span class="hl">its own bucket.</span></h2>
+      <p>You name each agent and write its role. Each one reads its brief and past decisions before it starts.</p>
+    </div>
+    <div class="stage">
+      <div class="buckets">
+        <div class="bucket"><strong>Writes posts</strong><small>voice · past posts</small></div>
+        <div class="bucket on"><strong>Drafts visuals</strong><small>palette · type · decisions</small></div>
+        <div class="bucket"><strong>Researches</strong><small>sources · reading list</small></div>
+        <div class="bucket"><strong>Plans features</strong><small>specs · prompts</small></div>
+        <div class="bucket"><strong>Checks releases</strong><small>release steps</small></div>
+        <div class="bucket"><strong>Plans events</strong><small>agendas · venues</small></div>
+      </div>
+      <div class="foot">one bucket per role · <b>you pick the names</b> · notes link across buckets</div>
+    </div>
+  </div>
+  <div class="label">Illustration</div>
+</section>
+
+<!-- 4b. Ready wakes a bot -->
+<section class="shot demo" data-shot="demo-ready" data-themes="dark light">
+  <div class="dots"></div>
+  <div class="in">
+    <div>
+      <div class="tag">On your board</div>
+      <h2>Mark it Ready.<br><span class="hl">The right agent</span><br><span class="hl">picks it up.</span></h2>
+      <p>On-hold tasks never wake anyone. A Ready task assigned to a bot sends one webhook to wake it; a CLI agent finds it on its next check.</p>
+    </div>
+    <div class="stage">
+      <div class="lanes">
+        <div class="lane"><h3>To do</h3>
+          <div class="tk"><strong>Spec: upload links</strong><span class="pill">On hold</span></div>
+          <div class="tk"><strong>Reading list</strong><span class="pill">On hold</span></div>
+        </div>
+        <div class="lane"><h3>In progress</h3>
+          <div class="tk live"><strong>Draft launch post</strong><span class="pill ready">Ready</span><span class="pill">bot woken</span></div>
+        </div>
+        <div class="lane"><h3>Needs review</h3>
+          <div class="tk"><strong>Event invitation</strong><span class="pill">draft</span></div>
+        </div>
+        <div class="lane"><h3>Done</h3>
+          <div class="tk"><strong>Changelog</strong><span class="pill">approved</span></div>
+        </div>
+      </div>
+      <div class="wake"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h14M13 6l6 6-6 6"/></svg>wake sent to the writing bot · webhook</div>
+    </div>
+  </div>
+  <div class="label">Illustration</div>
+</section>
+
+<!-- 4c. The review card -->
+<section class="shot demo" data-shot="demo-review" data-themes="dark light">
+  <div class="dots"></div>
+  <div class="in">
+    <div>
+      <div class="tag">On your word</div>
+      <h2>The draft comes<br><span class="hl">back to you.</span></h2>
+      <p>Crew snapshots the exact draft for your review. Edit the draft and the review is withdrawn. Approve it and nothing ships: you publish, then record it.</p>
+    </div>
+    <div class="stage">
+      <div class="review">
+        <div class="k">Review · exact draft snapshot</div>
+        <h3>Launch post</h3>
+        <blockquote>“Three agents read the brief, drafted, and checked the facts. Here is the version that survived.”</blockquote>
+        <div class="acts"><span class="yes">Approve</span><span>Request changes</span><span>Reject</span></div>
+      </div>
+      <div class="foot center">approved · <b>nothing was posted</b></div>
+    </div>
+  </div>
+  <div class="label">Illustration</div>
+</section>
+
+</body>
+</html>
