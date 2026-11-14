@@ -69,6 +69,9 @@ async function ready() {
   await screen.findByRole("heading", {
     name: /Add screenshots to: Crash on save/,
   });
+  // The paste listener is attached in an effect after this render; flush it so a
+  // test that pastes right away is not lost on a slow runner.
+  await act(async () => {});
 }
 
 describe("routing", () => {
