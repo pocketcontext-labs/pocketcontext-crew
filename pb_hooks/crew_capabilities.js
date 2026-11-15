@@ -353,7 +353,7 @@ function document() {
   });
   op("review.request", { options: reviewOptions }, [], {
     description:
-      "Attach every image or file first and reference attachment:ID. Local file paths are refused with draft_references_unattached_files. Send alternatives as options with unique keys, labels and bodies (max 20; combined bodies max 200000 characters); they are frozen with the draft.",
+      "Attach every image or file first and reference attachment:ID. Local file paths are refused with draft_references_unattached_files. The result is the review with its derived path (#/approvals/<id>) and url (with a public base URL): link the owner to it to open the Review draft dialog directly. Send alternatives as options with unique keys, labels and bodies (max 20; combined bodies max 200000 characters); they are frozen with the draft.",
     revision: "task",
     execution_proof:
       "Required only while another execution is live on the task. With your proof, review.request completes your execution (outcome review_requested; result execution_completed) instead of invalidating it: make it your last step. Your fenced comment and execution.complete (outcome completed, no mark_done) afterwards are accepted as no-ops for the execution.",
@@ -905,6 +905,16 @@ function document() {
       decided_by: str,
       decided_at: str,
       decision_note: str,
+      path: {
+        type: "string",
+        description:
+          "Derived reader link #/approvals/<id>: opens this review's Review draft dialog.",
+      },
+      url: {
+        type: "string",
+        description:
+          "Absolute link to the Review draft dialog. Present only when the install has a public base URL. Send the owner this url (or path) for approval instead of building one.",
+      },
     },
     webhook_configs: {
       scope: str,

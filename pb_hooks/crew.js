@@ -335,6 +335,7 @@ const derivedFields = {
   webhook_bridges: ["overdue"],
   tasks: ["path", "url", "claim_state"],
   notes: ["path", "url"],
+  reviews: ["path", "url"],
   session_revisions: ["edited_by"],
   upload_links: ["state"],
   artifacts: ["pending_changes", "state", "expired", "path", "merged_into", "merged_at"],
@@ -678,11 +679,13 @@ function read(e) {
                   ? artifacts.exported(r, e.app)
                   : col === "tasks" || col === "notes"
                     ? webhooks.linkedExport(e.app, col, r)
-                    : col === "session_revisions"
-                      ? session.exportRevision(e.app, r)
-                      : keep
-                        ? r.publicExport()
-                        : r;
+                    : col === "reviews"
+                      ? webhooks.reviewExport(e.app, r)
+                      : col === "session_revisions"
+                        ? session.exportRevision(e.app, r)
+                        : keep
+                          ? r.publicExport()
+                          : r;
       return keep ? pick(value, keep) : value;
     }),
     has_more: rows.length > limit,
@@ -1346,7 +1349,7 @@ function write(e, isAgent) {
       if (finished) changes.execution_completed = finished.id;
       if (approvalCleared) changes.approval_cleared = true;
       event(app, t, b.action, b, actor, changes);
-      result = r.publicExport();
+      result = webhooks.reviewExport(app, r);
       if (finished)
         result.execution_completed = {
           id: finished.id,
@@ -1413,7 +1416,7 @@ function write(e, isAgent) {
         readiness: t.getString("readiness"),
         wake_generation: t.getInt("wake_generation"),
       });
-      result = r;
+      result = webhooks.reviewExport(app, r);
       return;
     }
     bad("Unknown action");

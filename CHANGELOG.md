@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.28.0](docs/releases/0.28.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.28.0) · Review links: `#/approvals/<id>` opens one review's Review draft dialog directly, and review records return that `url`.
 - **[0.27.2](docs/releases/0.27.2.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.27.2) · The session instructions dialog keeps one size across Read, Edit and History, and every file opens in one viewer whose previous, next and close never move.
 - **[0.27.1](docs/releases/0.27.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.27.1) · The Tasks agent row wraps on phones instead of scrolling sideways, so every agent is visible.
 - **[0.27.0](docs/releases/0.27.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.27.0) · One-click agent row on the board, clickable card agents, one Related section, Status help, a real Request approval button and the grouped viewer toolbar.

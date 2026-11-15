@@ -123,9 +123,32 @@ try {
  assert.equal(await reviewCard.evaluate(e=>e===document.activeElement&&e.matches(':focus-visible')&&getComputedStyle(e).outlineStyle!=='none'),true,'the Approvals card shows keyboard focus');
  await snapView('crew-approvals-focus-1440');await page.keyboard.press('Enter');
  assert.equal(await dialog().locator('.crew-draft-snapshot').innerText(),'A synthetic draft for the owner to publish manually.');
+ // Review links (0.28.0): the card puts #/approvals/<id> in the address, closing
+ // replaces it with #/approvals, and the link opens the dialog on a phone.
+ const reviewLink=new URL(page.url()).hash;
+ assert.match(reviewLink,/^#\/approvals\/[a-z0-9]{15}$/,'a clicked card puts its review link in the address');
+ await dialog().getByRole('button',{name:'Close dialog'}).click();await dialog().waitFor({state:'hidden'});
+ assert.equal(new URL(page.url()).hash,'#/approvals','closing returns to #/approvals');
+ await page.goBack();await page.waitForTimeout(300);
+ assert.equal(await page.locator('dialog[open]').count(),0,'Back does not reopen the review');
+ await page.setViewportSize({width:390,height:844});
+ await page.goto(base+'/'+reviewLink);await page.reload();
+ for(const name of ['Approve draft','Request changes','Reject']){const b=dialog().getByRole('button',{name,exact:true});await b.waitFor();await b.scrollIntoViewIfNeeded();assert.ok(await b.isEnabled(),name+' is enabled from a review link');}
+ const reviewBox=await dialog().boundingBox();assert.ok(reviewBox.width<=390,'the review dialog fits a phone');
+ await snapView('crew-review-link-390');
+ await page.goto(base+'/#/approvals/zzzzzzzzzzzzzzz');await page.reload();
+ await page.getByText('Review not found.').waitFor();
+ assert.equal(new URL(page.url()).hash,'#/approvals','an unknown review link falls back to Approvals');
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto(base+'/'+reviewLink);await page.reload();
  await dialog().getByLabel('Decision note').fill('Ready for manual publishing.');
  await dialog().getByRole('button',{name:'Approve draft',exact:true}).click();await saved();
  await page.getByRole('heading',{name:'Nothing waiting for your review'}).waitFor();
+ assert.equal(new URL(page.url()).hash,'#/approvals','deciding from a link shows the list');
+ await page.goto(base+'/'+reviewLink);await page.reload();
+ await dialog().getByText(/^Approved .* by you\.$/).waitFor();
+ assert.equal(await dialog().getByRole('button',{name:'Approve draft',exact:true}).count(),0,'a decided review link opens read-only');
+ await dialog().getByRole('button',{name:'Close dialog'}).click();await dialog().waitFor({state:'hidden'});
  await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
  await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/In progress/})}).locator('.crew-task-card').count(),1);

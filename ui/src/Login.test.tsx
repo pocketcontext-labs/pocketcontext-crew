@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, pb } from "./api";
@@ -248,6 +249,52 @@ it("returns to a stored page after email sign-in", async () => {
   expect(screen.getByRole("link", { name: /^Approvals/ })).toHaveAttribute(
     "aria-current",
     "page",
+  );
+});
+
+it("returns to a review link after sign-in and opens its dialog", async () => {
+  mockWorkspace();
+  vi.mocked(crewApi.read).mockImplementation(async (c, f = {}) =>
+    f.archived
+      ? []
+      : c === "tasks"
+        ? [linkedTask]
+        : c === "reviews"
+          ? [
+              {
+                id: "review000000001",
+                revision: 1,
+                task: linkedTask.id,
+                draft: "Synthetic draft",
+                status: "pending",
+              },
+            ]
+          : [],
+  );
+  vi.mocked(api.loginMode).mockResolvedValue("password");
+  history.replaceState(null, "", "/#/approvals/review000000001");
+  render(<App />);
+  fireEvent.change(await screen.findByLabelText("Password"), {
+    target: { value: "synthetic-password" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(
+    within(dialog).getByRole("button", { name: "Approve draft" }),
+  ).toBeInTheDocument();
+  expect(location.hash).toBe("#/approvals/review000000001");
+});
+
+it("remembers a review link when an email link is requested from it", async () => {
+  history.replaceState(null, "", "/#/approvals/review000000001");
+  render(<Login />);
+  fireEvent.change(await screen.findByLabelText("Email"), {
+    target: { value: "owner@example.test" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Email me a login link" }));
+  await screen.findByText(/is the owner's address/);
+  expect(JSON.parse(localStorage.getItem(returnKey)!).hash).toBe(
+    "#/approvals/review000000001",
   );
 });
 

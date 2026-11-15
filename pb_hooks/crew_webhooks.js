@@ -85,6 +85,14 @@ function withLinks(app, collection, out, title) {
   if (link.url) out.url = link.url;
   return out;
 }
+// A review's reader link opens its Review draft dialog: #/approvals/<id>.
+function reviewExport(app, record) {
+  const out = record.publicExport();
+  out.path = "#/approvals/" + record.id;
+  const base = $pocketcontext.webhookBaseURL(app);
+  if (base) out.url = base + "/" + out.path;
+  return out;
+}
 function linkedExport(app, collection, record) {
   const out = record.publicExport();
   if (collection === "tasks") out.claim_state = claimState(record);
@@ -1314,6 +1322,7 @@ module.exports = {
   exported,
   withLinks,
   linkedExport,
+  reviewExport,
   handle,
   state,
   eligible,

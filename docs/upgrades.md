@@ -1,5 +1,15 @@
 # Crew upgrades and rollback
 
+## Crew 0.27.2 to 0.28.0
+
+No data migration, protocol or managed block change. Replace the binary or image
+and upgrade paired clients to 0.28.0, run `skill` once and refresh MCP tool schemas:
+review records (reads and the `review.request`, `review.decide` and
+`review.withdraw` results) gain the derived `path` (`#/approvals/<id>`) and, with a
+domain, `url`, and the skill tells agents to send the owner that link. The reader
+opens `#/approvals/<id>` as that review's Review draft dialog. Rollback to 0.27.2
+needs no restore; review links then open the Approvals page.
+
 ## Crew 0.27.1 to 0.27.2
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

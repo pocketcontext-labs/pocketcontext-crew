@@ -423,6 +423,102 @@ it("opens a review from anywhere on its Approvals card, which holds no other con
     within(dialog).getByRole("button", { name: "Approve draft" }),
   ).toBeInTheDocument();
 });
+describe("review links (#/approvals/<id>)", () => {
+  const decided: Row = {
+    ...review,
+    id: "review000000002",
+    revision: 2,
+    status: "approved",
+    decided_by: "owner:user00000000001",
+    decided_at: "2026-11-15T10:00:00.000Z",
+    decision_note: "Ship it",
+  };
+  it("opens a pending review's dialog with its three actions, no tap needed", async () => {
+    history.replaceState(null, "", "/#/approvals/review000000001");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByRole("heading", { name: "Review draft" })).toBeTruthy();
+    for (const name of ["Approve draft", "Request changes", "Reject"])
+      expect(dialog.getByRole("button", { name })).toBeEnabled();
+    expect(screen.getByRole("link", { name: /^Approvals/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(location.hash).toBe("#/approvals/review000000001");
+  });
+  it("opens a decided review read-only with its outcome, who and when", async () => {
+    fixtures.reviews = [review, decided];
+    history.replaceState(null, "", "/#/approvals/review000000002");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByText(/^Approved .* by you\.$/)).toBeTruthy();
+    expect(dialog.getByText("Ship it")).toBeTruthy();
+    for (const name of ["Approve draft", "Request changes", "Reject"])
+      expect(dialog.queryByRole("button", { name })).toBeNull();
+  });
+  it("reads a review newer than the last load by id", async () => {
+    const reads = vi.mocked(crewApi.read);
+    reads.mockImplementation(async (c, f = {}) =>
+      f.archived
+        ? []
+        : c === "reviews" && f.id === decided.id
+          ? [decided]
+          : fixtures[c] || [],
+    );
+    history.replaceState(null, "", "/#/approvals/review000000002");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByText(/^Approved .* by you\.$/)).toBeTruthy();
+  });
+  it("falls back to the Approvals page with a notice for an unknown review", async () => {
+    history.replaceState(null, "", "/#/approvals/review000000009");
+    render(<CrewWorkspace />);
+    expect(await screen.findByText("Review not found.")).toBeTruthy();
+    expect(location.hash).toBe("#/approvals");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Review draft: Launch post" }),
+    ).toBeTruthy();
+  });
+  it("puts a clicked card in the address and closes back to #/approvals without reopening on Back", async () => {
+    history.replaceState(null, "", "/#/approvals");
+    const length = history.length;
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Review draft: Launch post" }),
+    );
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(location.hash).toBe("#/approvals/review000000001");
+    expect(history.length).toBe(length + 1);
+    fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Replaced, not pushed: the entry that held the review is now #/approvals.
+    expect(location.hash).toBe("#/approvals");
+    expect(history.length).toBe(length + 1);
+  });
+  it("shows the list after a decision made from a link", async () => {
+    history.replaceState(null, "", "/#/approvals/review000000001");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    fireEvent.click(dialog.getByRole("button", { name: "Request changes" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(crewApi.write).toHaveBeenCalledWith(
+      "review.decide",
+      { decision: "changes_requested", note: "" },
+      review,
+      "",
+    );
+    expect(location.hash).toBe("#/approvals");
+  });
+  it("opens a review when the address changes to its link", async () => {
+    history.replaceState(null, "", "/#/tasks");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Launch post" });
+    location.hash = "#/approvals/review000000001";
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByRole("button", { name: "Approve draft" })).toBeTruthy();
+  });
+});
 it("derives Human from a pending request while preserving the assigned agent", async () => {
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });

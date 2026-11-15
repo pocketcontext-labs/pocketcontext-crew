@@ -129,6 +129,8 @@ import {
   viewHashes,
   viewStateFromHash,
   viewStateHash,
+  reviewFocusFromHash,
+  reviewHash,
   sharedFocusFromHash,
 } from "./itemLink";
 import Shared from "./Shared";
@@ -969,6 +971,11 @@ export default function CrewWorkspace() {
     [pendingLink, setPendingLink] = useState(() =>
       parseItemHash(location.hash),
     ),
+    // A review an Approvals link (#/approvals/<id>) opens; consumed once, like
+    // pendingLink, after the data has loaded.
+    [pendingReview, setPendingReview] = useState(() =>
+      reviewFocusFromHash(location.hash),
+    ),
     // A status column a Home tile asked the board to show; consumed once, like
     // pendingLink, after the data has loaded.
     [pendingColumn, setPendingColumn] = useState(() =>
@@ -1080,6 +1087,7 @@ export default function CrewWorkspace() {
     const receive = () => {
       redirectLegacyAddress();
       setPendingLink(parseItemHash(location.hash));
+      setPendingReview(reviewFocusFromHash(location.hash));
       setPendingColumn(boardColumnFromHash(location.hash));
       setPendingSection(connectSectionFromHash(location.hash));
       if (isItemHash(location.hash)) return;
@@ -1190,6 +1198,31 @@ export default function CrewWorkspace() {
         : { kind, row, tab },
     );
   }, [pendingLink, ready, data, archived]);
+  // An Approvals link opens that review's dialog over the Approvals page; a
+  // review newer than the last load is read by id. An unknown id stays on
+  // the page with a notice.
+  useEffect(() => {
+    if (!pendingReview || !ready) return;
+    setPendingReview("");
+    const id = pendingReview;
+    const open = (row: Row) =>
+      setDialog((current) =>
+        current?.kind === "review" && current.row?.id === id
+          ? current
+          : { kind: "review", row },
+      );
+    const row = data.reviews.find((x) => x.id === id);
+    if (row) return open(row);
+    void crewApi
+      .read("reviews", { id })
+      .catch(() => [] as Row[])
+      .then(([fresh]) => {
+        if (reviewFocusFromHash(location.hash) !== id) return;
+        if (fresh?.id === id) return open(fresh);
+        setAddress(viewHashes.reviews);
+        setNotice("Review not found.");
+      });
+  }, [pendingReview, ready, data.reviews]);
   // The section query is consumed once: drop it from the address so a refresh
   // or Back does not scroll again.
   useEffect(() => {
@@ -1224,7 +1257,14 @@ export default function CrewWorkspace() {
     pushAddress(itemPath(kind, row));
     setDialog({ kind, row });
   };
+  // Clicking an Approvals card puts its shareable link in the address.
+  const openReviewCard = (row: Row) => {
+    pushAddress(reviewHash(row.id));
+    setDialog({ kind: "review", row });
+  };
   const closeDialog = () => {
+    // Replace, so Back never reopens the review.
+    if (reviewFocusFromHash(location.hash)) setAddress(viewHashes.reviews);
     if (isItemHash(location.hash))
       pushAddress(
         view === "search" && searchText
@@ -2296,7 +2336,7 @@ export default function CrewWorkspace() {
                       key={x.id}
                       aria-label={`Review draft: ${title}`}
                       aria-describedby={`review-preview-${x.id}`}
-                      onClick={() => setDialog({ kind: "review", row: x })}
+                      onClick={() => openReviewCard(x)}
                     >
                       <small className="crew-review-date">
                         {when(x.created)}
@@ -2328,10 +2368,7 @@ export default function CrewWorkspace() {
                 {data.reviews
                   .filter((x) => val(x, "status") !== "pending")
                   .map((x) => (
-                    <button
-                      key={x.id}
-                      onClick={() => setDialog({ kind: "review", row: x })}
-                    >
+                    <button key={x.id} onClick={() => openReviewCard(x)}>
                       <span>
                         {val(
                           data.tasks.find((t) => t.id === val(x, "task")),

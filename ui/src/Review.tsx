@@ -162,6 +162,21 @@ export function ReviewChoices({
   );
 }
 
+const decisionLabels: Record<string, string> = {
+  approved: "Approved",
+  changes_requested: "Changes requested",
+  rejected: "Rejected",
+};
+const decisionLabel = (status: string) =>
+  decisionLabels[status] || "Decided";
+/** decided_by is the actor: the owner's browser, or a work client (MCP or CLI). */
+const decidedBy = (actor: string) =>
+  actor.startsWith("owner:")
+    ? "you"
+    : actor.startsWith("mcp:")
+      ? "an agent"
+      : "someone";
+
 export function ReviewDecision({
   row,
   busy,
@@ -241,6 +256,12 @@ export function ReviewDecision({
           onChange={pending ? setChoices : undefined}
         />
       </ReviewContent>
+      {!pending && val(row, "decided_at") && (
+        <p className="crew-review-decided">
+          {decisionLabel(val(row, "status"))} {when(val(row, "decided_at"))} by{" "}
+          {decidedBy(val(row, "decided_by"))}.
+        </p>
+      )}
       {!!decisionSummary(row) && (
         <p className="crew-review-decision-summary">{decisionSummary(row)}</p>
       )}

@@ -238,3 +238,70 @@ func TestWakePayloadCarriesNoLinkOrTitle(t *testing.T) {
 	}
 	assertWake("domain", withDomain.GetString("payload"), id, linkTestBase, "Second wake target", "second-wake-target")
 }
+
+// A review's link opens its Review draft dialog: #/approvals/<id>, plus url
+// with a domain, on reads and on request, decide and withdraw results (0.28.0).
+func TestReviewLinksOnReadsAndWrites(t *testing.T) {
+	for _, domain := range []bool{false, true} {
+		name := "local"
+		if domain {
+			name = "domain"
+		}
+		t.Run(name, func(t *testing.T) {
+			a := newTestApp(t)
+			if domain {
+				setLinkTestDomain(a)
+			}
+			check := func(label string, got map[string]any, id string) {
+				t.Helper()
+				want := "#/approvals/" + id
+				if got["path"] != want {
+					t.Fatalf("%s path: got %v want %s", label, got["path"], want)
+				}
+				url, present := got["url"]
+				if domain && url != linkTestBase+"/"+want {
+					t.Fatalf("%s url: %v", label, url)
+				}
+				if !domain && present {
+					t.Fatalf("%s must omit url without a domain: %v", label, url)
+				}
+			}
+			read := func(body map[string]any) []map[string]any {
+				t.Helper()
+				return crewItems(t, crewPost(t, a, "/api/crew/read", body, 200))
+			}
+			task := crewOp(t, a, "task.create", nil, map[string]any{"title": "Review link", "draft": "Synthetic draft"})
+			review := crewOp(t, a, "review.request", task, map[string]any{})
+			id := review["id"].(string)
+			check("review.request", review, id)
+			check("read item", read(map[string]any{"collection": "reviews", "id": id})[0], id)
+			check("list", read(map[string]any{"collection": "reviews", "parent": task["id"]})[0], id)
+			projected := read(map[string]any{"collection": "reviews", "id": id, "fields": []string{"path", "url"}})[0]
+			check("projected", projected, id)
+			if subset := read(map[string]any{"collection": "reviews", "id": id, "fields": []string{"status"}})[0]; subset["path"] != nil || subset["url"] != nil {
+				t.Fatalf("unrequested links projected: %v", subset)
+			}
+			decided := crewOp(t, a, "review.decide", review, map[string]any{"decision": "changes_requested"})
+			check("review.decide", decided, id)
+			if decided["status"] != "changes_requested" {
+				t.Fatalf("decide result: %v", decided)
+			}
+			task = read(map[string]any{"collection": "tasks", "id": task["id"]})[0]
+			task = crewOp(t, a, "task.update", task, map[string]any{"draft": "Second synthetic draft"})
+			second := crewOp(t, a, "review.request", task, map[string]any{})
+			withdrawn := crewOp(t, a, "review.withdraw", second, map[string]any{})
+			check("review.withdraw", withdrawn, second["id"].(string))
+
+			// The link is derived on the way out, never stored or put in events.
+			events, err := a.app.FindRecordsByFilter("crew_events", "parent={:id}", "", 100, 0, map[string]any{"id": id})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range events {
+				if raw := e.GetString("changes"); strings.Contains(raw, "#/approvals/") {
+					t.Fatalf("event carries a review link: %s", raw)
+				}
+			}
+		})
+	}
+}

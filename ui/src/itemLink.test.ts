@@ -12,6 +12,8 @@ import {
   loginReturnHash,
   parseItemHash,
   itemTabPath,
+  reviewFocusFromHash,
+  reviewHash,
   viewFromHash,
   viewStateFromHash,
   viewStateHash,
@@ -106,6 +108,32 @@ describe("stored return target", () => {
     expect(takeLoginReturn()).toBeNull();
     put(hash, Date.now() + 16 * 60 * 1000);
     expect(takeLoginReturn()).toBeNull();
+  });
+});
+
+describe("review links", () => {
+  it("shows Approvals and names the review to open", () => {
+    expect(viewFromHash("#/approvals/review000000001")).toBe("reviews");
+    expect(reviewFocusFromHash("#/approvals/review000000001")).toBe(
+      "review000000001",
+    );
+    expect(reviewHash("review000000001")).toBe("#/approvals/review000000001");
+  });
+  it.each([
+    "#/approvals",
+    "#/approvals/",
+    "#/approvals/short",
+    "#/approvals/REVIEW000000001",
+    "#/approvals/review000000001?x=1",
+    "#/approvals/review000000001/more",
+  ])("opens no review for %s", (value) => {
+    expect(reviewFocusFromHash(value)).toBe("");
+  });
+  it("round-trips a review link through sign-in", () => {
+    const remembered = loginReturnHash("#/approvals/review000000001")!;
+    expect(remembered).toBe("#/approvals/review000000001");
+    rememberLoginReturn(remembered);
+    expect(takeLoginReturn()).toBe("#/approvals/review000000001");
   });
 });
 

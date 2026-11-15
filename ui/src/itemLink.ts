@@ -53,6 +53,7 @@ export function viewFromHash(hash: string): View {
   if (/^#\/tasks\?/.test(hash)) return "board";
   if (/^#\/notes\?/.test(hash)) return "memory";
   if (/^#\/connect\?/.test(hash)) return "connect";
+  if (reviewLinkPattern.test(hash)) return "reviews";
   if (/^#\/shared\/[a-z0-9]{15}$/.test(hash)) return "shared";
   if (/^#\/shared\?/.test(hash)) return "shared";
   if (/^#\/archive\?/.test(hash)) return "archive";
@@ -61,6 +62,16 @@ export function viewFromHash(hash: string): View {
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
   return match ? (match[0] as View) : "home";
 }
+
+const reviewLinkPattern = /^#\/approvals\/([a-z0-9]{15})$/;
+/**
+ * The review an Approvals address (#/approvals/<id>, since 0.28.0) opens in its
+ * Review draft dialog, or "". The server returns this address as a review's path.
+ */
+export function reviewFocusFromHash(hash: string): string {
+  return reviewLinkPattern.exec(hash)?.[1] ?? "";
+}
+export const reviewHash = (id: string) => `${viewHashes.reviews}/${id}`;
 
 /** The artifact a Shared page address (#/shared/<id>) points at, or "". */
 export function sharedFocusFromHash(hash: string): string {
@@ -295,7 +306,7 @@ export function itemShareUrl(kind: ItemKind, row: Row): string {
 const returnKey = "pocketcontext.crew.login_return";
 const returnLifetimeMs = 15 * 60 * 1000;
 const returnPattern =
-  /^#\/(?:(?:tasks|notes)\/[a-z0-9]{15}|tasks|notes|team|memory|approvals|agents|archive|connect|search|guide(?:\/[a-z-]+)?)$/;
+  /^#\/(?:(?:tasks|notes|approvals)\/[a-z0-9]{15}|tasks|notes|team|memory|approvals|agents|archive|connect|search|guide(?:\/[a-z-]+)?)$/;
 
 // OAuth consent sends the browser here to sign in and come back. The path is
 // fixed: only the query (validated by the consent endpoint) can vary.

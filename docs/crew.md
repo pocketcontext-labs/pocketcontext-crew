@@ -79,6 +79,17 @@ Responses always include `path`, for example `#/tasks/launch-post-vicfcuk53eds6y
 one, agents cite the title plus the id instead of a link. Agents cite items to humans
 as `[title](url)`, escaping `]` and replacing newlines because titles are untrusted.
 
+A review opens in the reader at `#/approvals/<review-id>` (since 0.28.0): the
+Approvals page with that review's Review draft dialog on top. A pending review shows
+Approve, Request changes and Reject; a decided or withdrawn one opens read-only with
+its outcome, who decided and when. An unknown id shows the Approvals page with a
+"Review not found" notice. Clicking an Approvals card puts its link in the address;
+closing or deciding replaces it with `#/approvals`, so Back does not reopen the
+dialog. A signed-out visit returns to the review after sign-in. Review reads and the
+`review.request`, `review.decide` and `review.withdraw` results include `path`
+(`#/approvals/<id>`) and, with a domain, `url`; agents send the owner that `url`
+for an approval instead of building one.
+
 Webhook wakes are unchanged and title-free: they carry IDs, revisions and reasons,
 never task prose, and their `task_url` stays in the bare-id form.
 
