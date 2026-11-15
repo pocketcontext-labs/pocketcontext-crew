@@ -415,6 +415,14 @@ token; nothing is framed or fetched from elsewhere.
 Larger files, files that are not valid UTF-8 and documents that cannot be
 opened (including password-protected PDFs) show name, size, type and Download.
 
+Since 0.27.2 every file opens in the same full-window viewer with one bar: the
+name (with size and type), the image zoom group, then a fixed cluster of previous,
+`n / N`, next, Download, Open original and close. Each control keeps its place and
+size for every file type; one that does not apply (zoom and Open original for a
+non-image, Download when the file cannot be saved) stays in place, disabled.
+Previous and next wrap around the list, the step button you used keeps focus in the
+next file, and Left/Right arrows and Escape work on every file type.
+
 PDF limits: pdf.js runs without its viewer, scripting, XFA forms or links, with
 eval off, and the reader serves it no standard font data, CMaps, ICC profiles or
 WebAssembly decoders (the asset route serves only `.js`, `.css`, `.woff2` and
@@ -774,7 +782,11 @@ text, ask what to change, show the new version and save it with
 and Cancel; a stale revision explains the conflict and offers Reload latest),
 **History** (revision, who, when, with Restore) and **Restore default**. **Copy
 prompt** copies the two-line prompt, which makes the session read the latest saved
-revision.
+revision. Since 0.27.2 Read, Edit and History are one segmented control that is
+always shown (the current view is pressed), the dialog keeps one size (pinned near
+the top on a desktop, full screen on a phone) and only the area below the toolbar
+changes and scrolls; an unsaved hand edit is kept while looking at Read or History
+until Save or Cancel.
 
 **Start a session (one click since 0.24.0; clearer since 0.25.0).** Each manually
 started agent has a copy button under its card on the Agents page (**Copy coding

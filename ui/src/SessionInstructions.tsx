@@ -51,7 +51,8 @@ export default function SessionInstructions({
   Markdown: (props: { children: string }) => ReactNode;
 }) {
   const [mode, setMode] = useState<"read" | "edit" | "history">("read");
-  const [text, setText] = useState(session.body);
+  // An unsaved hand edit, kept while switching views; null when none.
+  const [text, setText] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Row[] | null>(null);
@@ -109,6 +110,7 @@ export default function SessionInstructions({
         reason,
       );
       onChange(next);
+      setText(null);
       setMode("read");
       return true;
     } catch (e) {
@@ -118,6 +120,11 @@ export default function SessionInstructions({
       setBusy(false);
     }
   };
+  const show = (next: "read" | "edit" | "history") => {
+    setError("");
+    if (next === "edit") setText((draft) => draft ?? session.body);
+    setMode(next);
+  };
   const rewrite = async () => {
     const revision = session.revision;
     setCopy({
@@ -126,6 +133,7 @@ export default function SessionInstructions({
     });
   };
 
+  const draft = text ?? session.body;
   return (
     <div className="crew-dialog-body crew-session-dialog">
       <p className="crew-session-hint">
@@ -151,30 +159,35 @@ export default function SessionInstructions({
             version and saves it only after you approve.
           </small>
         </div>
-        {mode === "read" ? (
+        <div
+          className="crew-session-views"
+          role="group"
+          aria-label="View"
+        >
           <button
             type="button"
-            disabled={busy}
-            onClick={() => {
-              setText(session.body);
-              setError("");
-              setMode("edit");
-            }}
+            aria-pressed={mode === "read"}
+            onClick={() => show("read")}
+          >
+            Read
+          </button>
+          <button
+            type="button"
+            aria-pressed={mode === "edit"}
+            disabled={busy && mode !== "edit"}
+            onClick={() => show("edit")}
           >
             Edit
           </button>
-        ) : null}
-        <button
-          type="button"
-          aria-pressed={mode === "history"}
-          disabled={busy}
-          onClick={() => {
-            setError("");
-            setMode(mode === "history" ? "read" : "history");
-          }}
-        >
-          History
-        </button>
+          <button
+            type="button"
+            aria-pressed={mode === "history"}
+            disabled={busy && mode !== "history"}
+            onClick={() => show("history")}
+          >
+            History
+          </button>
+        </div>
         <button
           type="button"
           disabled={busy || session.is_default}
@@ -190,125 +203,133 @@ export default function SessionInstructions({
           Restore default
         </button>
       </div>
-      {copied === "manual" && (
-        <div role="alert" className="crew-session-note">
-          <p>Could not copy automatically. Copy this into an agent conversation:</p>
-          <textarea
-            readOnly
-            aria-label={`Rewrite prompt for ${name}`}
-            value={session.rewrite_prompt}
-            rows={5}
-            onFocus={(e) => e.currentTarget.select()}
-          />
-        </div>
-      )}
-      {error && (
-        <div role="alert" className="crew-session-note crew-session-error">
-          <p>{error}</p>
-          {error === conflictMessage && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void reload().then((next) => {
-                  if (next && mode === "edit") setText(next.body);
-                })
-              }
-            >
-              Reload latest
-            </button>
-          )}
-        </div>
-      )}
-      {mode === "edit" && (
-        <form
-          className="crew-session-editor"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (text.trim()) void save({ instructions: text }, "Edited by hand");
-          }}
-        >
-          <label htmlFor={editorId}>
-            Session instructions <small>Markdown supported</small>
-          </label>
-          <textarea
-            id={editorId}
-            value={text}
-            rows={18}
-            required
-            onChange={(e) => setText(e.target.value)}
-          />
-          <p className="crew-footnote">
-            The agent brief is added after these instructions; edit it on the
-            agent card.
-          </p>
-          <div className="crew-session-actions">
-            <button
-              type="submit"
-              className="crew-primary"
-              disabled={busy || !text.trim()}
-            >
-              {busy ? "Saving…" : "Save"}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setError("");
-                setMode("read");
-              }}
-            >
-              Cancel
-            </button>
+      {/* Only this area changes between Read, Edit and History; the
+          dialog, the hint and the toolbar above keep their size and place. */}
+      <div className={`crew-session-view crew-session-view-${mode}`}>
+        {copied === "manual" && (
+          <div role="alert" className="crew-session-note">
+            <p>Could not copy automatically. Copy this into an agent conversation:</p>
+            <textarea
+              readOnly
+              aria-label={`Rewrite prompt for ${name}`}
+              value={session.rewrite_prompt}
+              rows={5}
+              onFocus={(e) => e.currentTarget.select()}
+            />
           </div>
-        </form>
-      )}
-      {mode === "history" && (
-        <section aria-label="Revision history" className="crew-session-history">
-          <p>Restoring creates a new revision and keeps every earlier one.</p>
-          {history === null && !error && <p>Loading history…</p>}
-          {history?.length === 0 && (
-            <p>No saved revisions yet: these are the built-in instructions.</p>
-          )}
-          {history && history.length > 0 && (
-            <ol>
-              {history.map((x) => (
-                <li key={x.id}>
-                  <details>
-                    <summary>
-                      Revision {x.revision} ·{" "}
-                      {val(x, "edited_by") || val(x, "reported_agent") || "unknown"}{" "}
-                      · {when(x.created)}
-                      {x.is_default === true ? " · built-in default" : ""}
-                      {x.revision === session.revision ? " · current" : ""}
-                    </summary>
-                    {val(x, "reason") && (
-                      <p className="crew-footnote">{val(x, "reason")}</p>
+        )}
+        {error && (
+          <div role="alert" className="crew-session-note crew-session-error">
+            <p>{error}</p>
+            {error === conflictMessage && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void reload().then((next) => {
+                    if (next && mode === "edit") setText(next.body);
+                  })
+                }
+              >
+                Reload latest
+              </button>
+            )}
+          </div>
+        )}
+        {mode === "edit" && (
+          <form
+            className="crew-session-editor"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (draft.trim()) void save({ instructions: draft }, "Edited by hand");
+            }}
+          >
+            <label htmlFor={editorId}>
+              Session instructions <small>Markdown supported</small>
+            </label>
+            <textarea
+              id={editorId}
+              value={draft}
+              required
+              onChange={(e) => setText(e.target.value)}
+            />
+            <p className="crew-footnote">
+              The agent brief is added after these instructions; edit it on the
+              agent card.
+            </p>
+            <div className="crew-session-actions">
+              <button
+                type="submit"
+                className="crew-primary"
+                disabled={busy || !draft.trim()}
+              >
+                {busy ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setError("");
+                  setText(null);
+                  setMode("read");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+        {mode === "history" && (
+          <section aria-label="Revision history" className="crew-session-history">
+            <p>Restoring creates a new revision and keeps every earlier one.</p>
+            {history === null && !error && <p>Loading history…</p>}
+            {history?.length === 0 && (
+              <p>No saved revisions yet: these are the built-in instructions.</p>
+            )}
+            {history && history.length > 0 && (
+              <ol>
+                {history.map((x) => (
+                  <li key={x.id}>
+                    <details>
+                      <summary>
+                        Revision {x.revision} ·{" "}
+                        {val(x, "edited_by") || val(x, "reported_agent") || "unknown"}{" "}
+                        · {when(x.created)}
+                        {x.is_default === true ? " · built-in default" : ""}
+                        {x.revision === session.revision ? " · current" : ""}
+                      </summary>
+                      {val(x, "reason") && (
+                        <p className="crew-footnote">{val(x, "reason")}</p>
+                      )}
+                      <Markdown>{val(x, "instructions")}</Markdown>
+                    </details>
+                    {x.revision !== session.revision && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`Restore revision ${x.revision}`}
+                        onClick={() =>
+                          void save(
+                            { restore_revision: x.revision },
+                            `Restore revision ${x.revision}`,
+                          )
+                        }
+                      >
+                        Restore
+                      </button>
                     )}
-                    <Markdown>{val(x, "instructions")}</Markdown>
-                  </details>
-                  {x.revision !== session.revision && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      aria-label={`Restore revision ${x.revision}`}
-                      onClick={() =>
-                        void save(
-                          { restore_revision: x.revision },
-                          `Restore revision ${x.revision}`,
-                        )
-                      }
-                    >
-                      Restore
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-      )}
-      {mode === "read" && <Markdown>{session.instructions}</Markdown>}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        )}
+        {mode === "read" && (
+          <div className="crew-session-read">
+            <Markdown>{session.instructions}</Markdown>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

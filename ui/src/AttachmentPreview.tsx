@@ -31,6 +31,7 @@ import {
   type PreviewKind,
 } from "./previewFormats";
 import type { FileNav } from "./Lightbox";
+import ViewerBar from "./ViewerBar";
 import "./preview.css";
 
 // pdf.js and its worker load only when a PDF is opened.
@@ -62,17 +63,25 @@ export function AttachmentPreview({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const prevRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
   const kind = previewKind(attachment);
   useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const dialog = ref.current;
     if (dialog && typeof dialog.showModal === "function" && !dialog.open)
       dialog.showModal();
-    closeRef.current?.focus({ preventScroll: true });
+    // After a step, the button that stepped keeps focus; otherwise close.
+    const arrived = nav?.arrived;
+    const first =
+      arrived === "next" ? nextRef : arrived === "prev" ? prevRef : closeRef;
+    (first.current ?? closeRef.current)?.focus({ preventScroll: true });
     return () => {
       if (dialog?.open && typeof dialog.close === "function") dialog.close();
       previous?.focus?.({ preventScroll: true });
     };
+    // Mount only: a later step remounts the viewer with its own nav.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
     e.stopPropagation();
@@ -115,7 +124,7 @@ export function AttachmentPreview({
   return createPortal(
     <dialog
       ref={ref}
-      className={`crew-file-preview crew-file-preview-${kind}`}
+      className={`crew-file-preview crew-viewer crew-file-preview-${kind}`}
       aria-label={`File: ${attachment.name}`}
       open={
         typeof HTMLDialogElement.prototype.showModal !== "function"
@@ -136,49 +145,30 @@ export function AttachmentPreview({
       onPointerDown={(e) => e.stopPropagation()}
       onChange={(e) => e.stopPropagation()}
     >
-      <header className="crew-file-preview-header">
-        <div className="crew-file-preview-title">
-          <h2>{attachment.name}</h2>
-          <p>
-            {formatBytes(attachment.size)} · {type}
-          </p>
-        </div>
-        <div className="crew-file-preview-actions">
-          {nav && nav.count > 1 && (
-            <span className="crew-file-preview-nav">
-              <button
-                type="button"
-                aria-label="Previous file"
-                title="Previous file"
-                onClick={() => nav.go(-1)}
-              >
-                ‹
-              </button>
-              <span aria-live="polite">
-                {nav.index + 1} / {nav.count}
-              </span>
-              <button
-                type="button"
-                aria-label="Next file"
-                title="Next file"
-                onClick={() => nav.go(1)}
-              >
-                ›
-              </button>
-            </span>
-          )}
-          <DownloadButton attachment={attachment} token={token} />
-          <button
-            ref={closeRef}
-            type="button"
-            className="crew-file-preview-close"
-            aria-label="Close file preview"
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </div>
-      </header>
+      <ViewerBar
+        name={attachment.name}
+        meta={`${formatBytes(attachment.size)} · ${type}`}
+        position={nav ? nav.index : 0}
+        total={nav ? nav.count : 1}
+        unit="file"
+        onStep={(step) => {
+          if (nav && nav.count > 1) nav.go(step);
+        }}
+        prevRef={prevRef}
+        nextRef={nextRef}
+        closeRef={closeRef}
+        closeLabel="Close file preview"
+        onClose={onClose}
+        label={
+          nav
+            ? `File ${nav.index + 1} of ${nav.count}: ${attachment.name}`
+            : attachment.name
+        }
+        download={
+          <DownloadButton attachment={attachment} token={token} compact />
+        }
+        original={null}
+      />
       <div className="crew-file-preview-body">
         <PreviewBody attachment={attachment} kind={kind} token={token} />
       </div>
@@ -192,14 +182,18 @@ function DownloadButton({
   attachment,
   token,
   label = "Download",
+  compact,
 }: {
   attachment: Attachment;
   token?: string;
   label?: string;
+  /** The viewer bar's Download: an icon and a label that hides on phones. */
+  compact?: boolean;
 }) {
   return (
     <a
-      className="crew-file-preview-download"
+      className={compact ? "crew-viewer-action" : "crew-file-preview-download"}
+      aria-label={compact ? label : undefined}
       href={attachmentUrl(attachment.id, { download: true, token })}
       download={attachment.name}
       onClick={(e) => {
@@ -207,7 +201,14 @@ function DownloadButton({
         void attachmentsApi.download(attachment);
       }}
     >
-      {label}
+      {compact ? (
+        <>
+          <span aria-hidden="true">⤓</span>
+          <span className="crew-viewer-action-label">{label}</span>
+        </>
+      ) : (
+        label
+      )}
     </a>
   );
 }
@@ -224,6 +225,20 @@ function Unavailable({
 }) {
   return (
     <div className="crew-preview-unavailable">
+      <span className="crew-preview-unavailable-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none">
+          <path
+            d="M6 2.75h8.5L19.25 7.5v13.75H6z M14.25 2.75V7.75h5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+      <p className="crew-preview-unavailable-name">
+        {attachment.name}
+        <small>{formatBytes(attachment.size)}</small>
+      </p>
       <p>{children}</p>
       <DownloadButton
         attachment={attachment}

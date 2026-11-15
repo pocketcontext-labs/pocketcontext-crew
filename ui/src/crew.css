@@ -1260,10 +1260,70 @@ a.crew-logo:hover .product-brand span {
 .crew-session-rewrite small {
   color: #5d6a52;
 }
+/* Read, Edit and History share one segmented control. The pressed view
+   changes colour only, never weight or width, so nothing in the row moves. */
+.crew-session-views {
+  display: inline-flex;
+}
+.crew-dialog .crew-session-views button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.crew-dialog .crew-session-views button:first-child {
+  border-radius: 7px 0 0 7px;
+  margin-left: 0;
+}
+.crew-dialog .crew-session-views button:last-child {
+  border-radius: 0 7px 7px 0;
+}
+.crew-dialog .crew-session-views button[aria-pressed="true"] {
+  position: relative;
+  background: #e1ebdb;
+  border-color: #8aa883;
+  color: #1f3527;
+}
+/* The session instructions dialog keeps one size in every view: the header,
+   hint and toolbar stay put and only .crew-session-view changes, scrolling
+   inside. On desktop it is pinned near the top, so its top edge never moves;
+   on phones it fills the screen like every dialog. */
+.crew-dialog:has(.crew-session-dialog) {
+  overflow: hidden;
+}
+@media (min-width: 681px) {
+  .crew-dialog:has(.crew-session-dialog) {
+    height: min(85dvh, 900px);
+    margin: max(16px, 7.5dvh) auto auto;
+  }
+}
+.crew-dialog-body.crew-session-dialog {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 0;
+}
+.crew-session-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin: 0 calc(-1 * var(--crew-body-gutter));
+  padding: 12px var(--crew-body-gutter) var(--crew-body-gutter);
+  border-top: 1px solid #e4e7dc;
+}
+.crew-session-view > * {
+  min-width: 0;
+}
+.crew-session-view .crew-session-history > p:first-child {
+  margin-top: 0;
+}
+/* Edit: the textarea takes the free height; Save and Cancel sit below it. */
 .crew-session-editor {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
+  grid-template-rows: auto minmax(160px, 1fr) auto auto;
   gap: 6px;
-  margin-bottom: 12px;
 }
 .crew-session-editor label small {
   font-weight: normal;
@@ -1271,7 +1331,9 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-session-editor textarea {
   width: 100%;
-  min-height: 320px;
+  height: 100%;
+  min-height: 0;
+  resize: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -3312,139 +3374,14 @@ a.crew-logo:hover .product-brand span {
 .crew-note-card .crew-card-thumb {
   height: 120px;
 }
-/* Lightbox */
-.crew-lightbox {
-  width: 100vw;
-  height: 100dvh;
-  max-width: none;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: #111814f2;
-  color: #f5f7f2;
-  font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
-}
-.crew-lightbox[open] {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-}
-.crew-lightbox::backdrop {
-  background: #111814e6;
-}
-.crew-lightbox-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px max(14px, env(safe-area-inset-right)) 10px
-    max(14px, env(safe-area-inset-left));
-}
-.crew-lightbox-count {
-  min-width: 3em;
-  font-variant-numeric: tabular-nums;
-}
-.crew-lightbox-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.crew-lightbox button {
-  font: inherit;
-  color: inherit;
-  background: #ffffff1a;
-  border: 1px solid #ffffff33;
-  border-radius: 8px;
-  cursor: pointer;
-}
-.crew-lightbox button:hover {
-  background: #ffffff33;
-}
-.crew-lightbox button:focus-visible {
-  outline: 2px solid #b9dcc0;
-  outline-offset: 2px;
-}
-.crew-lightbox-close {
-  font-size: 24px !important;
-  line-height: 1;
-  padding: 4px 12px;
-}
-.crew-lightbox-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 6px 16px;
-  padding: 0 max(14px, env(safe-area-inset-right)) 10px
-    max(14px, env(safe-area-inset-left));
-}
-.crew-lightbox-tools button,
-.crew-lightbox-original {
-  min-height: 36px;
-  padding: 4px 10px;
-}
-.crew-lightbox-tools button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.crew-lightbox-tools button[aria-pressed="true"] {
-  background: #ffffff40;
-  border-color: #ffffff80;
-}
-.crew-lightbox-zoom {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.crew-lightbox-zoom button {
-  min-width: 36px;
-  font-size: 18px !important;
-  line-height: 1;
-}
-.crew-lightbox-level {
-  min-width: 3.4em;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.crew-lightbox-fit,
-.crew-lightbox-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-/* Open original and Download sit together on the right. */
-.crew-lightbox-actions {
-  margin-left: auto;
-}
-/* A link styled exactly like the toolbar's buttons. */
-.crew-lightbox-original {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  box-sizing: border-box;
-  color: inherit;
-  background: #ffffff1a;
-  border: 1px solid #ffffff33;
-  border-radius: 8px;
-  text-decoration: none;
-}
-.crew-lightbox-original:hover {
-  background: #ffffff33;
-  color: inherit;
-  text-decoration: none;
-}
-.crew-lightbox-original:focus-visible {
-  outline: 2px solid #b9dcc0;
-  outline-offset: 2px;
-}
+/* Lightbox: the image stage inside the viewer shell (viewer.css). */
 .crew-lightbox-stage {
   position: relative;
   min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 56px 16px;
+  padding: 0 16px 16px;
   overflow: hidden;
   scrollbar-gutter: stable;
   touch-action: pan-x pan-y;
@@ -3479,21 +3416,6 @@ a.crew-logo:hover .product-brand span {
 .crew-lightbox-stage.is-zoomed img:active {
   cursor: grabbing;
 }
-.crew-lightbox-prev,
-.crew-lightbox-next {
-  position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 30px !important;
-  line-height: 1;
-  padding: 10px 14px;
-}
-.crew-lightbox-prev {
-  left: max(8px, env(safe-area-inset-left));
-}
-.crew-lightbox-next {
-  right: max(8px, env(safe-area-inset-right));
-}
 @media (prefers-reduced-motion: no-preference) {
   .crew-lightbox-stage img {
     animation: crew-lightbox-in 0.16s ease-out;
@@ -3509,20 +3431,7 @@ a.crew-logo:hover .product-brand span {
 }
 @media (max-width: 680px) {
   .crew-lightbox-stage {
-    padding: 0 8px calc(64px + env(safe-area-inset-bottom));
-  }
-  .crew-lightbox-tools {
-    gap: 6px;
-  }
-  .crew-lightbox-tools button,
-  .crew-lightbox-original {
-    min-height: 40px;
-  }
-  .crew-lightbox-prev,
-  .crew-lightbox-next {
-    top: auto;
-    bottom: max(12px, env(safe-area-inset-bottom));
-    transform: none;
+    padding: 0 8px max(12px, env(safe-area-inset-bottom));
   }
   .crew-attachment-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

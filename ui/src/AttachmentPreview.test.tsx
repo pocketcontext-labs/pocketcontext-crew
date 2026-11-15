@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AttachmentPreview } from "./AttachmentPreview";
@@ -275,8 +276,12 @@ describe("AttachmentPreview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
     expect(await screen.findByText("Page 2 of 3")).toBeVisible();
     await waitFor(() => expect(pdf.renders).toContain(2));
-    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-    expect(screen.getByRole("button", { name: "Fit width" })).toHaveAttribute(
+    // The PDF has its own zoom; the viewer bar's image zoom is disabled.
+    const pages = within(screen.getByRole("toolbar", { name: "PDF pages" }));
+    const bar = within(screen.getByRole("toolbar", { name: "Zoom" }));
+    expect(bar.getByRole("button", { name: "Zoom in" })).toBeDisabled();
+    fireEvent.click(pages.getByRole("button", { name: "Zoom in" }));
+    expect(pages.getByRole("button", { name: "Fit width" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );

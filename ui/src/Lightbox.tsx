@@ -8,6 +8,7 @@ import {
   type TouchEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import ViewerBar, { type ArrivedBy } from "./ViewerBar";
 
 export type LightboxItem = {
   id: string;
@@ -25,6 +26,8 @@ export type FileNav = {
   index: number;
   count: number;
   go: (step: number) => void;
+  /** Which step button opened this file, to focus it again. */
+  arrived?: ArrivedBy;
 };
 
 const focusable =
@@ -86,6 +89,8 @@ export default function Lightbox({
   );
   const ref = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const prevRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const gesture = useRef<Gesture | null>(null);
@@ -155,11 +160,17 @@ export default function Lightbox({
     const dialog = ref.current;
     if (dialog && typeof dialog.showModal === "function" && !dialog.open)
       dialog.showModal();
-    closeRef.current?.focus({ preventScroll: true });
+    // After a step, the button that stepped keeps focus; otherwise close.
+    const arrived = nav?.arrived;
+    const first =
+      arrived === "next" ? nextRef : arrived === "prev" ? prevRef : closeRef;
+    (first.current ?? closeRef.current)?.focus({ preventScroll: true });
     return () => {
       if (dialog?.open && typeof dialog.close === "function") dialog.close();
       previous?.focus?.({ preventScroll: true });
     };
+    // Mount only: a later step remounts the viewer with its own nav.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     if (index >= count && count) setIndex(count - 1);
@@ -356,7 +367,7 @@ export default function Lightbox({
   return createPortal(
     <dialog
       ref={ref}
-      className="crew-lightbox"
+      className="crew-lightbox crew-viewer"
       aria-label="Image viewer"
       aria-modal="true"
       open={
@@ -390,98 +401,68 @@ export default function Lightbox({
         gesture.current = null;
       }}
     >
-      <div className="crew-lightbox-bar">
-        <span className="crew-lightbox-count" aria-live="polite">
-          {total > 1 ? `${position + 1} / ${total}` : ""}
-          <span className="crew-visually-hidden">{label}</span>
-        </span>
-        <span className="crew-lightbox-name" title={item.alt}>
-          {item.alt}
-        </span>
-        <button
-          ref={closeRef}
-          type="button"
-          className="crew-lightbox-close"
-          aria-label="Close image viewer"
-          onClick={onClose}
-        >
-          ×
-        </button>
-      </div>
-      <div className="crew-lightbox-tools" role="toolbar" aria-label="Zoom">
-        <span className="crew-lightbox-zoom">
-          <button
-            type="button"
-            aria-label="Zoom out"
-            disabled={isBroken || scale <= MIN_SCALE + 0.001}
-            onClick={() => setScale(stepOut(scale))}
-          >
-            −
-          </button>
-          <output className="crew-lightbox-level" aria-label="Zoom level">
-            {percent}
-          </output>
-          <button
-            type="button"
-            aria-label="Zoom in"
-            disabled={isBroken || scale >= MAX_SCALE - 0.001}
-            onClick={() => setScale(stepIn(scale))}
-          >
-            +
-          </button>
-        </span>
-        <span className="crew-lightbox-fit" role="group" aria-label="Fit">
-          <button
-            type="button"
-            aria-label="Fit to screen"
-            aria-pressed={zoom === "fit"}
-            disabled={isBroken}
-            onClick={() => setZoom("fit")}
-          >
-            Fit
-          </button>
-          <button
-            type="button"
-            aria-label="Fit width"
-            aria-pressed={zoom === "width"}
-            disabled={isBroken}
-            onClick={() => setZoom("width")}
-          >
-            Fit width
-          </button>
-          <button
-            type="button"
-            aria-label="Actual size"
-            aria-pressed={zoom === 1}
-            disabled={isBroken}
-            onClick={() => setScale(1)}
-          >
-            Actual size
-          </button>
-        </span>
-        <span className="crew-lightbox-actions">
-          <a
-            className="crew-lightbox-original"
-            href={item.src}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open the original in a new tab"
-          >
-            <span aria-hidden="true">↗</span>Open original
-          </a>
-          {item.onDownload && (
+      <ViewerBar
+        name={item.alt}
+        position={position}
+        total={total}
+        unit={unit}
+        onStep={go}
+        prevRef={prevRef}
+        nextRef={nextRef}
+        closeRef={closeRef}
+        closeLabel="Close image viewer"
+        onClose={onClose}
+        label={label}
+        zoom={
+          isBroken
+            ? undefined
+            : {
+                percent,
+                mode:
+                  zoom === "fit"
+                    ? "fit"
+                    : zoom === "width"
+                      ? "width"
+                      : zoom === 1
+                        ? "actual"
+                        : "custom",
+                canZoomIn: scale < MAX_SCALE - 0.001,
+                canZoomOut: scale > MIN_SCALE + 0.001,
+                zoomIn: () => setScale(stepIn(scale)),
+                zoomOut: () => setScale(stepOut(scale)),
+                fit: () => setZoom("fit"),
+                fitWidth: () => setZoom("width"),
+                actualSize: () => setScale(1),
+              }
+        }
+        download={
+          item.onDownload ? (
             <button
               type="button"
-              className="crew-lightbox-download"
+              className="crew-viewer-action"
               aria-label={`Download ${item.alt}`}
               title={`Download ${item.alt}`}
               onClick={item.onDownload}
             >
-              <span aria-hidden="true">⤓ </span>Download
+              <span aria-hidden="true">⤓</span>
+              <span className="crew-viewer-action-label">Download</span>
             </button>
-          )}
-        </span>
-      </div>
+          ) : null
+        }
+        original={
+          <a
+            className="crew-viewer-action"
+            href={item.src}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open original"
+            title="Open the original in a new tab"
+          >
+            <span aria-hidden="true">↗</span>
+            <span className="crew-viewer-action-label">Open original</span>
+          </a>
+        }
+      />
       <div
         ref={stageRef}
         className={`crew-lightbox-stage${zoomed ? " is-zoomed" : ""}`}
@@ -524,26 +505,6 @@ export default function Lightbox({
           />
         )}
       </div>
-      {total > 1 && (
-        <>
-          <button
-            type="button"
-            className="crew-lightbox-prev"
-            aria-label={`Previous ${unit}`}
-            onClick={() => go(-1)}
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            className="crew-lightbox-next"
-            aria-label={`Next ${unit}`}
-            onClick={() => go(1)}
-          >
-            ›
-          </button>
-        </>
-      )}
     </dialog>,
     document.body,
   );

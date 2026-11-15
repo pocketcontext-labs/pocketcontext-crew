@@ -36,6 +36,7 @@ import {
   type UploadLink,
 } from "./attachmentsApi";
 import Lightbox, { type FileNav, type LightboxItem } from "./Lightbox";
+import type { ArrivedBy } from "./ViewerBar";
 import type { Row } from "./crewApi";
 import { connectSectionHash } from "./itemLink";
 import "./upload.css";
@@ -679,6 +680,7 @@ export function AttachmentsProvider({
   const [viewing, setViewing] = useState<{
     id: string;
     sequence?: string[];
+    arrived?: ArrivedBy;
   } | null>(null);
   const [fresh, setFresh] = useState("");
   const files: ItemFile[] = [
@@ -710,11 +712,16 @@ export function AttachmentsProvider({
       ? {
           index: Math.max(0, sequence.indexOf(viewing.id)),
           count: sequence.length,
+          arrived: viewing.arrived,
           go: (step) => {
             const i = Math.max(0, sequence.indexOf(viewing.id));
             const next =
               sequence[(i + step + sequence.length) % sequence.length];
-            setViewing({ id: next, sequence });
+            setViewing({
+              id: next,
+              sequence,
+              arrived: step > 0 ? "next" : "prev",
+            });
           },
         }
       : undefined;

@@ -204,24 +204,28 @@ describe("Lightbox zoom", () => {
     expect(link).toHaveAttribute("href", items[0].src);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    expect(link).toHaveClass("crew-lightbox-original");
-    expect(link.closest(".crew-lightbox-actions")).not.toBeNull();
+    expect(link).toHaveClass("crew-viewer-action");
+    expect(link.closest(".crew-viewer-cluster")).not.toBeNull();
   });
 
   it("gives every toolbar control its own label", () => {
     const { v } = open([{ ...items[0], onDownload: vi.fn() }, items[1]]);
     const toolbar = v.getByRole("toolbar", { name: "Zoom" });
-    const labels = [...toolbar.querySelectorAll("button, a")].map(
-      (el) => el.textContent?.replace(/[↗⤓]/g, "").trim(),
-    );
+    const cluster = v.getByRole("group", { name: "Viewer" });
+    const labels = [toolbar, cluster]
+      .flatMap((el) => [...el.querySelectorAll("button, a")])
+      .map((el) => el.getAttribute("aria-label"));
     expect(labels).toEqual([
-      "−",
-      "+",
-      "Fit",
+      "Zoom out",
+      "Zoom in",
+      "Fit to screen",
       "Fit width",
       "Actual size",
+      "Previous image",
+      "Next image",
+      "Download tall.png",
       "Open original",
-      "Download",
+      "Close image viewer",
     ]);
     expect(new Set(labels).size).toBe(labels.length);
   });
@@ -241,7 +245,9 @@ describe("Download", () => {
       "_blank",
     );
     cleanup();
+    // Without a download the control stays in place, disabled, so the
+    // cluster never shifts.
     const plain = open(items);
-    expect(plain.v.queryByRole("button", { name: /^Download/ })).toBeNull();
+    expect(plain.v.getByRole("button", { name: "Download" })).toBeDisabled();
   });
 });

@@ -748,6 +748,9 @@ try {
   await instructions.getByRole('heading',{name:'1. Session name'}).waitFor();
   assert.equal(await instructions.evaluate(d=>{const b=d.getBoundingClientRect();const top=document.elementFromPoint(b.left+b.width/2,b.top+Math.min(b.height/2,200));return d.contains(top);}),true,`the instructions are on top at ${width}`);
   assert.equal(await instructions.evaluate(d=>d.scrollWidth<=d.clientWidth+1),true,`no sideways scroll in the instructions at ${width}`);
+  // Long instructions scroll inside the view; the dialog itself never scrolls.
+  assert.equal(await instructions.locator('.crew-session-view').evaluate(v=>v.scrollHeight>v.clientHeight&&getComputedStyle(v).overflowY==='auto'),true,`the instructions scroll inside at ${width}`);
+  assert.equal(await instructions.evaluate(d=>d.scrollHeight<=d.clientHeight+1),true,`the dialog itself does not scroll at ${width}`);
   assert.equal(await instructions.locator('pre').first().evaluate(p=>p.scrollWidth>p.clientWidth&&getComputedStyle(p).overflowX==='auto'),true,`the shell command scrolls in its own box at ${width}`);
   assert.equal(await pageOverflows(),false,`Agents horizontal overflow with instructions at ${width}`);
   if(width===1024) await snapView('crew-session-instructions-1024');
@@ -796,6 +799,27 @@ try {
   await box.getByRole('button',{name:'Copy prompt',exact:true}).click();
   await box.getByRole('button',{name:'Prompt copied',exact:true}).waitFor();
   assert.equal(await lastCopied(),latest.prompt,'Copy prompt copies the session prompt');
+  // 0.27.2: Read, Edit and History keep the dialog and its buttons in place
+  // (within 1px) on desktop and phone; only the area below the toolbar changes.
+  for(const [width,height] of [[1280,800],[1440,900],[390,844]]){
+   await page.setViewportSize({width,height});
+   await box.getByRole('button',{name:'Read',exact:true}).click();
+   await box.getByRole('heading',{name:'Synthetic browser instructions'}).waitFor();
+   const geometry=()=>box.evaluate(d=>{const r=e=>{const b=e.getBoundingClientRect();return [b.left,b.top,b.right,b.bottom].map(Math.round);};const out={dialog:r(d),toolbar:r(d.querySelector('.crew-session-toolbar'))};d.querySelectorAll('header button, .crew-session-toolbar button').forEach((b,i)=>{out['button '+i]=r(b);});return out;});
+   const read=await geometry();
+   if(width===390) assert.deepEqual(read.dialog,[0,0,390,844],'the dialog fills the phone');
+   for(const view of ['Edit','History','Read']){
+    await box.getByRole('button',{name:view,exact:true}).click();
+    await box.locator(`.crew-session-view-${view==='Read'?'read':view.toLowerCase()}`).waitFor();
+    if(view==='History') await box.getByText(/^Revision 1 · owner · /).waitFor();
+    const now=await geometry();
+    assert.deepEqual(Object.keys(now),Object.keys(read),`the same controls in ${view} at ${width}`);
+    for(const key of Object.keys(read)) now[key].forEach((v,j)=>assert.ok(Math.abs(v-read[key][j])<=1,`${key} stays put in ${view} at ${width}x${height}: ${now[key]} vs ${read[key]}`));
+    assert.equal(await page.evaluate(v=>document.activeElement?.textContent===v,view),true,`${view} keeps focus at ${width}`);
+    if(width===1440) await snapView('crew-session-instructions-'+view.toLowerCase()+'-1440');
+   }
+  }
+  await page.setViewportSize({width:1280,height:900});
   // Reopening shows the latest revision, and the rewrite prompt follows it.
   await box.getByRole('button',{name:'Close dialog'}).click();
   await box.waitFor({state:'hidden'});
@@ -983,6 +1007,8 @@ try {
   {name:'people.csv',mimeType:'text/csv',buffer:Buffer.from(csvLines.join('\r\n')+'\r\n')},
   {name:'spec.pdf',mimeType:'application/pdf',buffer:pdfFile()},
   {name:'tone.wav',mimeType:'audio/wav',buffer:wavFile()},
+  // An empty zip archive: no preview, only the placeholder and Download.
+  {name:'bundle.zip',mimeType:'application/zip',buffer:Buffer.from([0x50,0x4b,0x05,0x06,...new Array(18).fill(0)])},
   ...(webm?[{name:'clip.webm',mimeType:'video/webm',buffer:Buffer.from(webm,'base64')}]:[]),
  ];
  const taskDialog=page.locator('.crew-dialog');
@@ -1035,7 +1061,7 @@ try {
  await previewFits('pdf 1440');await snapView('preview-pdf-1440');
  await preview.getByRole('button',{name:'Next page'}).click();
  await preview.getByText('Page 2 of 2').waitFor();
- await preview.getByRole('button',{name:'Zoom in'}).click();
+ await preview.locator('.crew-pdf-toolbar').getByRole('button',{name:'Zoom in'}).click();
  await page.waitForFunction(()=>document.querySelector('.crew-pdf-stage')?.getAttribute('aria-busy')==='false');
  assert.equal(await preview.locator('iframe, object, embed').count(),0,'no frames or plug-ins');
  await snapView('preview-pdf-page2-zoom-1440');
@@ -1052,6 +1078,42 @@ try {
   await page.waitForFunction(()=>{const v=document.querySelector('.crew-file-preview video');return v&&v.readyState>=1&&v.videoWidth===160;},null,{timeout:15000});
   await snapView('preview-video-1440');
   await closePreview();
+ }
+ // One viewer for every file (0.27.2): stepping from the first tile through
+ // images, text, a table, a PDF and media with clicks at one mouse position
+ // keeps previous, next and close (and the viewer itself) in place within 1px.
+ {
+  const tiles=taskDialog.locator('.crew-file-tiles .crew-file-tile-open');
+  const count=await tiles.count();
+  assert.ok(count>=6,'mixed files to step through: '+count);
+  const shell=page.locator('dialog.crew-viewer[open]');
+  const cluster=()=>shell.evaluate(d=>{const r=e=>{const b=e.getBoundingClientRect();return [b.left,b.top,b.width,b.height].map(Math.round);};const steps=d.querySelectorAll('.crew-viewer-step');return {dialog:r(d),prev:r(steps[0]),next:r(steps[1]),close:r(d.querySelector('.crew-viewer-close')),name:d.querySelector('.crew-viewer-name').textContent,bg:getComputedStyle(d).backgroundColor};});
+  for(const [width,height] of [[1280,800],[1440,900],[390,844]]){
+   await page.setViewportSize({width,height});
+   await tiles.first().click();await shell.waitFor();
+   const first=await cluster();
+   const names=[first.name];
+   const point={x:first.next[0]+first.next[2]/2,y:first.next[1]+first.next[3]/2};
+   for(let i=1;i<=count;i++){
+    await page.mouse.click(point.x,point.y);
+    await page.waitForFunction(prev=>{const d=document.querySelector('dialog.crew-viewer[open]');return d&&d.querySelector('.crew-viewer-name')?.textContent!==prev;},names.at(-1));
+    const now=await cluster();
+    for(const key of ['dialog','prev','next','close']) now[key].forEach((v,j)=>assert.ok(Math.abs(v-first[key][j])<=1,`${key} stays put at ${width}x${height} on ${now.name}: ${now[key]} vs ${first[key]}`));
+    assert.equal(now.bg,first.bg,`same viewer theme at ${width} on ${now.name}`);
+    assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Next file',`Next keeps focus at ${width} on ${now.name}`);
+    names.push(now.name);
+    if(now.name==='bundle.zip'){assert.equal(await shell.getByText('No preview for this type of file.').count(),1,'the zip shows the placeholder');assert.equal(await shell.getByRole('button',{name:'Zoom in'}).isDisabled(),true,'zoom is disabled for a zip');}
+    if(width===1440&&/\.(csv|wav|zip)$/.test(now.name)) await snapView('viewer-cluster-'+now.name.replace(/\W+/g,'-')+'-1440');
+   }
+   assert.equal(names.at(-1),names[0],`Next wraps to the first file at ${width}`);
+   assert.equal(new Set(names).size,count,`Next visits every file at ${width}`);
+   // The arrow keys step on every file type too.
+   await page.keyboard.press('ArrowLeft');
+   await page.waitForFunction(prev=>document.querySelector('dialog.crew-viewer[open] .crew-viewer-name')?.textContent!==prev,names[0]);
+   await page.keyboard.press('Escape');await shell.waitFor({state:'hidden'});
+   assert.equal(await page.getByRole('dialog').count(),1,'Escape closes only the viewer');
+  }
+  await page.setViewportSize({width:1440,height:1000});
  }
  // Phone width: full-screen previews.
  await page.setViewportSize({width:390,height:844});

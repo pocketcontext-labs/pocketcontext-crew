@@ -19,6 +19,7 @@ const Markdown = ({ children }: { children: string }) => <div>{children}</div>;
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   Reflect.deleteProperty(navigator, "clipboard");
 });
 
@@ -39,4 +40,29 @@ it("keeps the copied rewrite prompt for its revision and clears it on a new one"
   // A new revision means a new prompt: copy again.
   rerender(<SessionInstructions session={{ ...session, revision: 1 }} {...props} />);
   expect(screen.getByRole("button", { name: "Rewrite with an agent" })).toBeInTheDocument();
+});
+
+// 0.27.2: Read, Edit and History are one fixed control (the pressed view
+// changes, the buttons never), and an unsaved edit survives a look at History.
+it("keeps the same view buttons in every view and the draft across views", async () => {
+  const { crewApi } = await import("./crewApi");
+  vi.spyOn(crewApi, "read").mockResolvedValue([]);
+  render(<SessionInstructions session={session} onChange={() => undefined} Markdown={Markdown} />);
+  const views = screen.getByRole("group", { name: "View" });
+  const names = () =>
+    [...views.querySelectorAll("button")].map((b) => [b.textContent, b.getAttribute("aria-pressed")]);
+  expect(names()).toEqual([["Read", "true"], ["Edit", "false"], ["History", "false"]]);
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect(names()).toEqual([["Read", "false"], ["Edit", "true"], ["History", "false"]]);
+  fireEvent.change(screen.getByLabelText(/Session instructions/), { target: { value: "Draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "History" }));
+  await screen.findByText("No saved revisions yet: these are the built-in instructions.");
+  expect(names()).toEqual([["Read", "false"], ["Edit", "false"], ["History", "true"]]);
+  expect(screen.getByRole("button", { name: "Restore default" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect(screen.getByLabelText(/Session instructions/)).toHaveValue("Draft");
+  // Cancel drops the draft; the next Edit starts from the saved text.
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect(screen.getByLabelText(/Session instructions/)).toHaveValue("Synthetic body");
 });

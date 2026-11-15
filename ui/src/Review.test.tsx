@@ -232,6 +232,54 @@ it("steps from an image to an HTML file, which opens in the sandboxed preview", 
   expect(await screen.findByRole("toolbar", { name: "Zoom" })).toBeInTheDocument();
   expect(screen.queryByTitle("Preview of homepage.html")).toBeNull();
 });
+// 0.27.2: one viewer shell for every file type; the step buttons are always
+// in the same cluster and the one that stepped keeps focus.
+it("keeps previous, next and close in one cluster from an image to a zip", async () => {
+  const row = {
+    ...review,
+    draft: "",
+    attachments: [
+      { id: "shot", sha256: "shot" },
+      { id: "pack", sha256: "pack" },
+    ],
+  };
+  render(
+    <ReviewContent
+      row={row}
+      attachments={[
+        file("shot"),
+        file("pack", { name: "bundle.zip", image: false, media_type: "application/zip" }),
+      ]}
+      Prose={Prose}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Open shot.png" }));
+  const image = await screen.findByRole("dialog", { name: "Image viewer" });
+  expect(image).toHaveClass("crew-viewer");
+  fireEvent.click(within(image).getByRole("button", { name: "Next file" }));
+  const zip = await screen.findByRole("dialog", { name: "File: bundle.zip" });
+  expect(zip).toHaveClass("crew-viewer");
+  const cluster = within(zip).getByRole("group", { name: "Viewer" });
+  expect(
+    [...cluster.querySelectorAll("button, a")].map((x) => x.getAttribute("aria-label")),
+  ).toEqual([
+    "Previous file",
+    "Next file",
+    "Download",
+    null,
+    "Close file preview",
+  ]);
+  expect(within(cluster).getByRole("button", { name: "Open original" })).toBeDisabled();
+  expect(within(zip).getByRole("button", { name: "Zoom in" })).toBeDisabled();
+  expect(within(zip).getByText("No preview for this type of file.")).toBeInTheDocument();
+  // Focus stays on Next, so repeated clicks or Enter keep stepping.
+  expect(within(zip).getByRole("button", { name: "Next file" })).toHaveFocus();
+  fireEvent.click(within(zip).getByRole("button", { name: "Next file" }));
+  const back = await screen.findByRole("dialog", { name: "Image viewer" });
+  expect(within(back).getByRole("button", { name: "Next file" })).toHaveFocus();
+  fireEvent.keyDown(back, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
 it("warns for legacy local paths and unresolved snapshot evidence", () => {
   render(
     <ReviewContent
