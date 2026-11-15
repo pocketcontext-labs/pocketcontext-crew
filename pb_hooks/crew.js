@@ -432,7 +432,18 @@ function read(e) {
     "overdue",
     "agent",
     "claim_state",
+    "ids",
   ]);
+  if (b.ids !== undefined && b.collection !== "references")
+    bad("ids is only supported for the references collection");
+  // Titles and reader paths for ids written in prose (0.29.0).
+  if (b.collection === "references") {
+    only(b, ["collection", "ids"]);
+    return e.json(
+      200,
+      require(`${__hooks}/crew_references.js`).resolve(e.app, b.ids),
+    );
+  }
   if (b.collection === "capabilities")
     return e.json(200, capabilities.describe(b.id));
   if (b.agent !== undefined && b.collection !== "session")

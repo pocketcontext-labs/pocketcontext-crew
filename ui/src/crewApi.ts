@@ -1,4 +1,5 @@
 import { pb } from "./api";
+import type { Reference } from "./references";
 export type Row = {
   id: string;
   revision: number;
@@ -134,6 +135,26 @@ export const crewApi = {
         throw new Error("Could not continue loading records.");
       offset = response.next_offset;
     }
+  },
+  /**
+   * Titles and reader paths for record ids written in prose (0.29.0): one
+   * request for up to 100 ids; ids that name nothing readable are left out.
+   */
+  async references(ids: string[]): Promise<Reference[]> {
+    const response = await pb.send<{ items?: unknown }>("/api/crew/read", {
+      method: "POST",
+      body: { collection: "references", ids },
+    });
+    const items = Array.isArray(response?.items) ? response.items : [];
+    return items.filter(
+      (x): x is Reference =>
+        !!x &&
+        typeof x === "object" &&
+        typeof (x as Reference).id === "string" &&
+        typeof (x as Reference).title === "string" &&
+        typeof (x as Reference).path === "string" &&
+        (x as Reference).path.startsWith("#/"),
+    );
   },
   /**
    * The session prompt for one agent started manually (id or name). This read

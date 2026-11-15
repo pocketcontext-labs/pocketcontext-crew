@@ -12,8 +12,10 @@ import (
 const crewSlugMaxLength = 60
 
 // crewSlugFallbacks lists the collections with permanent links and the slug
-// used when a title has nothing transliterable.
-var crewSlugFallbacks = map[string]string{"tasks": "task", "notes": "note"}
+// used when a title (a name for buckets and agents) has nothing
+// transliterable. Bucket and agent links (0.29.0) come only from the
+// references resolver.
+var crewSlugFallbacks = map[string]string{"tasks": "task", "notes": "note", "buckets": "bucket", "agents": "agent"}
 
 // crewSlugLetters covers common Latin letters that have no canonical
 // decomposition. Keys are lowercase: letters are lowered before the lookup.
@@ -56,7 +58,7 @@ func crewSlug(title, fallback string) string {
 	return fallback
 }
 
-// crewRecordLink returns a task's or note's derived permanent link: always
+// crewRecordLink returns a record's derived permanent link: always
 // "path", plus an absolute "url" only when the install has a base URL.
 func crewRecordLink(app core.App, collection, id, title string) (map[string]string, error) {
 	fallback, ok := crewSlugFallbacks[collection]

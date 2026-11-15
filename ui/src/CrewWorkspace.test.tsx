@@ -12,6 +12,8 @@ import { resetSessionGuideForTests } from "./sessionGuide";
 import CrewWorkspace from "./CrewWorkspace";
 import { crewApi, type Row } from "./crewApi";
 import { attachmentsApi } from "./attachmentsApi";
+import { resetReferencesForTests } from "./references";
+import { resetTrail } from "./trail";
 const agent: Row = {
   id: "agent0000000001",
   revision: 1,
@@ -74,12 +76,15 @@ beforeEach(() => {
   });
   vi.spyOn(attachmentsApi, "cardThumbnails").mockResolvedValue({});
   vi.spyOn(attachmentsApi, "fileToken").mockResolvedValue("file-token");
+  vi.spyOn(crewApi, "references").mockResolvedValue([]);
 });
 afterEach(() => {
   cleanup();
   history.replaceState(null, "", "/");
   vi.restoreAllMocks();
   resetSessionGuideForTests();
+  resetReferencesForTests();
+  resetTrail();
 });
 /** Opens the board's Filters panel (if closed) and returns it. */
 function openFilters() {
@@ -1276,7 +1281,9 @@ it.each([
   "#/tasks/launch-post-TASK00000000001",
   "#/tasks/task00000000001/extra",
   "#/tasks/task00000000001?otp=123456",
-  "#/agents/task00000000001",
+  "#/labels/task00000000001",
+  "#/notes/note00000000001?comment=event0000000001",
+  "#/buckets/bucket000000001?file=file00000000001",
 ])("ignores the malformed item link %s", async (hash) => {
   history.replaceState(null, "", `/${hash}`);
   render(<CrewWorkspace />);
@@ -3842,4 +3849,119 @@ it("keeps Sort as its own toolbar control, outside Filters, and not counted as a
   const panel = screen.getByRole("group", { name: "Task filters" });
   expect(within(panel).queryByRole("combobox", { name: "Sort tasks" })).toBeNull();
   expect(within(panel).getByRole("combobox", { name: "Filter by status" })).toBeInTheDocument();
+});
+
+describe("links in rendered text (0.29.0)", () => {
+  const linkingNote: Row = {
+    id: "note00000000002",
+    revision: 1,
+    title: "Weekly digest",
+    bucket: bucket.id,
+    body: "Picked up task00000000001 and an unknown zzzzzzzzzzzzzzz, see `task00000000001`.",
+    links: [],
+    path: "#/notes/weekly-digest-note00000000002",
+  };
+  const taskRef = {
+    id: task.id,
+    collection: "tasks",
+    title: "Launch post",
+    path: "#/tasks/launch-post-task00000000001",
+  };
+  it("shows a bare id as its record's title and walks back and forward", async () => {
+    fixtures.notes = [linkingNote];
+    fixtures.tasks = [linkedTask];
+    vi.mocked(crewApi.references).mockResolvedValue([taskRef]);
+    history.replaceState(null, "", "/#/notes/weekly-digest-note00000000002");
+    render(<CrewWorkspace />);
+    let dialog = within(await screen.findByRole("dialog"));
+    const link = await dialog.findByRole("link", { name: "Launch post" });
+    expect(link).toHaveAttribute("href", taskRef.path);
+    expect(link).toHaveAttribute("title", "Task · task00000000001");
+    expect(link).not.toHaveAttribute("target");
+    // Unknown ids and code stay as written; one batched request asked.
+    expect(dialog.getByText(/an unknown zzzzzzzzzzzzzzz/)).toBeInTheDocument();
+    expect(dialog.getByText("task00000000001").tagName).toBe("CODE");
+    expect(crewApi.references).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(crewApi.references).mock.calls[0][0].sort()).toEqual(
+      ["task00000000001", "zzzzzzzzzzzzzzz"],
+    );
+    const back = dialog.getByRole("button", { name: "Back" });
+    const forward = dialog.getByRole("button", { name: "Forward" });
+    expect(back).toBeDisabled();
+    expect(forward).toBeDisabled();
+
+    fireEvent.click(link);
+    dialog = within(await screen.findByRole("dialog"));
+    await waitFor(() => expect(dialog.getByLabelText("Title")).toHaveValue("Launch post"));
+    expect(location.hash).toBe(taskRef.path);
+    expect(dialog.getByRole("button", { name: "Back" })).toBeEnabled();
+    expect(dialog.getByRole("button", { name: "Forward" })).toBeDisabled();
+
+    fireEvent.click(dialog.getByRole("button", { name: "Back" }));
+    await waitFor(() =>
+      expect(location.hash).toBe("#/notes/weekly-digest-note00000000002"),
+    );
+    dialog = within(await screen.findByRole("dialog"));
+    await dialog.findByRole("heading", { name: "Weekly digest" });
+    expect(dialog.getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(dialog.getByRole("button", { name: "Forward" })).toBeEnabled();
+
+    fireEvent.click(dialog.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(location.hash).toBe(taskRef.path));
+    dialog = within(await screen.findByRole("dialog"));
+    await waitFor(() => expect(dialog.getByLabelText("Title")).toHaveValue("Launch post"));
+
+    // Closing returns to the page underneath.
+    fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(location.hash).toBe("#/notes");
+  });
+  it("asks before leaving unsaved changes for a linked record", async () => {
+    fixtures.tasks = [{ ...linkedTask, description: "See note00000000002" }];
+    fixtures.notes = [linkingNote];
+    vi.mocked(crewApi.references).mockResolvedValue([
+      { id: linkingNote.id, collection: "notes", title: "Weekly digest", path: linkingNote.path as string },
+    ]);
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    fireEvent.change(dialog.getByLabelText("Title"), { target: { value: "Edited" } });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const link = await dialog.findByRole("link", { name: "Weekly digest" });
+    fireEvent.click(link);
+    expect(confirm).toHaveBeenCalled();
+    await waitFor(() => expect(location.hash).toBe("#/tasks/launch-post-task00000000001"));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Edit task");
+  });
+  it("opens buckets and agents from their links, and says when one is missing", async () => {
+    history.replaceState(null, "", "/#/buckets/network-bucket000000001");
+    render(<CrewWorkspace />);
+    let dialog = within(await screen.findByRole("dialog"));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Edit bucket");
+    expect(dialog.getByDisplayValue("NETWORK")).toBeInTheDocument();
+    navigate("#/agents/network-agent0000000001");
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Edit agent"));
+    dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByDisplayValue("Network")).toBeInTheDocument();
+    cleanup();
+    history.replaceState(null, "", "/#/agents/gone-agent0000000009");
+    render(<CrewWorkspace />);
+    expect(await screen.findByText("That agent wasn't found.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+  it("opens a comment link on the Comments tab at that comment", async () => {
+    fixtures.tasks = [linkedTask];
+    fixtures.events = [
+      { id: "event0000000001", revision: 1, parent: task.id, action: "task.comment", body: "First synthetic comment", created: "2026-11-15 10:00:00.000Z", reported_agent: "Network" },
+    ];
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001?comment=event0000000001");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    const item = (await dialog.findByText("First synthetic comment")).closest("li")!;
+    expect(item).toHaveClass("crew-comment-target");
+    expect(dialog.getByRole("tab", { name: /Comments/ })).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+  });
 });

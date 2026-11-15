@@ -4100,3 +4100,61 @@ a.crew-logo:hover .product-brand span {
     height: 20px;
   }
 }
+/* Links in rendered text (0.29.0): a resolved record id or Crew address reads
+   as the record's title and opens in the app. */
+.crew-prose a.crew-ref {
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+.crew-prose a {
+  overflow-wrap: anywhere;
+}
+/* Back and forward through opened links: first in the header, so the title
+   and actions never push it around; disabled buttons keep their place. */
+.crew-trail-nav {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-left: -9px;
+}
+.crew-dialog > header .crew-trail-nav button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 8px;
+}
+.crew-dialog > header .crew-trail-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
+.crew-dialog > header h2 {
+  min-width: 0;
+}
+/* Every record dialog keeps one size, whatever it shows. */
+@media (min-width: 681px) {
+  .crew-dialog:has(.crew-trail-nav) {
+    height: min(90dvh, 860px);
+  }
+}
+.crew-comments li.crew-comment-target {
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px #9cc4a4;
+  animation: crew-comment-target 2.4s ease-out 1;
+}
+@keyframes crew-comment-target {
+  from {
+    background: #e6f1e3;
+  }
+  to {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-comments li.crew-comment-target {
+    animation: none;
+  }
+}

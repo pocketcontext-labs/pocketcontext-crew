@@ -667,11 +667,14 @@ export function AttachmentsProvider({
   staged = [],
   enabled = true,
   stepThroughAll = false,
+  initialOpen = "",
   children,
 }: {
   attachments: Attachment[];
   staged?: StagedFile[];
   enabled?: boolean;
+  /** A file a link asked for (`?file=<id>`), opened once it has loaded. */
+  initialOpen?: string;
   /** Every open steps through all the files (a review's submitted files). */
   stepThroughAll?: boolean;
   children: ReactNode;
@@ -705,6 +708,14 @@ export function AttachmentsProvider({
     )?.filter((s) => files.some((f) => f.id === s && !f.archived));
     setViewing({ id, sequence: steps && steps.length > 1 ? steps : undefined });
   };
+  const asked = useRef("");
+  const askedLoaded = files.some((f) => f.id === initialOpen && !f.archived);
+  useEffect(() => {
+    if (!initialOpen || !askedLoaded || asked.current === initialOpen) return;
+    asked.current = initialOpen;
+    open(initialOpen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOpen, askedLoaded]);
   const current = viewing ? files.find((f) => f.id === viewing.id) : undefined;
   const sequence = viewing?.sequence;
   const nav: FileNav | undefined =

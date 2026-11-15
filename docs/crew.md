@@ -79,6 +79,32 @@ Responses always include `path`, for example `#/tasks/launch-post-vicfcuk53eds6y
 one, agents cite the title plus the id instead of a link. Agents cite items to humans
 as `[title](url)`, escaping `]` and replacing newlines because titles are untrusted.
 
+Links in text (since 0.29.0): wherever the reader renders Markdown (note Read
+views, task descriptions, drafts, comments, agent briefs, reviews and the Shared
+page), a bare 15-character record id reads as its record's title, with the
+collection and id in the tooltip, and opens in the same dialog. One
+`crew_read`-route request resolves a page's ids: collection `references` with
+`ids` (at most 100) answers `{id, collection, title, path, url, archived, state,
+parent}` for tasks, notes, reviews (`#/approvals/<id>`), buckets
+(`#/buckets/<slug>-<id>`, opening the bucket's Edit dialog), agents
+(`#/agents/<slug>-<id>`), artifacts (the owner's `#/shared/<id>`, never the public
+link or token), attachments (the parent task or note with `?file=<id>`, which
+opens the viewer), comments (the parent task with `?comment=<id>`, on the Comments
+tab at that comment), other task or note activity, and note and session
+revisions (their note or agent). Webhook, execution, upload-link and settings
+records are never resolved, and ids that resolve to nothing stay plain text.
+Ids inside code and existing links are left alone, and stored text never changes.
+A pasted address of this Crew install opens in the app, titled with its record
+when the text is the address itself; `#/reviews/<id>` and `#/artifacts/<id>` read
+as `#/approvals/<id>` and `#/shared/<id>`. Other `http` and `https` links open in a
+new tab with `noopener noreferrer` (long ones shortened, the full address in the
+tooltip), `mailto:` links stay clickable and other schemes are never links. Each
+link click adds a history entry; the dialog's back and forward buttons (fixed
+before its title, disabled when they don't apply) and the browser's own Back and
+Forward walk the records opened, a reload keeps the current one, and closing
+returns to the page underneath. Following a link with unsaved changes asks first.
+Every record dialog keeps one size.
+
 A review opens in the reader at `#/approvals/<review-id>` (since 0.28.0): the
 Approvals page with that review's Review draft dialog on top. A pending review shows
 Approve, Request changes and Reject; a decided or withdrawn one opens read-only with

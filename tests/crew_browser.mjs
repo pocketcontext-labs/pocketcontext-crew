@@ -149,6 +149,51 @@ try {
  await dialog().getByText(/^Approved .* by you\.$/).waitFor();
  assert.equal(await dialog().getByRole('button',{name:'Approve draft',exact:true}).count(),0,'a decided review link opens read-only');
  await dialog().getByRole('button',{name:'Close dialog'}).click();await dialog().waitFor({state:'hidden'});
+ // Links in text (0.29.0): bare ids read as their record's title and open in the
+ // same dialog; Back/Forward (dialog buttons and the browser's) walk the trail;
+ // the back/forward cluster and the dialog size stay put across records.
+ {const api=async body=>(await page.request.post(base+'/api/crew/read',{headers:{Authorization:syntheticOwnerAuth},data:body})).json();
+ const crewWrite=async(action,data,record)=>(await page.request.post(base+'/api/crew/write',{headers:{Authorization:syntheticOwnerAuth},data:{action,data,id:record?.id,expected_revision:record?.revision,reported_agent:'synthetic-browser'}})).json();
+ const reviewId=reviewLink.split('/').pop();
+ const linkedTask=(await api({collection:'tasks',query:'Synthetic launch post'})).items[0];
+ const linkBucket=(await api({collection:'buckets'})).items[0];
+ const digest=await crewWrite('note.create',{bucket:linkBucket.id,title:'Weekly link digest',body:`Shipped ${linkedTask.id} after ${reviewId}; unknown zzzzzzzzzzzzzzz; see https://example.com/page and \`${linkedTask.id}\`.`});
+ await page.goto(base+'/'+digest.path);await page.reload();
+ const taskLink=dialog().getByRole('link',{name:'Synthetic launch post',exact:true});await taskLink.waitFor();
+ assert.equal(await taskLink.getAttribute('target'),null,'a Crew link opens in the app');
+ assert.equal(await dialog().getByRole('link',{name:'https://example.com/page'}).getAttribute('rel'),'noopener noreferrer');
+ assert.equal(await dialog().locator('.crew-prose code').innerText(),linkedTask.id,'code keeps the raw id');
+ await dialog().getByText(/unknown zzzzzzzzzzzzzzz/).waitFor();
+ const back=()=>dialog().getByRole('button',{name:'Back',exact:true}),forward=()=>dialog().getByRole('button',{name:'Forward',exact:true});
+ assert.equal(await back().isDisabled(),true,'Back is disabled at the start of a trail');
+ const frame=async()=>{const n=await dialog().locator('.crew-trail-nav').boundingBox(),d=await dialog().boundingBox();return [n.x,n.y,d.x,d.y,d.width,d.height].map(Math.round);};
+ const noteFrame=await frame();
+ await snapView('crew-links-note-1440');
+ await taskLink.click();
+ await dialog().getByRole('tab',{name:'Comments'}).waitFor();
+ assert.equal(await dialog().getByLabel('Title',{exact:true}).inputValue(),'Synthetic launch post','the link opens the task in the dialog');
+ assert.match(new URL(page.url()).hash,new RegExp('^#/tasks/synthetic-launch-post-'+linkedTask.id+'$'));
+ assert.deepEqual(await frame(),noteFrame,'the back/forward cluster and the dialog size stay put');
+ assert.equal(await back().isEnabled(),true);assert.equal(await forward().isDisabled(),true);
+ await back().click();
+ await dialog().getByRole('link',{name:'Synthetic launch post',exact:true}).waitFor();
+ assert.equal(await forward().isEnabled(),true,'Forward returns to the task');
+ await page.goForward();
+ await dialog().getByRole('tab',{name:'Comments'}).waitFor();
+ await page.reload();
+ await dialog().getByRole('tab',{name:'Comments'}).waitFor();
+ assert.equal(await dialog().getByLabel('Title',{exact:true}).inputValue(),'Synthetic launch post','reload keeps the linked task');
+ await page.goBack();
+ const reviewRef=dialog().getByRole('link',{name:'Review: Synthetic launch post',exact:true});await reviewRef.waitFor();
+ await reviewRef.click();
+ await dialog().getByText(/^Approved .* by you\.$/).waitFor();
+ assert.equal(new URL(page.url()).hash,'#/approvals/'+reviewId,'a review id opens its Review draft dialog');
+ await page.goBack();
+ await dialog().getByRole('link',{name:'Synthetic launch post',exact:true}).waitFor();
+ await close();await dialog().waitFor({state:'hidden'});
+ // The reload above opened the task link, whose page underneath is Tasks.
+ assert.equal(new URL(page.url()).hash,'#/tasks','closing returns to the page underneath');
+}
  await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
  await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/In progress/})}).locator('.crew-task-card').count(),1);

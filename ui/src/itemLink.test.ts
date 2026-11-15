@@ -284,6 +284,52 @@ describe("Tasks and Notes address state", () => {
       "#/tasks/a-task00000000001",
     );
   });
+  it("reads bucket, agent, file and comment links (0.29.0)", () => {
+    expect(parseItemHash("#/buckets/network-bucket000000001")).toEqual({
+      kind: "bucket",
+      id: "bucket000000001",
+    });
+    expect(parseItemHash("#/agents/agent0000000001")).toEqual({
+      kind: "agent",
+      id: "agent0000000001",
+    });
+    expect(viewFromHash("#/buckets/network-bucket000000001")).toBe("memory");
+    expect(viewFromHash("#/agents/network-agent0000000001")).toBe("agents");
+    expect(isItemHash("#/agents/network-agent0000000001")).toBe(true);
+    expect(isItemHash("#/agents")).toBe(false);
+    expect(parseItemHash("#/notes/a-note00000000001?file=file00000000001")).toEqual({
+      kind: "note",
+      id: "note00000000001",
+      file: "file00000000001",
+    });
+    expect(parseItemHash("#/tasks/a-task00000000001?comment=event0000000001")).toEqual({
+      kind: "task",
+      id: "task00000000001",
+      tab: "comments",
+      comment: "event0000000001",
+    });
+    for (const malformed of [
+      "#/notes/note00000000001?comment=event0000000001",
+      "#/agents/agent0000000001?file=file00000000001",
+      "#/tasks/task00000000001?file=short",
+      "#/agents/agent0000000001?tab=comments",
+      "#/tasks/task00000000001?file=file00000000001&tab=comments",
+    ])
+      expect(parseItemHash(malformed)).toBeNull();
+    expect(loginReturnHash("#/buckets/network-bucket000000001")).toBe(
+      "#/buckets/bucket000000001",
+    );
+  });
+  it("reads pasted review and artifact aliases as their pages", () => {
+    expect(legacyRedirect("#/reviews/review000000001")).toBe(
+      "#/approvals/review000000001",
+    );
+    expect(legacyRedirect("#/artifacts/pricing-artifact0000001")).toBe(
+      "#/shared/artifact0000001",
+    );
+    expect(viewFromHash("#/reviews/review000000001")).toBe("reviews");
+    expect(legacyRedirect("#/artifacts/short")).toBeNull();
+  });
   it("remembers a canonical filtered page across sign-in", () => {
     const remembered = loginReturnHash(
       `#/notes?x=1&sort=created&bucket=${bucketId}`,

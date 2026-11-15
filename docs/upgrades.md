@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.28.0 to 0.29.0
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.29.0. The reader turns record
+ids and Crew addresses in rendered text into titled links with back and forward;
+the server adds the read-only `references` read (collection `references` with
+`ids`) on the existing `/api/crew/read` route, so proxy allowlists need no change.
+Rollback to 0.28.0 needs no restore; ids then show as plain text again.
+
 ## Crew 0.27.2 to 0.28.0
 
 No data migration, protocol or managed block change. Replace the binary or image

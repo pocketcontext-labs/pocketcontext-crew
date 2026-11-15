@@ -135,6 +135,7 @@ import {
 } from "./itemLink";
 import Shared from "./Shared";
 import Prose from "./Prose";
+import { resetTrail, useTrail } from "./trail";
 import Archive, { type RestoreItem } from "./Archive";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
@@ -181,17 +182,27 @@ const statusHelp: Record<(typeof boardStatuses)[number][0], HelpTopic> = {
 };
 type Kind = "task" | "note" | "bucket" | "agent" | "review";
 type Data = Record<string, Row[]>;
-/** Never fires hashchange, so writing the address cannot open a dialog. */
+/**
+ * Never fires hashchange, so writing the address cannot open a dialog. The
+ * entry keeps its state: its place in a link trail (trail.ts).
+ */
 const setAddress = (hash: string) =>
-  history.replaceState(null, "", location.pathname + location.search + hash);
+  history.replaceState(
+    history.state,
+    "",
+    location.pathname + location.search + hash,
+  );
 /** Replaces an old page address with its current form, adding no history entry. */
 const redirectLegacyAddress = () => {
   const next = legacyRedirect(location.hash);
   if (next) setAddress(next);
 };
+/** A plain history entry; it starts a new link trail (see trail.ts). */
 const pushAddress = (hash: string) => {
-  if (location.hash !== hash)
+  if (location.hash !== hash) {
     history.pushState(null, "", location.pathname + location.search + hash);
+    resetTrail();
+  }
 };
 const noteSortLabels: Record<NoteSort, string> = {
   updated: "Sort: Last updated",
@@ -773,14 +784,47 @@ function RelatedItems({
     </fieldset>
   );
 }
+/**
+ * Back and forward through records opened from links in text (0.29.0). The
+ * two buttons stay in place, disabled when there is nowhere to go, and use
+ * the browser's own history, so browser Back and Forward agree with them.
+ */
+function TrailNav() {
+  const trail = useTrail();
+  return (
+    <div className="crew-trail-nav" role="group" aria-label="Link history">
+      <button
+        type="button"
+        aria-label="Back"
+        title="Back"
+        disabled={!trail.back}
+        onClick={() => history.back()}
+      >
+        ←
+      </button>
+      <button
+        type="button"
+        aria-label="Forward"
+        title="Forward"
+        disabled={!trail.forward}
+        onClick={() => history.forward()}
+      >
+        →
+      </button>
+    </div>
+  );
+}
 function Modal({
   title,
+  nav,
   actions,
   children,
   close,
   onEdit,
 }: {
   title: string;
+  /** Shown before the title, so it never moves when the title changes. */
+  nav?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   close: () => void;
@@ -874,6 +918,7 @@ function Modal({
       aria-label={title}
     >
       <header>
+        {nav}
         <h2>{title}</h2>
         {actions}
         <button onClick={close} aria-label="Close dialog">
@@ -959,6 +1004,9 @@ export default function CrewWorkspace() {
       /** A task tab asked for by the address, with a counter to repeat it. */
       tab?: TaskTab;
       tabAsk?: number;
+      /** A file (`?file=`) or comment (`?comment=`) the address points at. */
+      file?: string;
+      comment?: string;
     } | null>(null),
     // An external agent's full session instructions, read by Start a session.
     [instructions, setInstructions] = useState<{
@@ -995,6 +1043,9 @@ export default function CrewWorkspace() {
     loadFailed = useRef(false);
   const discardOk = () =>
     !edited.current || window.confirm("Discard your unsaved changes?");
+  // The open dialog, for the hashchange listener registered once below.
+  const dialogRef = useRef(dialog);
+  dialogRef.current = dialog;
   // A layout effect, so the reset precedes any edit to the newly shown dialog;
   // a deferred effect could run after the first change and erase it.
   useLayoutEffect(() => {
@@ -1086,11 +1137,37 @@ export default function CrewWorkspace() {
   useEffect(() => {
     const receive = () => {
       redirectLegacyAddress();
-      setPendingLink(parseItemHash(location.hash));
+      // Following a link to another record from a dialog with unsaved changes
+      // asks first; declining steps back to where the dialog was.
+      const link = parseItemHash(location.hash);
+      const open = dialogRef.current;
+      if (
+        link &&
+        open &&
+        !(open.kind === link.kind && open.row?.id === link.id) &&
+        !discardOk()
+      ) {
+        history.back();
+        return;
+      }
+      setPendingLink(link);
       setPendingReview(reviewFocusFromHash(location.hash));
       setPendingColumn(boardColumnFromHash(location.hash));
       setPendingSection(connectSectionFromHash(location.hash));
       if (isItemHash(location.hash)) return;
+      // A review opened from a link in an open dialog replaces that dialog and
+      // keeps the page underneath, like any other record on the trail.
+      if (reviewFocusFromHash(location.hash) && dialogRef.current) {
+        if (
+          !(dialogRef.current.kind === "review" &&
+            dialogRef.current.row?.id === reviewFocusFromHash(location.hash)) &&
+          !discardOk()
+        ) {
+          setPendingReview("");
+          history.back();
+        }
+        return;
+      }
       if (!discardOk()) {
         history.forward();
         return;
@@ -1181,22 +1258,42 @@ export default function CrewWorkspace() {
   useEffect(() => {
     if (!pendingLink || !ready) return;
     setPendingLink(null);
-    const { kind, id, tab } = pendingLink;
-    const collection = kind === "task" ? "tasks" : "notes";
-    const row = [...data[collection], ...archived[collection]].find(
+    const { kind, id, tab, file, comment } = pendingLink;
+    const collection = `${kind}s`;
+    const show = (row: Row) => {
+      // Tasks and notes keep their server path (with its slug) in the
+      // address; buckets and agents, and file or comment links, keep the
+      // address they were opened with.
+      if (!file && !comment && (kind === "task" || kind === "note"))
+        setAddress(itemTabPath(itemPath(kind, row), tab));
+      // Navigating to the open item must not disturb its in-progress edits; a
+      // tab in the address still switches to it.
+      setDialog((open) =>
+        open?.kind === kind && open.row?.id === id
+          ? tab
+            ? { ...open, tab, tabAsk: (open.tabAsk || 0) + 1, comment }
+            : open
+          : { kind, row, tab, file, comment },
+      );
+    };
+    const row = [...(data[collection] ?? []), ...(archived[collection] ?? [])].find(
       (x) => x.id === id,
     );
-    if (!row) return;
-    setAddress(itemTabPath(itemPath(kind, row), tab));
-    // Navigating to the open item must not disturb its in-progress edits; a
-    // tab in the address still switches to it.
-    setDialog((open) =>
-      open?.kind === kind && open.row?.id === id
-        ? tab
-          ? { ...open, tab, tabAsk: (open.tabAsk || 0) + 1 }
-          : open
-        : { kind, row, tab },
-    );
+    if (row) return show(row);
+    // A record newer than the last load is read by id; one that doesn't
+    // exist leaves a short notice.
+    const hash = location.hash;
+    void Promise.all([
+      crewApi.read(collection, { id }),
+      crewApi.read(collection, { id, archived: true }),
+    ])
+      .then(([a, b]) => [...a, ...b])
+      .catch(() => [] as Row[])
+      .then(([fresh]) => {
+        if (location.hash !== hash) return;
+        if (fresh?.id === id) return show(fresh);
+        setNotice(`That ${kind} wasn't found.`);
+      });
   }, [pendingLink, ready, data, archived]);
   // An Approvals link opens that review's dialog over the Approvals page; a
   // review newer than the last load is read by id. An unknown id stays on
@@ -1263,8 +1360,17 @@ export default function CrewWorkspace() {
     setDialog({ kind: "review", row });
   };
   const closeDialog = () => {
-    // Replace, so Back never reopens the review.
-    if (reviewFocusFromHash(location.hash)) setAddress(viewHashes.reviews);
+    // Replace, so Back never reopens the review. A review reached from a link
+    // over another page returns to that page, like an item.
+    if (reviewFocusFromHash(location.hash)) {
+      if (view === "reviews") setAddress(viewHashes.reviews);
+      else
+        pushAddress(
+          view === "search" && searchText
+            ? searchHash(searchText)
+            : viewStateHash(view, viewState),
+        );
+    }
     if (isItemHash(location.hash))
       pushAddress(
         view === "search" && searchText
@@ -2529,6 +2635,7 @@ export default function CrewWorkspace() {
       )}
       {dialog && (
         <Modal
+          nav={dialog.row ? <TrailNav /> : undefined}
           title={
             dialog.kind === "review"
               ? "Review draft"
@@ -2610,6 +2717,9 @@ type EditorProps = {
   /** The task tab the address asked for, and a counter to switch again. */
   tab?: TaskTab;
   tabAsk?: number;
+  /** A file to open in the viewer, or a comment to show, from the address. */
+  file?: string;
+  comment?: string;
   data: Data;
   archiveNotice?: string;
   onEdit: () => void;
@@ -2674,6 +2784,8 @@ function Editor({
   row,
   tab: askedTab,
   tabAsk = 0,
+  file: askedFile = "",
+  comment: askedComment = "",
   data,
   archiveNotice = "",
   onEdit,
@@ -2712,6 +2824,17 @@ function Editor({
     if (kind === "task" && row && askedTab && tabAsk) setTabState(askedTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabAsk]);
+  // A comment link (`?comment=<id>`) scrolls to that comment once it loads.
+  const shownComment = useRef("");
+  const commentLoaded = comments.some((x) => x.id === askedComment);
+  useEffect(() => {
+    if (!askedComment || !commentLoaded || shownComment.current === askedComment)
+      return;
+    shownComment.current = askedComment;
+    document
+      .getElementById(`crew-comment-${askedComment}`)
+      ?.scrollIntoView?.({ block: "center" });
+  }, [askedComment, commentLoaded, tab]);
   const [start] = useState(() => formValues(kind, row, data));
   const [title, setTitle] = useState(start.title),
     [body, setBody] = useState(start.body),
@@ -3121,7 +3244,11 @@ function Editor({
     }
   };
   return (
-    <AttachmentsProvider attachments={item.attachments} staged={staged.staged}>
+    <AttachmentsProvider
+      attachments={item.attachments}
+      staged={staged.staged}
+      initialOpen={askedFile}
+    >
     <div
       className={`crew-dialog-body${row && (kind === "note" || kind === "task") ? " crew-switching-views" : ""}`}
       ref={root}
@@ -3689,7 +3816,11 @@ function Editor({
           {comments.length ? (
             <ol className="crew-timeline crew-comments" aria-label="Comments">
               {comments.map((x) => (
-                <li key={x.id}>
+                <li
+                  key={x.id}
+                  id={`crew-comment-${x.id}`}
+                  className={x.id === askedComment ? "crew-comment-target" : undefined}
+                >
                   <small>
                     <strong>{eventSummary(x).by}</strong> · {when(x.created)}
                   </small>

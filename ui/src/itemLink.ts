@@ -6,8 +6,27 @@ import {
   searchTextFromHash,
 } from "./searchApi";
 
-export type ItemKind = "task" | "note";
-export type ItemLink = { kind: ItemKind; id: string; tab?: TaskTab };
+/**
+ * Records with their own dialog address. Buckets and agents (0.29.0) open their
+ * Edit dialog over Notes and Agents; their addresses come from the references
+ * resolver for ids written in prose.
+ */
+export type ItemKind = "task" | "note" | "bucket" | "agent";
+export type ItemLink = {
+  kind: ItemKind;
+  id: string;
+  tab?: TaskTab;
+  /** A task's or note's file to open in the viewer (`?file=<id>`). */
+  file?: string;
+  /** A task comment to show on the Comments tab (`?comment=<id>`). */
+  comment?: string;
+};
+const itemCollections: Record<string, ItemKind> = {
+  tasks: "task",
+  notes: "note",
+  buckets: "bucket",
+  agents: "agent",
+};
 /** Task dialog views a link can open on: `#/tasks/<slug>?tab=comments`. */
 export const taskTabs = ["edit", "comments", "activity", "reviews"] as const;
 export type TaskTab = (typeof taskTabs)[number];
@@ -29,8 +48,15 @@ export type View = keyof typeof viewHashes;
 /**
  * The current address of an older page address (`#/team` became `#/tasks`,
  * `#/memory` became `#/notes`), keeping its query; null for any other address.
+ * Pasted aliases (0.29.0) read as their canonical form: `#/reviews/<id>` is
+ * `#/approvals/<id>` and `#/artifacts/<slug>-<id>` is `#/shared/<id>`.
  */
 export function legacyRedirect(hash: string): string | null {
+  const alias = /^#\/(reviews|artifacts)\/(?:[^/?#]*-)?([a-z0-9]{15})$/.exec(
+    hash,
+  );
+  if (alias)
+    return `${alias[1] === "reviews" ? viewHashes.reviews : viewHashes.shared}/${alias[2]}`;
   const match = /^#\/(team|memory)(\?.*)?$/.exec(hash);
   if (!match) return null;
   return (
@@ -58,7 +84,12 @@ export function viewFromHash(hash: string): View {
   if (/^#\/shared\?/.test(hash)) return "shared";
   if (/^#\/archive\?/.test(hash)) return "archive";
   const link = parseItemHash(hash);
-  if (link) return link.kind === "task" ? "board" : "memory";
+  if (link)
+    return link.kind === "task"
+      ? "board"
+      : link.kind === "agent"
+        ? "agents"
+        : "memory";
   const match = Object.entries(viewHashes).find(([, value]) => value === hash);
   return match ? (match[0] as View) : "home";
 }
@@ -261,18 +292,27 @@ export function isCanonicalViewStateHash(hash: string): boolean {
  * before it is the server's and is never interpreted here.
  */
 export function parseItemHash(hash: string): ItemLink | null {
-  // The only query an item link takes is a task tab (0.24.0); anything else
-  // makes the link malformed, as before.
+  // An item link takes one query at most: a task tab (0.24.0), or since
+  // 0.29.0 a file (tasks and notes) or a comment (tasks). Anything else makes
+  // the link malformed, as before.
   const match =
-    /^#\/(tasks|notes)\/([^/?#]+)(?:\?tab=(edit|comments|activity|reviews))?$/.exec(
+    /^#\/(tasks|notes|buckets|agents)\/([^/?#]+)(?:\?(tab|file|comment)=([a-z0-9]+))?$/.exec(
       hash,
     );
   if (!match) return null;
   const id = match[2].slice(match[2].lastIndexOf("-") + 1);
-  if (!/^[a-z0-9]{15}$/.test(id)) return null;
-  const kind = match[1] === "tasks" ? "task" : "note";
-  if (match[3] && kind !== "task") return null;
-  return match[3] ? { kind, id, tab: match[3] as TaskTab } : { kind, id };
+  if (!recordId.test(id)) return null;
+  const kind = itemCollections[match[1]];
+  const [, , , key, value] = match;
+  if (!key) return { kind, id };
+  if (key === "tab")
+    return kind === "task" && taskTabs.includes(value as TaskTab)
+      ? { kind, id, tab: value as TaskTab }
+      : null;
+  if (!recordId.test(value)) return null;
+  if (key === "file")
+    return kind === "task" || kind === "note" ? { kind, id, file: value } : null;
+  return kind === "task" ? { kind, id, tab: "comments", comment: value } : null;
 }
 /** An item's address on one task tab; Edit, the default, has no query. */
 export function itemTabPath(path: string, tab?: string): string {
@@ -282,7 +322,8 @@ export function itemTabPath(path: string, tab?: string): string {
     : base;
 }
 
-export const isItemHash = (hash: string) => /^#\/(tasks|notes)\//.test(hash);
+export const isItemHash = (hash: string) =>
+  /^#\/(tasks|notes|buckets|agents)\//.test(hash);
 
 const bareHash = ({ kind, id }: ItemLink) => `#/${kind}s/${id}`;
 
@@ -306,7 +347,7 @@ export function itemShareUrl(kind: ItemKind, row: Row): string {
 const returnKey = "pocketcontext.crew.login_return";
 const returnLifetimeMs = 15 * 60 * 1000;
 const returnPattern =
-  /^#\/(?:(?:tasks|notes|approvals)\/[a-z0-9]{15}|tasks|notes|team|memory|approvals|agents|archive|connect|search|guide(?:\/[a-z-]+)?)$/;
+  /^#\/(?:(?:tasks|notes|buckets|agents|approvals)\/[a-z0-9]{15}|tasks|notes|team|memory|approvals|agents|archive|connect|search|guide(?:\/[a-z-]+)?)$/;
 
 // OAuth consent sends the browser here to sign in and come back. The path is
 // fixed: only the query (validated by the consent endpoint) can vary.
