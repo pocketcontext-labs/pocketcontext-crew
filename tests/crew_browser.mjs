@@ -18,6 +18,20 @@ const snapView=async name=>{if(process.env.CREW_SCREENSHOTS) await page.screensh
 // Exact label matching sees a textarea's own text, so match the label's span.
 const noteBody=()=>dialog().getByLabel('Note',{exact:true});
 const edit=()=>dialog().getByRole('tab',{name:'Edit',exact:true}).click();
+// The floating dialog header (0.30.0) is one row: every control and the title
+// share one vertical centre, nothing wraps, and close stays inside the screen.
+const headerOneRow=async where=>{
+ const r=await dialog().locator('header.crew-dialog-head').evaluate(h=>{
+  const box=h.getBoundingClientRect();const mid=e=>{const b=e.getBoundingClientRect();return b.top+b.height/2;};
+  const buttons=[...h.querySelectorAll('button')];const title=h.querySelector('h2');
+  return {height:box.height,mids:[...buttons,title].map(mid),right:Math.max(...buttons.map(b=>b.getBoundingClientRect().right)),width:innerWidth,
+   tall:Math.max(...buttons.map(b=>b.getBoundingClientRect().height)),nowrap:getComputedStyle(title).whiteSpace==='nowrap',labels:buttons.every(b=>!b.textContent.trim()&&b.title===b.getAttribute('aria-label'))};
+ });
+ assert.ok(Math.max(...r.mids)-Math.min(...r.mids)<=1,`${where}: header controls share one row `+JSON.stringify(r.mids));
+ assert.ok(r.height<r.tall*2,`${where}: header height is one row (${r.height} with ${r.tall} px buttons)`);
+ assert.ok(r.right<=r.width,`${where}: close stays on screen`);
+ assert.ok(r.nowrap&&r.labels,`${where}: an ellipsized title and icon-only named buttons`);
+};
 try {
  await page.goto(base);
  await page.getByLabel('Password',{exact:true}).fill(process.env.CREW_TEST_PASSWORD);
@@ -122,6 +136,7 @@ try {
  await reviewCard.focus();await page.keyboard.press('Shift+Tab');await page.keyboard.press('Tab');
  assert.equal(await reviewCard.evaluate(e=>e===document.activeElement&&e.matches(':focus-visible')&&getComputedStyle(e).outlineStyle!=='none'),true,'the Approvals card shows keyboard focus');
  await snapView('crew-approvals-focus-1440');await page.keyboard.press('Enter');
+ await dialog().locator('.crew-draft-snapshot').waitFor();await headerOneRow('review 1440');
  assert.equal(await dialog().locator('.crew-draft-snapshot').innerText(),'A synthetic draft for the owner to publish manually.');
  // Review links (0.28.0): the card puts #/approvals/<id> in the address, closing
  // replaces it with #/approvals, and the link opens the dialog on a phone.
@@ -188,6 +203,7 @@ try {
  await reviewRef.click();
  await dialog().getByText(/^Approved .* by you\.$/).waitFor();
  assert.equal(new URL(page.url()).hash,'#/approvals/'+reviewId,'a review id opens its Review draft dialog');
+ {const size=page.viewportSize();for(const width of [320,375,390]){await page.setViewportSize({width,height:844});await headerOneRow('review '+width);}await page.setViewportSize(size);}
  await page.goBack();
  await dialog().getByRole('link',{name:'Synthetic launch post',exact:true}).waitFor();
  await close();await dialog().waitFor({state:'hidden'});
@@ -432,6 +448,24 @@ try {
  const sheet=await dialog().boundingBox();
  assert.deepEqual([sheet.x,sheet.y,sheet.width,sheet.height],[0,0,390,844],'overlay fills the phone screen');
  assert.equal(await dialog().getByRole('button',{name:'Copy link'}).evaluate(e=>e===document.activeElement),false,'Copy link is not focused');
+ for(const width of [320,375,390]){
+  await page.setViewportSize({width,height:844});await headerOneRow('note '+width);
+  if(width===320){
+   // More opens a floating card under the header that fits the phone; Escape closes only the menu.
+   await dialog().getByRole('button',{name:'More actions'}).click();
+   const menu=dialog().getByRole('menu',{name:'More actions'});await menu.waitFor();
+   const box=await menu.boundingBox();
+   assert.ok(box.x>=0&&box.x+box.width<=320&&box.y+box.height<=844,'the More menu fits at 320: '+JSON.stringify(box));
+   const rows=await menu.getByRole('menuitem').evaluateAll(items=>items.map(i=>[i.textContent,Math.round(i.getBoundingClientRect().height),getComputedStyle(i).color]));
+   assert.deepEqual(rows.map(r=>r[0]),['Copy link','Share as artifact','History','Archive note']);
+   assert.ok(rows.every(r=>r[1]>=44),'menu rows are at least 44 px: '+JSON.stringify(rows));
+   assert.notEqual(rows[3][2],rows[0][2],'Archive is coloured as destructive');
+   await snapView('crew-dialog-menu-320');
+   await page.keyboard.press('Escape');await menu.waitFor({state:'hidden'});
+   assert.equal(await dialog().isVisible(),true,'Escape closes the menu, not the dialog');
+  }
+ }
+ await page.setViewportSize({width:390,height:844});
  await snapView('crew-note-read-390');
  await page.keyboard.press('Escape');
  await page.setViewportSize({width:1280,height:800});
@@ -1010,12 +1044,19 @@ try {
  const inlineWidth=await inline.first().evaluate(i=>i.getBoundingClientRect().width);
  assert.ok(inlineWidth<=390,'inline image fits the phone');
  await snapView('attachments-task-inline-390');
+ for(const width of [320,375]){await page.setViewportSize({width,height:844});await headerOneRow('task '+width);}
+ await page.setViewportSize({width:390,height:844});await headerOneRow('task 390');
  await dialog().locator('.crew-attachments').scrollIntoViewIfNeeded();
  await snapView('attachments-task-files-390');
  await dialog().getByRole('button',{name:/^Open image: screenshot-.*-2\.png$/}).click();
  await viewer.waitFor();await allLoaded('.crew-lightbox-stage img');
  const shown=await viewer.locator('.crew-lightbox-stage img').boundingBox();
  assert.ok(shown&&shown.width<=390&&shown.height<=844,'lightbox image fits the phone');
+{await page.setViewportSize({width:320,height:700});
+ // The viewer's header row (name and the fixed cluster) stays one row at 320.
+ const mids=await viewer.locator('.crew-viewer-bar').evaluate(bar=>[bar.querySelector('.crew-viewer-name'),...bar.querySelectorAll('.crew-viewer-cluster button, .crew-viewer-cluster a')].filter(Boolean).map(e=>{const b=e.getBoundingClientRect();return b.top+b.height/2;}));
+ assert.ok(mids.length>2&&Math.max(...mids)-Math.min(...mids)<=2,'viewer header is one row at 320: '+JSON.stringify(mids));
+ await snapView('attachments-lightbox-320');await page.setViewportSize({width:390,height:844});}
  await snapView('attachments-lightbox-390');
  await viewer.getByRole('button',{name:'Close image viewer'}).click();
  await viewer.waitFor({state:'hidden'});

@@ -1644,6 +1644,102 @@ it.each([
   expect(dialog.getByLabelText("Title")).toHaveValue("Launch post");
 });
 
+describe("dialog header", () => {
+  it("is one floating row: back, forward, title, icon pill with More, close", async () => {
+    fixtures.notes = [linkedNote];
+    history.replaceState(null, "", `/${linkedNote.path}`);
+    render(<CrewWorkspace />);
+    const dialog = await screen.findByRole("dialog");
+    const header = dialog.querySelector("header.crew-dialog-head")!;
+    const names = Array.from(header.querySelectorAll("button")).map((b) =>
+      b.getAttribute("aria-label"),
+    );
+    expect(names).toEqual([
+      "Back",
+      "Forward",
+      "Copy link",
+      "Share as artifact",
+      "More actions",
+      "Close dialog",
+    ]);
+    // Icon-only, each named and with a tooltip.
+    for (const button of header.querySelectorAll("button")) {
+      expect(button.textContent).toBe("");
+      expect(button.getAttribute("title")).toBe(button.getAttribute("aria-label"));
+    }
+    expect(within(header as HTMLElement).getByRole("heading")).toHaveAttribute(
+      "title",
+      "Note",
+    );
+  });
+
+  it("keeps Share as artifact in place, disabled, on a task", async () => {
+    fixtures.tasks = [linkedTask];
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByRole("button", { name: "Share as artifact" })).toBeDisabled();
+    expect(dialog.getByRole("button", { name: "Back" })).toBeDisabled();
+  });
+
+  it("opens a More menu with roles, arrow keys and Escape that keeps the dialog", async () => {
+    fixtures.notes = [linkedNote];
+    history.replaceState(null, "", `/${linkedNote.path}`);
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    const more = dialog.getByRole("button", { name: "More actions" });
+    expect(more).toHaveAttribute("aria-haspopup", "menu");
+    fireEvent.click(more);
+    const menu = dialog.getByRole("menu", { name: "More actions" });
+    expect(more).toHaveAttribute("aria-expanded", "true");
+    const items = within(menu).getAllByRole("menuitem");
+    expect(items.map((x) => x.textContent)).toEqual([
+      "Copy link",
+      "Share as artifact",
+      "History",
+      "Archive note",
+    ]);
+    // Destructive actions are red, in their own last group.
+    const groups = within(menu).getAllByRole("group");
+    expect(groups).toHaveLength(2);
+    expect(within(groups[1]).getByRole("menuitem")).toHaveClass("crew-menu-danger");
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(items[3]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "Home" });
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(items[1]).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(dialog.queryByRole("menu")).toBeNull();
+    expect(more).toHaveFocus();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("runs a menu item and closes the menu; outside taps close it too", async () => {
+    fixtures.notes = [linkedNote];
+    history.replaceState(null, "", `/${linkedNote.path}`);
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    fireEvent.click(dialog.getByRole("button", { name: "More actions" }));
+    fireEvent.pointerDown(dialog.getByText("Clear prose"));
+    expect(dialog.queryByRole("menu")).toBeNull();
+    fireEvent.click(dialog.getByRole("button", { name: "More actions" }));
+    fireEvent.click(dialog.getByRole("menuitem", { name: "History" }));
+    expect(dialog.queryByRole("menu")).toBeNull();
+    expect(await dialog.findByRole("button", { name: /Back to note/ })).toBeInTheDocument();
+  });
+
+  it("disables More when a dialog has nothing in it", async () => {
+    history.replaceState(null, "", "/#/tasks");
+    render(<CrewWorkspace />);
+    fireEvent.click(await screen.findByRole("button", { name: "＋ New task" }));
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByRole("button", { name: "More actions" })).toBeDisabled();
+    expect(dialog.getByRole("button", { name: "Copy link" })).toBeDisabled();
+  });
+});
+
 describe("simple dialogs", () => {
   const openNote = async (note: Row = linkedNote) => {
     fixtures.notes = fixtures.notes.length ? fixtures.notes : [note];

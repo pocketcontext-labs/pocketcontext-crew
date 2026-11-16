@@ -1,5 +1,12 @@
 # Crew upgrades and rollback
 
+## Crew 0.29.0 to 0.30.0
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.30.0. Reader change only: every
+dialog has one floating header row with icon buttons and a More menu. Rollback to
+0.29.0 needs no restore.
+
 ## Crew 0.28.0 to 0.29.0
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

@@ -135,6 +135,14 @@ import {
 } from "./itemLink";
 import Shared from "./Shared";
 import Prose from "./Prose";
+import DialogHeader, {
+  DialogMenuContext,
+  HeadButton,
+  NavCluster,
+  menuIsOpenIn,
+  useDialogMenu,
+  type MenuItem,
+} from "./DialogHeader";
 import { resetTrail, useTrail } from "./trail";
 import Archive, { type RestoreItem } from "./Archive";
 const nav: [View, string, string][] = [
@@ -440,45 +448,89 @@ function CopyLink({
     </span>
   );
 }
+/**
+ * Copy link as a header icon (0.30.0): the icon turns into a check and the
+ * name into the copied label for 2 s, with a small "Copied" bubble.
+ */
+function HeadCopy({
+  target,
+  label = "Copy link",
+  copiedLabel = "Link copied",
+  icon = "link",
+}: {
+  target: string;
+  label?: string;
+  copiedLabel?: string;
+  icon?: "link" | "copy";
+}) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  useEffect(() => {
+    if (state !== "copied") return;
+    const timer = window.setTimeout(() => setState("idle"), 2000);
+    return () => window.clearTimeout(timer);
+  }, [state]);
+  const copy = async () => setState((await copyText(target)) ? "copied" : "failed");
+  return (
+    <span className="crew-head-copy">
+      <HeadButton
+        icon={state === "copied" ? "check" : icon}
+        label={state === "copied" ? copiedLabel : label}
+        onClick={() => void copy()}
+      />
+      {state === "copied" && (
+        <span className="crew-head-toast" aria-hidden="true">
+          Copied
+        </span>
+      )}
+      {state === "failed" && (
+        <span role="alert" className="crew-head-alert">
+          Could not copy automatically. Copy it from here: <code>{target}</code>
+        </span>
+      )}
+    </span>
+  );
+}
 /** Creates a draft artifact prefilled from a note; publishing is on Shared. */
+async function shareAsArtifact(note: Row) {
+  const created = await crewApi.write(
+    "artifact.create",
+    {
+      title: val(note, "title"),
+      body: val(note, "body"),
+      sources: [note.id],
+    },
+    undefined,
+    "Share as artifact",
+  );
+  return created.id as string;
+}
 function ShareAsArtifact({
   note,
   done,
 }: {
-  note: Row;
+  note?: Row;
   done: (id: string) => void;
 }) {
   const [state, setState] = useState<"idle" | "busy" | "failed">("idle");
   const share = async () => {
+    if (!note) return;
     setState("busy");
     try {
-      const created = await crewApi.write(
-        "artifact.create",
-        {
-          title: val(note, "title"),
-          body: val(note, "body"),
-          sources: [note.id],
-        },
-        undefined,
-        "Share as artifact",
-      );
-      done(created.id);
+      done(await shareAsArtifact(note));
     } catch {
       setState("failed");
     }
   };
   return (
-    <span className="crew-copy-link">
-      <button
-        type="button"
-        disabled={state === "busy"}
-        title="Make a frozen copy of this note you can share by link"
+    <span className="crew-head-copy">
+      <HeadButton
+        icon="share"
+        label="Share as artifact"
+        disabled={!note || state === "busy"}
         onClick={() => void share()}
-      >
-        Share as artifact
-      </button>
+      />
       {state === "failed" && (
-        <span role="alert" className="crew-copy-error">
+        <span role="alert" className="crew-head-alert">
           Could not create the artifact.
         </span>
       )}
@@ -792,45 +844,37 @@ function RelatedItems({
 function TrailNav() {
   const trail = useTrail();
   return (
-    <div className="crew-trail-nav" role="group" aria-label="Link history">
-      <button
-        type="button"
-        aria-label="Back"
-        title="Back"
-        disabled={!trail.back}
-        onClick={() => history.back()}
-      >
-        ←
-      </button>
-      <button
-        type="button"
-        aria-label="Forward"
-        title="Forward"
-        disabled={!trail.forward}
-        onClick={() => history.forward()}
-      >
-        →
-      </button>
-    </div>
+    <NavCluster
+      back={trail.back ? () => history.back() : undefined}
+      forward={trail.forward ? () => history.forward() : undefined}
+    />
   );
 }
 function Modal({
   title,
   nav,
   actions,
+  menu = [],
+  record = false,
   children,
   close,
   onEdit,
 }: {
+  /** A record dialog keeps one size, whatever it shows. */
+  record?: boolean;
   title: string;
   /** Shown before the title, so it never moves when the title changes. */
   nav?: ReactNode;
+  /** Icon buttons in the header pill. */
   actions?: ReactNode;
+  /** The More menu's own items; the body can add more through context. */
+  menu?: MenuItem[];
   children: ReactNode;
   close: () => void;
   onEdit: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const [bodyMenu, setBodyMenu] = useState<MenuItem[]>([]);
   const pressedBackdrop = useRef(false);
   const helpWasOpen = useRef(false);
   // A native file picker opened from inside the dialog: while it is open, and
@@ -883,13 +927,14 @@ function Modal({
           ? true
           : undefined
       }
-      className="crew-dialog"
+      className={`crew-dialog${record ? " crew-record-dialog" : ""}`}
       tabIndex={-1}
       onChange={onEdit}
       // Runs before Help's own listener, so it still sees the popover. The first
       // click outside an open popover only dismisses the popover.
       onPointerDown={() => {
-        helpWasOpen.current = helpIsOpenIn(ref.current);
+        helpWasOpen.current =
+          helpIsOpenIn(ref.current) || menuIsOpenIn(ref.current);
       }}
       onScroll={(e) =>
         e.currentTarget.classList.toggle(
@@ -917,15 +962,16 @@ function Modal({
       }}
       aria-label={title}
     >
-      <header>
-        {nav}
-        <h2>{title}</h2>
-        {actions}
-        <button onClick={close} aria-label="Close dialog">
-          ×
-        </button>
-      </header>
-      {children}
+      <DialogHeader
+        title={title}
+        nav={nav}
+        actions={actions}
+        menu={[...menu, ...bodyMenu]}
+        close={close}
+      />
+      <DialogMenuContext.Provider value={setBodyMenu}>
+        {children}
+      </DialogMenuContext.Provider>
     </dialog>
   );
 }
@@ -1358,6 +1404,11 @@ export default function CrewWorkspace() {
   const openReviewCard = (row: Row) => {
     pushAddress(reviewHash(row.id));
     setDialog({ kind: "review", row });
+  };
+  // Share as artifact from a note's header or menu opens the new draft.
+  const sharedArtifact = (id: string) => {
+    closeDialog();
+    location.hash = `${viewHashes.shared}/${id}`;
   };
   const closeDialog = () => {
     // Replace, so Back never reopens the review. A review reached from a link
@@ -2612,11 +2663,13 @@ export default function CrewWorkspace() {
       {instructions && (
         <Modal
           title={`Session instructions for ${instructions.name}`}
+          nav={<NavCluster />}
           actions={
-            <CopyLink
+            <HeadCopy
               target={instructions.session.prompt}
               label="Copy prompt"
               copiedLabel="Prompt copied"
+              icon="copy"
             />
           }
           close={() => setInstructions(null)}
@@ -2635,7 +2688,8 @@ export default function CrewWorkspace() {
       )}
       {dialog && (
         <Modal
-          nav={dialog.row ? <TrailNav /> : undefined}
+          record={!!dialog.row}
+          nav={dialog.row ? <TrailNav /> : <NavCluster />}
           title={
             dialog.kind === "review"
               ? "Review draft"
@@ -2646,24 +2700,56 @@ export default function CrewWorkspace() {
                   : `${dialog.row ? "Edit" : "New"} ${dialog.kind}`
           }
           actions={
-            dialog.row &&
-            (dialog.kind === "task" || dialog.kind === "note") && (
-              <>
-                <CopyLink
+            <>
+              {dialog.row && (dialog.kind === "task" || dialog.kind === "note") ? (
+                <HeadCopy
                   key={dialog.row.id}
                   target={itemShareUrl(dialog.kind, dialog.row)}
                 />
-                {dialog.kind === "note" && !archiveNotice && (
-                  <ShareAsArtifact
-                    note={dialog.row}
-                    done={(id) => {
-                      closeDialog();
-                      location.hash = `${viewHashes.shared}/${id}`;
-                    }}
-                  />
-                )}
-              </>
-            )
+              ) : (
+                <HeadButton icon="link" label="Copy link" disabled />
+              )}
+              <ShareAsArtifact
+                key={`share-${dialog.row?.id || "new"}`}
+                note={
+                  dialog.row && dialog.kind === "note" && !archiveNotice
+                    ? dialog.row
+                    : undefined
+                }
+                done={sharedArtifact}
+              />
+            </>
+          }
+          menu={
+            dialog.row && (dialog.kind === "task" || dialog.kind === "note")
+              ? [
+                  {
+                    label: "Copy link",
+                    icon: "link",
+                    onSelect: () =>
+                      void copyText(
+                        itemShareUrl(dialog.kind as ItemKind, dialog.row!),
+                      ).then((ok) =>
+                        ok
+                          ? setNotice("Link copied.")
+                          : setError("Could not copy the link automatically."),
+                      ),
+                  },
+                  ...(dialog.kind === "note" && !archiveNotice
+                    ? [
+                        {
+                          label: "Share as artifact",
+                          icon: "share" as const,
+                          onSelect: () =>
+                            void shareAsArtifact(dialog.row!).then(
+                              sharedArtifact,
+                              () => setError("Could not create the artifact."),
+                            ),
+                        },
+                      ]
+                    : []),
+                ]
+              : []
           }
           onEdit={() => {
             edited.current = true;
@@ -2835,6 +2921,30 @@ function Editor({
       .getElementById(`crew-comment-${askedComment}`)
       ?.scrollIntoView?.({ block: "center" });
   }, [askedComment, commentLoaded, tab]);
+  // The header's More menu: a note's History and Archive (Deactivate for an
+  // agent). They call through a ref, so the menu always runs the latest save.
+  const setMenu = useDialogMenu();
+  const menuActions = useRef({ history: () => {}, archive: () => {} });
+  useEffect(() => {
+    if (!setMenu) return;
+    const items: MenuItem[] = [];
+    if (row && kind === "note")
+      items.push({
+        label: "History",
+        icon: "history",
+        onSelect: () => menuActions.current.history(),
+      });
+    if (row && kind !== "review" && !readOnly)
+      items.push({
+        label: kind === "agent" ? "Deactivate agent" : `Archive ${kind}`,
+        icon: kind === "agent" ? "person" : "archive",
+        destructive: true,
+        disabled: busy,
+        onSelect: () => menuActions.current.archive(),
+      });
+    setMenu(items);
+    return () => setMenu([]);
+  }, [setMenu, row, kind, readOnly, busy]);
   const [start] = useState(() => formValues(kind, row, data));
   const [title, setTitle] = useState(start.title),
     [body, setBody] = useState(start.body),
@@ -3139,6 +3249,12 @@ function Editor({
         {action}
       </div>
     ) : null;
+  menuActions.current = {
+    history: () => setTab("history"),
+    archive: () => {
+      if (row) void save(`${kind}.update`, { archived: true }, row, reason);
+    },
+  };
   // One quiet line: these are rarely needed and must not look like next steps.
   const more = row && (
     <p className="crew-meta-row">

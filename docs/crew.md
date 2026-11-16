@@ -105,6 +105,14 @@ Forward walk the records opened, a reload keeps the current one, and closing
 returns to the page underneath. Following a link with unsaved changes asks first.
 Every record dialog keeps one size.
 
+Every dialog has one floating header row (since 0.30.0), one row from 320 px up:
+round back and forward buttons, the title (ellipsized), a pill of icon buttons
+(Copy link, Share as artifact, or Copy prompt in session instructions) ending in
+More, and a round close button. Each icon has a name and a tooltip; controls that
+do not apply stay in place, disabled. More opens a menu with Copy link, Share as
+artifact, a note's History and, last and in red, Archive (Deactivate for an
+agent); it closes on selection, a tap outside or Escape.
+
 A review opens in the reader at `#/approvals/<review-id>` (since 0.28.0): the
 Approvals page with that review's Review draft dialog on top. A pending review shows
 Approve, Request changes and Reject; a decided or withdrawn one opens read-only with
