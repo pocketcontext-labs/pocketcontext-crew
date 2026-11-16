@@ -103,6 +103,8 @@ link click adds a history entry; the dialog's back and forward buttons (fixed
 before its title, disabled when they don't apply) and the browser's own Back and
 Forward walk the records opened, a reload keeps the current one, and closing
 returns to the page underneath. Following a link with unsaved changes asks first.
+Related rows (since 0.30.1) are the same kind of link: a click adds a trail step,
+and Cmd/Ctrl-click or middle-click opens the record in a new tab.
 Every record dialog keeps one size.
 
 Every dialog has one floating header row (since 0.30.0), one row from 320 px up:

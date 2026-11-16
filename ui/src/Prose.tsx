@@ -1,7 +1,6 @@
 import {
   Children,
   type ComponentProps,
-  type MouseEvent,
   type ReactNode,
 } from "react";
 import ReactMarkdown from "react-markdown";
@@ -20,22 +19,7 @@ import {
   remarkCrewRefs,
   useReference,
 } from "./references";
-import { followTrail } from "./trail";
-
-/** Opens a reader address as the next step of the trail; modified clicks open a tab. */
-function follow(e: MouseEvent<HTMLAnchorElement>, hash: string) {
-  if (
-    e.defaultPrevented ||
-    e.button !== 0 ||
-    e.metaKey ||
-    e.ctrlKey ||
-    e.shiftKey ||
-    e.altKey
-  )
-    return;
-  e.preventDefault();
-  followTrail(hash);
-}
+import { followLink } from "./trail";
 
 /** A bare id: its record's title when it resolves, otherwise the plain id. */
 function RecordRef({ id }: { id: string }) {
@@ -47,7 +31,7 @@ function RecordRef({ id }: { id: string }) {
       className="crew-ref"
       title={referenceLabel(ref)}
       data-collection={ref.collection}
-      onClick={(e) => follow(e, ref.path)}
+      onClick={(e) => followLink(e, ref.path)}
     >
       {ref.title || id}
     </a>
@@ -81,7 +65,7 @@ function CrewLink({
       href={hash}
       className="crew-ref"
       title={ref ? referenceLabel(ref) : href}
-      onClick={(e) => follow(e, hash)}
+      onClick={(e) => followLink(e, hash)}
     >
       {pasted ? ref?.title || displayUrl(href) : children}
     </a>

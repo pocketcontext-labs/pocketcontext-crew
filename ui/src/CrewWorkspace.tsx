@@ -143,7 +143,7 @@ import DialogHeader, {
   useDialogMenu,
   type MenuItem,
 } from "./DialogHeader";
-import { resetTrail, useTrail } from "./trail";
+import { followLink, resetTrail, useTrail } from "./trail";
 import Archive, { type RestoreItem } from "./Archive";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
@@ -692,14 +692,12 @@ function relatedItems(
   return { linked, linkedFrom };
 }
 const kindName = (kind: ItemKind) => (kind === "task" ? "Task" : "Note");
-/** A related task or note by title, linking to its permanent address. */
-function RelatedLink({
-  item,
-  open,
-}: {
-  item: Related;
-  open: (kind: ItemKind, row: Row) => void;
-}) {
+/**
+ * A related task or note by title, linking to its permanent address. A click
+ * is the next step of the link trail, like a reference in text, so Back
+ * returns here; unsaved changes are confirmed by the hashchange handler.
+ */
+function RelatedLink({ item }: { item: Related }) {
   const { row, kind } = item;
   if (!row) return <span className="crew-related-missing">Unavailable item</span>;
   const title = val(row, "title") || "Untitled";
@@ -708,11 +706,7 @@ function RelatedLink({
       <span className="crew-related-kind">{kindName(kind)}</span>
       <a
         href={itemPath(kind, row)}
-        onClick={(e) => {
-          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-          e.preventDefault();
-          open(kind, row);
-        }}
+        onClick={(e) => followLink(e, itemPath(kind, row))}
       >
         {title}
       </a>
@@ -730,14 +724,12 @@ function RelatedItems({
   links,
   setLinks,
   readOnly,
-  open,
 }: {
   data: Data;
   currentId?: string;
   links: string;
   setLinks: (next: string) => void;
   readOnly: boolean;
-  open: (kind: ItemKind, row: Row) => void;
 }) {
   const [query, setQuery] = useState("");
   const ids = links.split("\n").filter(Boolean);
@@ -769,7 +761,7 @@ function RelatedItems({
         <ul className="crew-related-linked" aria-label="Links">
           {linked.map((item) => (
             <li key={item.id}>
-              <RelatedLink item={item} open={open} />
+              <RelatedLink item={item} />
               {!readOnly && (
                 <button
                   type="button"
@@ -793,7 +785,7 @@ function RelatedItems({
           <ul className="crew-related-linked" aria-label="Linked from">
             {linkedFrom.map((item) => (
               <li key={item.id}>
-                <RelatedLink item={item} open={open} />
+                <RelatedLink item={item} />
               </li>
             ))}
           </ul>
@@ -2772,10 +2764,6 @@ export default function CrewWorkspace() {
             onEdit={() => {
               edited.current = true;
             }}
-            openRelated={(kind, target) => {
-              if (target.id === dialog.row?.id || !discardOk()) return;
-              openItem(kind, target);
-            }}
             wakeMissing={
               dialog.kind === "task" && !!dialog.row && wakeMissing.has(dialog.row.id)
             }
@@ -2809,8 +2797,6 @@ type EditorProps = {
   data: Data;
   archiveNotice?: string;
   onEdit: () => void;
-  /** Opens a related task or note, after confirming unsaved changes. */
-  openRelated: (kind: ItemKind, row: Row) => void;
   /** An overdue wake for this task was never received. */
   wakeMissing?: boolean;
   busy: boolean;
@@ -2875,7 +2861,6 @@ function Editor({
   data,
   archiveNotice = "",
   onEdit,
-  openRelated,
   wakeMissing = false,
   busy,
   error,
@@ -3459,7 +3444,6 @@ function Editor({
               currentId={row.id}
               links={links}
               readOnly={readOnly}
-              open={openRelated}
               setLinks={(next) => {
                 setLinks(next);
                 onEdit();
@@ -3729,7 +3713,6 @@ function Editor({
                 currentId={row?.id}
                 links={links}
                 readOnly={readOnly}
-                open={openRelated}
                 setLinks={(next) => {
                   setLinks(next);
                   onEdit();

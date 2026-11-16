@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 
 /**
  * The trail of records opened from links in rendered text (0.29.0). Each link
@@ -65,6 +65,25 @@ export function followTrail(hash: string) {
   writeMax(next);
   window.dispatchEvent(new HashChangeEvent("hashchange"));
   notify();
+}
+
+/**
+ * The click handler of every in-app record link (text references, Related):
+ * a plain click opens the address as the next trail step; a modified or
+ * middle click is left to the browser, which opens the href in a new tab.
+ */
+export function followLink(e: MouseEvent<HTMLAnchorElement>, hash: string) {
+  if (
+    e.defaultPrevented ||
+    e.button !== 0 ||
+    e.metaKey ||
+    e.ctrlKey ||
+    e.shiftKey ||
+    e.altKey
+  )
+    return;
+  e.preventDefault();
+  followTrail(hash);
 }
 
 export type Trail = { back: boolean; forward: boolean };

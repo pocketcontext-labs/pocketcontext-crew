@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.30.1](docs/releases/0.30.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.30.1) · Opening a task or note from Related adds a history step, so the dialog's Back and the browser's Back return to where you were.
 - **[0.30.0](docs/releases/0.30.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.30.0) · Sign in from the home-screen app with a six-digit code from the email, 30-day rolling sessions, a real Crew home-screen icon, and one floating dialog header with a More menu.
 - **[0.29.0](docs/releases/0.29.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.29.0) · Links in text: record ids and Crew addresses in rendered Markdown read as their record's title and open in the same dialog, with back and forward.
 - **[0.28.0](docs/releases/0.28.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.28.0) · Review links: `#/approvals/<id>` opens one review's Review draft dialog directly, and review records return that `url`.

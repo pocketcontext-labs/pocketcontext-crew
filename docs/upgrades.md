@@ -1,5 +1,13 @@
 # Crew upgrades and rollback
 
+## Crew 0.30.0 to 0.30.1
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.30.1. Reader change only:
+Related rows on tasks and notes open their record as a step of the link trail, so
+the dialog's and the browser's Back and Forward walk them. Rollback to 0.30.0 needs
+no restore. From 0.29.0 or earlier, follow the 0.29.0 to 0.30.0 notes first.
+
 ## Crew 0.29.0 to 0.30.0
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

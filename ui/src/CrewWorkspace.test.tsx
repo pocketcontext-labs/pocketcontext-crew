@@ -4029,6 +4029,84 @@ describe("links in rendered text (0.29.0)", () => {
     await waitFor(() => expect(location.hash).toBe("#/tasks/launch-post-task00000000001"));
     expect(screen.getByRole("dialog")).toHaveTextContent("Edit task");
   });
+  it("walks Related links back and forward like links in text (0.30.1)", async () => {
+    fixtures.tasks = [{ ...linkedTask, links: [linkedNote.id] }];
+    fixtures.notes = [linkedNote];
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+    render(<CrewWorkspace />);
+    let dialog = within(await screen.findByRole("dialog"));
+    const related = dialog.getByRole("group", { name: "Related" });
+    const link = within(related).getByRole("link", { name: "Voice guide" });
+    expect(link).toHaveAttribute("href", linkedNote.path);
+    expect(dialog.getByRole("button", { name: "Back" })).toBeDisabled();
+
+    fireEvent.click(link);
+    await waitFor(() => expect(location.hash).toBe(linkedNote.path));
+    dialog = within(await screen.findByRole("dialog"));
+    await dialog.findByRole("heading", { name: "Voice guide" });
+    expect(dialog.getByRole("button", { name: "Back" })).toBeEnabled();
+    expect(dialog.getByRole("button", { name: "Forward" })).toBeDisabled();
+
+    // The note lists the task under Linked from; the dialog's Back returns.
+    fireEvent.click(dialog.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(location.hash).toBe("#/tasks/launch-post-task00000000001"));
+    dialog = within(await screen.findByRole("dialog"));
+    await waitFor(() => expect(dialog.getByLabelText("Title")).toHaveValue("Launch post"));
+    expect(dialog.getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(dialog.getByRole("button", { name: "Forward" })).toBeEnabled();
+
+    // Browser Forward matches the dialog's Forward.
+    act(() => history.forward());
+    await waitFor(() => expect(location.hash).toBe(linkedNote.path));
+    dialog = within(await screen.findByRole("dialog"));
+    await dialog.findByRole("heading", { name: "Voice guide" });
+
+    // From the note's Related to the task, then browser Back.
+    fireEvent.click(
+      within(dialog.getByRole("group", { name: "Related" })).getByRole("link", {
+        name: "Launch post",
+      }),
+    );
+    await waitFor(() => expect(location.hash).toBe("#/tasks/launch-post-task00000000001"));
+    dialog = within(await screen.findByRole("dialog"));
+    await waitFor(() => expect(dialog.getByLabelText("Title")).toHaveValue("Launch post"));
+    expect(dialog.getByRole("button", { name: "Back" })).toBeEnabled();
+    act(() => history.back());
+    await waitFor(() => expect(location.hash).toBe(linkedNote.path));
+    await within(await screen.findByRole("dialog")).findByRole("heading", { name: "Voice guide" });
+  });
+  it("leaves modified clicks on a Related link to the browser", async () => {
+    fixtures.tasks = [{ ...linkedTask, links: [linkedNote.id] }];
+    fixtures.notes = [linkedNote];
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    const link = within(dialog.getByRole("group", { name: "Related" })).getByRole("link", {
+      name: "Voice guide",
+    });
+    for (const init of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }]) {
+      // fireEvent returns false when a handler called preventDefault.
+      expect(fireEvent.click(link, init)).toBe(true);
+    }
+    expect(location.hash).toBe("#/tasks/launch-post-task00000000001");
+  });
+  it("asks before a Related link leaves unsaved changes, and keeps them", async () => {
+    fixtures.tasks = [{ ...linkedTask, links: [linkedNote.id] }];
+    fixtures.notes = [linkedNote];
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    fireEvent.change(dialog.getByLabelText("Title"), { target: { value: "Edited" } });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    fireEvent.click(
+      within(dialog.getByRole("group", { name: "Related" })).getByRole("link", {
+        name: "Voice guide",
+      }),
+    );
+    expect(confirm).toHaveBeenCalledWith("Discard your unsaved changes?");
+    await waitFor(() => expect(location.hash).toBe("#/tasks/launch-post-task00000000001"));
+    expect(within(screen.getByRole("dialog")).getByLabelText("Title")).toHaveValue("Edited");
+  });
   it("opens buckets and agents from their links, and says when one is missing", async () => {
     history.replaceState(null, "", "/#/buckets/network-bucket000000001");
     render(<CrewWorkspace />);
