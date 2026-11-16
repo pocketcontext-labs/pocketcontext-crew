@@ -204,6 +204,19 @@ async function completeEmailLogin() {
 const stored = (hash: unknown, expires: unknown = Date.now() + 60_000) =>
   localStorage.setItem(returnKey, JSON.stringify({ hash, expires }));
 
+it("renews the session when the reader opens and when it comes back into view", async () => {
+  mockWorkspace();
+  const refresh = vi.spyOn(api, "refreshSession").mockResolvedValue(undefined);
+  signIn();
+  history.replaceState(null, "", "/#/tasks");
+  render(<App />);
+  await screen.findByRole("button", { name: "Refresh" });
+  expect(refresh).toHaveBeenCalledWith();
+  const before = refresh.mock.calls.length;
+  document.dispatchEvent(new Event("visibilitychange"));
+  expect(refresh.mock.calls.length).toBe(before + 1);
+});
+
 it("reopens the item after password sign-in, keeping the hash", async () => {
   mockWorkspace();
   vi.mocked(api.loginMode).mockResolvedValue("password");

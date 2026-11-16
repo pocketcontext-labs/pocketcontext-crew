@@ -60,6 +60,13 @@ try{
  }
  assert.equal(mailbox.count,1,'one owner login email');
  const link=mailbox.url;assert(link.startsWith(origin+'/#'));
+ // 0.30.0: the email also carries a six-digit code for installed web apps. A
+ // wrong code counts down and leaves the request (and its link) usable.
+ assert.match(mailbox.code,/^\d{6}$/,'the email carries a six-digit code');
+ const codeField=consent.getByLabel('Code from the email',{exact:true});
+ assert.equal(await codeField.getAttribute('autocomplete'),'one-time-code');
+ await codeField.fill(mailbox.code==='000000'?'111111':'000000');
+ await consent.getByRole('alert').filter({hasText:'That code is wrong. 4 tries left.'}).waitFor();
  await page.goto(link);
  await page.getByRole('button',{name:'Continue to Crew',exact:true}).waitFor();
  assert.equal(redeemed,0,'opening a link never consumes OTP');
@@ -83,6 +90,10 @@ try{
  const fragment=new URLSearchParams(link.split('?')[1]);
  const replay=await call('/api/collections/users/auth-with-otp',{otpId:fragment.get('otpId'),password:fragment.get('otp')});
  assert.equal(replay.status,400,'used login link rejected');
+ // The redeemed link spent the code too.
+ const reused=await call('/api/collections/users/auth-with-otp-code',{otpId:fragment.get('otpId'),code:mailbox.code});
+ assert.equal(reused.status,400,'code after its link rejected');
+ assert.match(reused.data.message,/expired or was already used/);
  assert.deepEqual(problems,[]);
- console.log('ok - hosted email form, unknown email, captured mail, scanner-safe confirmation, OTP replay, responsive login, consent Log in with return from the emailed link, and MCP consent');
+ console.log('ok - hosted email form, unknown email, captured mail, sign-in code (wrong code count, spent by the link), scanner-safe confirmation, OTP replay, responsive login, consent Log in with return from the emailed link, and MCP consent');
 }finally{await context.close();await browser.close()}

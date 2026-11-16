@@ -87,6 +87,19 @@ function Reader() {
       }),
     [],
   );
+  // Sessions roll (0.30.0): opening the reader, or coming back to it, renews
+  // the sign-in, so an installed home-screen app rarely asks again. Renewals
+  // are throttled; a rejected token signs out, as any other request would.
+  useEffect(() => {
+    if (!authenticated || emailLink || oauthTarget) return;
+    const renew = () => {
+      if (document.visibilityState === "visible")
+        void api.refreshSession().catch(() => undefined);
+    };
+    renew();
+    document.addEventListener("visibilitychange", renew);
+    return () => document.removeEventListener("visibilitychange", renew);
+  }, [authenticated, emailLink, oauthTarget]);
   // An unusable return target is ignored, never followed.
   useEffect(() => {
     if (!signinHash || oauthTarget) return;

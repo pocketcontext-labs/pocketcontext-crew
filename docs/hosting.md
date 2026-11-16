@@ -87,6 +87,11 @@ keep host administrative access restricted and never mount the Docker socket.
    `auto_update: false`, `auto_backup: false`, `deploy-strategy: stop-first` and a
    sufficient graceful stop time (300s).
 5. Verify `/up`, HTTPS, anonymous knowledge denial, email login, and MCP consent.
+   The sign-in email (since 0.30.0) carries a six-digit code and the browser link.
+   An installed home-screen web app signs in with the code, because the link opens
+   the browser; path-filtering proxies must pass
+   `POST /api/collections/users/auth-with-otp-code`. Hosted sign-ins last 30 days
+   and are renewed while the reader is in use.
    The MCP endpoint is `https://INSTANCE_DOMAIN/mcp`. No private tunnel is started.
 6. Run `pocketcontext-container backup` inside the container and verify its successful
    receipt before declaring the instance backed up. Rehearse restore into a separate

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
 
@@ -62,6 +63,7 @@ var Text = appserver.Text{
 	OTPSubject:      "Log in to PocketContext",
 	OTPSenderName:   "PocketContext",
 	OTPLoginPath:    "/#/login", // the reader route in sign-in emails already sent
+	OTPCodeEmail:    signInCodeEmail,
 }
 
 // The OAuth page's Content-Security-Policy loads no images or fonts, so the logo
@@ -102,11 +104,13 @@ func Policy() appserver.Policy {
 			ReadPosts: map[string]bool{"/api/crew/read": true, "/api/crew/search": true, "/api/crew/query": true, "/api/crew/attachment-read": true, "/api/files/token": true},
 			ReadGets:  map[string]bool{"/api/crew/schema": true, "/api/crew/attachment": true},
 		},
-		Observe:          Observe,
-		OAuthScope:       OAuthScope,
-		PublicBodyLimit:  110 << 20, // above the 90 MiB multipart cap Crew applies itself
-		Legacy:           Legacy,
-		Hosted:           HostedBudget,
+		Observe:         Observe,
+		OAuthScope:      OAuthScope,
+		PublicBodyLimit: 110 << 20, // above the 90 MiB multipart cap Crew applies itself
+		Legacy:          Legacy,
+		Hosted:          HostedBudget,
+		// Hosted sign-ins last 30 days; the reader renews the token while in use.
+		HostedSession:    30 * 24 * time.Hour,
 		AllowPublicUIDev: true,
 		// The reader frames the sandboxed HTML attachment preview (same origin).
 		ReaderFramesSelf: true,

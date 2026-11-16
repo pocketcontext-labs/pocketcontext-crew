@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/hook"
 	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
 )
 
@@ -33,19 +34,26 @@ func TestHostedEmailBrowser(t *testing.T) {
 	setOwnerEmail(t, a)
 	const email = "owner@example.test"
 	var mu sync.Mutex
-	mailURL := ""
+	mailURL, mailCode := "", ""
 	count := 0
-	link := regexp.MustCompile(`href="([^"]+)"`)
-	a.app.OnMailerRecordOTPSend("users").BindFunc(func(e *core.MailerRecordEvent) error {
+	// The sign-in link, not the domain link above it (0.30.0 code email).
+	link := regexp.MustCompile(`href="([^"]*otpId=[^"]+)"`)
+	code := regexp.MustCompile(`^(\d{6}) is your PocketContext sign-in code$`)
+	// A late priority: capture the email after Core has rendered the code email.
+	a.app.OnMailerRecordOTPSend("users").Bind(&hook.Handler[*core.MailerRecordEvent]{Id: "syntheticMailbox", Priority: 100, Func: func(e *core.MailerRecordEvent) error {
 		match := link.FindStringSubmatch(e.Message.HTML)
 		mu.Lock()
 		defer mu.Unlock()
 		if len(match) == 2 {
 			mailURL = html.UnescapeString(match[1])
+			mailCode = ""
+			if m := code.FindStringSubmatch(e.Message.Subject); len(m) == 2 {
+				mailCode = m[1]
+			}
 			count++
 		}
 		return nil // capture only: synthetic test never sends mail
-	})
+	}})
 	testServer, err := Runtime.NewTestServer(a.app, appserver.TestServerOptions{Domain: syntheticDomain, Hosted: true, MCP: true, HostedConfig: syntheticHostedConfig(), ReaderDir: filepath.Join(root, "ui", "dist"), Cache: t.TempDir(),
 		MCPHandler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -60,7 +68,7 @@ func TestHostedEmailBrowser(t *testing.T) {
 			mu.Lock()
 			defer mu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"url": mailURL, "count": count})
+			_ = json.NewEncoder(w).Encode(map[string]any{"url": mailURL, "code": mailCode, "count": count})
 			return
 		}
 		// Simulate TLS termination upstream of the hosted plaintext listener.
