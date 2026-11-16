@@ -3,9 +3,16 @@
 ## Crew 0.29.0 to 0.30.0
 
 No data migration, protocol, managed block, skill or capabilities change. Replace
-the binary or image and upgrade paired clients to 0.30.0. Reader change only: every
-dialog has one floating header row with icon buttons and a More menu. Rollback to
-0.29.0 needs no restore.
+the binary or image and upgrade paired clients to 0.30.0. Built on
+`pocketcontext-core` 0.2.2: the hosted sign-in email carries a six-digit code that
+the reader (including an installed home-screen app) redeems on
+`POST /api/collections/users/auth-with-otp-code`, so path-filtering proxies must
+pass it, and `GET` for the six root icon files (`/apple-touch-icon.png`,
+`/icon-192.png`, `/icon-512.png`, `/icon-maskable-512.png`, `/favicon.ico`,
+`/manifest.webmanifest`); hosted sign-ins last 30 days and roll. Remove and re-add
+a home-screen Crew icon to get the new art. Every dialog has one floating
+header row with icon buttons and a More menu. Rollback to 0.29.0 needs no restore;
+codes in emails already sent then stop working, and their links still work.
 
 ## Crew 0.28.0 to 0.29.0
 
