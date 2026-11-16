@@ -152,6 +152,15 @@ select {
 .login-card input {
   padding: 10px;
 }
+.login-card .login-code-hint {
+  margin: 0 0 18px;
+}
+.login-card .login-code {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
 .login-card .login-error {
   color: var(--danger);
   font-size: 12px;

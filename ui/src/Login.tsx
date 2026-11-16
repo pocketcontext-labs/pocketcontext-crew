@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type FormEvent,
+} from "react";
 import Brand from "./Brand";
 import { api, localIdentity, type AuthMode } from "./api";
 import {
@@ -26,6 +32,23 @@ export function readEmailLoginLink(): EmailLoginLink | null {
   return { otpId, password };
 }
 
+/** An installed home-screen app keeps its own cookies and storage, apart from the browser. */
+export function isStandaloneApp(): boolean {
+  try {
+    return (
+      window.matchMedia?.("(display-mode: standalone)")?.matches === true ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true
+    );
+  } catch {
+    return false;
+  }
+}
+const codeLength = 6;
+const codeDigits = (value: string) =>
+  value.replace(/\D/g, "").slice(0, codeLength);
+/** These server answers end the login request; only a new email helps. */
+const spentCode = /Too many wrong codes|expired or was already used/;
+
 export default function Login({
   emailLink,
   onEmailComplete,
@@ -38,6 +61,11 @@ export default function Login({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sentTo, setSentTo] = useState("");
+  const [address, setAddress] = useState("");
+  const [otpId, setOtpId] = useState("");
+  const [code, setCode] = useState("");
+  const [codeSpent, setCodeSpent] = useState(false);
+  const redeeming = useRef(false);
   const [link, setLink] = useState(emailLink);
   const [linkFailed, setLinkFailed] = useState(false);
   useEffect(() => {
@@ -82,14 +110,57 @@ export default function Login({
     const form = new FormData(event.currentTarget);
     const address = String(form.get("email"));
     const hash = location.hash;
+    setAddress(address);
     void run(async () => {
-      await api.requestEmailLogin(address);
+      const id = await api.requestEmailLogin(address);
       const target = loginReturnHash(hash);
       if (target) rememberLoginReturn(target);
       // Asking again from a spent link's #/login view keeps the original target.
       else if (!hash.startsWith("#/login")) clearLoginReturn();
+      setOtpId(id);
+      setCode("");
+      setCodeSpent(false);
       setSentTo(address);
     });
+  };
+  const redeem = (value: string) => {
+    if (redeeming.current) return;
+    if (value.length !== codeLength) {
+      setError("Enter the 6-digit code from the email.");
+      return;
+    }
+    redeeming.current = true;
+    void run(async () => {
+      try {
+        await api.loginEmailCode(otpId, value);
+      } catch (e) {
+        setCode("");
+        if (e instanceof Error && spentCode.test(e.message)) setCodeSpent(true);
+        throw e;
+      } finally {
+        redeeming.current = false;
+      }
+      // The link flow returns to the stored target; here the address never left it.
+      if (onEmailComplete) onEmailComplete();
+      else clearLoginReturn();
+    });
+  };
+  const enterCode = (value: string) => {
+    const digits = codeDigits(value);
+    setCode(digits);
+    if (digits.length === codeLength) redeem(digits);
+  };
+  const pasteCode = (event: ClipboardEvent<HTMLInputElement>) => {
+    // maxLength would cut "123 456" before the spaces are stripped.
+    event.preventDefault();
+    enterCode(event.clipboardData.getData("text"));
+  };
+  const newCode = () => {
+    setSentTo("");
+    setOtpId("");
+    setCode("");
+    setCodeSpent(false);
+    setError("");
   };
   const confirm = () =>
     void run(async () => {
@@ -185,10 +256,49 @@ export default function Login({
             <>
               <h1>Check your inbox</h1>
               <p role="status">
-                If {sentTo} is the owner's address, a login link is on its way.
-                It works for 15 minutes.
+                If {sentTo} is the owner's address, a sign-in code and link are
+                on their way. They work for 15 minutes.
               </p>
-              <button className="login-link" onClick={() => setSentTo("")}>
+              <p className="login-code-hint">
+                {isStandaloneApp()
+                  ? "Enter the code from the email here. The link in the email opens your browser, not this app."
+                  : "Enter the code from the email here, or open the link in it. Either one signs you in."}
+              </p>
+              {codeSpent ? (
+                <button className="primary-button" autoFocus onClick={newCode}>
+                  Send a new code
+                </button>
+              ) : (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    redeem(code);
+                  }}
+                >
+                  <label>
+                    Code from the email
+                    <input
+                      className="login-code"
+                      required
+                      autoFocus
+                      name="code"
+                      type="text"
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={codeLength}
+                      readOnly={busy}
+                      value={code}
+                      onChange={(event) => enterCode(event.target.value)}
+                      onPaste={pasteCode}
+                    />
+                  </label>
+                  <button className="primary-button" disabled={busy}>
+                    Sign in
+                  </button>
+                </form>
+              )}
+              <button className="login-link" onClick={newCode}>
                 Use a different email
               </button>
             </>
@@ -205,10 +315,11 @@ export default function Login({
                     type="email"
                     autoComplete="email"
                     maxLength={255}
+                    defaultValue={address}
                   />
                 </label>
                 <button className="primary-button" disabled={busy}>
-                  Email me a login link
+                  Email me a sign-in code
                 </button>
               </form>
             </>

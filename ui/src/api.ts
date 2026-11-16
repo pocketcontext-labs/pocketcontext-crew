@@ -150,9 +150,11 @@ export async function loginMode(): Promise<AuthMode> {
     throw new Error("Unable to load sign-in options. Please try again.");
   return result.mode;
 }
-export async function requestEmailLogin(email: string): Promise<void> {
+/** Returns the login request id that the emailed code is bound to. */
+export async function requestEmailLogin(email: string): Promise<string> {
   const client = new PocketBase(pb.baseURL, new BaseAuthStore());
-  await client.collection("users").requestOTP(email.trim());
+  const result = await client.collection("users").requestOTP(email.trim());
+  return result.otpId;
 }
 export async function loginEmail(
   otpId: string,
@@ -160,6 +162,18 @@ export async function loginEmail(
 ): Promise<void> {
   await signIn((client) =>
     client.collection("users").authWithOTP(otpId, password),
+  );
+}
+/** Redeems the 6-digit code from the login email, for the app that asked for it. */
+export async function loginEmailCode(
+  otpId: string,
+  code: string,
+): Promise<void> {
+  await signIn((client) =>
+    client.send<RecordAuthResponse>(
+      "/api/collections/users/auth-with-otp-code",
+      { method: "POST", body: { otpId, code } },
+    ),
   );
 }
 let refreshedAt = 0;
@@ -217,6 +231,7 @@ export const api = {
   loginMode,
   requestEmailLogin,
   loginEmail,
+  loginEmailCode,
   refreshSession,
   logout,
 };

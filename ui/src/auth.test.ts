@@ -254,3 +254,38 @@ it("does not revoke a new session when an old Crew request returns unauthorized"
   await rejected;
   expect(api.pb.authStore.token).toBe("new-login-token");
 });
+describe("emailed code", () => {
+  it("keeps the otpId from the email request", async () => {
+    const request = vi
+      .spyOn(servicePrototype, "requestOTP")
+      .mockResolvedValue({ otpId: "syntheticotp0001" });
+    await expect(api.requestEmailLogin(" owner@example.test ")).resolves.toBe(
+      "syntheticotp0001",
+    );
+    expect(request).toHaveBeenCalledWith("owner@example.test");
+  });
+  it("redeems the code on its own route and saves the session", async () => {
+    const send = vi
+      .spyOn(PocketBase.prototype, "send")
+      .mockResolvedValue({ token, record });
+    await api.loginEmailCode("syntheticotp0001", "123456");
+    expect(send).toHaveBeenCalledWith(
+      "/api/collections/users/auth-with-otp-code",
+      expect.objectContaining({
+        method: "POST",
+        body: { otpId: "syntheticotp0001", code: "123456" },
+      }),
+    );
+    expect(api.pb.authStore.token).toBe(token);
+    expect(api.pb.authStore.record?.id).toBe(record.id);
+  });
+  it("passes the server's message through", async () => {
+    vi.spyOn(PocketBase.prototype, "send").mockRejectedValue(
+      new Error("That code is wrong. 4 tries left."),
+    );
+    await expect(
+      api.loginEmailCode("syntheticotp0001", "111111"),
+    ).rejects.toThrow("That code is wrong. 4 tries left.");
+    expect(api.pb.authStore.token).toBe("");
+  });
+});

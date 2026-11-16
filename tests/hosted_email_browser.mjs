@@ -33,7 +33,7 @@ try{
  const mode=await call('/api/bundle/auth-mode');
  assert.deepEqual(mode.data,{mode:'email'});
  await page.getByLabel('Email',{exact:true}).fill('unknown@example.com');
- await page.getByRole('button',{name:'Email me a login link',exact:true}).click();
+ await page.getByRole('button',{name:'Email me a sign-in code',exact:true}).click();
  await page.getByRole('status').filter({hasText:"is the owner's address"}).waitFor();
  const before=await call('/__test/mailbox');assert.equal(before.data.count,0);
  await page.getByRole('button',{name:'Use a different email',exact:true}).click();
@@ -50,7 +50,7 @@ try{
  await consent.getByRole('link',{name:'Log in',exact:true}).click();
  await consent.waitForURL(origin+'/#/signin?next=**');
  await consent.getByLabel('Email',{exact:true}).fill(email);
- await consent.getByRole('button',{name:'Email me a login link',exact:true}).click();
+ await consent.getByRole('button',{name:'Email me a sign-in code',exact:true}).click();
  await consent.getByRole('heading',{name:'Check your inbox',exact:true}).waitFor();
  let mailbox;
  for(let n=0;n<100;n++){
