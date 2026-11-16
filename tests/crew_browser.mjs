@@ -37,6 +37,24 @@ try {
  await page.getByLabel('Password',{exact:true}).fill(process.env.CREW_TEST_PASSWORD);
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
  await page.getByRole('heading',{name:'Get started',exact:true}).waitFor();
+ // Home-screen icon, favicons and manifest: linked with ?v=, served, the declared sizes, and the manifest passes the page CSP.
+ const iconLinks=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('link[rel=icon],link[rel=apple-touch-icon],link[rel=manifest]')].map(l=>[l.rel+' '+(l.type||l.getAttribute('href').split('?')[0].split('.').pop()),l.getAttribute('href')])));
+ assert.match(iconLinks['apple-touch-icon png'],/^\/apple-touch-icon\.png\?v=[0-9a-f]{10}$/);
+ assert.match(iconLinks['icon ico'],/^\/favicon\.ico\?v=[0-9a-f]{10}$/);
+ assert.match(iconLinks['icon image/svg+xml'],/^\/assets\/favicon-[A-Za-z0-9_-]+\.svg$/);
+ assert.match(iconLinks['manifest webmanifest'],/^\/manifest\.webmanifest\?v=[0-9a-f]{10}$/);
+ const cdp=await page.context().newCDPSession(page);
+ const appManifest=await cdp.send('Page.getAppManifest');
+ assert.deepEqual(appManifest.errors,[],'manifest loads under the reader CSP');
+ const manifest=JSON.parse(appManifest.data);
+ assert.equal(manifest.name,'Crew');assert.equal(manifest.short_name,'Crew');assert.equal(manifest.display,'standalone');
+ const iconChecks=[[iconLinks['apple-touch-icon png'],180,'image/png'],[iconLinks['icon ico'],32,'image/x-icon'],...manifest.icons.map(i=>[i.src,Number(i.sizes.split('x')[0]),i.type])];
+ for(const [src,size,type] of iconChecks){
+  const got=await page.evaluate(async src=>{const r=await fetch(src,{credentials:'omit'});const bytes=new Uint8Array(await r.clone().arrayBuffer());const img=new Image();img.src=URL.createObjectURL(await r.blob());await img.decode();return {status:r.status,type:r.headers.get('content-type'),width:img.naturalWidth,height:img.naturalHeight,colorType:bytes[25],png:bytes[1]===0x50};},src);
+  assert.deepEqual({src,status:got.status,type:got.type,width:got.width,height:got.height},{src,status:200,type,width:size,height:size});
+  if(got.png) assert.equal(got.colorType,2,`${src} is opaque RGB without alpha`);
+ }
+ await cdp.detach();
  await snap('crew-home-new');
  await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
  await page.waitForURL('**/#/tasks');

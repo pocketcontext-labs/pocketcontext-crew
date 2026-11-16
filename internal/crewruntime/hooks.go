@@ -42,7 +42,12 @@ func Hooks() appserver.Hooks {
 		OnServeStart: func(e *core.ServeEvent, p *Project) error {
 			return restoreLocalWebhookMarker(e.App, p)
 		},
-		Routes:          versionRoute,
+		Routes: func(e *core.ServeEvent) error {
+			if err := versionRoute(e); err != nil {
+				return err
+			}
+			return readerIcons(e)
+		},
 		Background:      func(ctx context.Context, app core.App) { newWebhookDispatcher(app).run(ctx) },
 		OnHostedRestore: restoreWebhookState,
 		Bindings:        func(*goja.Runtime) map[string]any { return hookBindings() },

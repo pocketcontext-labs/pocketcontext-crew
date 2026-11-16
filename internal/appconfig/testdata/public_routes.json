@@ -3288,5 +3288,425 @@
   "method": "PUT",
   "path": "/a/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z/files/1/2",
   "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/apple-touch-icon.png",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/apple-touch-icon.png",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/favicon.ico",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/favicon.ico",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/favicon.ico",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/favicon.ico",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/favicon.ico",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/favicon.ico",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/favicon.ico",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/icon-192.png",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/icon-192.png",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/icon-512.png",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/icon-512.png",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/icon-512.png",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/icon-512.png",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/icon-512.png",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/icon-512.png",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/icon-512.png",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/icon-maskable-512.png",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/icon-maskable-512.png",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/icon-maskable-512.png",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/icon-maskable-512.png",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/icon-maskable-512.png",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/icon-maskable-512.png",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/icon-maskable-512.png",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/manifest.webmanifest",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/manifest.webmanifest",
+  "allow": true
+ },
+ {
+  "method": "HEAD",
+  "path": "/manifest.webmanifest",
+  "allow": true
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/manifest.webmanifest",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/manifest.webmanifest",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/manifest.webmanifest",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/manifest.webmanifest",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/apple-touch-icon.png/",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/apple-touch-icon.png/",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/apple-touch-icon.png/",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/apple-touch-icon.png/",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/apple-touch-icon.png/",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/apple-touch-icon.png/",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/apple-touch-icon.png/",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/apple-touch-icon-precomposed.png",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/apple-touch-icon-precomposed.png",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/apple-touch-icon-precomposed.png",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/apple-touch-icon-precomposed.png",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/apple-touch-icon-precomposed.png",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/apple-touch-icon-precomposed.png",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/apple-touch-icon-precomposed.png",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/assets/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/assets/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/assets/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/assets/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/assets/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/assets/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/assets/icon-192.png",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/brand/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/brand/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/brand/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/brand/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/brand/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/brand/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/brand/apple-touch-icon.png",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/favicon.png",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/favicon.png",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/favicon.png",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/favicon.png",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/favicon.png",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/favicon.png",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/favicon.png",
+  "allow": false
+ },
+ {
+  "method": "DELETE",
+  "path": "/manifest.json",
+  "allow": false
+ },
+ {
+  "method": "GET",
+  "path": "/manifest.json",
+  "allow": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/manifest.json",
+  "allow": false
+ },
+ {
+  "method": "OPTIONS",
+  "path": "/manifest.json",
+  "allow": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/manifest.json",
+  "allow": false
+ },
+ {
+  "method": "POST",
+  "path": "/manifest.json",
+  "allow": false
+ },
+ {
+  "method": "PUT",
+  "path": "/manifest.json",
+  "allow": false
  }
 ]
