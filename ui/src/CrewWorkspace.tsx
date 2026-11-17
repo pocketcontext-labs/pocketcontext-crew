@@ -77,7 +77,7 @@ import {
   webhookConfigured,
   type AgentKind,
 } from "./projectAgents";
-import { GlobalSearch, SearchPage } from "./Search";
+import { GlobalSearch, SearchPage, type SearchEntry } from "./Search";
 import { searchHash, searchTextFromHash, type SearchHit } from "./searchApi";
 import "./crew.css";
 import type { ServerVersion } from "./crewApi";
@@ -138,12 +138,20 @@ import Prose from "./Prose";
 import DialogHeader, {
   DialogMenuContext,
   HeadButton,
+  ListNavCluster,
   NavCluster,
   menuIsOpenIn,
   useDialogMenu,
   type MenuItem,
 } from "./DialogHeader";
 import { followLink, resetTrail, useTrail } from "./trail";
+import {
+  arrowStep,
+  swipeFeedback,
+  useSwipe,
+  type Step,
+  type StepResult,
+} from "./swipe";
 import Archive, { type RestoreItem } from "./Archive";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
@@ -842,9 +850,22 @@ function TrailNav() {
     />
   );
 }
+/**
+ * The list a record dialog was opened from (0.31.0): swipes, Left/Right and
+ * the header's previous/next step through it. Inactive when no list is behind
+ * the dialog; previous/next are false at the ends.
+ */
+type ListNav = {
+  noun: string;
+  active: boolean;
+  previous: boolean;
+  next: boolean;
+  go: (step: Step) => StepResult;
+};
 function Modal({
   title,
   nav,
+  listNav,
   actions,
   menu = [],
   record = false,
@@ -857,6 +878,8 @@ function Modal({
   title: string;
   /** Shown before the title, so it never moves when the title changes. */
   nav?: ReactNode;
+  /** Stepping through the source list, with its header cluster. */
+  listNav?: ListNav;
   /** Icon buttons in the header pill. */
   actions?: ReactNode;
   /** The More menu's own items; the body can add more through context. */
@@ -867,6 +890,21 @@ function Modal({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [bodyMenu, setBodyMenu] = useState<MenuItem[]>([]);
+  // One handler for swipes, arrow keys and the header buttons.
+  const step = (direction: Step) => {
+    if (!listNav?.active) return;
+    const result = listNav.go(direction);
+    swipeFeedback(ref.current, result, direction);
+    // The next item replaces the body, and a button at the end turns
+    // disabled: keep focus in the dialog so Left/Right keep working.
+    if (result === "moved")
+      requestAnimationFrame(() => {
+        const dialog = ref.current;
+        if (dialog && !dialog.contains(document.activeElement))
+          dialog.focus({ preventScroll: true });
+      });
+  };
+  useSwipe(ref, listNav ? step : null);
   const pressedBackdrop = useRef(false);
   const helpWasOpen = useRef(false);
   // A native file picker opened from inside the dialog: while it is open, and
@@ -922,6 +960,12 @@ function Modal({
       className={`crew-dialog${record ? " crew-record-dialog" : ""}`}
       tabIndex={-1}
       onChange={onEdit}
+      onKeyDown={(e) => {
+        const direction = listNav?.active ? arrowStep(e, ref.current) : 0;
+        if (!direction) return;
+        e.preventDefault();
+        step(direction);
+      }}
       // Runs before Help's own listener, so it still sees the popover. The first
       // click outside an open popover only dismisses the popover.
       onPointerDown={() => {
@@ -957,6 +1001,17 @@ function Modal({
       <DialogHeader
         title={title}
         nav={nav}
+        listNav={
+          listNav && (
+            <ListNavCluster
+              noun={listNav.noun}
+              previous={
+                listNav.active && listNav.previous ? () => step(-1) : undefined
+              }
+              next={listNav.active && listNav.next ? () => step(1) : undefined}
+            />
+          )
+        }
         actions={actions}
         menu={[...menu, ...bodyMenu]}
         close={close}
@@ -1004,7 +1059,9 @@ export default function CrewWorkspace() {
     // The first image of each task and note, for card thumbnails.
     [thumbs, setThumbs] = useState<Record<string, CardThumb>>({}),
     // Wake bridges, for "Wake not received" on tasks whose wake is overdue.
-    [bridges, setBridges] = useState<Row[]>([]);
+    [bridges, setBridges] = useState<Row[]>([]),
+    // The records the Search page shows, for stepping through them.
+    [searchEntries, setSearchEntries] = useState<SearchEntry[]>([]);
   const thumbToken = useFileToken(Object.keys(thumbs).length > 0);
   // "Saved." confirms an action; it should not linger on other pages.
   useEffect(() => {
@@ -1634,6 +1691,81 @@ export default function CrewWorkspace() {
         byName(val(a, "title"), val(b, "title"))
       );
     });
+  // The board's columns as shown, so a task dialog steps in card order.
+  const boardColumns = boardStatuses.map(([status, label]) => {
+    // The Done column holds every closed task: Done and Won't do.
+    const tasks = boardTasks.filter((x) =>
+      status === "done" ? isClosed(x) : val(x, "status") === status,
+    );
+    tasks.sort((a, b) => viewState.taskSort === "held"
+      ? (onHold(a) && !isClosed(a) ? heldSince(a) || Infinity : Infinity) - (onHold(b) && !isClosed(b) ? heldSince(b) || Infinity : Infinity)
+      : val(b, "updated").localeCompare(val(a, "updated")));
+    // Older closed tasks fold away unless a label is chosen or the owner
+    // asks for them.
+    const done =
+      status === "done"
+        ? doneColumn(tasks, showOlderDone || labelChosen || viewState.status === "done" || viewState.status === "wont_do")
+        : null;
+    return { status, label, tasks, done, shown: done ? done.tasks : tasks };
+  });
+  // The list under the open record dialog, as the page shows it (0.31.0):
+  // the board's cards, the Notes page's notes or bucket cards, the agents,
+  // pending reviews or past decisions, or the Search page's results. A dialog
+  // with no list behind it (opened from Home, a link to another kind, or an
+  // item the list is hiding) does not step.
+  const dialogList = ((): { kind: Kind; row: Row }[] | null => {
+    if (!dialog?.row) return null;
+    const as = (kind: Kind) => (row: Row) => ({ kind, row });
+    switch (`${view}:${dialog.kind}`) {
+      case "board:task":
+        return boardColumns.flatMap((c) => c.shown).map(as("task"));
+      case "memory:note":
+        return shownNotes.map(as("note"));
+      case "memory:bucket":
+        return sortedBuckets.map(as("bucket"));
+      case "agents:agent":
+        return data.agents.map(as("agent"));
+      case "reviews:review": {
+        const id = dialog.row.id;
+        const status = val(data.reviews.find((x) => x.id === id) ?? dialog.row, "status");
+        return data.reviews
+          .filter((x) => (val(x, "status") === "pending") === (status === "pending"))
+          .map(as("review"));
+      }
+    }
+    if (view !== "search" || dialog.kind === "review") return null;
+    // Records not loaded here are skipped, as an inaccessible item is.
+    const rows: Record<SearchEntry["kind"], Row[]> = {
+      task: [...data.tasks, ...archived.tasks],
+      note: [...data.notes, ...archived.notes],
+      agent: data.agents,
+      bucket: data.buckets,
+    };
+    return searchEntries.flatMap(({ kind, id }) => {
+      const row = rows[kind].find((x) => x.id === id);
+      return row ? [{ kind, row }] : [];
+    });
+  })();
+  const dialogIndex =
+    dialogList?.findIndex(
+      (x) => x.kind === dialog?.kind && x.row.id === dialog?.row?.id,
+    ) ?? -1;
+  // Moves the open dialog to the item `step` away in its list, without
+  // wrapping. Unsaved changes ask first; the address becomes the new item's
+  // link (replaced, so Back still returns to the list).
+  const stepDialog = (step: Step): StepResult => {
+    const target = dialogIndex >= 0 ? dialogList?.[dialogIndex + step] : undefined;
+    if (!target) return "end";
+    if (busy || !discardOk()) return "stayed";
+    const { kind, row } = target;
+    if (kind === "review") setAddress(reviewHash(row.id));
+    else if (kind === "task" || kind === "note" || isItemHash(location.hash))
+      setAddress(itemPath(kind, row));
+    setDialog({ kind, row });
+    return "moved";
+  };
+  const listNoun =
+    view === "search" ? "result" : dialog?.kind === "review" ? "review" : dialog?.kind ?? "item";
   const seed = () =>
     perform(async () => {
       for (const [n, purpose] of [
@@ -2135,6 +2267,7 @@ export default function CrewWorkspace() {
               onOpenHit={(hit, inArchive) => void openHit(hit, inArchive)}
               onOpenAgent={(row) => setDialog({ kind: "agent", row })}
               onOpenBucket={(row) => setDialog({ kind: "bucket", row })}
+              onResults={setSearchEntries}
             />
           )}
           {view === "connect" && (
@@ -2150,20 +2283,7 @@ export default function CrewWorkspace() {
           )}
           {view === "board" && (
             <div className="crew-board">
-              {boardStatuses.map(([status, label]) => {
-                // The Done column holds every closed task: Done and Won't do.
-                const tasks = boardTasks.filter((x) =>
-                  status === "done" ? isClosed(x) : val(x, "status") === status,
-                );
-                tasks.sort((a, b) => viewState.taskSort === "held"
-                  ? (onHold(a) && !isClosed(a) ? heldSince(a) || Infinity : Infinity) - (onHold(b) && !isClosed(b) ? heldSince(b) || Infinity : Infinity)
-                  : val(b, "updated").localeCompare(val(a, "updated")));
-                // Older closed tasks fold away unless a label is chosen or
-                // the owner asks for them.
-                const done =
-                  status === "done"
-                    ? doneColumn(tasks, showOlderDone || labelChosen || viewState.status === "done" || viewState.status === "wont_do")
-                    : null;
+              {boardColumns.map(({ status, label, tasks, done, shown }) => {
                 const card = (x: Row) => (
                   <div
                     role="button"
@@ -2281,7 +2401,7 @@ export default function CrewWorkspace() {
                       </h2>
                       <Help topic={statusHelp[status]} />
                     </div>
-                    {(done ? done.tasks : tasks).map(card)}
+                    {shown.map(card)}
                     {done && done.older > 0 && (
                       <button
                         type="button"
@@ -2682,6 +2802,17 @@ export default function CrewWorkspace() {
         <Modal
           record={!!dialog.row}
           nav={dialog.row ? <TrailNav /> : <NavCluster />}
+          listNav={
+            dialog.row
+              ? {
+                  noun: listNoun,
+                  active: dialogIndex >= 0,
+                  previous: dialogIndex > 0,
+                  next: !!dialogList && dialogIndex >= 0 && dialogIndex < dialogList.length - 1,
+                  go: stepDialog,
+                }
+              : undefined
+          }
           title={
             dialog.kind === "review"
               ? "Review draft"

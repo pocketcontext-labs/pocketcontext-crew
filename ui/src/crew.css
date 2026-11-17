@@ -4342,3 +4342,64 @@ a.crew-logo:hover .product-brand span {
     height: 36px;
   }
 }
+/* Previous/next in the list a dialog was opened from (0.31.0): one pill, like
+   the actions pill, after the title. Phones swipe instead, so their header
+   stays one row. */
+.crew-dialog-head .crew-list-nav {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ffffff 80%, transparent);
+  border: 1px solid #ffffffcc;
+  box-shadow:
+    0 1px 2px #1a2c2014,
+    0 6px 18px -8px #1a2c2033;
+}
+@media (max-width: 680px) {
+  .crew-dialog-head .crew-list-nav {
+    display: none;
+  }
+}
+/* Stepping feedback on the body only; the header never moves. */
+.crew-dialog[data-swipe] > :not(header) {
+  animation: 220ms ease-out both crew-step-slide-next;
+}
+.crew-dialog[data-swipe="slide-prev"] > :not(header) {
+  animation-name: crew-step-slide-prev;
+}
+.crew-dialog[data-swipe="bounce-next"] > :not(header) {
+  animation-name: crew-step-bounce-next;
+}
+.crew-dialog[data-swipe="bounce-prev"] > :not(header) {
+  animation-name: crew-step-bounce-prev;
+}
+@keyframes crew-step-slide-next {
+  from {
+    transform: translateX(28px);
+    opacity: 0.4;
+  }
+}
+@keyframes crew-step-slide-prev {
+  from {
+    transform: translateX(-28px);
+    opacity: 0.4;
+  }
+}
+@keyframes crew-step-bounce-next {
+  40% {
+    transform: translateX(-14px);
+  }
+}
+@keyframes crew-step-bounce-prev {
+  40% {
+    transform: translateX(14px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-dialog[data-swipe] > :not(header) {
+    animation: none;
+  }
+}

@@ -228,6 +228,32 @@ describe("AttachmentPreview", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("steps through files with the reader's swipe, ignoring vertical drags", () => {
+    const go = vi.fn();
+    render(
+      <AttachmentPreview
+        attachment={att("archive.zip", "application/zip")}
+        token="tok"
+        onClose={vi.fn()}
+        nav={{ index: 0, count: 2, go }}
+      />,
+    );
+    const text = screen.getByText("No preview for this type of file.");
+    const drag = (dx: number, dy: number) => {
+      fireEvent.touchStart(text, { touches: [{ clientX: 300, clientY: 300 }] });
+      fireEvent.touchEnd(text, {
+        touches: [],
+        changedTouches: [{ clientX: 300 + dx, clientY: 300 + dy }],
+      });
+    };
+    drag(-40, 300);
+    expect(go).not.toHaveBeenCalled();
+    drag(-120, 0);
+    expect(go).toHaveBeenLastCalledWith(1);
+    drag(120, 10);
+    expect(go).toHaveBeenLastCalledWith(-1);
+  });
+
   it("closes on Escape and returns focus", async () => {
     const opener = document.createElement("button");
     document.body.append(opener);

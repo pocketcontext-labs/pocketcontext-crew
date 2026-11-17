@@ -23,7 +23,8 @@ const edit=()=>dialog().getByRole('tab',{name:'Edit',exact:true}).click();
 const headerOneRow=async where=>{
  const r=await dialog().locator('header.crew-dialog-head').evaluate(h=>{
   const box=h.getBoundingClientRect();const mid=e=>{const b=e.getBoundingClientRect();return b.top+b.height/2;};
-  const buttons=[...h.querySelectorAll('button')];const title=h.querySelector('h2');
+  // Buttons hidden at this width (list previous/next on phones) don't count.
+  const buttons=[...h.querySelectorAll('button')].filter(b=>b.getClientRects().length);const title=h.querySelector('h2');
   return {height:box.height,mids:[...buttons,title].map(mid),right:Math.max(...buttons.map(b=>b.getBoundingClientRect().right)),width:innerWidth,
    tall:Math.max(...buttons.map(b=>b.getBoundingClientRect().height)),nowrap:getComputedStyle(title).whiteSpace==='nowrap',labels:buttons.every(b=>!b.textContent.trim()&&b.title===b.getAttribute('aria-label'))};
  });
@@ -1418,6 +1419,114 @@ try {
  await dialog().getByRole('tab',{name:'Reviews',exact:true}).click();
  await dialog().getByText('Approved: Draft A · LinkedIn, Draft A · X; Rejected: Draft B · LinkedIn, Draft B · X',{exact:true}).waitFor();
  await close();await dialog().waitFor({state:'hidden'});
+ // List stepping (0.31.0): one swipe handler moves a dialog through the list it
+ // was opened from (real touch events at 390); edges, vertical drags, fields
+ // and typing don't count; a typed decision note asks first; the end bounces
+ // without wrapping; the header and the pinned decisions stay put; wide
+ // screens add previous/next buttons and Left/Right.
+ {
+ for(const [title,draft] of [['Synthetic swipe first','Short first draft.'],['Synthetic swipe second','A much longer second draft.\n\n'+'More words for the owner to read. '.repeat(150)]]){
+  const t=await boardWrite('task.create',{title,draft});
+  await boardWrite('review.request',{},t.id,t.revision);
+ }
+ page.removeAllListeners('dialog');
+ const decidedBefore=writeActions.filter(a=>a==='review.decide').length;
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.setViewportSize({width:390,height:844});
+ const touch=await page.context().newCDPSession(page);
+ await touch.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+ const swipe=async(dx,{x=200,y=380,dy=0}={})=>{
+  await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+  for(let i=1;i<=6;i++){await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*i/6,y:y+dy*i/6}]});await page.waitForTimeout(15);}
+  await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await page.waitForTimeout(150);
+ };
+ const hash=()=>new URL(page.url()).hash;
+ await page.goto(base+'/#/approvals');await page.reload();
+ await page.getByRole('button',{name:'Review draft: Synthetic swipe second'}).waitFor();
+ const cardsShown=await page.locator('.crew-review-card').evaluateAll(cs=>cs.map(c=>c.getAttribute('aria-label')));
+ assert.ok(cardsShown.includes('Review draft: Synthetic swipe first')&&cardsShown.includes('Review draft: Synthetic swipe second'),'both swipe reviews are pending');
+ await page.locator('.crew-review-card').first().click();
+ await dialog().locator('.crew-draft-snapshot').waitFor();
+ await headerOneRow('stepping review 390');
+ assert.equal(await dialog().locator('.crew-list-nav').isVisible(),false,'phones swipe; the header keeps one row');
+ await page.evaluate(()=>{window.__swipes=[];const d=document.querySelector('dialog[open]');new MutationObserver(m=>m.forEach(x=>{const v=x.target.getAttribute('data-swipe');if(v)window.__swipes.push(v);})).observe(d,{attributes:true,attributeFilter:['data-swipe']});});
+ // Swipe left through the whole pending list, in card order.
+ const seen=[hash()];const titles=[await dialog().locator('.crew-draft-snapshot').innerText()];
+ for(let i=1;i<cardsShown.length;i++){await swipe(-160);await page.waitForFunction(h=>location.hash!==h,seen.at(-1));seen.push(hash());titles.push(await dialog().locator('.crew-draft-snapshot').innerText());}
+ assert.equal(new Set(seen).size,cardsShown.length,'each swipe shows the next review: '+seen.join(' '));
+ assert.ok(seen.every(h=>/^#\/approvals\/[a-z0-9]{15}$/.test(h)),'each review keeps its link in the address');
+ const last=seen.at(-1);
+ await swipe(-160);
+ assert.equal(hash(),last,'the end of the list does not wrap');
+ assert.deepEqual(await page.evaluate(()=>window.__swipes.at(-1)),'bounce-next','the end bounces');
+ assert.equal(await page.locator('dialog[open]').count(),1,'the dialog stays open at the end');
+ // Back to the two synthetic reviews: header and decisions stay put between them.
+ const firstAt=titles.indexOf('Short first draft.');assert.ok(firstAt>=0,'the short review was shown');
+ for(let i=seen.length-1;i>firstAt;i--) await swipe(160);
+ await page.waitForFunction(h=>location.hash===h,seen[firstAt]);
+ const frame=()=>dialog().evaluate(d=>[d,d.querySelector('header.crew-dialog-head'),...d.querySelectorAll('.crew-review-bar textarea, .crew-review-bar button')].map(e=>{const b=e.getBoundingClientRect();return [b.x,b.y,b.width,b.height].map(Math.round);}));
+ const shortFrame=await frame();
+ const neighbour=titles[firstAt+1]!==undefined?1:-1;
+ await swipe(neighbour>0?-160:160);
+ await page.waitForFunction(h=>location.hash===h,seen[firstAt+neighbour]);
+ assert.deepEqual(await frame(),shortFrame,'the dialog, header, note and decision buttons keep their place and size');
+ await snapView('crew-swipe-review-390');
+ // Ignored: screen edges, a vertical drag (it scrolls), a drag from the note, typing.
+ const here=hash();
+ await swipe(-160,{x:10});await swipe(160,{x:380});
+ await swipe(-90,{dy:-320,y:600});
+ const note=dialog().getByLabel('Decision note');const noteBox=await note.boundingBox();
+ await swipe(-160,{x:noteBox.x+noteBox.width/2,y:noteBox.y+noteBox.height/2});
+ await note.focus();await swipe(-160);await swipe(160);
+ assert.equal(hash(),here,'edge, vertical, field and typing drags do not step');
+ // A typed note asks first: Stay keeps it, Discard moves on.
+ await note.fill('Half-written feedback');await note.evaluate(e=>e.blur());
+ page.once('dialog',d=>{assert.match(d.message(),/Discard your unsaved changes/);void d.dismiss();});
+ await swipe(neighbour>0?160:-160);
+ assert.equal(hash(),here,'declining keeps the review');
+ assert.equal(await note.inputValue(),'Half-written feedback','declining keeps the note');
+ page.once('dialog',d=>void d.accept());
+ await swipe(neighbour>0?160:-160);
+ await page.waitForFunction(h=>location.hash!==h,here);
+ assert.equal(writeActions.filter(a=>a==='review.decide').length,decidedBefore,'a swipe never decides');
+ await touch.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch.detach();
+ // Wide screens: previous/next buttons in a fixed cluster and Left/Right.
+ await page.setViewportSize({width:1440,height:1000});
+ await headerOneRow('stepping review 1440');
+ const prev=dialog().getByRole('button',{name:'Previous review'}),next=dialog().getByRole('button',{name:'Next review'});
+ await next.waitFor();
+ const at=hash(),cluster=await dialog().locator('.crew-list-nav').boundingBox();
+ // Focus stays in the dialog after a step, even when the button turns disabled.
+ if(await next.isEnabled()){await next.click();await page.waitForFunction(h=>location.hash!==h,at);await page.keyboard.press('ArrowLeft');}
+ else{await prev.click();await page.waitForFunction(h=>location.hash!==h,at);await page.keyboard.press('ArrowRight');}
+ await page.waitForFunction(h=>location.hash===h,at);
+ assert.deepEqual(await dialog().locator('.crew-list-nav').boundingBox(),cluster,'the previous/next cluster stays put');
+ await snapView('crew-step-review-1440');
+ await close();await dialog().waitFor({state:'hidden'});
+ assert.equal(hash(),'#/approvals','closing after steps returns to the list');
+ // The board: a task dialog steps in visible card order.
+ await page.goto(base+'/#/tasks');await page.reload();
+ await page.getByRole('heading',{name:'Synthetic swipe second'}).waitFor();
+ const boardOrder=await page.locator('.crew-task-card h3').allInnerTexts();
+ assert.ok(boardOrder.length>1,'the board has tasks to step through');
+ await page.locator('.crew-task-card').first().click();
+ const title=dialog().getByLabel('Title',{exact:true});await title.waitFor();
+ assert.equal(await title.inputValue(),boardOrder[0]);
+ await page.keyboard.press('ArrowRight');
+ for(let i=0;i<50&&await title.inputValue()!==boardOrder[1];i++) await page.waitForTimeout(100);
+ assert.equal(await title.inputValue(),boardOrder[1],'Right shows the next card on the board');
+ assert.equal(await dialog().getByRole('button',{name:'Previous task'}).isEnabled(),true);
+ await close();await dialog().waitFor({state:'hidden'});
+ await page.emulateMedia({reducedMotion:null});
+ await page.goto(base+'/#/tasks');await page.reload();
+ // Leave nothing pending for later sections.
+ for(const title of ['Synthetic swipe first','Synthetic swipe second']){
+  await page.goto(base+'/#/approvals');await page.reload();
+  await page.getByRole('button',{name:'Review draft: '+title}).click();
+  await dialog().getByRole('button',{name:'Reject',exact:true}).click();await saved();
+ }
+ }
  // HTML attachments open in a sandboxed preview (0.26.0): the page's own
  // scripts and links work, but it cannot reach Crew, the network, the top
  // window, new windows or forms, in the frame or in a new tab.

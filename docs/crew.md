@@ -115,6 +115,25 @@ do not apply stay in place, disabled. More opens a menu with Copy link, Share as
 artifact, a note's History and, last and in red, Archive (Deactivate for an
 agent); it closes on selection, a tap outside or Escape.
 
+A record dialog opened from a list steps through that list (since 0.31.0): swipe
+left for the next item and right for the previous one, or use Left and Right (focus
+not in a field, tab list or menu), or the previous/next pill after the title on
+screens wider than 680 px. The list is the page under the dialog as shown, in its
+current filter and sort: the board's visible cards column by column, the Notes
+page's notes or bucket cards, the Agents page, pending reviews (or past decisions
+for a decided one) on Approvals, and the Search page's results. A fresh link such
+as `#/tasks/<slug>-<id>` or `#/approvals/<id>` loads its page with the default
+filter and sort and steps through it; a dialog with no list behind it (opened from Home, from a link to another kind, or an item the
+list is hiding) does not step. Stepping never wraps: at either end the body bounces
+and the button there is disabled. The address becomes the item's link (replaced, so
+Back still returns to the list), unsaved changes ask first, and a swipe never saves
+or decides. Swipes are ignored within 24 px of the screen edges (iOS Back), when
+mostly vertical, short or slow, when they start in a field or in content that
+scrolls sideways, while typing or with text selected, and in the file viewer, which
+keeps its own steps; the file preview steps through its files with the same swipe.
+A pending review's Decision note and decision buttons are pinned to the bottom, like
+the editors' save bar, so they stay put from one review to the next.
+
 A review opens in the reader at `#/approvals/<review-id>` (since 0.28.0): the
 Approvals page with that review's Review draft dialog on top. A pending review shows
 Approve, Request changes and Reject; a decided or withdrawn one opens read-only with

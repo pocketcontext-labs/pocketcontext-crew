@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.30.1 to 0.31.0
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.31.0. Reader change only: record
+dialogs opened from a list step through it with swipes, Left/Right and a
+previous/next pill, and a pending review's decision bar is pinned. Rollback to
+0.30.1 needs no restore. From 0.29.0 or earlier, follow the 0.29.0 to 0.30.0 notes
+first.
+
 ## Crew 0.30.0 to 0.30.1
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

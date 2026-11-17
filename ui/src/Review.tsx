@@ -272,49 +272,58 @@ export function ReviewDecision({
       )}
       {pending && (
         <>
-          <label className="crew-option-note">
-            Decision note
-            <textarea
-              ref={note}
-              defaultValue=""
-              maxLength={20000}
-              placeholder="Feedback for the next revision"
-            />
-          </label>
           {options.length > 0 && (
             <p className="crew-footnote">
               Choose Approve or Reject for every option. Approve at least one
               option to approve the review.
             </p>
           )}
-          <div className="crew-actions">
-            <button
-              className="crew-primary"
-              disabled={
-                busy || (options.length > 0 && (!complete || !anyApproved))
-              }
-              onClick={() => submit("approved")}
-            >
-              {options.length ? "Approve selected options" : "Approve draft"}
-            </button>
-            <button disabled={busy} onClick={() => submit("changes_requested")}>
-              Request changes
-            </button>
-            <button
-              className="crew-danger"
-              disabled={busy}
-              onClick={() => submit("rejected")}
-            >
-              Reject
-            </button>
-          </div>
           <p className="crew-footnote">
             After approval, perform the external action yourself and mark the
             task Done.
           </p>
+          {/* Pinned to the bottom like the editors' save bar, so the note and
+              the decisions stay put from one review to the next (0.31.0). */}
+          <div className="crew-save-bar crew-review-bar">
+            {error && (
+              <p className="crew-alert" role="alert">
+                {error}
+              </p>
+            )}
+            <label className="crew-option-note">
+              Decision note
+              <textarea
+                ref={note}
+                defaultValue=""
+                maxLength={20000}
+                placeholder="Feedback for the next revision"
+              />
+            </label>
+            <div className="crew-actions">
+              <button
+                className="crew-primary"
+                disabled={
+                  busy || (options.length > 0 && (!complete || !anyApproved))
+                }
+                onClick={() => submit("approved")}
+              >
+                {options.length ? "Approve selected options" : "Approve draft"}
+              </button>
+              <button disabled={busy} onClick={() => submit("changes_requested")}>
+                Request changes
+              </button>
+              <button
+                className="crew-danger"
+                disabled={busy}
+                onClick={() => submit("rejected")}
+              >
+                Reject
+              </button>
+            </div>
+          </div>
         </>
       )}
-      {error && (
+      {!pending && error && (
         <p className="crew-alert" role="alert">
           {error}
         </p>

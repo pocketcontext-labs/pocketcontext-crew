@@ -32,6 +32,7 @@ import {
 } from "./previewFormats";
 import type { FileNav } from "./Lightbox";
 import ViewerBar from "./ViewerBar";
+import { useSwipe } from "./swipe";
 import "./preview.css";
 
 // pdf.js and its worker load only when a PDF is opened.
@@ -62,6 +63,8 @@ export function AttachmentPreview({
   nav?: FileNav;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // The reader's one swipe handler steps through the files, like the arrows.
+  useSwipe(ref, nav && nav.count > 1 ? (step) => nav.go(step) : null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const prevRef = useRef<HTMLButtonElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);

@@ -670,6 +670,13 @@ function ResultList({
   );
 }
 
+/** One record the Search page shows, in page order (0.31.0). */
+export type SearchEntry = {
+  kind: "task" | "note" | "agent" | "bucket";
+  id: string;
+  archived?: boolean;
+};
+
 export function SearchPage({
   text,
   agents,
@@ -678,6 +685,7 @@ export function SearchPage({
   onOpenHit,
   onOpenAgent,
   onOpenBucket,
+  onResults,
 }: {
   /** The address's query; null when the address is not a valid search. */
   text: string | null;
@@ -687,6 +695,8 @@ export function SearchPage({
   onOpenHit: (hit: SearchHit, archived: boolean) => void;
   onOpenAgent: (row: Row) => void;
   onOpenBucket: (row: Row) => void;
+  /** The records shown, in order, so a dialog opened here steps through them. */
+  onResults?: (entries: SearchEntry[]) => void;
 }) {
   const [includeArchived, setIncludeArchived] = useState(false);
   const problem = text === null ? "invalid" : queryProblem(text);
@@ -697,6 +707,33 @@ export function SearchPage({
     !problem && includeArchived,
     refreshKey,
   );
+  const hitsOf = (paged: typeof current, archived: boolean): SearchEntry[] =>
+    paged.state.status === "ready"
+      ? paged.state.items.map((hit) => ({
+          kind: hit.collection === "tasks" ? "task" : "note",
+          id: hit.id,
+          archived,
+        }))
+      : [];
+  const shown: SearchEntry[] = problem
+    ? []
+    : [
+        ...matchNames(agents, text ?? "").map((row) => ({
+          kind: "agent" as const,
+          id: row.id,
+        })),
+        ...matchNames(buckets, text ?? "").map((row) => ({
+          kind: "bucket" as const,
+          id: row.id,
+        })),
+        ...hitsOf(current, false),
+        ...(includeArchived ? hitsOf(old, true) : []),
+      ];
+  const shownKey = JSON.stringify(shown);
+  useEffect(() => {
+    onResults?.(JSON.parse(shownKey) as SearchEntry[]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownKey]);
   if (problem)
     return (
       <div className="crew-search-page">

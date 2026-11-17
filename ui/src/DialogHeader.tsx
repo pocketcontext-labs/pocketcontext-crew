@@ -20,6 +20,8 @@ import {
 const paths = {
   back: "M15 5l-7 7 7 7",
   forward: "M9 5l7 7-7 7",
+  up: "M5 15l7-7 7 7",
+  down: "M5 9l7 7 7-7",
   close: "M6 6l12 12M18 6L6 18",
   more: "",
   link: "M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1",
@@ -243,9 +245,43 @@ export function NavCluster({
   );
 }
 
+/**
+ * Previous and next in the list the dialog was opened from (0.31.0), always
+ * both, in one fixed cluster; disabled at the ends and when no list is behind
+ * the dialog. Shown on wide screens; phones swipe instead, so their header
+ * keeps one row.
+ */
+export function ListNavCluster({
+  noun,
+  previous,
+  next,
+}: {
+  noun: string;
+  previous?: () => void;
+  next?: () => void;
+}) {
+  return (
+    <div className="crew-list-nav" role="group" aria-label="List">
+      <HeadButton
+        icon="up"
+        label={`Previous ${noun}`}
+        disabled={!previous}
+        onClick={previous}
+      />
+      <HeadButton
+        icon="down"
+        label={`Next ${noun}`}
+        disabled={!next}
+        onClick={next}
+      />
+    </div>
+  );
+}
+
 export default function DialogHeader({
   title,
   nav,
+  listNav,
   actions,
   menu,
   close,
@@ -254,6 +290,8 @@ export default function DialogHeader({
   title: string;
   /** The back/forward cluster; a disabled one when the dialog has no trail. */
   nav?: ReactNode;
+  /** Previous/next in the source list, after the title (ListNavCluster). */
+  listNav?: ReactNode;
   /** Icon buttons in the pill, before More. */
   actions?: ReactNode;
   menu: MenuItem[];
@@ -265,6 +303,7 @@ export default function DialogHeader({
     <header className="crew-dialog-head">
       {nav ?? <NavCluster />}
       <h2 title={title}>{title}</h2>
+      {listNav}
       <div className="crew-head-pill" role="toolbar" aria-label="Actions">
         {actions}
         <MoreMenu items={menu} />

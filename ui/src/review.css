@@ -44,3 +44,25 @@
 .crew-review-content .crew-alert code {
   overflow-wrap: anywhere;
 }
+/* The pinned decision bar (0.31.0): a shorter note keeps the draft readable. */
+.crew-review-bar .crew-option-note {
+  margin: 0 0 10px;
+}
+.crew-dialog .crew-review-bar textarea {
+  min-height: 64px;
+}
+/* Approve on its own row, Request changes and Reject side by side. */
+.crew-dialog .crew-review-bar .crew-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.crew-dialog .crew-review-bar .crew-actions button {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.crew-dialog .crew-review-bar .crew-actions .crew-primary {
+  grid-column: 1 / -1;
+}
