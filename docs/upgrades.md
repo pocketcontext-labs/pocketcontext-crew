@@ -1,5 +1,15 @@
 # Crew upgrades and rollback
 
+## Crew 0.31.0 to 0.32.0
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.32.0. Reader change only:
+review options are pick any with feedback on each option (recorded in the existing
+`option_decisions`), the review decision footer is compact with Reject in the More
+menu, and record dialogs step through their list with previous/next buttons and an
+"x of y" position, one history entry per step, instead of swipes. Rollback to 0.31.0
+needs no restore. From 0.29.0 or earlier, follow the 0.29.0 to 0.30.0 notes first.
+
 ## Crew 0.30.1 to 0.31.0
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

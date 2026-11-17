@@ -144,11 +144,17 @@ import DialogHeader, {
   useDialogMenu,
   type MenuItem,
 } from "./DialogHeader";
-import { followLink, resetTrail, useTrail } from "./trail";
 import {
-  arrowStep,
+  followLink,
+  listDepth,
+  pushFromList,
+  resetTrail,
+  stepTrail,
+  useTrail,
+} from "./trail";
+import {
+  listKeyStep,
   swipeFeedback,
-  useSwipe,
   type Step,
   type StepResult,
 } from "./swipe";
@@ -512,39 +518,6 @@ async function shareAsArtifact(note: Row) {
   );
   return created.id as string;
 }
-function ShareAsArtifact({
-  note,
-  done,
-}: {
-  note?: Row;
-  done: (id: string) => void;
-}) {
-  const [state, setState] = useState<"idle" | "busy" | "failed">("idle");
-  const share = async () => {
-    if (!note) return;
-    setState("busy");
-    try {
-      done(await shareAsArtifact(note));
-    } catch {
-      setState("failed");
-    }
-  };
-  return (
-    <span className="crew-head-copy">
-      <HeadButton
-        icon="share"
-        label="Share as artifact"
-        disabled={!note || state === "busy"}
-        onClick={() => void share()}
-      />
-      {state === "failed" && (
-        <span role="alert" className="crew-head-alert">
-          Could not create the artifact.
-        </span>
-      )}
-    </span>
-  );
-}
 /**
  * Grows with its content, so a long note scrolls with the dialog, not inside it.
  * The agent brief is capped (CSS max-height) and past that scrolls itself.
@@ -851,15 +824,18 @@ function TrailNav() {
   );
 }
 /**
- * The list a record dialog was opened from (0.31.0): swipes, Left/Right and
- * the header's previous/next step through it. Inactive when no list is behind
- * the dialog; previous/next are false at the ends.
+ * The list a record dialog was opened from (0.31.0; buttons and "x of y"
+ * since 0.32.0): the header's previous/next and J/K step through it.
+ * Inactive when no list is behind the dialog; previous/next are false at the
+ * ends. index is zero-based.
  */
 type ListNav = {
   noun: string;
   active: boolean;
   previous: boolean;
   next: boolean;
+  index: number;
+  count: number;
   go: (step: Step) => StepResult;
 };
 function Modal({
@@ -890,13 +866,13 @@ function Modal({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [bodyMenu, setBodyMenu] = useState<MenuItem[]>([]);
-  // One handler for swipes, arrow keys and the header buttons.
+  // One handler for the header buttons and J/K.
   const step = (direction: Step) => {
     if (!listNav?.active) return;
     const result = listNav.go(direction);
     swipeFeedback(ref.current, result, direction);
     // The next item replaces the body, and a button at the end turns
-    // disabled: keep focus in the dialog so Left/Right keep working.
+    // disabled: keep focus in the dialog so J/K keep working.
     if (result === "moved")
       requestAnimationFrame(() => {
         const dialog = ref.current;
@@ -904,7 +880,6 @@ function Modal({
           dialog.focus({ preventScroll: true });
       });
   };
-  useSwipe(ref, listNav ? step : null);
   const pressedBackdrop = useRef(false);
   const helpWasOpen = useRef(false);
   // A native file picker opened from inside the dialog: while it is open, and
@@ -961,7 +936,7 @@ function Modal({
       tabIndex={-1}
       onChange={onEdit}
       onKeyDown={(e) => {
-        const direction = listNav?.active ? arrowStep(e, ref.current) : 0;
+        const direction = listNav?.active ? listKeyStep(e, ref.current) : 0;
         if (!direction) return;
         e.preventDefault();
         step(direction);
@@ -1002,13 +977,13 @@ function Modal({
         title={title}
         nav={nav}
         listNav={
-          listNav && (
+          listNav?.active && (
             <ListNavCluster
               noun={listNav.noun}
-              previous={
-                listNav.active && listNav.previous ? () => step(-1) : undefined
-              }
-              next={listNav.active && listNav.next ? () => step(1) : undefined}
+              index={listNav.index}
+              count={listNav.count}
+              previous={listNav.previous ? () => step(-1) : undefined}
+              next={listNav.next ? () => step(1) : undefined}
             />
           )
         }
@@ -1446,20 +1421,32 @@ export default function CrewWorkspace() {
   }, [highlightColumn]);
   const dismissSessionStart = useCallback(() => setSessionStart(null), []);
   const openItem = (kind: ItemKind, row: Row) => {
-    pushAddress(itemPath(kind, row));
+    pushFromList(itemPath(kind, row));
     setDialog({ kind, row });
   };
   // Clicking an Approvals card puts its shareable link in the address.
   const openReviewCard = (row: Row) => {
-    pushAddress(reviewHash(row.id));
+    pushFromList(reviewHash(row.id));
     setDialog({ kind: "review", row });
   };
   // Share as artifact from a note's header or menu opens the new draft.
   const sharedArtifact = (id: string) => {
-    closeDialog();
+    setDialog(null);
     location.hash = `${viewHashes.shared}/${id}`;
   };
   const closeDialog = () => {
+    // Opened from a list: go back to the list's own entry (0.32.0), so the
+    // address is the list, its scroll and filters stay, and Back does not
+    // reopen the item. The hashchange that follows shows the page.
+    const depth = listDepth();
+    if (depth > 0) {
+      // Saved or confirmed already: the hashchange may arrive before the
+      // closed dialog's render resets this, and must not ask again.
+      edited.current = false;
+      setDialog(null);
+      history.go(-depth);
+      return;
+    }
     // Replace, so Back never reopens the review. A review reached from a link
     // over another page returns to that page, like an item.
     if (reviewFocusFromHash(location.hash)) {
@@ -1751,16 +1738,15 @@ export default function CrewWorkspace() {
       (x) => x.kind === dialog?.kind && x.row.id === dialog?.row?.id,
     ) ?? -1;
   // Moves the open dialog to the item `step` away in its list, without
-  // wrapping. Unsaved changes ask first; the address becomes the new item's
-  // link (replaced, so Back still returns to the list).
+  // wrapping. Unsaved changes ask first (staying adds no history); a move
+  // pushes one history entry with the new item's link (0.32.0), so Back and
+  // Forward retrace the items moved through.
   const stepDialog = (step: Step): StepResult => {
     const target = dialogIndex >= 0 ? dialogList?.[dialogIndex + step] : undefined;
     if (!target) return "end";
     if (busy || !discardOk()) return "stayed";
     const { kind, row } = target;
-    if (kind === "review") setAddress(reviewHash(row.id));
-    else if (kind === "task" || kind === "note" || isItemHash(location.hash))
-      setAddress(itemPath(kind, row));
+    stepTrail(kind === "review" ? reviewHash(row.id) : itemPath(kind, row));
     setDialog({ kind, row });
     return "moved";
   };
@@ -1888,8 +1874,8 @@ export default function CrewWorkspace() {
               pageText={view === "search" ? searchText : null}
               disabled={dialog !== null}
               onOpenHit={(hit) => void openHit(hit)}
-              onOpenAgent={(row) => setDialog({ kind: "agent", row })}
-              onOpenBucket={(row) => setDialog({ kind: "bucket", row })}
+              onOpenAgent={(row) => openItem("agent", row)}
+              onOpenBucket={(row) => openItem("bucket", row)}
             />
             <button
               className="crew-refresh"
@@ -2265,8 +2251,8 @@ export default function CrewWorkspace() {
               buckets={data.buckets}
               refreshKey={saves}
               onOpenHit={(hit, inArchive) => void openHit(hit, inArchive)}
-              onOpenAgent={(row) => setDialog({ kind: "agent", row })}
-              onOpenBucket={(row) => setDialog({ kind: "bucket", row })}
+              onOpenAgent={(row) => openItem("agent", row)}
+              onOpenBucket={(row) => openItem("bucket", row)}
               onResults={setSearchEntries}
             />
           )}
@@ -2493,7 +2479,7 @@ export default function CrewWorkspace() {
                         type="button"
                         className="crew-bucket-edit"
                         aria-label={`Edit bucket ${val(x, "name")}`}
-                        onClick={() => setDialog({ kind: "bucket", row: x })}
+                        onClick={() => openItem("bucket", x)}
                       >
                         Edit
                       </button>
@@ -2676,7 +2662,7 @@ export default function CrewWorkspace() {
                   <div className="crew-agent-tile" key={x.id}>
                     <button
                       className="crew-agent-card"
-                      onClick={() => setDialog({ kind: "agent", row: x })}
+                      onClick={() => openItem("agent", x)}
                     >
                       <span className="crew-avatar">
                         {agentInitials(val(x, "name"), data.agents)}
@@ -2809,6 +2795,8 @@ export default function CrewWorkspace() {
                   active: dialogIndex >= 0,
                   previous: dialogIndex > 0,
                   next: !!dialogList && dialogIndex >= 0 && dialogIndex < dialogList.length - 1,
+                  index: dialogIndex,
+                  count: dialogList?.length ?? 0,
                   go: stepDialog,
                 }
               : undefined
@@ -2822,41 +2810,22 @@ export default function CrewWorkspace() {
                   ? "Note"
                   : `${dialog.row ? "Edit" : "New"} ${dialog.kind}`
           }
-          actions={
-            <>
-              {dialog.row && (dialog.kind === "task" || dialog.kind === "note") ? (
-                <HeadCopy
-                  key={dialog.row.id}
-                  target={itemShareUrl(dialog.kind, dialog.row)}
-                />
-              ) : (
-                <HeadButton icon="link" label="Copy link" disabled />
-              )}
-              <ShareAsArtifact
-                key={`share-${dialog.row?.id || "new"}`}
-                note={
-                  dialog.row && dialog.kind === "note" && !archiveNotice
-                    ? dialog.row
-                    : undefined
-                }
-                done={sharedArtifact}
-              />
-            </>
-          }
           menu={
-            dialog.row && (dialog.kind === "task" || dialog.kind === "note")
+            // Copy link and Share live in the More menu (0.32.0); a review's
+            // own menu comes from its body.
+            dialog.row && dialog.kind !== "review"
               ? [
                   {
                     label: "Copy link",
                     icon: "link",
-                    onSelect: () =>
-                      void copyText(
-                        itemShareUrl(dialog.kind as ItemKind, dialog.row!),
-                      ).then((ok) =>
+                    onSelect: () => {
+                      const url = itemShareUrl(dialog.kind as ItemKind, dialog.row!);
+                      void copyText(url).then((ok) =>
                         ok
                           ? setNotice("Link copied.")
-                          : setError("Could not copy the link automatically."),
-                      ),
+                          : setError(`Could not copy automatically. Copy it from here: ${url}`),
+                      );
+                    },
                   },
                   ...(dialog.kind === "note" && !archiveNotice
                     ? [
@@ -3042,7 +3011,8 @@ function Editor({
   const setMenu = useDialogMenu();
   const menuActions = useRef({ history: () => {}, archive: () => {} });
   useEffect(() => {
-    if (!setMenu) return;
+    // A review's body (ReviewDecision) sets its own menu.
+    if (!setMenu || kind === "review") return;
     const items: MenuItem[] = [];
     if (row && kind === "note")
       items.push({
@@ -3050,7 +3020,7 @@ function Editor({
         icon: "history",
         onSelect: () => menuActions.current.history(),
       });
-    if (row && kind !== "review" && !readOnly)
+    if (row && !readOnly)
       items.push({
         label: kind === "agent" ? "Deactivate agent" : `Archive ${kind}`,
         icon: kind === "agent" ? "person" : "archive",
@@ -4077,7 +4047,7 @@ function Editor({
                   {val(x, "action") === "review.decide" && (() => {
                     const changes = typeof x.changes === "string" ? (() => { try { return JSON.parse(x.changes); } catch { return {}; } })() : (x.changes || {});
                     const choices = objects(changes.option_decisions);
-                    const summary = decisionSummary({ id: x.id, revision: x.revision, options: changes.options, option_decisions: choices });
+                    const summary = decisionSummary({ id: x.id, revision: x.revision, options: changes.options, option_decisions: choices }, String(changes.decision || changes.status || ""));
                     return summary ? <p>{summary}</p> : null;
                   })()}
                   <small>

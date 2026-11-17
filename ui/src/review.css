@@ -44,17 +44,185 @@
 .crew-review-content .crew-alert code {
   overflow-wrap: anywhere;
 }
-/* The pinned decision bar (0.31.0): a shorter note keeps the draft readable. */
-.crew-review-bar .crew-option-note {
-  margin: 0 0 10px;
+/* Pick any (0.32.0, the approved mockup): checkbox cards with a feedback
+   icon, one-line feedback under the card, image options as tiles. */
+.crew-pick-heading {
+  margin: 1rem 0 0.5rem;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6a7d63;
 }
-.crew-dialog .crew-review-bar textarea {
-  min-height: 64px;
+.crew-review-option.crew-pick {
+  margin: 0 0 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
+  background: #fbfcf8;
 }
-/* Approve on its own row, Request changes and Reject side by side. */
+.crew-pick[data-selected] {
+  border: 2px solid #2f4a35;
+  background: #eef3ea;
+  padding: calc(0.7rem - 1px) calc(0.8rem - 1px);
+}
+.crew-pick-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.crew-pick-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+.crew-dialog .crew-pick-check input[type="checkbox"] {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 1px 0 0;
+  accent-color: #2f4a35;
+}
+.crew-pick-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.crew-dialog button.crew-pick-comment {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #4d6450;
+}
+.crew-dialog button.crew-pick-comment:hover:not(:disabled) {
+  background: #e3eadc;
+}
+.crew-pick[data-selected] button.crew-pick-comment,
+.crew-dialog button.crew-pick-comment[data-note] {
+  background: #dfe8d8;
+}
+.crew-pick-body {
+  margin: 0.3rem 0 0 32px;
+}
+.crew-pick-body .crew-prose > :first-child {
+  margin-top: 0;
+}
+.crew-pick-body .crew-prose > :last-child {
+  margin-bottom: 0;
+}
+.crew-dialog input.crew-pick-note {
+  display: block;
+  width: 100%;
+  margin: 0.6rem 0 0;
+}
+.crew-pick-feedback {
+  margin: 0.5rem 0 0 32px;
+}
+.crew-pick-tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+.crew-pick-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line, #d7ded6);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fbfcf8;
+}
+.crew-pick-tile[data-selected] {
+  border: 2px solid #2f4a35;
+}
+.crew-pick-image {
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #eef1ea;
+}
+.crew-pick-image .crew-prose,
+.crew-pick-image .crew-prose p {
+  margin: 0;
+  height: 100%;
+}
+.crew-pick-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.crew-pick-tile .crew-pick-check {
+  padding: 6px 8px;
+  gap: 6px;
+  font-size: 13px;
+  align-items: center;
+}
+.crew-dialog .crew-pick-tile .crew-pick-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.crew-pick-tile .crew-pick-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The tile's feedback icon is a small badge on the image, filled when the
+   option has feedback. */
+.crew-dialog .crew-pick-tile button.crew-pick-comment {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ffffff 85%, transparent);
+}
+.crew-dialog .crew-pick-tile button.crew-pick-comment[data-note] {
+  background: #233a28;
+  color: #fff;
+}
+.crew-pick-tile-note input.crew-pick-note,
+.crew-pick-tile-note .crew-pick-feedback {
+  margin: 8px 0 0;
+}
+
+/* The pinned decision bar, compact (0.32.0): a one-line note that grows
+   upward into the body on focus (the bar is pinned to the bottom, so the
+   buttons stay put), then Approve and Request changes on one row. */
+.crew-dialog .crew-review-bar {
+  padding-top: 10px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+.crew-dialog .crew-review-bar textarea.crew-review-note {
+  display: block;
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  resize: none;
+  line-height: 22px;
+}
+.crew-dialog .crew-review-bar textarea.crew-review-note:focus {
+  height: 96px;
+}
 .crew-dialog .crew-review-bar .crew-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
   margin: 0;
 }
@@ -62,7 +230,22 @@
   width: 100%;
   min-width: 0;
   margin: 0;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.crew-dialog .crew-review-bar .crew-actions .crew-primary {
-  grid-column: 1 / -1;
+/* "Link copied" from the More menu, briefly, at the top of the body. */
+.crew-review-toast {
+  position: sticky;
+  top: 64px;
+  z-index: 2;
+  align-self: center;
+  margin: 0 0 8px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #233a28;
+  color: #fff;
+  font-size: 13px;
 }

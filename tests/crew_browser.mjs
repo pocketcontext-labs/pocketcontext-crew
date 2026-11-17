@@ -162,12 +162,13 @@ try {
  const reviewLink=new URL(page.url()).hash;
  assert.match(reviewLink,/^#\/approvals\/[a-z0-9]{15}$/,'a clicked card puts its review link in the address');
  await dialog().getByRole('button',{name:'Close dialog'}).click();await dialog().waitFor({state:'hidden'});
- assert.equal(new URL(page.url()).hash,'#/approvals','closing returns to #/approvals');
+ await page.waitForFunction(()=>location.hash==='#/approvals');
  await page.goBack();await page.waitForTimeout(300);
  assert.equal(await page.locator('dialog[open]').count(),0,'Back does not reopen the review');
  await page.setViewportSize({width:390,height:844});
  await page.goto(base+'/'+reviewLink);await page.reload();
- for(const name of ['Approve draft','Request changes','Reject']){const b=dialog().getByRole('button',{name,exact:true});await b.waitFor();await b.scrollIntoViewIfNeeded();assert.ok(await b.isEnabled(),name+' is enabled from a review link');}
+ for(const name of ['Approve draft','Request changes']){const b=dialog().getByRole('button',{name,exact:true});await b.waitFor();await b.scrollIntoViewIfNeeded();assert.ok(await b.isEnabled(),name+' is enabled from a review link');}
+ {const f=await dialog().locator('.crew-review-bar').boundingBox();assert.ok(f.height<=844*0.25,'a review without options has a compact footer: '+f.height);}
  const reviewBox=await dialog().boundingBox();assert.ok(reviewBox.width<=390,'the review dialog fits a phone');
  await snapView('crew-review-link-390');
  await page.goto(base+'/#/approvals/zzzzzzzzzzzzzzz');await page.reload();
@@ -466,7 +467,7 @@ try {
  await dialog().getByRole('heading',{name:'Synthetic launch voice'}).waitFor();
  const sheet=await dialog().boundingBox();
  assert.deepEqual([sheet.x,sheet.y,sheet.width,sheet.height],[0,0,390,844],'overlay fills the phone screen');
- assert.equal(await dialog().getByRole('button',{name:'Copy link'}).evaluate(e=>e===document.activeElement),false,'Copy link is not focused');
+ assert.equal(await dialog().getByRole('button',{name:'More actions'}).evaluate(e=>e===document.activeElement),false,'More is not focused');
  for(const width of [320,375,390]){
   await page.setViewportSize({width,height:844});await headerOneRow('note '+width);
   if(width===320){
@@ -1408,123 +1409,206 @@ try {
  assert.ok(boxes[0][1]<=190,'a tile row stays short: '+JSON.stringify(boxes));}
  await snapView('review-file-tiles-1440');
  assert.equal(await dialog().locator('.crew-draft-snapshot p').first().evaluate(p=>getComputedStyle(p).whiteSpace),'pre-wrap','review line breaks are preserved');
- const optionApproval=dialog().getByRole('button',{name:'Approve selected options'});
- assert.equal(await optionApproval.isDisabled(),true,'undecided options cannot be approved');
- for(const option of reviewOptions) await dialog().getByRole('region',{name:option.label,exact:true}).getByRole('radio',{name:option.key.startsWith('a-')?'Approve':'Reject',exact:true}).check();
- await dialog().getByLabel('Note for Draft A · X (optional)').fill('Use this option');
- await optionApproval.click();await saved();
+ // Pick any (0.32.0): checkboxes, feedback on each option, Approve N selected.
+ assert.equal(await dialog().getByRole('button',{name:'Approve 0 selected'}).isDisabled(),true,'nothing selected cannot be approved');
+ for(const option of reviewOptions.filter(o=>o.key.startsWith('a-'))) await dialog().getByRole('checkbox',{name:option.label,exact:true}).check();
+ await dialog().getByRole('textbox',{name:'Feedback on Draft A · X'}).fill('Use this option');
+ await dialog().getByRole('button',{name:'Feedback on Draft B · LinkedIn'}).click();
+ await dialog().getByRole('textbox',{name:'Feedback on Draft B · LinkedIn'}).fill('Too long');
+ await dialog().getByRole('button',{name:'Approve 2 selected'}).click();await saved();
+ {const api=async body=>(await page.request.post(base+'/api/crew/read',{headers:{Authorization:syntheticOwnerAuth},data:body})).json();
+ const decided=(await api({collection:'reviews',parent:reviewTask.id})).items[0];
+ assert.deepEqual(decided.option_decisions,[{key:'a-linkedin',decision:'approved',note:''},{key:'a-x',decision:'approved',note:'Use this option'},{key:'b-linkedin',decision:'rejected',note:'Too long'},{key:'b-x',decision:'rejected',note:''}],'every option is recorded with its feedback');}
  await page.goto(base+'/#/tasks/'+reviewTask.id);
  await dialog().getByRole('tab',{name:'Activity',exact:true}).click();
- await dialog().getByText('Approved: Draft A · LinkedIn, Draft A · X; Rejected: Draft B · LinkedIn, Draft B · X',{exact:true}).waitFor();
+ await dialog().getByText('Approved: Draft A · LinkedIn, Draft A · X; Not selected: Draft B · LinkedIn, Draft B · X',{exact:true}).waitFor();
  await dialog().getByRole('tab',{name:'Reviews',exact:true}).click();
- await dialog().getByText('Approved: Draft A · LinkedIn, Draft A · X; Rejected: Draft B · LinkedIn, Draft B · X',{exact:true}).waitFor();
+ await dialog().getByText('Approved: Draft A · LinkedIn, Draft A · X; Not selected: Draft B · LinkedIn, Draft B · X',{exact:true}).waitFor();
+ await dialog().getByText('Too long').waitFor();
  await close();await dialog().waitFor({state:'hidden'});
- // List stepping (0.31.0): one swipe handler moves a dialog through the list it
- // was opened from (real touch events at 390); edges, vertical drags, fields
- // and typing don't count; a typed decision note asks first; the end bounces
- // without wrapping; the header and the pinned decisions stay put; wide
- // screens add previous/next buttons and Left/Right.
+ // List stepping (0.32.0): fixed previous/next buttons with "x of y" in the
+ // header, `[‹ ›] title [∧ x of y ∨] [⋯] [✕]`, on phones too. Each step pushes
+ // one history entry, so Back/Forward retrace it; a swipe never steps; the
+ // ends are disabled in place; a typed note asks first; closing returns to the
+ // list without reopening on Back. The compact decision footer (one-line note,
+ // Approve N selected beside Request changes) stays under 25% of a phone
+ // screen, and its buttons never move.
  {
- for(const [title,draft] of [['Synthetic swipe first','Short first draft.'],['Synthetic swipe second','A much longer second draft.\n\n'+'More words for the owner to read. '.repeat(150)]]){
-  const t=await boardWrite('task.create',{title,draft});
-  await boardWrite('review.request',{},t.id,t.revision);
+ const pickOptions=[{key:'a',label:'A · Out of tokens',body:'LinkedIn and X'},{key:'b',label:'B · One human, many agents',body:'LinkedIn and X'},{key:'c',label:'C · Your AI provider',body:'LinkedIn and X'}];
+ for(const [title,draft,options] of [['Synthetic step first','Short first draft. Pick any text.',pickOptions],['Synthetic step second','A much longer second draft.\n\n'+'More words for the owner to read. '.repeat(150),[]]]){
+  const files=options.length?shotsBase64.slice(0,2).map((content_base64,i)=>({name:`tile-${i+1}.png`,content_base64})):undefined;
+  const t=await boardWrite('task.create',{title,draft,...(files?{files}:{})});
+  // Options whose body is one image show as tiles.
+  const images=files?(await (await page.request.post(base+'/api/crew/read',{headers:{Authorization:syntheticOwnerAuth},data:{collection:'attachments',parent:t.id}})).json()).items.map((a,i)=>({key:'img-'+(i+1),label:['Shared notebook','Handoff'][i],body:`![${['Shared notebook','Handoff'][i]}](attachment:${a.id})`})):[];
+  await boardWrite('review.request',options.length?{options:[...options,...images]}:{},t.id,t.revision);
  }
  page.removeAllListeners('dialog');
  const decidedBefore=writeActions.filter(a=>a==='review.decide').length;
  await page.emulateMedia({reducedMotion:'reduce'});
  await page.setViewportSize({width:390,height:844});
- const touch=await page.context().newCDPSession(page);
- await touch.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
- const swipe=async(dx,{x=200,y=380,dy=0}={})=>{
-  await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
-  for(let i=1;i<=6;i++){await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*i/6,y:y+dy*i/6}]});await page.waitForTimeout(15);}
-  await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  await page.waitForTimeout(150);
- };
  const hash=()=>new URL(page.url()).hash;
+ // Chromium caps history.length at 50, so count the pushes themselves.
+ const historyLength=()=>page.evaluate(()=>window.__pushes);
  await page.goto(base+'/#/approvals');await page.reload();
- await page.getByRole('button',{name:'Review draft: Synthetic swipe second'}).waitFor();
+ await page.getByRole('button',{name:'Review draft: Synthetic step second'}).waitFor();
  const cardsShown=await page.locator('.crew-review-card').evaluateAll(cs=>cs.map(c=>c.getAttribute('aria-label')));
- assert.ok(cardsShown.includes('Review draft: Synthetic swipe first')&&cardsShown.includes('Review draft: Synthetic swipe second'),'both swipe reviews are pending');
+ assert.ok(cardsShown.includes('Review draft: Synthetic step first')&&cardsShown.includes('Review draft: Synthetic step second'),'both stepping reviews are pending');
+ await page.evaluate(()=>{window.__pushes=0;const push=history.pushState.bind(history);history.pushState=(...a)=>{window.__pushes++;return push(...a);};});
+ const n=cardsShown.length,startLength=await historyLength();
  await page.locator('.crew-review-card').first().click();
  await dialog().locator('.crew-draft-snapshot').waitFor();
  await headerOneRow('stepping review 390');
- assert.equal(await dialog().locator('.crew-list-nav').isVisible(),false,'phones swipe; the header keeps one row');
- await page.evaluate(()=>{window.__swipes=[];const d=document.querySelector('dialog[open]');new MutationObserver(m=>m.forEach(x=>{const v=x.target.getAttribute('data-swipe');if(v)window.__swipes.push(v);})).observe(d,{attributes:true,attributeFilter:['data-swipe']});});
- // Swipe left through the whole pending list, in card order.
+ const header=dialog().locator('header.crew-dialog-head');
+ {const fit=await header.locator('h2').evaluate(h=>{const r=document.createRange();r.selectNodeContents(h);return [r.getBoundingClientRect().width,h.getBoundingClientRect().width];});
+ assert.ok(fit[0]<=fit[1]+0.5,'"Review draft" fits the header at 390: '+JSON.stringify(fit));}
+ assert.deepEqual(await header.evaluate(h=>[...h.children].map(c=>['crew-trail-nav','crew-list-nav','crew-head-pill','crew-head-close'].find(k=>c.classList.contains(k))||c.tagName)),['crew-trail-nav','H2','crew-list-nav','crew-head-pill','crew-head-close'],'the header matches the mockup');
+ assert.equal(await header.locator('.crew-head-pill button').count(),1,'only More sits between the list capsule and close');
+ const position=()=>header.locator('.crew-list-position').innerText();
+ const next=dialog().getByRole('button',{name:'Next review (J)'}),prev=dialog().getByRole('button',{name:'Previous review (K)'});
+ assert.equal(await position(),`1 of ${n}`);
+ assert.equal(await prev.isDisabled(),true,'previous is disabled on the first item');
+ const chrome=()=>header.evaluate(h=>['.crew-trail-nav','.crew-list-nav','.crew-head-pill','.crew-head-close'].map(s=>{const b=h.querySelector(s).getBoundingClientRect();return [b.x,b.y,b.width,b.height].map(Math.round);}));
+ const chromeAt=await chrome();
+ // A horizontal swipe never changes the item.
+ {const touch=await page.context().newCDPSession(page);
+ await touch.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+ const at=hash();
+ await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:200,y:420}]});
+ for(let i=1;i<=6;i++){await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:200-160*i/6,y:420}]});await page.waitForTimeout(15);}
+ await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(300);
+ assert.equal(hash(),at,'a swipe does not step');
+ await touch.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch.detach();}
+ // Next through the whole list: one history entry each, "x of y", fixed chrome.
  const seen=[hash()];const titles=[await dialog().locator('.crew-draft-snapshot').innerText()];
- for(let i=1;i<cardsShown.length;i++){await swipe(-160);await page.waitForFunction(h=>location.hash!==h,seen.at(-1));seen.push(hash());titles.push(await dialog().locator('.crew-draft-snapshot').innerText());}
- assert.equal(new Set(seen).size,cardsShown.length,'each swipe shows the next review: '+seen.join(' '));
+ for(let i=1;i<n;i++){
+  await next.click();await page.waitForFunction(h=>location.hash!==h,seen.at(-1));
+  seen.push(hash());titles.push(await dialog().locator('.crew-draft-snapshot').innerText());
+  assert.equal(await position(),`${i+1} of ${n}`);
+  assert.deepEqual(await chrome(),chromeAt,'back/forward, the list capsule, More and close stay put');
+ }
+ assert.equal(new Set(seen).size,n,'each step shows the next review: '+seen.join(' '));
  assert.ok(seen.every(h=>/^#\/approvals\/[a-z0-9]{15}$/.test(h)),'each review keeps its link in the address');
- const last=seen.at(-1);
- await swipe(-160);
- assert.equal(hash(),last,'the end of the list does not wrap');
- assert.deepEqual(await page.evaluate(()=>window.__swipes.at(-1)),'bounce-next','the end bounces');
- assert.equal(await page.locator('dialog[open]').count(),1,'the dialog stays open at the end');
- // Back to the two synthetic reviews: header and decisions stay put between them.
- const firstAt=titles.indexOf('Short first draft.');assert.ok(firstAt>=0,'the short review was shown');
- for(let i=seen.length-1;i>firstAt;i--) await swipe(160);
- await page.waitForFunction(h=>location.hash===h,seen[firstAt]);
- const frame=()=>dialog().evaluate(d=>[d,d.querySelector('header.crew-dialog-head'),...d.querySelectorAll('.crew-review-bar textarea, .crew-review-bar button')].map(e=>{const b=e.getBoundingClientRect();return [b.x,b.y,b.width,b.height].map(Math.round);}));
- const shortFrame=await frame();
- const neighbour=titles[firstAt+1]!==undefined?1:-1;
- await swipe(neighbour>0?-160:160);
- await page.waitForFunction(h=>location.hash===h,seen[firstAt+neighbour]);
- assert.deepEqual(await frame(),shortFrame,'the dialog, header, note and decision buttons keep their place and size');
- await snapView('crew-swipe-review-390');
- // Ignored: screen edges, a vertical drag (it scrolls), a drag from the note, typing.
- const here=hash();
- await swipe(-160,{x:10});await swipe(160,{x:380});
- await swipe(-90,{dy:-320,y:600});
- const note=dialog().getByLabel('Decision note');const noteBox=await note.boundingBox();
- await swipe(-160,{x:noteBox.x+noteBox.width/2,y:noteBox.y+noteBox.height/2});
- await note.focus();await swipe(-160);await swipe(160);
- assert.equal(hash(),here,'edge, vertical, field and typing drags do not step');
- // A typed note asks first: Stay keeps it, Discard moves on.
+ assert.equal(await historyLength(),startLength+n,'opening and each step push one history entry');
+ assert.equal(await next.isDisabled(),true,'next is disabled on the last item');
+ await next.click({force:true});await page.waitForTimeout(200);
+ assert.equal(hash(),seen.at(-1),'the end does not wrap');
+ assert.equal(await historyLength(),startLength+n,'a tap on a disabled end adds nothing');
+ // Browser Back and Forward, and the dialog's own back, retrace the steps.
+ if(n>1){
+  await page.goBack();await page.waitForFunction(h=>location.hash===h,seen.at(-2));
+  assert.equal(await page.locator('dialog[open]').count(),1,'Back keeps the dialog open on the previous item');
+  assert.equal(await position(),`${n-1} of ${n}`);
+  await page.goForward();await page.waitForFunction(h=>location.hash===h,seen.at(-1));
+  await dialog().getByRole('button',{name:'Back',exact:true}).click();
+  await page.waitForFunction(h=>location.hash===h,seen.at(-2));
+  await dialog().getByRole('button',{name:'Forward',exact:true}).click();
+  await page.waitForFunction(h=>location.hash===h,seen.at(-1));
+ }
+ // To the review with options, with the list buttons.
+ const firstAt=titles.indexOf('Short first draft. Pick any text.');assert.ok(firstAt>=0,'the options review was shown');
+ for(let i=n-1;i>firstAt;i--){const h=hash();await prev.click();await page.waitForFunction(x=>location.hash!==x,h);}
+ assert.equal(hash(),seen[firstAt]);
+ // The compact footer as in the mockup: a one-line note, then Approve N selected
+ // beside Request changes; at most 25% of 390×844; options visible above it.
+ const bar=dialog().locator('.crew-review-bar');
+ const footer=()=>bar.evaluate(f=>{const box=e=>{const b=e.getBoundingClientRect();return [b.x,b.y,b.width,b.height].map(Math.round);};return {bar:box(f),note:box(f.querySelector('textarea')),buttons:[...f.querySelectorAll('button')].map(b=>[b.textContent,...box(b)])};});
+ const rest=await footer();
+ assert.ok(rest.bar[3]<=844*0.25,'the decision footer is at most 25% of the screen: '+JSON.stringify(rest));
+ assert.deepEqual(rest.buttons.map(b=>b[0]),['Approve 0 selected','Request changes'],'the footer holds the two primary actions');
+ assert.equal(rest.buttons[0][2],rest.buttons[1][2],'both actions share one row');
+ assert.ok(rest.note[3]<=44,'the note is one line at rest: '+rest.note[3]);
+ assert.ok(rest.bar[1]+rest.bar[3]<=844,'the footer sits on screen');
+ const firstOption=await dialog().locator('.crew-pick').first().boundingBox();
+ assert.ok(firstOption.y<rest.bar[1],'the start of the options is visible above the footer');
+ await dialog().getByRole('heading',{name:'Text · pick any'}).waitFor();
+ await dialog().getByRole('heading',{name:'Images · pick any'}).waitFor();
+ assert.equal(await dialog().locator('.crew-pick-tile').count(),2,'image options are tiles');
+ assert.equal(await dialog().getByRole('button',{name:'Reject',exact:true}).count(),0,'Reject is not on the main screen');
+ const pick=dialog().getByRole('checkbox',{name:'A · Out of tokens'});
+ await pick.check();
+ await dialog().getByRole('textbox',{name:'Feedback on A · Out of tokens'}).fill('Shorten the hook');
+ await dialog().getByRole('button',{name:'Feedback on B · One human, many agents'}).click();
+ await dialog().getByRole('textbox',{name:'Feedback on B · One human, many agents'}).waitFor();
+ assert.equal(await dialog().getByRole('checkbox',{name:'B · One human, many agents'}).isChecked(),false,'feedback opens on an unselected option');
+ const tile=dialog().getByRole('listitem',{name:'Shared notebook'});
+ await tile.getByRole('checkbox',{name:'Shared notebook'}).check();
+ await dialog().getByRole('textbox',{name:'Feedback on Shared notebook'}).fill('Crop the edges');
+ assert.equal(await tile.getByRole('button',{name:'Feedback on Shared notebook'}).getAttribute('data-note'),'true','a tile with feedback shows a badge');
+ await allLoaded('.crew-dialog .crew-pick-tile img');
+ await dialog().locator('.crew-pick').first().scrollIntoViewIfNeeded();
+ const picked=await footer();
+ assert.equal(picked.buttons[0][0],'Approve 2 selected');
+ const keep=f=>f.buttons.map(b=>b.slice(1));
+ assert.deepEqual(keep(picked),keep(rest),'the actions stay put while picking');
+ await snapView('crew-review-footer-390');
+ // The note grows upward on focus; the buttons stay. More opens and closes; they stay.
+ const note=dialog().getByRole('textbox',{name:'Decision note'});
+ await note.focus();
+ const focused=await footer();
+ assert.ok(focused.note[3]>rest.note[3],'the note grows on focus');
+ assert.deepEqual(keep(focused),keep(rest),'the actions stay put when the note opens');
+ await note.evaluate(e=>e.blur());
+ await dialog().getByRole('button',{name:'More actions'}).click();
+ const menu=dialog().getByRole('menu',{name:'More actions'});await menu.waitFor();
+ const items=await menu.getByRole('menuitem').evaluateAll(xs=>xs.map(x=>[x.textContent,x.className]));
+ assert.ok(['Add note','Copy link'].every(l=>items.some(i=>i[0]===l)),'Add note and Copy link are in More: '+JSON.stringify(items));
+ assert.deepEqual(items.at(-1),['Reject','crew-menu-danger'],'Reject is last, in red');
+ assert.deepEqual(keep(await footer()),keep(rest),'the actions stay put while More is open');
+ await snapView('crew-review-menu-390');
+ await menu.getByRole('menuitem',{name:'Add note'}).click();
+ assert.equal(await note.evaluate(e=>e===document.activeElement),true,'Add note focuses the note');
+ await note.evaluate(e=>e.blur());
+ assert.deepEqual(keep(await footer()),keep(rest),'the actions stay put after More closes');
+ // A typed note asks first: Stay adds no history entry, Discard moves on.
  await note.fill('Half-written feedback');await note.evaluate(e=>e.blur());
+ const here=hash(),lengthHere=await historyLength();
+ const neighbour=firstAt+1<n?next:prev;
  page.once('dialog',d=>{assert.match(d.message(),/Discard your unsaved changes/);void d.dismiss();});
- await swipe(neighbour>0?160:-160);
+ await neighbour.click();await page.waitForTimeout(200);
  assert.equal(hash(),here,'declining keeps the review');
  assert.equal(await note.inputValue(),'Half-written feedback','declining keeps the note');
+ assert.equal(await historyLength(),lengthHere,'staying adds no history entry');
  page.once('dialog',d=>void d.accept());
- await swipe(neighbour>0?160:-160);
+ await neighbour.click();
  await page.waitForFunction(h=>location.hash!==h,here);
- assert.equal(writeActions.filter(a=>a==='review.decide').length,decidedBefore,'a swipe never decides');
- await touch.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch.detach();
- // Wide screens: previous/next buttons in a fixed cluster and Left/Right.
+ assert.equal(writeActions.filter(a=>a==='review.decide').length,decidedBefore,'a step never decides');
+ // Wide screens: the same capsule, and J/K.
  await page.setViewportSize({width:1440,height:1000});
  await headerOneRow('stepping review 1440');
- const prev=dialog().getByRole('button',{name:'Previous review'}),next=dialog().getByRole('button',{name:'Next review'});
- await next.waitFor();
- const at=hash(),cluster=await dialog().locator('.crew-list-nav').boundingBox();
- // Focus stays in the dialog after a step, even when the button turns disabled.
- if(await next.isEnabled()){await next.click();await page.waitForFunction(h=>location.hash!==h,at);await page.keyboard.press('ArrowLeft');}
- else{await prev.click();await page.waitForFunction(h=>location.hash!==h,at);await page.keyboard.press('ArrowRight');}
+ {const at=hash(),cluster=await header.locator('.crew-list-nav').boundingBox();
+ await page.keyboard.press(firstAt+1<n?'k':'j');
+ await page.waitForFunction(h=>location.hash!==h,at);
+ await page.keyboard.press(firstAt+1<n?'j':'k');
  await page.waitForFunction(h=>location.hash===h,at);
- assert.deepEqual(await dialog().locator('.crew-list-nav').boundingBox(),cluster,'the previous/next cluster stays put');
+ assert.deepEqual(await header.locator('.crew-list-nav').boundingBox(),cluster,'the previous/next capsule stays put');}
  await snapView('crew-step-review-1440');
  await close();await dialog().waitFor({state:'hidden'});
- assert.equal(hash(),'#/approvals','closing after steps returns to the list');
+ await page.waitForFunction(()=>location.hash==='#/approvals');
+ await page.goBack();await page.waitForTimeout(300);
+ assert.equal(await page.locator('dialog[open]').count(),0,'Back after closing does not reopen a review');
  // The board: a task dialog steps in visible card order.
  await page.goto(base+'/#/tasks');await page.reload();
- await page.getByRole('heading',{name:'Synthetic swipe second'}).waitFor();
+ await page.getByRole('heading',{name:'Synthetic step second'}).waitFor();
  const boardOrder=await page.locator('.crew-task-card h3').allInnerTexts();
  assert.ok(boardOrder.length>1,'the board has tasks to step through');
  await page.locator('.crew-task-card').first().click();
  const title=dialog().getByLabel('Title',{exact:true});await title.waitFor();
  assert.equal(await title.inputValue(),boardOrder[0]);
- await page.keyboard.press('ArrowRight');
+ await page.keyboard.press('j');
  for(let i=0;i<50&&await title.inputValue()!==boardOrder[1];i++) await page.waitForTimeout(100);
- assert.equal(await title.inputValue(),boardOrder[1],'Right shows the next card on the board');
- assert.equal(await dialog().getByRole('button',{name:'Previous task'}).isEnabled(),true);
+ assert.equal(await title.inputValue(),boardOrder[1],'J shows the next card on the board');
+ assert.equal(await header.locator('.crew-list-position').innerText(),`2 of ${boardOrder.length}`);
+ assert.equal(await dialog().getByRole('button',{name:'Previous task (K)'}).isEnabled(),true);
  await close();await dialog().waitFor({state:'hidden'});
+ await page.waitForFunction(()=>location.hash==='#/tasks');
  await page.emulateMedia({reducedMotion:null});
  await page.goto(base+'/#/tasks');await page.reload();
- // Leave nothing pending for later sections.
- for(const title of ['Synthetic swipe first','Synthetic swipe second']){
+ // Leave nothing pending for later sections: Reject from the More menu.
+ for(const title of ['Synthetic step first','Synthetic step second']){
   await page.goto(base+'/#/approvals');await page.reload();
   await page.getByRole('button',{name:'Review draft: '+title}).click();
-  await dialog().getByRole('button',{name:'Reject',exact:true}).click();await saved();
+  await dialog().getByRole('button',{name:'More actions'}).click();
+  await dialog().getByRole('menuitem',{name:'Reject'}).click();await saved();
  }
  }
  // HTML attachments open in a sandboxed preview (0.26.0): the page's own
@@ -1598,7 +1682,8 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  const shareBucket=await boardWrite('bucket.create',{name:'SHARE',purpose:'Synthetic artifacts'});
  const shareNote=await boardWrite('note.create',{bucket:shareBucket.id,title:'Synthetic partner pricing',body:'Plans start at **10**.\n\n![chart](attachment:new-1)\n\n[board](#/tasks)',files:[{name:'chart.png',content_base64:shotsBase64[0]}]});
  await page.goto(base+'/#/notes/'+shareNote.id);await page.reload();
- await dialog().getByRole('button',{name:'Share as artifact'}).click();
+ await dialog().getByRole('button',{name:'More actions'}).click();
+ await dialog().getByRole('menuitem',{name:'Share as artifact'}).click();
  await page.waitForFunction(()=>/^#\/shared\/[a-z0-9]{15}$/.test(location.hash));
  const artifactCard=page.locator('.crew-artifact-focused');
  await artifactCard.getByRole('heading',{name:'Synthetic partner pricing'}).waitFor();

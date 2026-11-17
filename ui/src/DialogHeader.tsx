@@ -31,6 +31,8 @@ const paths = {
   history: "M4 12a8 8 0 1 0 2.34-5.66L4 8.5M4 4v4.5h4.5M12 8v4.5l3 2",
   archive: "M4 5h16v4H4zM6 9v10h12V9M10 13h4",
   person: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 20a7 7 0 0 1 14 0",
+  note: "M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z",
+  reject: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",
 } as const;
 export type IconName = keyof typeof paths;
 
@@ -246,31 +248,46 @@ export function NavCluster({
 }
 
 /**
- * Previous and next in the list the dialog was opened from (0.31.0), always
- * both, in one fixed cluster; disabled at the ends and when no list is behind
- * the dialog. Shown on wide screens; phones swipe instead, so their header
- * keeps one row.
+ * Previous and next in the list the dialog was opened from, with the item's
+ * place in it (0.32.0, iOS Mail style): one capsule after the title,
+ * `[∧ 3 of 12 ∨]`. Vertical chevrons, so it never looks like the horizontal
+ * back/forward history cluster. Disabled in place at the ends (no wrapping);
+ * the position has a fixed width for the list, so the buttons never shift.
+ * Rendered only when a list is behind the dialog.
  */
 export function ListNavCluster({
   noun,
+  index,
+  count,
   previous,
   next,
 }: {
   noun: string;
+  /** Zero-based place in the list. */
+  index: number;
+  count: number;
   previous?: () => void;
   next?: () => void;
 }) {
+  const digits = String(Math.max(count, 1)).length;
   return (
-    <div className="crew-list-nav" role="group" aria-label="List">
+    <div className="crew-list-nav" role="group" aria-label={`${noun} ${index + 1} of ${count}`}>
       <HeadButton
         icon="up"
-        label={`Previous ${noun}`}
+        label={`Previous ${noun} (K)`}
         disabled={!previous}
         onClick={previous}
       />
+      <span
+        className="crew-list-position"
+        aria-hidden="true"
+        style={{ width: `${digits * 2 + 3}ch` }}
+      >
+        {index + 1} of {count}
+      </span>
       <HeadButton
         icon="down"
-        label={`Next ${noun}`}
+        label={`Next ${noun} (J)`}
         disabled={!next}
         onClick={next}
       />
@@ -290,7 +307,7 @@ export default function DialogHeader({
   title: string;
   /** The back/forward cluster; a disabled one when the dialog has no trail. */
   nav?: ReactNode;
-  /** Previous/next in the source list, after the title (ListNavCluster). */
+  /** Previous/next and "x of y" in the source list, after the title (ListNavCluster); absent without a list. */
   listNav?: ReactNode;
   /** Icon buttons in the pill, before More. */
   actions?: ReactNode;

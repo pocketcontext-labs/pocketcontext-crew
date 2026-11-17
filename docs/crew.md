@@ -108,38 +108,63 @@ and Cmd/Ctrl-click or middle-click opens the record in a new tab.
 Every record dialog keeps one size.
 
 Every dialog has one floating header row (since 0.30.0), one row from 320 px up:
-round back and forward buttons, the title (ellipsized), a pill of icon buttons
-(Copy link, Share as artifact, or Copy prompt in session instructions) ending in
-More, and a round close button. Each icon has a name and a tooltip; controls that
-do not apply stay in place, disabled. More opens a menu with Copy link, Share as
-artifact, a note's History and, last and in red, Archive (Deactivate for an
-agent); it closes on selection, a tap outside or Escape.
+round back and forward buttons, the title (ellipsized), the list capsule described
+below, More, and a round close button (`[‹ ›] title [∧ x of y ∨] [⋯] [✕]`). Each icon
+has a name and a tooltip; controls that do not apply stay in place, disabled. Since
+0.32.0 secondary actions live only in More, to save space: Copy link (with a brief
+"Link copied"), Share as artifact on a note, a note's History and, last and in red,
+Archive (Deactivate for an agent); a review's More holds Add note, Copy link, Share
+(where the browser can share) and, last and in red, Reject. The session instructions
+dialog keeps Copy prompt beside More. The menu closes on selection, a tap outside or
+Escape.
 
-A record dialog opened from a list steps through that list (since 0.31.0): swipe
-left for the next item and right for the previous one, or use Left and Right (focus
-not in a field, tab list or menu), or the previous/next pill after the title on
-screens wider than 680 px. The list is the page under the dialog as shown, in its
-current filter and sort: the board's visible cards column by column, the Notes
-page's notes or bucket cards, the Agents page, pending reviews (or past decisions
-for a decided one) on Approvals, and the Search page's results. A fresh link such
-as `#/tasks/<slug>-<id>` or `#/approvals/<id>` loads its page with the default
-filter and sort and steps through it; a dialog with no list behind it (opened from Home, from a link to another kind, or an item the
-list is hiding) does not step. Stepping never wraps: at either end the body bounces
-and the button there is disabled. The address becomes the item's link (replaced, so
-Back still returns to the list), unsaved changes ask first, and a swipe never saves
-or decides. Swipes are ignored within 24 px of the screen edges (iOS Back), when
-mostly vertical, short or slow, when they start in a field or in content that
-scrolls sideways, while typing or with text selected, and in the file viewer, which
-keeps its own steps; the file preview steps through its files with the same swipe.
-A pending review's Decision note and decision buttons are pinned to the bottom, like
-the editors' save bar, so they stay put from one review to the next.
+A record dialog opened from a list steps through that list (since 0.31.0; buttons
+since 0.32.0). The capsule after the title shows the item's place, for example
+`∧ 3 of 12 ∨`: vertical chevrons for the list, so they never look like the
+horizontal back/forward history buttons, and J (next) and K (previous) when focus
+is not in a field. The list is the page under the dialog as shown, in its current
+filter and sort: the board's visible cards column by column, the Notes page's notes
+or bucket cards, the Agents page, pending reviews (or past decisions for a decided
+one) on Approvals, and the Search page's results. A fresh link such as
+`#/tasks/<slug>-<id>` or `#/approvals/<id>` loads its page with the default filter
+and sort and steps through it; a dialog with no list behind it (opened from Home,
+from a link to another kind, or an item the list is hiding) hides the capsule, and
+nothing else moves. Stepping never wraps: at either end that button is disabled in
+place and the position still reads `1 of 12` or `12 of 12`; the position has a fixed
+width for the list, so the buttons never shift. Each step pushes one history entry
+with the item's link, so the browser's Back and Forward (and iOS edge-swipe back) and
+the dialog's own back and forward retrace the items moved through; back from the
+first item opened returns to the list. Closing returns to the list's own history
+entry, with its scroll and filters, so Back does not reopen the item. Unsaved
+changes ask first (staying adds no history entry), and a step never saves or
+decides. A horizontal swipe no longer steps; the file viewer keeps its own swipe
+between files.
+
+A pending review's decision footer is pinned to the bottom and compact (since
+0.32.0, at most a quarter of a 390×844 phone screen): a one-line "Add a note…" field
+that grows upward while focused, then "Approve N selected" (or "Approve draft" for a
+review without options) beside Request changes. The buttons stay put when the note
+opens, when More opens or closes and from one review to the next. The draft and its
+options scroll above the footer.
+
+Review options are pick any (since 0.32.0): each option is a card with a checkbox and
+a feedback icon, under "Options · pick any" (or "Text · pick any" and
+"Images · pick any" when some options are a single image, which show as tiles with a
+feedback badge). Checking an option, or tapping its feedback icon (also on an option
+left unchecked), opens a one-line "Feedback on …" field under it. Approve needs at
+least one checked option. The reader records every option in `option_decisions` on
+Approve and on Request changes: a checked option as `approved`, an unchecked one as
+`rejected`, each with its feedback as `note` (empty stays empty); Reject records
+every option as rejected, keeping the feedback. The decided review shows the same
+selection and feedback, and its summary reads "Approved: …; Not selected: …" (or
+"Selected: …; Not selected: …" for a change request).
 
 A review opens in the reader at `#/approvals/<review-id>` (since 0.28.0): the
 Approvals page with that review's Review draft dialog on top. A pending review shows
-Approve, Request changes and Reject; a decided or withdrawn one opens read-only with
+Approve and Request changes, with Reject in More; a decided or withdrawn one opens read-only with
 its outcome, who decided and when. An unknown id shows the Approvals page with a
 "Review not found" notice. Clicking an Approvals card puts its link in the address;
-closing or deciding replaces it with `#/approvals`, so Back does not reopen the
+closing or deciding returns to `#/approvals`, so Back does not reopen the
 dialog. A signed-out visit returns to the review after sign-in. Review reads and the
 `review.request`, `review.decide` and `review.withdraw` results include `path`
 (`#/approvals/<id>`) and, with a domain, `url`; agents send the owner that `url`
@@ -735,7 +760,11 @@ overall `decision` and optional `note`. An approval needs explicit approved/reje
 choices for every option and at least one approved option. Unknown or duplicate
 keys and contradictory decisions are refused. Rejecting with omitted option decisions
 records every option as rejected; supplied rejection choices must reject them all.
-Request changes can include partial choices. Choices are exposed through
+Request changes can include partial choices. Since 0.32.0 the reader's pick-any
+dialog sends a choice for every option on Approve and Request changes: `approved`
+for a checked option and `rejected` for an unchecked one, each with the owner's
+feedback on that option as `note`; with Request changes, `approved` means the owner
+picked that option and wants the changes applied to it. Choices are exposed through
 `crew_read`, the bounded SQL reviews view, review history and task Activity. Closed
 reviews remain immutable. The owner's delegation rules apply to every decision.
 

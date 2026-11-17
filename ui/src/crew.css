@@ -4170,7 +4170,7 @@ a.crew-logo:hover .product-brand span {
   flex: none;
   align-items: center;
   gap: 2px;
-  padding: 2px;
+  padding: 1px;
   border-radius: 999px;
   background: color-mix(in srgb, #ffffff 80%, transparent);
   border: 1px solid #ffffffcc;
@@ -4342,15 +4342,16 @@ a.crew-logo:hover .product-brand span {
     height: 36px;
   }
 }
-/* Previous/next in the list a dialog was opened from (0.31.0): one pill, like
-   the actions pill, after the title. Phones swipe instead, so their header
-   stays one row. */
+/* Previous/next in the list a dialog was opened from, with "x of y"
+   (0.32.0, iOS Mail style): one capsule after the title, on every width.
+   The position has a fixed width per list (set inline), so the chevrons
+   never shift as the numbers change. */
 .crew-dialog-head .crew-list-nav {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: 0;
+  padding: 1px;
   border-radius: 999px;
   background: color-mix(in srgb, #ffffff 80%, transparent);
   border: 1px solid #ffffffcc;
@@ -4358,9 +4359,55 @@ a.crew-logo:hover .product-brand span {
     0 1px 2px #1a2c2014,
     0 6px 18px -8px #1a2c2033;
 }
+.crew-list-position {
+  flex: none;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #233a28;
+  text-align: center;
+  white-space: nowrap;
+}
+/* Phones: slightly smaller circles so back/forward, the title, the list
+   capsule, More and close stay on one row at 320 px and up. */
 @media (max-width: 680px) {
-  .crew-dialog-head .crew-list-nav {
-    display: none;
+  .crew-dialog > header.crew-dialog-head {
+    gap: 4px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .crew-dialog-head h2 {
+    font-size: 15px;
+    margin-left: 2px;
+  }
+  .crew-dialog > header.crew-dialog-head button.crew-head-button,
+  .crew-dialog-head .crew-trail-nav button.crew-head-button,
+  .crew-dialog > header.crew-dialog-head button.crew-head-close {
+    width: 32px;
+    height: 32px;
+  }
+  .crew-dialog > header.crew-dialog-head .crew-list-nav button.crew-head-button {
+    width: 28px;
+    height: 30px;
+  }
+  .crew-list-position {
+    font-size: 13px;
+  }
+}
+@media (max-width: 360px) {
+  .crew-dialog > header.crew-dialog-head {
+    gap: 3px;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  .crew-dialog-head .crew-trail-nav {
+    gap: 2px;
+  }
+  .crew-dialog > header.crew-dialog-head .crew-list-nav button.crew-head-button {
+    width: 26px;
+  }
+  .crew-list-position {
+    font-size: 12px;
   }
 }
 /* Stepping feedback on the body only; the header never moves. */
@@ -4378,24 +4425,24 @@ a.crew-logo:hover .product-brand span {
 }
 @keyframes crew-step-slide-next {
   from {
-    transform: translateX(28px);
+    transform: translateY(28px);
     opacity: 0.4;
   }
 }
 @keyframes crew-step-slide-prev {
   from {
-    transform: translateX(-28px);
+    transform: translateY(-28px);
     opacity: 0.4;
   }
 }
 @keyframes crew-step-bounce-next {
   40% {
-    transform: translateX(-14px);
+    transform: translateY(-14px);
   }
 }
 @keyframes crew-step-bounce-prev {
   40% {
-    transform: translateX(14px);
+    transform: translateY(14px);
   }
 }
 @media (prefers-reduced-motion: reduce) {

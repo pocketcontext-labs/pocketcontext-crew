@@ -1,16 +1,15 @@
 import { useEffect, useRef, type RefObject } from "react";
 
 /**
- * The one swipe handler of the reader (0.31.0): a horizontal swipe on a dialog
- * opened from a list moves to the previous or next item of that list, and the
- * file preview steps through its files the same way. Swipe left is next,
- * swipe right is previous.
+ * The one swipe handler of the reader (0.31.0): the file preview steps
+ * through its files with a horizontal swipe (swipe left is next). Record
+ * dialogs no longer swipe between list items (0.32.0): they have fixed
+ * previous/next buttons with an "x of y" position, and J/K.
  *
  * A swipe counts only when it is mostly horizontal, long enough and quick
  * enough (or very long), starts away from the screen edges (iOS uses them for
  * Back), and does not start in a field, while typing, while text is selected,
- * in content that scrolls sideways or in another window above the dialog (the
- * image viewer is a portal, so its touches never reach the dialog).
+ * in content that scrolls sideways or in another window above the element.
  */
 
 export type Step = -1 | 1;
@@ -65,12 +64,12 @@ export function ownedElsewhere(target: EventTarget | null, root: Element) {
   return scrollsSideways(target, root);
 }
 
-/** Arrow keys that a focused control already uses (tabs, menus, fields). */
-const arrowOwners =
-  '[role="tablist"], [role="tab"], [role="menu"], [role="menuitem"], [role="radiogroup"], [role="radio"], [role="slider"], [role="listbox"], [role="option"], [role="combobox"], pre, table';
-
-/** The list step a key press asks for: Left is previous, Right is next. */
-export function arrowStep(
+/**
+ * The list step a key press asks for in a record dialog (0.32.0): K is
+ * previous and J is next, as in mail apps. Left/Right are left alone, so list
+ * stepping never looks like history back/forward.
+ */
+export function listKeyStep(
   e: {
     key: string;
     target: EventTarget | null;
@@ -82,12 +81,12 @@ export function arrowStep(
   },
   root: Element | null,
 ): Step | 0 {
-  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return 0;
+  const key = e.key.toLowerCase();
+  if (key !== "j" && key !== "k") return 0;
   if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)
     return 0;
   if (!root || typing() || ownedElsewhere(e.target, root)) return 0;
-  if (e.target instanceof Element && e.target.closest(arrowOwners)) return 0;
-  return e.key === "ArrowRight" ? 1 : -1;
+  return key === "j" ? 1 : -1;
 }
 
 /**

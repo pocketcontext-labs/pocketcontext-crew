@@ -78,8 +78,11 @@ beforeEach(() => {
   vi.spyOn(attachmentsApi, "fileToken").mockResolvedValue("file-token");
   vi.spyOn(crewApi, "references").mockResolvedValue([]);
 });
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  // Closing a dialog opened from a list goes back in history (0.32.0); let a
+  // traversal still queued from the test land before the next test starts.
+  await new Promise((resolve) => setTimeout(resolve, 20));
   history.replaceState(null, "", "/");
   vi.restoreAllMocks();
   resetSessionGuideForTests();
@@ -438,13 +441,24 @@ describe("review links (#/approvals/<id>)", () => {
     decided_at: "2026-11-15T10:00:00.000Z",
     decision_note: "Ship it",
   };
-  it("opens a pending review's dialog with its three actions, no tap needed", async () => {
+  it("opens a pending review's dialog with its actions, no tap needed", async () => {
     history.replaceState(null, "", "/#/approvals/review000000001");
     render(<CrewWorkspace />);
     const dialog = within(await screen.findByRole("dialog"));
     expect(dialog.getByRole("heading", { name: "Review draft" })).toBeTruthy();
-    for (const name of ["Approve draft", "Request changes", "Reject"])
+    for (const name of ["Approve draft", "Request changes"])
       expect(dialog.getByRole("button", { name })).toBeEnabled();
+    // Reject is a secondary action: last in the More menu, in red (0.32.0).
+    expect(dialog.queryByRole("button", { name: "Reject" })).toBeNull();
+    const more = dialog.getByRole("button", { name: "More actions" });
+    await waitFor(() => expect(more).toBeEnabled());
+    fireEvent.click(more);
+    const items = dialog.getAllByRole("menuitem");
+    expect(items.at(-1)).toHaveTextContent("Reject");
+    expect(items.at(-1)).toHaveClass("crew-menu-danger");
+    expect(items.map((x) => x.textContent)).toEqual(
+      expect.arrayContaining(["Add note", "Copy link"]),
+    );
     expect(screen.getByRole("link", { name: /^Approvals/ })).toHaveAttribute(
       "aria-current",
       "page",
@@ -497,8 +511,9 @@ describe("review links (#/approvals/<id>)", () => {
     expect(history.length).toBe(length + 1);
     fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    // Replaced, not pushed: the entry that held the review is now #/approvals.
-    expect(location.hash).toBe("#/approvals");
+    // Back to the list's own entry (0.32.0): nothing pushed, and the review's
+    // entry is forward history, so Back never reopens it.
+    await waitFor(() => expect(location.hash).toBe("#/approvals"));
     expect(history.length).toBe(length + 1);
   });
   it("shows the list after a decision made from a link", async () => {
@@ -1481,12 +1496,15 @@ it("updates the address on click without a duplicate open, and not for new items
   expect(location.hash).toBe("#/tasks/launch-post-task00000000001");
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
-  expect(listener).not.toHaveBeenCalled();
+  // Closing goes back to the list's own entry (0.32.0).
+  await waitFor(() => expect(location.hash).toBe("#/tasks"));
   await openPage("Notes");
   listener.mockClear(); // The sidebar link is a real navigation.
   fireEvent.click(screen.getByRole("button", { name: /Voice guide/ }));
   expect(location.hash).toBe("#/notes/voice-guide-note00000000001");
   fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+  await waitFor(() => expect(location.hash).toBe("#/notes"));
+  listener.mockClear();
   fireEvent.click(screen.getByRole("button", { name: /New note/ }));
   expect(location.hash).toBe("#/notes");
   expect(listener).not.toHaveBeenCalled();
@@ -1597,6 +1615,13 @@ it("treats a note hidden only by its archived bucket as archived", async () => {
   expect(dialog.queryByRole("button", { name: "Archive note" })).toBeNull();
 });
 
+/** Copy link lives in the header's More menu (0.32.0). */
+async function copyFromMenu(dialog: ReturnType<typeof within>) {
+  const more = dialog.getByRole("button", { name: "More actions" });
+  await waitFor(() => expect(more).toBeEnabled());
+  fireEvent.click(more);
+  fireEvent.click(dialog.getByRole("menuitem", { name: "Copy link" }));
+}
 it("copies the server's absolute url when present", async () => {
   const writeText = mockClipboard(async () => {});
   fixtures.tasks = [
@@ -1608,8 +1633,8 @@ it("copies the server's absolute url when present", async () => {
   history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
   render(<CrewWorkspace />);
   const dialog = within(await screen.findByRole("dialog"));
-  fireEvent.click(dialog.getByRole("button", { name: "Copy link" }));
-  await dialog.findByRole("button", { name: "Link copied" });
+  await copyFromMenu(dialog);
+  await screen.findByText("Link copied.");
   expect(writeText).toHaveBeenCalledExactlyOnceWith(
     "https://crew.example.test/#/tasks/launch-post-task00000000001",
   );
@@ -1621,8 +1646,8 @@ it("builds the link from the current origin and path without a url", async () =>
   history.replaceState(null, "", "/app/#/notes/voice-guide-note00000000001");
   render(<CrewWorkspace />);
   const dialog = within(await screen.findByRole("dialog"));
-  fireEvent.click(dialog.getByRole("button", { name: "Copy link" }));
-  await dialog.findByRole("button", { name: "Link copied" });
+  await copyFromMenu(dialog);
+  await screen.findByText("Link copied.");
   expect(writeText).toHaveBeenCalledExactlyOnceWith(
     `${location.origin}/app/#/notes/voice-guide-note00000000001`,
   );
@@ -1637,7 +1662,7 @@ it.each([
   history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
   render(<CrewWorkspace />);
   const dialog = within(await screen.findByRole("dialog"));
-  fireEvent.click(dialog.getByRole("button", { name: "Copy link" }));
+  await copyFromMenu(dialog);
   const alert = await dialog.findByRole("alert");
   expect(alert).toHaveTextContent("Could not copy automatically");
   expect(alert).toHaveTextContent("#/tasks/launch-post-task00000000001");
@@ -1645,7 +1670,7 @@ it.each([
 });
 
 describe("dialog header", () => {
-  it("is one floating row: back, forward, title, list previous/next, icon pill with More, close", async () => {
+  it("is one floating row: back, forward, title, list previous/next with x of y, More, close", async () => {
     fixtures.notes = [linkedNote];
     history.replaceState(null, "", `/${linkedNote.path}`);
     render(<CrewWorkspace />);
@@ -1657,13 +1682,13 @@ describe("dialog header", () => {
     expect(names).toEqual([
       "Back",
       "Forward",
-      "Previous note",
-      "Next note",
-      "Copy link",
-      "Share as artifact",
+      "Previous note (K)",
+      "Next note (J)",
       "More actions",
       "Close dialog",
     ]);
+    // The list capsule shows the note's place in the Notes page's list.
+    expect(header.querySelector(".crew-list-position")).toHaveTextContent("1 of 1");
     // Icon-only, each named and with a tooltip.
     for (const button of header.querySelectorAll("button")) {
       expect(button.textContent).toBe("");
@@ -1675,13 +1700,21 @@ describe("dialog header", () => {
     );
   });
 
-  it("keeps Share as artifact in place, disabled, on a task", async () => {
+  it("keeps Copy link in the More menu, not the header, on a task", async () => {
     fixtures.tasks = [linkedTask];
     history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
     render(<CrewWorkspace />);
     const dialog = within(await screen.findByRole("dialog"));
-    expect(dialog.getByRole("button", { name: "Share as artifact" })).toBeDisabled();
+    expect(dialog.queryByRole("button", { name: "Copy link" })).toBeNull();
+    expect(dialog.queryByRole("button", { name: "Share as artifact" })).toBeNull();
     expect(dialog.getByRole("button", { name: "Back" })).toBeDisabled();
+    const more = dialog.getByRole("button", { name: "More actions" });
+    await waitFor(() => expect(more).toBeEnabled());
+    fireEvent.click(more);
+    expect(dialog.getAllByRole("menuitem").map((x) => x.textContent)).toEqual([
+      "Copy link",
+      "Archive task",
+    ]);
   });
 
   it("opens a More menu with roles, arrow keys and Escape that keeps the dialog", async () => {
@@ -1738,7 +1771,9 @@ describe("dialog header", () => {
     fireEvent.click(await screen.findByRole("button", { name: "＋ New task" }));
     const dialog = within(await screen.findByRole("dialog"));
     expect(dialog.getByRole("button", { name: "More actions" })).toBeDisabled();
-    expect(dialog.getByRole("button", { name: "Copy link" })).toBeDisabled();
+    expect(dialog.queryByRole("button", { name: "Copy link" })).toBeNull();
+    // A new item has no list behind it: no previous/next capsule.
+    expect(dialog.queryByRole("button", { name: /^Next/ })).toBeNull();
   });
 });
 
@@ -1750,14 +1785,14 @@ describe("simple dialogs", () => {
     return within(await screen.findByRole("dialog"));
   };
 
-  it("focuses the dialog rather than Copy link", async () => {
+  it("focuses the dialog rather than its first header button", async () => {
     fixtures.tasks = [linkedTask];
     history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
     render(<CrewWorkspace />);
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveFocus();
     expect(
-      within(dialog).getByRole("button", { name: "Copy link" }),
+      within(dialog).getByRole("button", { name: "More actions" }),
     ).not.toHaveFocus();
   });
 
@@ -2487,7 +2522,9 @@ describe("Notes page", () => {
     fireEvent.click(screen.getByRole("button", { name: /Gamma audience/ }));
     expect(location.hash).toBe("#/notes/note00000000003");
     fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
-    expect(location.hash).toBe(`#/notes?bucket=${bucket.id}&sort=title`);
+    await waitFor(() =>
+      expect(location.hash).toBe(`#/notes?bucket=${bucket.id}&sort=title`),
+    );
     expect(noteTitles()).toEqual(["Beta voice", "Gamma audience"]);
     navigate("#/notes/note00000000002");
     const dialog = within(await screen.findByRole("dialog"));
@@ -2610,7 +2647,7 @@ describe("board agent filter", () => {
     fireEvent.click(screen.getByRole("button", { name: /Design palette/ }));
     expect(location.hash).toBe("#/tasks/task00000000003");
     fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
-    expect(location.hash).toBe(`#/tasks?agent=${design.id}`);
+    await waitFor(() => expect(location.hash).toBe(`#/tasks?agent=${design.id}`));
     expect(cardTitles()).toEqual(["Design palette"]);
   });
 
@@ -4141,116 +4178,126 @@ describe("links in rendered text (0.29.0)", () => {
     await waitFor(() => expect(scroll).toHaveBeenCalled());
   });
 });
-describe("stepping through the list a dialog was opened from (0.31.0)", () => {
+describe("stepping through the list a dialog was opened from (0.32.0)", () => {
   const second: Row = {
     ...review,
     id: "review000000002",
     draft: "The second draft",
   };
-  /** A one-finger swipe on el: dx < 0 is a swipe left (next). */
-  function swipe(
-    el: Element,
-    dx: number,
-    { x = 300, y = 300, dy = 0 }: { x?: number; y?: number; dy?: number } = {},
-  ) {
-    fireEvent.touchStart(el, { touches: [{ clientX: x, clientY: y }] });
+  /** A one-finger swipe on el: dx < 0 is a swipe left. */
+  function swipe(el: Element, dx: number) {
+    fireEvent.touchStart(el, { touches: [{ clientX: 300, clientY: 300 }] });
     fireEvent.touchEnd(el, {
       touches: [],
-      changedTouches: [{ clientX: x + dx, clientY: y + dy }],
+      changedTouches: [{ clientX: 300 + dx, clientY: 300 }],
     });
   }
-  it("swipes between pending reviews in list order, updating the address, and stops at the end", async () => {
+  const position = (dialog: HTMLElement) =>
+    dialog.querySelector(".crew-list-position")?.textContent;
+  it("steps between pending reviews with previous/next and x of y, one history entry per step", async () => {
     fixtures.reviews = [review, second];
-    history.replaceState(null, "", "/#/approvals/review000000001");
+    history.replaceState(null, "", "/#/approvals");
+    const push = vi.spyOn(history, "pushState");
     render(<CrewWorkspace />);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Review draft: Launch post" }))[0],
+    );
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByText("The submitted draft");
-    const next = within(dialog).getByRole("button", { name: "Next review" });
+    const next = within(dialog).getByRole("button", { name: "Next review (J)" });
     const previous = within(dialog).getByRole("button", {
-      name: "Previous review",
+      name: "Previous review (K)",
     });
+    expect(position(dialog)).toBe("1 of 2");
     expect(previous).toBeDisabled();
-    swipe(within(dialog).getByText("The submitted draft"), -120);
+    expect(push).toHaveBeenCalledTimes(1);
+    fireEvent.click(next);
     await within(dialog).findByText("The second draft");
     expect(location.hash).toBe("#/approvals/review000000002");
+    expect(push).toHaveBeenCalledTimes(2);
+    // A tap on the disabled end adds nothing.
+    fireEvent.click(next);
+    expect(push).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(position(dialog)).toBe("2 of 2");
     expect(next).toBeDisabled();
     expect(previous).toBeEnabled();
-    // The end: no wrap, a bounce, still the same review.
-    swipe(within(dialog).getByText("The second draft"), -120);
-    expect(dialog).toHaveAttribute("data-swipe", "bounce-next");
-    expect(location.hash).toBe("#/approvals/review000000002");
-    expect(within(dialog).getByText("The second draft")).toBeTruthy();
-    // Swipe right goes back; a swipe never decides.
-    swipe(within(dialog).getByText("The second draft"), 120);
+    // A step never decides.
+    expect(crewApi.write).not.toHaveBeenCalled();
+    // History back/forward retrace the steps; the dialog stays open.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
     await within(dialog).findByText("The submitted draft");
     expect(location.hash).toBe("#/approvals/review000000001");
-    expect(crewApi.write).not.toHaveBeenCalled();
+    expect(position(dialog)).toBe("1 of 2");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Forward" }));
+    await within(dialog).findByText("The second draft");
+    expect(location.hash).toBe("#/approvals/review000000002");
+    // Back twice: the first review, then the list, which closes the dialog.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    await within(dialog).findByText("The submitted draft");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(location.hash).toBe("#/approvals");
   });
-  it("ignores edge, vertical, short and multi-finger drags, drags from fields, typing and selections", async () => {
+  it("closes from a stepped-to item back to the list without reopening on Back", async () => {
+    fixtures.reviews = [review, second];
+    history.replaceState(null, "", "/#/approvals");
+    render(<CrewWorkspace />);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Review draft: Launch post" }))[0],
+    );
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(dialog, { key: "j" });
+    await within(dialog).findByText("The second draft");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
+    await waitFor(() => expect(location.hash).toBe("#/approvals"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // The list's own entry: the items are forward history now.
+    expect(history.state).toBeNull();
+  });
+  it("never changes the item on a horizontal swipe or Left/Right", async () => {
     fixtures.reviews = [review, second];
     history.replaceState(null, "", "/#/approvals/review000000001");
     render(<CrewWorkspace />);
     const dialog = await screen.findByRole("dialog");
     const text = await within(dialog).findByText("The submitted draft");
-    const note = within(dialog).getByRole("textbox");
-    swipe(text, -120, { x: 10 }); // starts at the left screen edge
-    swipe(text, 120, { x: window.innerWidth - 10 }); // right edge
-    swipe(text, -80, { dy: 200 }); // mostly vertical: a scroll
-    swipe(text, -30); // a slip
-    swipe(note, -120); // inside the Decision note
-    fireEvent.touchStart(text, {
-      touches: [
-        { clientX: 300, clientY: 300 },
-        { clientX: 350, clientY: 300 },
-      ],
-    });
-    fireEvent.touchEnd(text, {
-      touches: [],
-      changedTouches: [{ clientX: 100, clientY: 300 }],
-    });
-    note.focus();
-    swipe(text, -120); // typing in the note
-    note.blur();
-    const selection = vi
-      .spyOn(document, "getSelection")
-      .mockReturnValue({
-        isCollapsed: false,
-        toString: () => "submitted",
-      } as unknown as Selection);
     swipe(text, -120);
-    selection.mockRestore();
+    swipe(text, 120);
+    fireEvent.keyDown(dialog, { key: "ArrowRight" });
+    fireEvent.keyDown(dialog, { key: "ArrowLeft" });
     expect(location.hash).toBe("#/approvals/review000000001");
     expect(within(dialog).getByText("The submitted draft")).toBeTruthy();
-    expect(dialog).not.toHaveAttribute("data-swipe");
-    // The same swipe away from all of that moves.
-    swipe(text, -120);
-    await within(dialog).findByText("The second draft");
+    // A deep link has its list too: the page's default list.
+    expect(position(dialog)).toBe("1 of 2");
   });
-  it("asks before discarding a typed decision note, and moves only when told", async () => {
+  it("asks before discarding a typed decision note; staying adds no history entry", async () => {
     fixtures.reviews = [review, second];
     history.replaceState(null, "", "/#/approvals/review000000001");
+    const push = vi.spyOn(history, "pushState");
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<CrewWorkspace />);
     const dialog = await screen.findByRole("dialog");
-    const text = await within(dialog).findByText("The submitted draft");
-    fireEvent.change(within(dialog).getByRole("textbox"), {
+    await within(dialog).findByText("The submitted draft");
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Decision note" }), {
       target: { value: "Almost" },
     });
-    swipe(text, -120);
+    const next = within(dialog).getByRole("button", { name: "Next review (J)" });
+    fireEvent.click(next);
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(location.hash).toBe("#/approvals/review000000001");
+    expect(push).not.toHaveBeenCalled();
     expect(dialog).not.toHaveAttribute("data-swipe");
     confirm.mockReturnValue(true);
-    swipe(text, -120);
+    fireEvent.click(next);
     await within(dialog).findByText("The second draft");
+    expect(push).toHaveBeenCalledTimes(1);
     expect(crewApi.write).not.toHaveBeenCalled();
     // The new review has nothing typed: no question.
-    swipe(within(dialog).getByText("The second draft"), 120);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Previous review (K)" }));
     await within(dialog).findByText("The submitted draft");
     expect(confirm).toHaveBeenCalledTimes(2);
   });
-  it("steps through the board in visible card order with arrow keys and the header buttons", async () => {
+  it("steps through the board in visible card order with J/K and the header buttons", async () => {
     const todo: Row = {
       ...task,
       id: "task00000000002",
@@ -4271,25 +4318,27 @@ describe("stepping through the list a dialog was opened from (0.31.0)", () => {
     fireEvent.click(await screen.findByRole("heading", { name: "Plan launch" }));
     const dialog = await screen.findByRole("dialog");
     expect(location.hash).toMatch(/^#\/tasks\/task00000000002$/);
-    fireEvent.keyDown(dialog, { key: "ArrowRight" });
+    expect(position(dialog)).toBe("1 of 3");
+    fireEvent.keyDown(dialog, { key: "j" });
     await waitFor(() =>
       expect(location.hash).toMatch(/^#\/tasks\/task00000000003$/),
     );
     expect(within(dialog).getByDisplayValue("Write copy")).toBeTruthy();
-    // Arrow keys in a field stay in the field.
+    expect(position(dialog)).toBe("2 of 3");
+    // Typing J in a field types it.
     fireEvent.keyDown(within(dialog).getByDisplayValue("Write copy"), {
-      key: "ArrowRight",
+      key: "j",
     });
     expect(location.hash).toBe("#/tasks/task00000000003");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Next task" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next task (J)" }));
     await waitFor(() => expect(location.hash).toBe("#/tasks/task00000000001"));
-    expect(within(dialog).getByRole("button", { name: "Next task" })).toBeDisabled();
-    fireEvent.keyDown(dialog, { key: "ArrowLeft" });
+    expect(within(dialog).getByRole("button", { name: "Next task (J)" })).toBeDisabled();
+    expect(position(dialog)).toBe("3 of 3");
+    fireEvent.keyDown(dialog, { key: "k" });
     await waitFor(() => expect(location.hash).toBe("#/tasks/task00000000003"));
-    // Back still returns to the board, not to the previous task.
     fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(location.hash).toBe("#/tasks");
+    await waitFor(() => expect(location.hash).toBe("#/tasks"));
   });
   it("follows the board's filter: hidden tasks are not steps", async () => {
     const other: Row = {
@@ -4303,12 +4352,13 @@ describe("stepping through the list a dialog was opened from (0.31.0)", () => {
     render(<CrewWorkspace />);
     fireEvent.click(await screen.findByRole("heading", { name: "Launch post" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("button", { name: "Next task" })).toBeDisabled();
-    expect(within(dialog).getByRole("button", { name: "Previous task" })).toBeDisabled();
-    swipe(dialog.querySelector("form") ?? dialog, -120);
+    expect(within(dialog).getByRole("button", { name: "Next task (J)" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "Previous task (K)" })).toBeDisabled();
+    expect(position(dialog)).toBe("1 of 1");
+    fireEvent.keyDown(dialog, { key: "j" });
     expect(dialog).toHaveAttribute("data-swipe", "bounce-next");
   });
-  it("does not step a dialog with no list behind it", async () => {
+  it("hides the list capsule on a dialog with no list behind it", async () => {
     fixtures.reviews = [review, second];
     history.replaceState(null, "", "/#/");
     render(<CrewWorkspace />);
@@ -4318,12 +4368,15 @@ describe("stepping through the list a dialog was opened from (0.31.0)", () => {
     // A task opened from a link over Approvals has no task list behind it.
     location.hash = "#/tasks/task00000000001";
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("button", { name: "Next task" })).toBeDisabled();
-    swipe(dialog, -120);
-    expect(dialog).not.toHaveAttribute("data-swipe");
+    expect(within(dialog).queryByRole("button", { name: /^Next task/ })).toBeNull();
+    expect(dialog.querySelector(".crew-list-position")).toBeNull();
+    // History back/forward stay, and so do More and close.
+    expect(within(dialog).getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "More actions" })).toBeTruthy();
+    fireEvent.keyDown(dialog, { key: "j" });
     expect(location.hash).toBe("#/tasks/task00000000001");
   });
-  it("steps through notes in their sort, and agents", async () => {
+  it("steps through notes in their sort, and agents with their links", async () => {
     fixtures.notes = [
       { id: "note00000000001", revision: 1, bucket: bucket.id, title: "Beta", body: "b", updated: "2026-11-10 10:00:00.000Z" },
       { id: "note00000000002", revision: 1, bucket: bucket.id, title: "Alpha", body: "a", updated: "2026-11-11 10:00:00.000Z" },
@@ -4333,16 +4386,17 @@ describe("stepping through the list a dialog was opened from (0.31.0)", () => {
     render(<CrewWorkspace />);
     fireEvent.click(await screen.findByRole("heading", { name: "Alpha" }));
     let dialog = await screen.findByRole("dialog");
-    swipe(dialog, -120);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next note (J)" }));
     await waitFor(() => expect(location.hash).toMatch(/^#\/notes\/note00000000001$/));
     fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(location.hash).toBe("#/notes?sort=title"));
     await openPage("Agents");
     fireEvent.click(screen.getByRole("heading", { name: "Network" }));
     dialog = await screen.findByRole("dialog");
-    swipe(dialog, -120);
+    expect(location.hash).toBe("#/agents/agent0000000001");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next agent (J)" }));
     await waitFor(() => expect(within(dialog).getByDisplayValue("Build")).toBeTruthy());
-    // Opened from the page, an agent keeps the page address.
-    expect(location.hash).toBe("#/agents");
+    expect(location.hash).toBe("#/agents/agent0000000002");
   });
 });

@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ReviewContent, ReviewDecision, ReviewRequest } from "./Review";
+import { DialogMenuContext, type MenuItem } from "./DialogHeader";
 import { decisionSummary, localFilePaths, reviewFiles } from "./reviews";
 import { attachmentsApi, formatBytes, type Attachment } from "./attachmentsApi";
 import type { Row } from "./crewApi";
@@ -51,86 +52,158 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-it("requires explicit choices and submits exact per-platform decisions", () => {
-  const save = vi.fn().mockResolvedValue(undefined);
+const decide = (row: Row, save = vi.fn().mockResolvedValue(undefined)) => {
+  let menu: MenuItem[] = [];
   render(
-    <ReviewDecision
-      row={review}
-      busy={false}
-      error=""
-      attachments={[]}
-      loaded
-      Prose={Prose}
-      when={() => "today"}
-      save={save}
-    />,
+    <DialogMenuContext.Provider value={(items) => (menu = items)}>
+      <ReviewDecision
+        row={row}
+        busy={false}
+        error=""
+        attachments={[]}
+        loaded
+        Prose={Prose}
+        when={() => "today"}
+        save={save}
+      />
+    </DialogMenuContext.Provider>,
   );
-  const approve = screen.getByRole("button", {
-    name: "Approve selected options",
-  });
+  return { save, menu: () => menu };
+};
+it("picks any options, with feedback on each, and records every option (0.32.0)", () => {
+  const { save } = decide(review);
+  expect(screen.getByRole("heading", { name: "Options · pick any" })).toBeTruthy();
+  expect(screen.queryAllByRole("radio")).toHaveLength(0);
+  const approve = screen.getByRole("button", { name: "Approve 0 selected" });
   expect(approve).toBeDisabled();
-  for (const label of ["Draft A · LinkedIn", "Draft A · X"])
-    fireEvent.click(
-      within(screen.getByRole("region", { name: label })).getByRole("radio", {
-        name: "Approve",
-      }),
-    );
-  expect(approve).toBeDisabled();
-  for (const label of ["Draft B · LinkedIn", "Draft B · X"])
-    fireEvent.click(
-      within(screen.getByRole("region", { name: label })).getByRole("radio", {
-        name: "Reject",
-      }),
-    );
-  fireEvent.change(screen.getByLabelText("Note for Draft A · X (optional)"), {
+  fireEvent.click(screen.getByRole("checkbox", { name: "Draft A · LinkedIn" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Draft A · X" }));
+  expect(approve).toHaveTextContent("Approve 2 selected");
+  expect(approve).toBeEnabled();
+  // Selecting opens the option's one-line feedback field.
+  fireEvent.change(screen.getByRole("textbox", { name: "Feedback on Draft A · X" }), {
     target: { value: "Use this" },
   });
-  expect(approve).toBeEnabled();
+  // The feedback icon opens the field on an unselected option too.
+  expect(screen.queryByRole("textbox", { name: "Feedback on Draft B · LinkedIn" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Feedback on Draft B · LinkedIn" }));
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Feedback on Draft B · LinkedIn" }),
+    { target: { value: "Too long" } },
+  );
+  expect(screen.getByRole("checkbox", { name: "Draft B · LinkedIn" })).not.toBeChecked();
   fireEvent.click(approve);
   expect(save).toHaveBeenCalledWith(
     "review.decide",
-    expect.objectContaining({
+    {
       decision: "approved",
-      option_decisions: expect.arrayContaining([
-        { key: "a-linkedin", decision: "approved" },
+      note: "",
+      option_decisions: [
+        { key: "a-linkedin", decision: "approved", note: "" },
         { key: "a-x", decision: "approved", note: "Use this" },
-        { key: "b-linkedin", decision: "rejected" },
-        { key: "b-x", decision: "rejected" },
-      ]),
-    }),
+        { key: "b-linkedin", decision: "rejected", note: "Too long" },
+        { key: "b-x", decision: "rejected", note: "" },
+      ],
+    },
     review,
   );
 });
-it("cannot approve all-rejected options but can reject the whole review", () => {
-  const save = vi.fn().mockResolvedValue(undefined);
-  render(
-    <ReviewDecision
-      row={review}
-      busy={false}
-      error=""
-      attachments={[]}
-      loaded
-      Prose={Prose}
-      when={() => "today"}
-      save={save}
-    />,
-  );
-  for (const radio of screen.getAllByRole("radio", { name: "Reject" }))
-    fireEvent.click(radio);
-  expect(
-    screen.getByRole("button", { name: "Approve selected options" }),
-  ).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "Reject" }));
-  expect(save).toHaveBeenCalledWith(
+it("keeps the selection and feedback on Request changes; Reject in More rejects every option", () => {
+  const { save, menu } = decide(review);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Draft B · X" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Feedback on Draft B · X" }), {
+    target: { value: "Shorter" },
+  });
+  fireEvent.change(screen.getByRole("textbox", { name: "Decision note" }), {
+    target: { value: "Close" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Request changes" }));
+  expect(save).toHaveBeenLastCalledWith(
     "review.decide",
     expect.objectContaining({
-      decision: "rejected",
+      decision: "changes_requested",
+      note: "Close",
       option_decisions: expect.arrayContaining([
+        { key: "b-x", decision: "approved", note: "Shorter" },
         { key: "a-x", decision: "rejected", note: "" },
       ]),
     }),
     review,
   );
+  // No Reject on the main screen: it is the last, red item of the More menu.
+  expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
+  const reject = menu().at(-1)!;
+  expect(reject).toMatchObject({ label: "Reject", destructive: true });
+  expect(menu().map((x) => x.label)).toEqual(
+    expect.arrayContaining(["Add note", "Copy link"]),
+  );
+  reject.onSelect();
+  expect(save).toHaveBeenLastCalledWith(
+    "review.decide",
+    expect.objectContaining({
+      decision: "rejected",
+      option_decisions: expect.arrayContaining([
+        { key: "b-x", decision: "rejected", note: "Shorter" },
+        { key: "a-x", decision: "rejected", note: "" },
+      ]),
+    }),
+    review,
+  );
+});
+it("focuses the one-line note from Add note in More", () => {
+  const { menu } = decide({ ...review, options: null });
+  const note = screen.getByRole("textbox", { name: "Decision note" });
+  expect(note).toHaveAttribute("rows", "1");
+  expect(note).toHaveAttribute("placeholder", "Add a note…");
+  menu().find((x) => x.label === "Add note")!.onSelect();
+  expect(note).toHaveFocus();
+});
+it("shows image options as tiles with a feedback badge, under Text and Images", () => {
+  const row: Row = {
+    ...review,
+    options: [
+      { key: "a", label: "A · Tokens", body: "We run out of tokens" },
+      { key: "img-a", label: "Shared notebook", body: "![Shared notebook](attachment:abcdefabcdef123)" },
+      { key: "img-b", label: "Handoff", body: "![Handoff](attachment:abcdefabcdef124)" },
+    ],
+  };
+  decide(row);
+  expect(screen.getByRole("heading", { name: "Text · pick any" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Images · pick any" })).toBeTruthy();
+  const tile = screen.getByRole("listitem", { name: "Shared notebook" });
+  expect(tile).toHaveClass("crew-pick-tile");
+  const badge = within(tile).getByRole("button", { name: "Feedback on Shared notebook" });
+  expect(badge).not.toHaveAttribute("data-note");
+  fireEvent.click(within(tile).getByRole("checkbox", { name: "Shared notebook" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Feedback on Shared notebook" }), {
+    target: { value: "Crop it" },
+  });
+  expect(badge).toHaveAttribute("data-note");
+  expect(screen.getByRole("button", { name: "Approve 1 selected" })).toBeEnabled();
+});
+it("shows a decided review's selection and feedback read-only", () => {
+  decide({
+    ...review,
+    status: "changes_requested",
+    decided_at: "2026-11-17T10:00:00.000Z",
+    decided_by: "owner:user00000000001",
+    option_decisions: [
+      { key: "a-linkedin", decision: "approved", note: "Shorten the hook" },
+      { key: "a-x", decision: "rejected", note: "" },
+      { key: "b-linkedin", decision: "rejected", note: "" },
+      { key: "b-x", decision: "rejected", note: "" },
+    ],
+  });
+  expect(screen.getByRole("heading", { name: "Options" })).toBeTruthy();
+  const a = screen.getByRole("checkbox", { name: "Draft A · LinkedIn" });
+  expect(a).toBeChecked();
+  expect(a).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: "Draft A · X" })).not.toBeChecked();
+  expect(screen.getByText("Shorten the hook")).toBeTruthy();
+  expect(
+    screen.getByText("Selected: Draft A · LinkedIn; Not selected: Draft A · X, Draft B · LinkedIn, Draft B · X"),
+  ).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /Approve/ })).toBeNull();
 });
 it("keeps the legacy approval payload unchanged", () => {
   const save = vi.fn().mockResolvedValue(undefined),

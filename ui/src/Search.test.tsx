@@ -360,7 +360,8 @@ describe("opening results", () => {
     );
     const dialog = await screen.findByRole("dialog", { name: "Edit agent" });
     expect(within(dialog).getByDisplayValue("Network")).toBeTruthy();
-    expect(location.hash).toBe("#/tasks");
+    // Opened with its link since 0.32.0, so closing returns to the page.
+    expect(location.hash).toMatch(/^#\/agents\/[a-z0-9]{15}$/);
   });
 
   it("opens a bucket's dialog", async () => {

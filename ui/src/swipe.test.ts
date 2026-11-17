@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { arrowStep, isSwipe } from "./swipe";
+import { isSwipe, listKeyStep } from "./swipe";
 
 describe("isSwipe", () => {
   it("needs distance, a mostly horizontal path and speed (or most of the width)", () => {
@@ -12,7 +12,7 @@ describe("isSwipe", () => {
   });
 });
 
-describe("arrowStep", () => {
+describe("listKeyStep", () => {
   afterEach(() => {
     document.body.innerHTML = "";
   });
@@ -26,20 +26,18 @@ describe("arrowStep", () => {
     defaultPrevented: false,
     ...extra,
   });
-  it("maps Left/Right on plain content and leaves fields, tabs and menus alone", () => {
-    document.body.innerHTML = `<dialog open><p>text</p><textarea></textarea>
-      <div role="tablist"><button role="tab">A</button></div>
-      <div role="menu"><button role="menuitem">B</button></div><pre>code</pre></dialog>`;
+  it("maps K/J on plain content, never Left/Right, and leaves fields alone", () => {
+    document.body.innerHTML = `<dialog open><p>text</p><textarea></textarea></dialog>`;
     const root = document.querySelector("dialog")!;
     const p = root.querySelector("p")!;
-    expect(arrowStep(key("ArrowRight", p), root)).toBe(1);
-    expect(arrowStep(key("ArrowLeft", p), root)).toBe(-1);
-    expect(arrowStep(key("ArrowDown", p), root)).toBe(0);
-    expect(arrowStep(key("ArrowRight", p, { metaKey: true }), root)).toBe(0);
-    expect(arrowStep(key("ArrowRight", p, { defaultPrevented: true }), root)).toBe(0);
-    for (const selector of ["textarea", '[role="tab"]', '[role="menuitem"]', "pre"])
-      expect(arrowStep(key("ArrowRight", root.querySelector(selector)!), root)).toBe(0);
+    expect(listKeyStep(key("j", p), root)).toBe(1);
+    expect(listKeyStep(key("k", p), root)).toBe(-1);
+    expect(listKeyStep(key("ArrowRight", p), root)).toBe(0);
+    expect(listKeyStep(key("ArrowLeft", p), root)).toBe(0);
+    expect(listKeyStep(key("j", p, { metaKey: true }), root)).toBe(0);
+    expect(listKeyStep(key("j", p, { defaultPrevented: true }), root)).toBe(0);
+    expect(listKeyStep(key("j", root.querySelector("textarea")!), root)).toBe(0);
     // A key from outside the dialog (a viewer in a portal) is not a step.
-    expect(arrowStep(key("ArrowRight", document.body), root)).toBe(0);
+    expect(listKeyStep(key("j", document.body), root)).toBe(0);
   });
 });

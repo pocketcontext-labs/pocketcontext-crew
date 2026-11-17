@@ -47,18 +47,36 @@ export function reviewFiles(row: Row, files: Attachment[]) {
       return rank(a.id) - rank(b.id);
     });
 }
-export function decisionSummary(row: Row): string {
+/**
+ * An option whose body is one image and nothing else shows as a tile in the
+ * Review draft (0.32.0); every other option is a text card.
+ */
+export const isImageOption = (option: ReviewOption) =>
+  /^!\[[^\]\n]*\]\([^)\s]+\)$/.test(option.body.trim());
+
+/**
+ * One line naming the options of a decision. Since 0.32.0 the reader picks
+ * any number of options: a checked option is recorded as approved, an
+ * unchecked one as rejected, each with its own note, on Approve and on
+ * Request changes alike. So an approval reads "Approved: …; Not selected: …"
+ * and a change request "Selected: …; Not selected: …". status is the overall
+ * decision (the review's status, or the decide event's decision).
+ */
+export function decisionSummary(row: Row, status = val(row, "status")): string {
   const choices = optionDecisions(row);
   const options = reviewOptions(row);
+  const words: Record<string, [string, string]> = {
+    approved: ["Approved", "Not selected"],
+    changes_requested: ["Selected", "Not selected"],
+  };
+  const [yes, no] = words[status] || ["Approved", "Rejected"];
   return ["approved", "rejected"]
     .flatMap((decision) => {
       const labels = choices
         .filter((x) => x.decision === decision)
         .map((x) => options.find((o) => o.key === x.key)?.label || x.key);
       return labels.length
-        ? [
-            `${decision === "approved" ? "Approved" : "Rejected"}: ${labels.join(", ")}`,
-          ]
+        ? [`${decision === "approved" ? yes : no}: ${labels.join(", ")}`]
         : [];
     })
     .join("; ");

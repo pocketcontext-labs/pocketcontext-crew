@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
   AttachmentsProvider,
   FileTile,
@@ -11,6 +11,7 @@ import { attachmentsApi, type Attachment } from "./attachmentsApi";
 import { val, type Row } from "./crewApi";
 import {
   decisionSummary,
+  isImageOption,
   missingReviewEvidence,
   optionDecisions,
   reviewFiles,
@@ -18,6 +19,9 @@ import {
   type OptionDecision,
   type ReviewOption,
 } from "./reviews";
+import { Icon, useDialogMenu, type MenuItem } from "./DialogHeader";
+import { reviewHash } from "./itemLink";
+import { copyText } from "./projectAgents";
 import "./review.css";
 
 type ProseComponent = ComponentType<{ children: string }>;
@@ -88,76 +92,200 @@ function ReviewFileTiles({ files }: { files: Attachment[] }) {
   );
 }
 
+/** One option's state while deciding: checked, its feedback, field open. */
+export type OptionPick = { selected: boolean; note: string; open?: boolean };
+export type OptionPicks = Record<string, OptionPick>;
+
+const pickOf = (picks: OptionPicks | undefined, key: string): OptionPick =>
+  picks?.[key] ?? { selected: false, note: "" };
+
+/** A decided option, as the read-only dialog shows it. */
+const decidedPick = (choices: OptionDecision[], key: string): OptionPick => {
+  const choice = choices.find((x) => x.key === key);
+  return { selected: choice?.decision === "approved", note: choice?.note || "" };
+};
+
+function FeedbackButton({
+  label,
+  hasNote,
+  onClick,
+}: {
+  label: string;
+  hasNote: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="crew-pick-comment"
+      data-note={hasNote || undefined}
+      aria-label={`Feedback on ${label}`}
+      title={`Feedback on ${label}`}
+      disabled={!onClick}
+      onClick={onClick}
+    >
+      <Icon name="note" />
+    </button>
+  );
+}
+
+/**
+ * The options of a review (0.32.0, as in the approved mockup): pick any
+ * number with checkboxes, and give each option its own feedback in a
+ * one-line field under it. Selecting an option or tapping its feedback icon
+ * (also on an unselected option) opens the field. Options whose body is one
+ * image are tiles, with a badge when they have feedback. Read-only (decided
+ * reviews and history) shows the recorded selection and feedback.
+ */
 export function ReviewChoices({
   row,
   Prose,
-  value,
+  picks,
   onChange,
 }: {
   row: Row;
   Prose: ProseComponent;
-  value?: OptionDecision[];
-  onChange?: (value: OptionDecision[]) => void;
+  picks?: OptionPicks;
+  onChange?: (key: string, pick: OptionPick, focus?: boolean) => void;
 }) {
+  const options = reviewOptions(row);
+  const choices = optionDecisions(row);
   const prefix = useId();
-  const choices = value || optionDecisions(row);
+  if (!options.length) return null;
+  const editable = !!onChange;
+  const pickFor = (key: string) =>
+    editable ? pickOf(picks, key) : decidedPick(choices, key);
+  const shown = (pick: OptionPick) =>
+    editable ? (pick.open ?? (pick.selected || !!pick.note)) : !!pick.note;
+  const text = options.filter((o) => !isImageOption(o));
+  const images = options.filter(isImageOption);
+  const field = (option: ReviewOption, pick: OptionPick) =>
+    editable ? (
+      <input
+        id={`${prefix}-${option.key}`}
+        className="crew-pick-note"
+        aria-label={`Feedback on ${option.label}`}
+        placeholder={`Feedback on ${option.label}…`}
+        maxLength={20000}
+        value={pick.note}
+        onChange={(e) => onChange(option.key, { ...pick, note: e.target.value })}
+      />
+    ) : (
+      <p className="crew-pick-feedback">
+        <strong>Feedback:</strong> {pick.note}
+      </p>
+    );
+  const toggleFeedback = (option: ReviewOption, pick: OptionPick) => {
+    if (!onChange) return;
+    // An empty open field closes; otherwise open it (or keep it) and focus it.
+    if (shown(pick) && !pick.note) onChange(option.key, { ...pick, open: false });
+    else onChange(option.key, { ...pick, open: true }, true);
+  };
+  const check = (option: ReviewOption, pick: OptionPick) =>
+    // Nothing recorded yet (a pending review in history): no checkboxes.
+    !editable && !choices.length ? (
+      <span className="crew-pick-check">
+        <span className="crew-pick-label">{option.label}</span>
+      </span>
+    ) : (
+    <label className="crew-pick-check">
+      <input
+        type="checkbox"
+        checked={pick.selected}
+        disabled={!editable}
+        onChange={(e) =>
+          onChange?.(option.key, {
+            ...pick,
+            selected: e.target.checked,
+            open: undefined,
+          })
+        }
+      />
+      <span className="crew-pick-label">{option.label}</span>
+    </label>
+    );
+  const heading = (name: string) => (editable ? `${name} · pick any` : name);
   return (
     <div className="crew-review-options">
-      {reviewOptions(row).map((option) => {
-        const choice = choices.find((x) => x.key === option.key);
-        const update = (patch: Partial<OptionDecision>) =>
-          onChange?.([
-            ...choices.filter((x) => x.key !== option.key),
-            { key: option.key, ...choice, ...patch } as OptionDecision,
-          ]);
-        return (
-          <section
-            key={option.key}
-            className="crew-review-option"
-            aria-label={option.label}
-          >
-            <h3>{option.label}</h3>
-            <Prose>{option.body}</Prose>
-            {onChange ? (
-              <>
-                <fieldset className="crew-option-decision">
-                  <legend>Decision for {option.label}</legend>
-                  {(["approved", "rejected"] as const).map((decision) => (
-                    <label key={decision}>
-                      <input
-                        type="radio"
-                        name={`${prefix}-${option.key}`}
-                        checked={choice?.decision === decision}
-                        onChange={() => update({ decision })}
-                      />
-                      {decision === "approved" ? "Approve" : "Reject"}
-                    </label>
-                  ))}
-                </fieldset>
-                <label className="crew-option-note">
-                  Note for {option.label} (optional)
-                  <textarea
-                    maxLength={20000}
-                    value={choice?.note || ""}
-                    onChange={(e) => update({ note: e.target.value })}
-                  />
-                </label>
-              </>
-            ) : (
-              <>
-                {choice && (
-                  <p>
-                    <strong>
-                      {choice.decision === "approved" ? "Approved" : "Rejected"}
-                    </strong>
-                    {choice.note && ` — ${choice.note}`}
-                  </p>
-                )}
-              </>
-            )}
-          </section>
-        );
-      })}
+      {text.length > 0 && (
+        <section aria-label={images.length ? "Text options" : "Options"}>
+          <h3 className="crew-pick-heading">
+            {heading(images.length ? "Text" : "Options")}
+          </h3>
+          {text.map((option) => {
+            const pick = pickFor(option.key);
+            return (
+              <section
+                key={option.key}
+                className="crew-review-option crew-pick"
+                data-selected={pick.selected || undefined}
+                aria-label={option.label}
+              >
+                <div className="crew-pick-head">
+                  {check(option, pick)}
+                  {editable && (
+                    <FeedbackButton
+                      label={option.label}
+                      hasNote={!!pick.note}
+                      onClick={() => toggleFeedback(option, pick)}
+                    />
+                  )}
+                </div>
+                <div className="crew-pick-body">
+                  <Prose>{option.body}</Prose>
+                </div>
+                {shown(pick) && field(option, pick)}
+              </section>
+            );
+          })}
+        </section>
+      )}
+      {images.length > 0 && (
+        <section aria-label="Image options">
+          <h3 className="crew-pick-heading">
+            {heading("Images")}
+          </h3>
+          <ul className="crew-pick-tiles">
+            {images.map((option) => {
+              const pick = pickFor(option.key);
+              return (
+                <li
+                  key={option.key}
+                  className="crew-pick-tile"
+                  data-selected={pick.selected || undefined}
+                  aria-label={option.label}
+                >
+                  <div className="crew-pick-image">
+                    <Prose>{option.body}</Prose>
+                  </div>
+                  {(editable || pick.note) && (
+                    <FeedbackButton
+                      label={option.label}
+                      hasNote={!!pick.note}
+                      onClick={
+                        editable ? () => toggleFeedback(option, pick) : undefined
+                      }
+                    />
+                  )}
+                  {check(option, pick)}
+                </li>
+              );
+            })}
+          </ul>
+          {/* Feedback on images sits under the whole row of tiles, so the
+              tiles never move when a field opens. */}
+          {images.map((option) => {
+            const pick = pickFor(option.key);
+            return (
+              shown(pick) && (
+                <div key={option.key} className="crew-pick-tile-note">
+                  {field(option, pick)}
+                </div>
+              )
+            );
+          })}
+        </section>
+      )}
     </div>
   );
 }
@@ -176,6 +304,12 @@ const decidedBy = (actor: string) =>
     : actor.startsWith("mcp:")
       ? "an agent"
       : "someone";
+
+/** The review's own address: the server's url on a domain, else this reader's. */
+const reviewUrl = (row: Row) =>
+  typeof row.url === "string" && row.url
+    ? row.url
+    : location.origin + location.pathname + reviewHash(row.id);
 
 export function ReviewDecision({
   row,
@@ -203,22 +337,36 @@ export function ReviewDecision({
   // Uncontrolled: typing a note re-renders nothing, so the draft and its
   // images stay put.
   const note = useRef<HTMLTextAreaElement>(null);
-  const [choices, setChoices] = useState<OptionDecision[]>([]);
+  const body = useRef<HTMLDivElement>(null);
+  const [picks, setPicks] = useState<OptionPicks>({});
+  const [copied, setCopied] = useState<"" | "copied" | "failed">("");
   const options = reviewOptions(row),
     pending = val(row, "status") === "pending";
-  const complete = options.every((o) =>
-    choices.some((c) => c.key === o.key && !!c.decision),
-  );
-  const anyApproved = choices.some((c) => c.decision === "approved");
+  const selected = options.filter((o) => picks[o.key]?.selected).length;
+  const setPick = (key: string, pick: OptionPick, focus = false) => {
+    setPicks((all) => ({ ...all, [key]: pick }));
+    if (focus)
+      requestAnimationFrame(() =>
+        body.current
+          ?.querySelector<HTMLInputElement>(
+            `input[aria-label="Feedback on ${CSS.escape(
+              options.find((o) => o.key === key)?.label || "",
+            )}"]`,
+          )
+          ?.focus(),
+      );
+  };
+  // Every option is recorded: checked as approved, unchecked as rejected,
+  // each with its feedback (empty stays empty). Reject rejects them all.
   const submit = (decision: string) => {
-    const decisions =
-      decision === "rejected"
-        ? options.map((o) => ({
-            key: o.key,
-            decision: "rejected",
-            note: choices.find((c) => c.key === o.key)?.note || "",
-          }))
-        : choices.filter((c) => c.decision);
+    const decisions = options.map((o) => ({
+      key: o.key,
+      decision:
+        decision !== "rejected" && picks[o.key]?.selected
+          ? "approved"
+          : "rejected",
+      note: picks[o.key]?.note || "",
+    }));
     void save(
       "review.decide",
       {
@@ -229,8 +377,52 @@ export function ReviewDecision({
       row,
     );
   };
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => {
+    if (copied !== "copied") return;
+    const timer = window.setTimeout(() => setCopied(""), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  // Secondary actions live in the header's More menu (0.32.0): Add note,
+  // Copy link, Share and, last and in red, Reject.
+  const setMenu = useDialogMenu();
+  useEffect(() => {
+    if (!setMenu) return;
+    const url = reviewUrl(row);
+    const items: MenuItem[] = [];
+    if (pending)
+      items.push({
+        label: "Add note",
+        icon: "note",
+        onSelect: () => note.current?.focus(),
+      });
+    items.push({
+      label: "Copy link",
+      icon: "link",
+      onSelect: () =>
+        void copyText(url).then((ok) => setCopied(ok ? "copied" : "failed")),
+    });
+    if (typeof navigator.share === "function")
+      items.push({
+        label: "Share",
+        icon: "share",
+        onSelect: () =>
+          void navigator.share({ title: "Review draft", url }).catch(() => undefined),
+      });
+    if (pending)
+      items.push({
+        label: "Reject",
+        icon: "reject",
+        destructive: true,
+        disabled: busy,
+        onSelect: () => submitRef.current("rejected"),
+      });
+    setMenu(items);
+    return () => setMenu([]);
+  }, [setMenu, row, pending, busy]);
   return (
-    <div className="crew-dialog-body">
+    <div className="crew-dialog-body crew-review-body" ref={body}>
       <div className="crew-review-meta">
         <span className={pending ? "crew-human" : "crew-pill"}>
           {val(row, "status").replaceAll("_", " ")}
@@ -243,6 +435,21 @@ export function ReviewDecision({
         This is the exact submitted draft. Approval does not send, post or
         publish it.
       </p>
+      {copied && (
+        <p
+          className={copied === "copied" ? "crew-review-toast" : "crew-alert"}
+          role={copied === "copied" ? "status" : "alert"}
+        >
+          {copied === "copied" ? (
+            "Link copied"
+          ) : (
+            <>
+              Could not copy automatically. Copy it from here:{" "}
+              <code>{reviewUrl(row)}</code>
+            </>
+          )}
+        </p>
+      )}
       <ReviewContent
         row={row}
         attachments={attachments}
@@ -252,8 +459,8 @@ export function ReviewDecision({
         <ReviewChoices
           row={row}
           Prose={Prose}
-          value={pending ? choices : undefined}
-          onChange={pending ? setChoices : undefined}
+          picks={pending ? picks : undefined}
+          onChange={pending ? setPick : undefined}
         />
       </ReviewContent>
       {!pending && val(row, "decided_at") && (
@@ -272,52 +479,40 @@ export function ReviewDecision({
       )}
       {pending && (
         <>
-          {options.length > 0 && (
-            <p className="crew-footnote">
-              Choose Approve or Reject for every option. Approve at least one
-              option to approve the review.
-            </p>
-          )}
           <p className="crew-footnote">
+            {options.length > 0 &&
+              "Check every option you approve and add feedback on any option. "}
             After approval, perform the external action yourself and mark the
-            task Done.
+            task Done. Reject is in the More menu.
           </p>
-          {/* Pinned to the bottom like the editors' save bar, so the note and
-              the decisions stay put from one review to the next (0.31.0). */}
+          {/* Pinned to the bottom (0.31.0) and compact (0.32.0): a one-line
+              note that grows upward on focus, then the two primary actions,
+              which never move. */}
           <div className="crew-save-bar crew-review-bar">
             {error && (
               <p className="crew-alert" role="alert">
                 {error}
               </p>
             )}
-            <label className="crew-option-note">
-              Decision note
-              <textarea
-                ref={note}
-                defaultValue=""
-                maxLength={20000}
-                placeholder="Feedback for the next revision"
-              />
-            </label>
+            <textarea
+              ref={note}
+              className="crew-review-note"
+              aria-label="Decision note"
+              rows={1}
+              defaultValue=""
+              maxLength={20000}
+              placeholder="Add a note…"
+            />
             <div className="crew-actions">
               <button
                 className="crew-primary"
-                disabled={
-                  busy || (options.length > 0 && (!complete || !anyApproved))
-                }
+                disabled={busy || (options.length > 0 && selected === 0)}
                 onClick={() => submit("approved")}
               >
-                {options.length ? "Approve selected options" : "Approve draft"}
+                {options.length ? `Approve ${selected} selected` : "Approve draft"}
               </button>
               <button disabled={busy} onClick={() => submit("changes_requested")}>
                 Request changes
-              </button>
-              <button
-                className="crew-danger"
-                disabled={busy}
-                onClick={() => submit("rejected")}
-              >
-                Reject
               </button>
             </div>
           </div>
