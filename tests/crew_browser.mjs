@@ -336,6 +336,26 @@ try {
  assert.ok(toggleBox.x+toggleBox.width<=refreshBox.x&&Math.abs(toggleBox.y-refreshBox.y)<2,'search icon sits beside Refresh');
  await snap('crew-search-page-390');
  assert.equal(await overflow(),false,'search page overflow at 390');
+ // A tap on Refresh shows a pressed state, a spinning (or, reduced, still) icon, then "Updated.".
+ const refreshButton=page.getByRole('button',{name:'Refresh',exact:true});
+ const spinFor=async(motion)=>{await page.emulateMedia({reducedMotion:motion});return refreshButton.evaluate(e=>{e.classList.add('is-refreshing');const name=getComputedStyle(e.querySelector('.crew-refresh-icon')).animationName;e.classList.remove('is-refreshing');return name;});};
+ assert.equal(await spinFor('no-preference'),'crew-refresh-spin','refresh icon spins');
+ assert.equal(await spinFor('reduce'),'none','reduced motion keeps the icon still');
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ const restBackground=await refreshButton.evaluate(e=>getComputedStyle(e).backgroundColor);
+ await page.mouse.move(refreshBox.x+refreshBox.width/2,refreshBox.y+refreshBox.height/2);
+ await page.mouse.down();
+ await page.waitForTimeout(150);
+ const pressedLook=await refreshButton.evaluate(e=>[getComputedStyle(e).backgroundColor,getComputedStyle(e).transform]);
+ await page.mouse.up();
+ assert.notEqual(pressedLook[0],restBackground,'Refresh shows a pressed background');
+ assert.notEqual(pressedLook[1],'none','Refresh shrinks while pressed');
+ const updated=page.getByRole('status').filter({hasText:'Updated.'});
+ await updated.waitFor();
+ const updatedBox=await updated.boundingBox();
+ assert.ok(updatedBox.y>=refreshBox.y+refreshBox.height&&updatedBox.x>=0&&updatedBox.x+updatedBox.width<=390,'Updated sits under the header buttons at 390');
+ await snapView('crew-refresh-updated-390');
+ await updated.waitFor({state:'hidden'});
  await searchToggle.click();
  await searchBox.waitFor({state:'visible'});
  assert.equal(await searchBox.evaluate(e=>e===document.activeElement&&getComputedStyle(e).fontSize),'16px','focused 16px phone field');

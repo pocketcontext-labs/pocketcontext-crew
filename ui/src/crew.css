@@ -4450,3 +4450,78 @@ a.crew-logo:hover .product-brand span {
     animation: none;
   }
 }
+/* Header icon buttons (Refresh, the phone Search) answer a touch at once:
+   iOS applies :active only with a touch listener, which main.tsx adds. */
+.crew-app .crew-refresh,
+.crew-app .crew-search-toggle {
+  transition:
+    transform 80ms ease,
+    background-color 80ms ease;
+  touch-action: manipulation;
+}
+.crew-app .crew-refresh:active:not(:disabled),
+.crew-app .crew-search-toggle:active {
+  background: #dfe8d8;
+  border-color: #b9c8b0;
+  transform: scale(0.92);
+}
+.crew-app .crew-refresh-icon {
+  display: inline-block;
+}
+/* While a refresh runs the button stays legible (not the faded disabled look)
+   and its icon spins; reduced motion shows the same tinted state, still. */
+.crew-app .crew-refresh.is-refreshing:disabled {
+  opacity: 1;
+  cursor: progress;
+  background: #edf2e9;
+  border-color: #b9c8b0;
+  color: #487d55;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .crew-app .crew-refresh.is-refreshing .crew-refresh-icon {
+    animation: crew-refresh-spin 0.8s linear infinite;
+  }
+}
+@keyframes crew-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-app .crew-refresh,
+  .crew-app .crew-search-toggle {
+    transition: none;
+  }
+  .crew-app .crew-refresh:active:not(:disabled),
+  .crew-app .crew-search-toggle:active {
+    transform: none;
+  }
+}
+/* "Updated." after a header Refresh: a small pill under the header buttons. */
+.crew-refresh-status {
+  position: fixed;
+  z-index: 55;
+  top: calc(72px + env(safe-area-inset-top));
+  right: calc(24px + env(safe-area-inset-right));
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #cfd9c4;
+  border-radius: 999px;
+  background: #eaf3e4;
+  color: #45643a;
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(37, 51, 44, 0.12);
+  pointer-events: none;
+}
+.crew-refresh-status.is-error {
+  border-color: #e0c7b2;
+  background: #fbefe6;
+  color: #8a4b2a;
+}
+@media (max-width: 680px) {
+  .crew-refresh-status {
+    top: calc(54px + env(safe-area-inset-top));
+    right: calc(16px + env(safe-area-inset-right));
+  }
+}

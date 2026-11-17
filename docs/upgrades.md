@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.32.0 to 0.32.1
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.32.1. Reader change only: the
+header Refresh button shows a pressed state on touch, spins (or, with reduced
+motion, stays tinted) and is disabled while the workspace loads, then shows
+"Updated." or an error. Rollback to 0.32.0 needs no restore. From 0.31.0 or earlier,
+follow the 0.31.0 to 0.32.0 notes first.
+
 ## Crew 0.31.0 to 0.32.0
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

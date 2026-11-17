@@ -107,6 +107,12 @@ Related rows (since 0.30.1) are the same kind of link: a click adds a trail step
 and Cmd/Ctrl-click or middle-click opens the record in a new tab.
 Every record dialog keeps one size.
 
+The header Refresh button (↻, since 0.32.1) reloads the workspace on request: it
+shows a pressed state on touch, spins and is disabled while the load runs (one at a
+time; with reduced motion it stays tinted without spinning), then shows "Updated."
+for a moment, or "Couldn't refresh…" when the load fails. The phone Search icon has
+the same pressed state. The background refresh every 30 seconds stays silent.
+
 Every dialog has one floating header row (since 0.30.0), one row from 320 px up:
 round back and forward buttons, the title (ellipsized), the list capsule described
 below, More, and a round close button (`[‹ ›] title [∧ x of y ∨] [⋯] [✕]`). Each icon

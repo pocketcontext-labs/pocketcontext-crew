@@ -1151,6 +1151,42 @@ it("opens webhook task links and clears the route when the editor closes", async
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });
 
+it("shows Refresh in flight, ignores a second tap and confirms the result", async () => {
+  render(<CrewWorkspace />);
+  const refresh = screen.getByRole("button", { name: "Refresh" });
+  await waitFor(() => expect(refresh).toBeEnabled());
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  vi.mocked(crewApi.read).mockImplementation(async (c, f = {}) => {
+    await gate;
+    return f.archived ? [] : fixtures[c] || [];
+  });
+  const reads = vi.mocked(crewApi.read).mock.calls.length;
+  fireEvent.click(refresh);
+  await waitFor(() => expect(refresh).toBeDisabled());
+  expect(refresh).toHaveAttribute("aria-busy", "true");
+  expect(refresh).toHaveClass("is-refreshing");
+  const started = vi.mocked(crewApi.read).mock.calls.length;
+  fireEvent.click(refresh);
+  expect(vi.mocked(crewApi.read).mock.calls.length).toBe(started);
+  expect(started).toBeGreaterThan(reads);
+  release();
+  expect(await screen.findByText("Updated.")).toHaveAttribute("role", "status");
+  expect(refresh).toBeEnabled();
+  expect(refresh).not.toHaveAttribute("aria-busy");
+  expect(refresh).not.toHaveClass("is-refreshing");
+
+  vi.mocked(crewApi.read).mockRejectedValue(new Error("Synthetic offline"));
+  fireEvent.click(refresh);
+  expect(
+    await screen.findByText(
+      "Couldn't refresh. Check your connection and try again.",
+    ),
+  ).toHaveAttribute("role", "alert");
+  expect(screen.queryByText("Updated.")).toBeNull();
+  await waitFor(() => expect(refresh).toBeEnabled());
+});
+
 it("displays the running server release and build and refreshes them", async () => {
   const commit = "0123456789abcdef0123456789abcdef01234567";
   vi.mocked(crewApi.serverVersion).mockResolvedValueOnce({

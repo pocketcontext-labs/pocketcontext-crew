@@ -204,6 +204,8 @@ const statusHelp: Record<(typeof boardStatuses)[number][0], HelpTopic> = {
 };
 type Kind = "task" | "note" | "bucket" | "agent" | "review";
 type Data = Record<string, Row[]>;
+type LoadOutcome = "ok" | "failed" | "stale";
+type RefreshStatus = { ok: boolean; text: string };
 /**
  * Never fires hashchange, so writing the address cannot open a dialog. The
  * entry keeps its state: its place in a link trail (trail.ts).
@@ -1123,7 +1125,8 @@ export default function CrewWorkspace() {
   }, [dialog?.kind, dialog?.row?.id]);
   // A silent load is the background refresh: it changes data only when the data
   // changed, and a failure leaves the page as it is until the next attempt.
-  const load = useCallback(async ({ silent = false } = {}) => {
+  // It resolves to the outcome, or "stale" when a newer load superseded it.
+  const load = useCallback(async ({ silent = false } = {}): Promise<LoadOutcome> => {
     const ticket = ++generation.current;
     loadsInFlight.current++;
     void crewApi
@@ -1165,7 +1168,7 @@ export default function CrewWorkspace() {
           async (c) => [c, await crewApi.read(c, { archived: true })] as const,
         ),
       );
-      if (ticket !== generation.current) return;
+      if (ticket !== generation.current) return "stale";
       const keep = (next: Data) => (current: Data) =>
         JSON.stringify(current) === JSON.stringify(next) ? current : next;
       setData(keep(Object.fromEntries(result)));
@@ -1176,11 +1179,14 @@ export default function CrewWorkspace() {
         setError("");
         loadFailed.current = false;
       }
+      return "ok";
     } catch (e) {
-      if (!silent && ticket === generation.current) {
+      if (ticket !== generation.current) return "stale";
+      if (!silent) {
         loadFailed.current = true;
         setError(e instanceof Error ? e.message : "Could not load workspace.");
       }
+      return "failed";
     } finally {
       loadsInFlight.current--;
       if (ticket === generation.current) setLoading(false);
@@ -1192,6 +1198,37 @@ export default function CrewWorkspace() {
       generation.current++;
     };
   }, [load]);
+  // The header Refresh: one request at a time, a spinning icon while it runs
+  // and a short status when it ends, so a tap on a phone visibly registers.
+  const [refreshing, setRefreshing] = useState(false),
+    [refreshStatus, setRefreshStatus] = useState<RefreshStatus | null>(null),
+    refreshingRef = useRef(false);
+  const refreshNow = async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    setRefreshStatus(null);
+    try {
+      const outcome = await load();
+      if (outcome === "ok") setRefreshStatus({ ok: true, text: "Updated." });
+      else if (outcome === "failed")
+        setRefreshStatus({
+          ok: false,
+          text: "Couldn't refresh. Check your connection and try again.",
+        });
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    }
+  };
+  useEffect(() => {
+    if (!refreshStatus) return;
+    const timer = setTimeout(
+      () => setRefreshStatus(null),
+      refreshStatus.ok ? 2500 : 6000,
+    );
+    return () => clearTimeout(timer);
+  }, [refreshStatus]);
   useEffect(() => {
     const refresh = () => {
       if (document.hidden || busyRef.current || loadsInFlight.current) return;
@@ -1878,16 +1915,27 @@ export default function CrewWorkspace() {
               onOpenBucket={(row) => openItem("bucket", row)}
             />
             <button
-              className="crew-refresh"
+              className={`crew-refresh${refreshing ? " is-refreshing" : ""}`}
               aria-label="Refresh"
-              title="Refresh"
-              disabled={busy || loading}
-              onClick={() => void load()}
+              title={refreshing ? "Refreshing…" : "Refresh"}
+              aria-busy={refreshing || undefined}
+              disabled={busy || loading || refreshing}
+              onClick={() => void refreshNow()}
             >
-              <span aria-hidden="true">↻</span>
+              <span className="crew-refresh-icon" aria-hidden="true">
+                ↻
+              </span>
             </button>
           </div>
         </header>
+        {refreshStatus && (
+          <p
+            className={`crew-refresh-status${refreshStatus.ok ? "" : " is-error"}`}
+            role={refreshStatus.ok ? "status" : "alert"}
+          >
+            {refreshStatus.text}
+          </p>
+        )}
         <section className="crew-content">
           <div className="crew-heading">
             <div>
