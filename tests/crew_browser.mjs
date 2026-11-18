@@ -607,27 +607,52 @@ try {
  await activeChips.getByRole('button',{name:'Remove filter Agent: Network'}).click();
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await activeChips.waitFor({state:'detached'});
- // Notes: sticky bucket chips with live counts, then note rows in the first screenful; Edit bucket is in the selected chip's ⋯.
+ // Notes (0.33.1): the same fixed switcher as the board, without dots: All first,
+ // then buckets A–Z with live counts; note rows start right below it in the first
+ // screenful. Edit bucket is in the page ⋯ for the selected bucket and in each
+ // bucket's ⋯ in the filter sheet.
  await go('Notes');await onPage('Notes');
- const bucketChips=page.getByRole('group',{name:'Filter by bucket'});
- const allChip=bucketChips.getByRole('button',{name:/^All buckets, \d+ notes?$/});
- assert.equal(await allChip.getAttribute('aria-pressed'),'true');
- assert.equal(await bucketChips.evaluate(e=>getComputedStyle(e).position),'sticky','the bucket chips are sticky');
+ assert.equal(await page.getByRole('group',{name:'Filter by bucket'}).count(),0,'no bucket chip row on the phone Notes page');
+ const bucketSwitcher=page.locator('.crew-bucket-switcher');
+ const bucketName=page.getByRole('button',{name:/^Bucket .*Choose a bucket$/});
+ const prevBucket=page.getByRole('button',{name:'Previous bucket'}),nextBucket=page.getByRole('button',{name:'Next bucket'});
+ assert.equal(await bucketSwitcher.locator('.crew-switch-dots').count(),0,'no dots on the bucket switcher');
+ assert.equal(await bucketSwitcher.evaluate(e=>getComputedStyle(e).position),'sticky','the bucket switcher is sticky');
  assert.equal(await page.locator('.crew-bucket-card').count(),0,'no bucket cards on the phone first screen');
- {const [bar,ch,row]=[await page.locator('header.crew-mtopbar').boundingBox(),await bucketChips.boundingBox(),await page.locator('.crew-note-row').first().boundingBox()];
-  assert.ok(Math.abs(ch.y-(bar.y+bar.height))<=1,'chips sit directly under the top bar');
-  assert.ok(row.y>=ch.y+ch.height&&row.y<=ch.y+ch.height+24&&row.y+row.height<=844,'the first note is in the first screenful');}
+ assert.equal(await prevBucket.isDisabled(),true,'Previous is disabled on All');
+ await bucketName.click();
+ const bucketPicker=page.getByRole('group',{name:'Buckets'});
+ const bucketPicks=await bucketPicker.getByRole('button').evaluateAll(bs=>bs.map(b=>[b.children[0].textContent,Number(b.children[1].textContent),b.children[2].textContent]));
+ assert.equal(bucketPicks[0][0],'All','All comes first');
+ assert.equal(bucketPicks[0][2],'✓','All is checked');
+ {const names=bucketPicks.slice(1).map(p=>p[0]);assert.deepEqual(names,[...names].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'})),'buckets are alphabetical: '+names.join());
+  assert.equal(bucketPicks[0][1],bucketPicks.slice(1).reduce((n,p)=>n+p[1],0),'All counts every note');}
+ {const b=await bucketPicker.boundingBox();assert.ok(b.x>=0&&b.x+b.width<=390&&b.y+b.height<=844,'the bucket picker fits: '+JSON.stringify(b));}
+ await snapView('crew-notes-bucket-picker-390');
+ await bucketPicker.getByRole('button',{name:/^All/}).click();await bucketPicker.waitFor({state:'detached'});
+ assert.match(await bucketName.innerText(),new RegExp('^All\\s*·\\s*'+bucketPicks[0][1]+'\\s*\\(1 of '+bucketPicks.length+'\\)'),'the switcher reads All · N (1 of M)');
+ {const [bar,sw,row]=[await page.locator('header.crew-mtopbar').boundingBox(),await bucketSwitcher.boundingBox(),await page.locator('.crew-note-row').first().boundingBox()];
+  assert.ok(Math.abs(sw.y-(bar.y+bar.height))<=1,'the switcher sits directly under the top bar');
+  assert.ok(row.y>=sw.y+sw.height&&row.y<=sw.y+sw.height+24&&row.y+row.height<=844,'the first note is in the first screenful');}
  assert.equal(await page.locator('.crew-note-row').first().locator('time').count(),1,'note rows show a relative date');
  await snapView('crew-notes-390');
- await bucketChips.getByRole('button',{name:/^NETWORK, /}).click();
+ {const boxes=async()=>[await prevBucket.boundingBox(),await nextBucket.boundingBox()].map(b=>[b.x,b.y,b.width,b.height].map(Math.round).join());
+  const first=await boxes();
+  for(let i=1;i<bucketPicks.length;i++){
+   await nextBucket.click();
+   assert.match(await bucketName.innerText(),new RegExp('·\\s*'+bucketPicks[i][1]+'\\s*\\('+(i+1)+' of '+bucketPicks.length+'\\)'),'step '+i+' names its bucket and count');
+   assert.equal(await page.locator('.crew-note-row').count(),bucketPicks[i][1],bucketPicks[i][0]+' shows its notes');
+   assert.deepEqual(await boxes(),first,'previous and next never move');
+  }
+  assert.equal(await nextBucket.isDisabled(),true,'Next is disabled on the last bucket');}
+ await bucketName.click();await bucketPicker.getByRole('button',{name:/^NETWORK/}).click();
  await page.waitForFunction(()=>/^#\/notes\?bucket=[a-z0-9]{15}$/.test(location.hash));
- await bucketChips.getByRole('button',{name:'Bucket NETWORK options'}).click();
- const bucketMenu=page.getByRole('menu');await bucketMenu.waitFor();
- {const b=await bucketMenu.boundingBox();assert.ok(b.x>=0&&b.x+b.width<=390,'the bucket menu fits');}
- await bucketMenu.getByRole('menuitem',{name:'Edit bucket'}).click();
+ await page.getByRole('button',{name:'Page options',exact:true}).click();
+ await page.getByRole('button',{name:'Edit bucket NETWORK',exact:true}).click();
  await dialog().getByLabel('Name',{exact:true}).waitFor();
  await close();await dialog().waitFor({state:'hidden'});
- await allChip.click();
+ await bucketName.click();await bucketPicker.getByRole('button',{name:/^All/}).click();
+ await page.waitForFunction(()=>location.hash==='#/notes');
  await page.getByRole('button',{name:/^Filter and sort/}).click();
  const noteSheet=page.getByRole('dialog',{name:'Filter and sort'});
  await noteSheet.getByRole('searchbox',{name:'Search notes'}).waitFor();
@@ -646,7 +671,7 @@ try {
  // 1024 keeps the desktop board and Notes.
  await page.setViewportSize({width:1024,height:800});
  await page.locator('.crew-bucket-card').first().waitFor();
- assert.equal(await page.locator('.crew-bucket-chips-bar').count(),0,'no phone chips at 1024');
+ assert.equal(await page.locator('.crew-bucket-switcher').count(),0,'no bucket switcher at 1024');
  await go('Tasks');await onPage('Tasks');
  assert.equal(await page.locator('.crew-column').count(),4,'four columns at 1024');
  assert.equal(await page.locator('.crew-column-switcher, .crew-tabbar, .crew-mtopbar').count(),0,'no phone chrome at 1024');

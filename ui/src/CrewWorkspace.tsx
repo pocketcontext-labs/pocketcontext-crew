@@ -169,7 +169,7 @@ import { RelativeTime, useNow, type Instant } from "./relativeTime";
 import { usePhone } from "./usePhone";
 import { MobileTabBar, MobileTopBar, Sheet, type PageAction } from "./MobileChrome";
 import ColumnSwitcher from "./ColumnSwitcher";
-import { BucketChips, NoteRows, NotesFilterSheet } from "./NotesMobile";
+import { NoteRows, NotesFilterSheet } from "./NotesMobile";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
   ["board", "Tasks", "▦"],
@@ -1369,6 +1369,7 @@ export default function CrewWorkspace() {
   const bucket = data.buckets.some((x) => x.id === viewState.bucket)
     ? viewState.bucket
     : "";
+  const selectedBucket = data.buckets.find((x) => x.id === bucket);
   const setBucket = (id: string) =>
     setViewState((state) => ({ ...state, bucket: id }));
   const openTitle =
@@ -2120,7 +2121,17 @@ export default function CrewWorkspace() {
           : undefined;
   const phoneActions: PageAction[] =
     view === "memory"
-      ? [{ label: "New bucket", onClick: () => setDialog({ kind: "bucket" }) }]
+      ? [
+          { label: "New bucket", onClick: () => setDialog({ kind: "bucket" }) },
+          ...(selectedBucket
+            ? [
+                {
+                  label: `Edit bucket ${val(selectedBucket, "name")}`,
+                  onClick: () => openItem("bucket", selectedBucket),
+                },
+              ]
+            : []),
+        ]
       : view === "board" && (boardFiltered || boardSearched)
         ? [{ label: "Clear all filters", onClick: clearBoard }]
         : [];
@@ -2673,14 +2684,27 @@ export default function CrewWorkspace() {
           )}
           {view === "memory" && phone && (
             <>
-              <BucketChips
-                className="crew-bucket-chips-bar"
-                buckets={sortedBuckets}
-                counts={bucketCounts}
-                total={data.notes.length}
-                selected={bucket}
-                onSelect={setBucket}
-                onEdit={(row) => openItem("bucket", row)}
+              <ColumnSwitcher
+                className="crew-bucket-switcher"
+                dots={false}
+                item="bucket"
+                pickerLabel="Buckets"
+                noun={["note", "notes"]}
+                columns={[
+                  { status: "", label: "All", count: data.notes.length },
+                  ...[...data.buckets]
+                    .sort((a, b) => byName(val(a, "name"), val(b, "name")))
+                    .map((row) => ({
+                      status: row.id,
+                      label: val(row, "name"),
+                      count: bucketCounts.get(row.id) ?? 0,
+                    })),
+                ]}
+                current={bucket}
+                onSelect={(id) => {
+                  setBucket(id);
+                  if (window.scrollY > 0) window.scrollTo(0, 0);
+                }}
               />
               <NoteRows
                 notes={shownNotes}

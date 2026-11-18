@@ -316,35 +316,56 @@ describe("phone board", () => {
 describe("phone Notes", () => {
   beforeEach(() => history.replaceState(null, "", "/#/notes"));
 
-  it("shows bucket chips with counts and note rows first", async () => {
+  it("switches buckets with fixed previous and next, then shows note rows", async () => {
     render(<CrewWorkspace />);
     await screen.findByText("Launch voice");
-    const chips = within(
-      screen.getByRole("group", { name: "Filter by bucket" }),
-    );
-    expect(
-      chips.getByRole("button", { name: "All buckets, 3 notes" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(
-      chips.getByRole("button", { name: "NETWORK, 2 notes" }),
-    ).toBeTruthy();
-    expect(chips.getByRole("button", { name: "BUILD, 1 note" })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "Filter by bucket" })).toBeNull();
+    const previous = screen.getByRole("button", { name: "Previous bucket" });
+    const next = screen.getByRole("button", { name: "Next bucket" });
+    const name = () => screen.getByRole("button", { name: /^Bucket .*Choose a bucket$/ });
+    expect(previous).toBeDisabled();
+    expect(name()).toHaveTextContent("All· 3(1 of 3)");
+    expect(name()).toHaveAccessibleName("Bucket All, 3 notes, 1 of 3. Choose a bucket");
+    expect(document.querySelector(".crew-bucket-switcher .crew-switch-dots")).toBeNull();
     // No bucket cards with permanent Edit buttons.
     expect(
       screen.queryByRole("button", { name: "Edit bucket NETWORK" }),
     ).toBeNull();
-    expect(chips.queryByRole("button", { name: /options$/ })).toBeNull();
     const row = screen.getByRole("button", { name: /Launch voice/ });
     expect(row).toHaveTextContent("NETWORK");
     expect(row.querySelector("time")).toBeTruthy();
     expect(row).toHaveTextContent("Body of Launch voice");
-    fireEvent.click(chips.getByRole("button", { name: "NETWORK, 2 notes" }));
+    // All first, then buckets A–Z with live counts and a check on the current one.
+    fireEvent.click(name());
+    const picker = within(screen.getByRole("group", { name: "Buckets" }));
+    expect(picker.getAllByRole("button").map((x) => x.textContent)).toEqual([
+      "All3✓",
+      "BUILD1",
+      "NETWORK2",
+    ]);
+    fireEvent.click(picker.getByRole("button", { name: /^NETWORK/ }));
+    expect(screen.queryByRole("group", { name: "Buckets" })).toBeNull();
     expect(location.hash).toBe(`#/notes?bucket=${bucket.id}`);
+    expect(name()).toHaveTextContent("NETWORK· 2(3 of 3)");
+    expect(next).toBeDisabled();
     expect(screen.queryByText("Release plan")).toBeNull();
+    fireEvent.click(previous);
+    expect(name()).toHaveTextContent("BUILD· 1(2 of 3)");
+    expect(screen.getByText("Release plan")).toBeTruthy();
+    expect(screen.queryByText("Launch voice")).toBeNull();
+    fireEvent.click(previous);
+    expect(location.hash).toBe("#/notes");
+    expect(previous).toBeDisabled();
+  });
+
+  it("edits the selected bucket from the page menu", async () => {
+    history.replaceState(null, "", `/#/notes?bucket=${bucket.id}`);
+    render(<CrewWorkspace />);
+    await screen.findByText("Launch voice");
+    fireEvent.click(screen.getByRole("button", { name: "Page options" }));
     fireEvent.click(
-      chips.getByRole("button", { name: "Bucket NETWORK options" }),
+      sheet("Notes").getByRole("button", { name: "Edit bucket NETWORK" }),
     );
-    fireEvent.click(screen.getByRole("menuitem", { name: "Edit bucket" }));
     await screen.findByRole("dialog");
     expect(location.hash).toContain(bucket.id);
   });

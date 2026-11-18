@@ -4,20 +4,33 @@ import { icons } from "./MobileChrome";
 export type SwitcherColumn = { status: string; label: string; count: number };
 
 /**
- * The phone board's column switcher: `‹  To do · 6  (1 of 4)  ›` with one dot
- * per column. Previous and next stay in place and turn disabled at the ends;
- * the name opens a picker listing every column with its live count. There is
- * no swipe.
+ * The phone's fixed switcher: `‹  To do · 6  (1 of 4)  ›`, on the board (one
+ * dot per column) and on Notes (buckets, no dots). Previous and next stay in
+ * place and turn disabled at the ends; the name opens a picker listing every
+ * option with its live count. There is no swipe.
  */
 export default function ColumnSwitcher({
   columns,
   current,
   onSelect,
+  dots = true,
+  item = "column",
+  pickerLabel = "Columns",
+  noun = ["task", "tasks"],
+  className = "",
 }: {
   columns: SwitcherColumn[];
   current: string;
   onSelect: (status: string) => void;
+  /** One dot per option; off when there are too many to tell apart. */
+  dots?: boolean;
+  /** What one option is called in labels: "column", "bucket". */
+  item?: string;
+  pickerLabel?: string;
+  noun?: [string, string];
+  className?: string;
 }) {
+  const Item = item.charAt(0).toUpperCase() + item.slice(1);
   const id = useId();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -51,12 +64,15 @@ export default function ColumnSwitcher({
     if (next) onSelect(next.status);
   };
   return (
-    <div className="crew-column-switcher" ref={root}>
+    <div
+      className={`crew-column-switcher${dots ? "" : " is-dotless"} ${className}`.trim()}
+      ref={root}
+    >
       <button
         type="button"
         className="crew-switch-step"
-        aria-label="Previous column"
-        title="Previous column"
+        aria-label={`Previous ${item}`}
+        title={`Previous ${item}`}
         disabled={index === 0}
         onClick={() => go(index - 1)}
       >
@@ -69,7 +85,7 @@ export default function ColumnSwitcher({
         aria-haspopup="true"
         aria-expanded={open}
         aria-controls={open ? `${id}-picker` : undefined}
-        aria-label={`Column ${column.label}, ${column.count} ${column.count === 1 ? "task" : "tasks"}, ${index + 1} of ${columns.length}. Choose a column`}
+        aria-label={`${Item} ${column.label}, ${column.count} ${column.count === 1 ? noun[0] : noun[1]}, ${index + 1} of ${columns.length}. Choose a ${item}`}
         onClick={() => setOpen((value) => !value)}
       >
         <span className="crew-switch-title">
@@ -79,20 +95,22 @@ export default function ColumnSwitcher({
             ({index + 1} of {columns.length})
           </span>
         </span>
-        <span className="crew-switch-dots" aria-hidden="true">
-          {columns.map((c, i) => (
-            <i
-              key={c.status}
-              className={i === index ? "is-current" : undefined}
-            />
-          ))}
-        </span>
+        {dots && (
+          <span className="crew-switch-dots" aria-hidden="true">
+            {columns.map((c, i) => (
+              <i
+                key={c.status}
+                className={i === index ? "is-current" : undefined}
+              />
+            ))}
+          </span>
+        )}
       </button>
       <button
         type="button"
         className="crew-switch-step"
-        aria-label="Next column"
-        title="Next column"
+        aria-label={`Next ${item}`}
+        title={`Next ${item}`}
         disabled={index === columns.length - 1}
         onClick={() => go(index + 1)}
       >
@@ -103,7 +121,7 @@ export default function ColumnSwitcher({
           id={`${id}-picker`}
           className="crew-switch-picker"
           role="group"
-          aria-label="Columns"
+          aria-label={pickerLabel}
         >
           {columns.map((c) => (
             <button

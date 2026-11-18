@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.33.0 to 0.33.1
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.33.1. Reader change only: phone
+Notes switch buckets with the Tasks board's fixed ‹ › switcher (no dots; the name
+opens All and every bucket A–Z with counts) instead of the bucket chip row, and the
+page ⋯ edits the selected bucket. Rollback to 0.33.0 needs no restore. From 0.32.1
+or earlier, follow the 0.32.1 to 0.33.0 notes first.
+
 ## Crew 0.32.1 to 0.33.0
 
 No data migration, protocol, managed block, skill or capabilities change. Replace
