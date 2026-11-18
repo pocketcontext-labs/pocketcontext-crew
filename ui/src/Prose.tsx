@@ -23,19 +23,28 @@ import {
 import PagePreview, { isStandaloneDisplay, publicPagePath } from "./PagePreview";
 import { followLink } from "./trail";
 
+/** A long title shortened for running text; the tooltip names the record. */
+const shorten = (text: string, max?: number) =>
+  max && text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+
 /** A bare id: its record's title when it resolves, otherwise the plain id. */
-function RecordRef({ id }: { id: string }) {
+export function RecordRef({ id, max }: { id: string; max?: number }) {
   const ref = useReference(id);
   if (!ref) return <>{id}</>;
+  const shown = shorten(ref.title, max);
   return (
     <a
       href={ref.path}
       className="crew-ref"
-      title={referenceLabel(ref)}
+      title={
+        shown === ref.title
+          ? referenceLabel(ref)
+          : `${ref.title} · ${referenceLabel(ref)}`
+      }
       data-collection={ref.collection}
       onClick={(e) => followLink(e, ref.path)}
     >
-      {ref.title || id}
+      {shown || id}
     </a>
   );
 }
@@ -49,15 +58,17 @@ const textOf = (children: ReactNode) => {
  * A link to this Crew install opens in the app. A pasted address (its text is
  * the address itself) reads as the record's title; written link text stays.
  */
-function CrewLink({
+export function CrewLink({
   href,
   hash,
   id,
+  max,
   children,
 }: {
   href: string;
   hash: string;
   id: string;
+  max?: number;
   children?: ReactNode;
 }) {
   const ref = useReference(id);
@@ -69,7 +80,7 @@ function CrewLink({
       title={ref ? referenceLabel(ref) : href}
       onClick={(e) => followLink(e, hash)}
     >
-      {pasted ? ref?.title || displayUrl(href) : children}
+      {pasted ? shorten(ref?.title || "", max) || displayUrl(href) : children}
     </a>
   );
 }

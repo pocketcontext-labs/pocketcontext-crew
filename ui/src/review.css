@@ -119,7 +119,7 @@
 .crew-pick-body .crew-prose > :last-child {
   margin-bottom: 0;
 }
-.crew-dialog input.crew-pick-note {
+.crew-dialog .crew-pick-note {
   display: block;
   width: 100%;
   margin: 0.6rem 0 0;
@@ -195,7 +195,7 @@
   background: #233a28;
   color: #fff;
 }
-.crew-pick-tile-note input.crew-pick-note,
+.crew-pick-tile-note .crew-pick-note,
 .crew-pick-tile-note .crew-pick-feedback {
   margin: 8px 0 0;
 }

@@ -1,0 +1,183 @@
+/* Single-line fields that wrap (0.33.0): one line tall, growing to four
+   lines, then scrolling inside; never sideways. */
+.crew-dialog textarea.crew-auto-field,
+.crew-app textarea.crew-auto-field {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 680px) {
+  /* 16 px or more, so iOS doesn't zoom into the field. */
+  .crew-dialog textarea.crew-auto-field,
+  .crew-app textarea.crew-auto-field,
+  .crew-dialog .crew-plain-read {
+    font-size: 16px;
+  }
+}
+
+/* Hold reason: Read shows linked references, Edit the raw text. */
+.crew-dialog .crew-plain-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+.crew-dialog button.crew-plain-field-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: -4px -6px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #3f6b48;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.crew-dialog button.crew-plain-field-toggle:hover {
+  background: #edf2e9;
+}
+.crew-plain-field-toggle .crew-icon {
+  width: 15px;
+  height: 15px;
+}
+.crew-dialog .crew-plain-read {
+  padding: 10px 12px;
+  border: 1px solid #ccd6c9;
+  border-radius: 6px;
+  background: #fffefb;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.crew-plain-read a.crew-ref,
+.crew-timeline a.crew-ref,
+.crew-footnote a.crew-ref,
+.crew-version a.crew-ref,
+.crew-review-decision a.crew-ref {
+  font-weight: 600;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+/* Edit task: one even gap between groups (claim, Status, Labels, Hold). */
+.crew-editor-form .crew-form-grid {
+  row-gap: 0;
+}
+.crew-editor-form .crew-status-field {
+  margin-bottom: 18px;
+}
+.crew-editor-form .crew-status-field > .crew-field {
+  margin-bottom: 0;
+}
+.crew-editor-form p.crew-hold-explainer {
+  margin: -8px 0 18px;
+}
+/* Labels: only as tall as the chips, the typing space beside them. */
+.crew-dialog .crew-chip-input {
+  min-height: 0;
+  padding: 5px 6px;
+  gap: 5px;
+}
+.crew-dialog .crew-labels-field .crew-chip-input input,
+.crew-dialog .crew-labels-field .crew-chip-input input:focus {
+  flex: 1 1 56px;
+  min-width: 56px;
+  height: 28px;
+  padding: 0 4px;
+  line-height: 28px;
+}
+.crew-dialog .crew-chip-input .crew-chip {
+  min-height: 26px;
+  font-size: 13px;
+  padding: 1px 9px;
+}
+
+/* A coding session's claim on Edit task: two lines, actions in ⋯. */
+.crew-claim-banner {
+  margin: 0 0 18px;
+  padding: 8px 8px 10px 14px;
+  border-radius: 12px;
+  background: #e4ecef;
+  color: #3d5f6b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.crew-claim-banner.is-expired {
+  background: #f3e9c9;
+  color: #7a5a1c;
+}
+.crew-claim-banner-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.crew-claim-banner-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.crew-dialog .crew-claim-banner button.crew-head-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  line-height: 0;
+}
+.crew-dialog .crew-claim-banner button.crew-head-button:hover,
+.crew-dialog .crew-claim-banner button.crew-head-button[aria-expanded="true"] {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.crew-claim-banner-times {
+  margin: 0;
+  padding-right: 6px;
+}
+.crew-claim-banner-times time {
+  white-space: nowrap;
+}
+.crew-dialog button.crew-claim-banner-toggle {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.crew-dialog button.crew-claim-banner-toggle:hover {
+  background: transparent;
+}
+.crew-claim-banner-details {
+  margin: 6px 6px 0 0;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.crew-claim-banner-details[hidden] {
+  display: none;
+}
+.crew-claim-banner-copied {
+  margin: 4px 0 0;
+  font-size: 12px;
+}

@@ -33,6 +33,8 @@ const paths = {
   person: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 20a7 7 0 0 1 14 0",
   note: "M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z",
   reject: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",
+  unlock: "M6 11h12v9H6zM8.5 11V7.5a3.5 3.5 0 0 1 6.8-1.2",
+  pencil: "M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4",
 } as const;
 export type IconName = keyof typeof paths;
 
@@ -122,7 +124,14 @@ export const menuIsOpenIn = (element: Element | null) =>
  * closes on selection, a tap outside and Escape, and moves with the arrow
  * keys, Home and End.
  */
-export function MoreMenu({ items }: { items: MenuItem[] }) {
+export function MoreMenu({
+  items,
+  label = "More actions",
+}: {
+  items: MenuItem[];
+  /** The button's and the menu's accessible name. */
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -182,7 +191,7 @@ export function MoreMenu({ items }: { items: MenuItem[] }) {
     <div className="crew-more-menu" ref={root}>
       <HeadButton
         icon="more"
-        label="More actions"
+        label={label}
         buttonRef={button}
         disabled={!items.length}
         aria-haspopup="menu"
@@ -196,7 +205,7 @@ export function MoreMenu({ items }: { items: MenuItem[] }) {
           ref={menu}
           className="crew-menu"
           role="menu"
-          aria-label="More actions"
+          aria-label={label}
           onKeyDown={onMenuKey}
         >
           {groups.map((group, g) => (

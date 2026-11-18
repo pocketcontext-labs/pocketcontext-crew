@@ -7,6 +7,7 @@ import {
   type SessionChange,
 } from "./crewApi";
 import { copyText } from "./projectAgents";
+import PlainRefs from "./PlainRefs";
 
 const when = (raw: unknown) => {
   const date = new Date(String(raw || ""));
@@ -299,7 +300,9 @@ export default function SessionInstructions({
                         {x.revision === session.revision ? " · current" : ""}
                       </summary>
                       {val(x, "reason") && (
-                        <p className="crew-footnote">{val(x, "reason")}</p>
+                        <p className="crew-footnote">
+                          <PlainRefs text={val(x, "reason")} />
+                        </p>
                       )}
                       <Markdown>{val(x, "instructions")}</Markdown>
                     </details>

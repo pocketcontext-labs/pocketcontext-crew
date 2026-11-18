@@ -3657,15 +3657,23 @@ describe("project agents and coding sessions", () => {
       render(<CrewWorkspace />);
       fireEvent.click(await screen.findByRole("button", { name: /Claimed work/ }));
       const dialog = within(screen.getByRole("dialog"));
-      expect(dialog.getByText(/^Session · /)).toBeInTheDocument();
-      expect(dialog.queryByRole("button", { name: /^Claim/ })).toBeNull();
-      fireEvent.click(dialog.getByRole("button", { name: "Release claim" }));
+      // One compact banner names the agent, not the session; actions are in ⋯.
+      const banner = within(dialog.getByRole("region", { name: "Claim" }));
+      expect(banner.getByText(`Claimed · ${String(project.name)}`)).toBeInTheDocument();
+      expect(banner.getByText(/^ends in 1 h \d+ m$/)).toBeInTheDocument();
+      expect(dialog.queryByRole("button", { name: /^Claim( task)?$/ })).toBeNull();
+      expect(dialog.queryByRole("button", { name: "Release claim" })).toBeNull();
+      const release = () => {
+        fireEvent.click(banner.getByRole("button", { name: "Claim actions" }));
+        fireEvent.click(banner.getByRole("menuitem", { name: "Release claim" }));
+      };
+      release();
       expect(confirm).toHaveBeenCalledWith(
         "A session is working on this. Release its claim?",
       );
       expect(crewApi.write).not.toHaveBeenCalled();
       confirm.mockReturnValue(true);
-      fireEvent.click(dialog.getByRole("button", { name: "Release claim" }));
+      release();
       await waitFor(() =>
         expect(crewApi.write).toHaveBeenCalledWith(
           "task.release",
@@ -3682,8 +3690,10 @@ describe("project agents and coding sessions", () => {
       render(<CrewWorkspace />);
       fireEvent.click(await screen.findByRole("button", { name: /Stale work/ }));
       const dialog = within(screen.getByRole("dialog"));
-      expect(dialog.getByText(/^Claim expired/)).toBeInTheDocument();
-      fireEvent.click(dialog.getByRole("button", { name: "Release claim" }));
+      expect(dialog.getByText(`Claim expired · ${String(project.name)}`)).toBeInTheDocument();
+      expect(dialog.getAllByText(/Claim expired/)).toHaveLength(1);
+      fireEvent.click(dialog.getByRole("button", { name: "Claim actions" }));
+      fireEvent.click(dialog.getByRole("menuitem", { name: "Release claim" }));
       await waitFor(() =>
         expect(crewApi.write).toHaveBeenCalledWith(
           "task.release",
@@ -3698,7 +3708,7 @@ describe("project agents and coding sessions", () => {
       render(<CrewWorkspace />);
       fireEvent.click(await screen.findByRole("button", { name: /Free work/ }));
       const dialog = within(screen.getByRole("dialog"));
-      expect(dialog.queryByRole("button", { name: "Release claim" })).toBeNull();
+      expect(dialog.queryByRole("button", { name: "Claim actions" })).toBeNull();
       expect(dialog.queryByText(/Claimed by|Claim expired/)).toBeNull();
     });
   });

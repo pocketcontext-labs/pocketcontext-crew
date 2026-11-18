@@ -1,8 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
   agentKind,
+  claimAgent,
+  claimLabel,
   claimOf,
   claimTitle,
+  claimTool,
   copyText,
   isBot,
   webhookConfigured,
@@ -62,6 +65,25 @@ it("reads the claim, showing a live claim whose lease passed as expired", () => 
   expect(claimTitle(claimOf(expired, now))).toBe(
     "Claimed by codex-1 · Start time unavailable · Claim expired",
   );
+});
+it("names the claim's agent and tool and shows exact times in the title", () => {
+  const now = Date.parse("2026-11-12T10:00:00Z");
+  const claim = claimOf(
+    row({
+      claim_state: "live",
+      claimed_by: "Implement · Claude Code · undulating-duck/2 · 9e017204",
+      claimed_at: "2026-11-12 09:45:00.000Z",
+      claim_until: "2026-11-12T11:45:00Z",
+    }),
+    now,
+  );
+  expect(claimAgent(claim)).toBe("Implement");
+  expect(claimAgent(claim, "Builder")).toBe("Builder");
+  expect(claimAgent(claimOf(row({ claim_state: "live" }), now))).toBe("a session");
+  expect(claimTool(claim)).toBe("Claude Code");
+  expect(claimLabel(claim, now)).toBe("Claude Code · 1 h 45 m left");
+  expect(claimTitle(claim)).toMatch(/^Claimed by Implement · Claude Code · undulating-duck\/2 · 9e017204 · Started .*2026.* · Until .*2026/);
+  expect(claimLabel({ ...claim, state: "expired" }, now)).toBe("Claim expired");
 });
 it("copies with the Clipboard API, else the copy command, else reports failure", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);

@@ -84,7 +84,7 @@ it("keeps full claim attribution in the tooltip and makes the chip short", () =>
     }),
     now,
   );
-  expect(claimLabel(claim, now)).toBe("Claude Code · 1h 40m left");
+  expect(claimLabel(claim, now)).toBe("Claude Code · 1 h 40 m left");
   expect(claimTitle(claim)).toContain("pane/1 · abcdef12");
   expect(claimTitle(claim)).toContain("Started");
 });

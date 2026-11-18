@@ -70,6 +70,7 @@ import {
   agentKindChoices,
   agentKinds,
   agentKindSuffix,
+  claimAgent,
   claimOf,
   claimLabel,
   claimTitle,
@@ -80,6 +81,7 @@ import {
 import { GlobalSearch, SearchPage, type SearchEntry } from "./Search";
 import { searchHash, searchTextFromHash, type SearchHit } from "./searchApi";
 import "./crew.css";
+import "./fields.css";
 import type { ServerVersion } from "./crewApi";
 import {
   AttachmentsProvider,
@@ -159,6 +161,11 @@ import {
   type StepResult,
 } from "./swipe";
 import Archive, { type RestoreItem } from "./Archive";
+import AutoTextarea, { AutoTextField } from "./AutoTextarea";
+import ClaimBanner from "./ClaimBanner";
+import HoldReasonField from "./HoldReasonField";
+import PlainRefs from "./PlainRefs";
+import { useNow } from "./relativeTime";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
   ["board", "Tasks", "▦"],
@@ -372,13 +379,9 @@ function FilterChipButton({
     </button>
   );
 }
-/** A coding session's claim: live with its end time on hover, or expired. */
-function ClaimChip({ task, details = false }: { task: Row; details?: boolean }) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
+/** A coding session's claim: time left (exact times on hover), or expired. */
+function ClaimChip({ task }: { task: Row }) {
+  const now = useNow().getTime();
   const claim = claimOf(task, now);
   if (!claim.state) return null;
   const title = claimTitle(claim);
@@ -386,7 +389,6 @@ function ClaimChip({ task, details = false }: { task: Row; details?: boolean }) 
   return (
     <span className={warning ? "crew-claim-expired" : "crew-claim-chip"} title={title}>
       {claimLabel(claim, now)}
-      {details && <span className="crew-claim-details">{title}</span>}
     </span>
   );
 }
@@ -3626,16 +3628,13 @@ function Editor({
             <span className="crew-note-bucket">{val(buckets, "name")}</span>
           )}
           <fieldset className="crew-form-fields" disabled={readOnly}>
-            <Field
+            <AutoTextField
               label={kind === "note" || kind === "task" ? "Title" : "Name"}
-            >
-              <input
-                required
-                maxLength={200}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </Field>
+              required
+              maxLength={200}
+              value={title}
+              onValue={setTitle}
+            />
             {kind === "agent" && (
               <fieldset className="crew-agent-start">
                 <legend>
@@ -3754,18 +3753,21 @@ function Editor({
             {kind === "task" && (
               <>
                 {row && claim.state && (
-                  <div className="crew-claim-row">
-                    <ClaimChip task={row} details />
-                    {!readOnly && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void releaseClaim()}
-                      >
-                        Release claim
-                      </button>
+                  <ClaimBanner
+                    claim={claim}
+                    agent={claimAgent(
+                      claim,
+                      val(
+                        data.agents.find(
+                          (x) => x.id === val(row, "assigned_agent"),
+                        ),
+                        "name",
+                      ),
                     )}
-                  </div>
+                    readOnly={readOnly}
+                    busy={busy}
+                    onRelease={() => void releaseClaim()}
+                  />
                 )}
                 <div className="crew-form-grid">
                   <div className="crew-status-field">
@@ -3823,14 +3825,11 @@ function Editor({
                     </select>
                   </Field>
                   {readiness !== "ready" && (
-                    <Field label="Hold reason">
-                      <input
-                        value={waitingReason}
-                        onChange={(e) => setWaitingReason(e.target.value)}
-                        placeholder="What needs to happen first?"
-                        maxLength={2000}
-                      />
-                    </Field>
+                    <HoldReasonField
+                      value={waitingReason}
+                      onValue={setWaitingReason}
+                      readOnly={readOnly}
+                    />
                   )}
                 </div>
                 <p className="crew-footnote crew-hold-explainer">
@@ -3870,9 +3869,9 @@ function Editor({
             )}
             {row && !readOnly && dirty && (
               <Field label="Reason for change" help="reason">
-                <input
+                <AutoTextarea
                   value={reason}
-                  onChange={(e) => setReason(e.target.value)}
+                  onValue={setReason}
                   placeholder="Optional: what changed and why?"
                 />
               </Field>
@@ -3944,7 +3943,12 @@ function Editor({
                     {val(x, "reported_agent") ||
                       val(x, "actor") ||
                       "Owner / connection"}
-                    {val(x, "reason") ? ` · ${val(x, "reason")}` : ""}
+                    {val(x, "reason") ? (
+                      <>
+                        {" · "}
+                        <PlainRefs text={val(x, "reason")} />
+                      </>
+                    ) : null}
                   </p>
                   <h3>{val(x, "title")}</h3>
                   <Prose>{val(x, "body")}</Prose>
@@ -4110,7 +4114,9 @@ function Editor({
                       <Prose>{val(x, "body")}</Prose>
                     </div>
                   ) : (
-                    <p>{val(x, "body") || val(x, "reason")}</p>
+                    <p>
+                      <PlainRefs text={val(x, "body") || val(x, "reason")} />
+                    </p>
                   )}
                 </li>
               );
@@ -4133,7 +4139,11 @@ function Editor({
                 <ReviewChoices row={x} Prose={Prose} />
               </ReviewContent>
               {decisionSummary(x) && <p>{decisionSummary(x)}</p>}
-              {val(x, "decision_note") && <p>{val(x, "decision_note")}</p>}
+              {val(x, "decision_note") && (
+                <p>
+                  <PlainRefs text={val(x, "decision_note")} />
+                </p>
+              )}
               {val(x, "status") === "pending" && !readOnly && (
                 <button
                   disabled={busy}

@@ -23,6 +23,8 @@ import { Icon, useDialogMenu, type MenuItem } from "./DialogHeader";
 import { reviewHash } from "./itemLink";
 import { copyText } from "./projectAgents";
 import "./review.css";
+import AutoTextarea, { AutoTextField } from "./AutoTextarea";
+import PlainRefs from "./PlainRefs";
 
 type ProseComponent = ComponentType<{ children: string }>;
 export function ReviewContent({
@@ -161,14 +163,14 @@ export function ReviewChoices({
   const images = options.filter(isImageOption);
   const field = (option: ReviewOption, pick: OptionPick) =>
     editable ? (
-      <input
+      <AutoTextarea
         id={`${prefix}-${option.key}`}
         className="crew-pick-note"
         aria-label={`Feedback on ${option.label}`}
         placeholder={`Feedback on ${option.label}…`}
         maxLength={20000}
         value={pick.note}
-        onChange={(e) => onChange(option.key, { ...pick, note: e.target.value })}
+        onValue={(note) => onChange(option.key, { ...pick, note })}
       />
     ) : (
       <p className="crew-pick-feedback">
@@ -474,7 +476,8 @@ export function ReviewDecision({
       )}
       {val(row, "decision_note") && (
         <p>
-          <strong>Your decision note:</strong> {val(row, "decision_note")}
+          <strong>Your decision note:</strong>{" "}
+          <PlainRefs text={val(row, "decision_note")} />
         </p>
       )}
       {pending && (
@@ -562,22 +565,19 @@ export function ReviewRequest({
         {options.map((option, index) => (
           <fieldset key={option.key} className="crew-review-option">
             <legend>Option {index + 1}</legend>
-            <label className="crew-option-note">
-              Option {index + 1} label
-              <input
-                maxLength={200}
-                value={option.label}
-                onChange={(e) =>
-                  setOptions(
-                    options.map((o) =>
-                      o.key === option.key
-                        ? { ...o, label: e.target.value }
-                        : o,
-                    ),
-                  )
-                }
-              />
-            </label>
+            <AutoTextField
+              className="crew-option-note"
+              label={`Option ${index + 1} label`}
+              maxLength={200}
+              value={option.label}
+              onValue={(label) =>
+                setOptions(
+                  options.map((o) =>
+                    o.key === option.key ? { ...o, label } : o,
+                  ),
+                )
+              }
+            />
             <label className="crew-option-note">
               Option {index + 1} draft
               <textarea

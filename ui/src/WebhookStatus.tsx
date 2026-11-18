@@ -11,6 +11,7 @@ import Help, { HelpField } from "./Help";
 import type { HelpTopic } from "./helpContent";
 import { itemPath } from "./itemLink";
 import { isBot } from "./projectAgents";
+import { AutoTextField } from "./AutoTextarea";
 import { isClosed } from "./closedTasks";
 import { strandedSince, strandedWakes } from "./wakes";
 type WakeRule = {
@@ -1736,18 +1737,20 @@ function AgentMapping({
           disabled={disabled}
           onChange={(e) => setReference(e.target.value)}
           placeholder="Confirmed bot reference"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
         />
       </label>
-      <label className="crew-field">
-        <span>Bot display name for {val(agent, "name")} (optional)</span>
-        <input
-          value={name}
-          maxLength={200}
-          disabled={disabled}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Name shown in Grok"
-        />
-      </label>
+      <AutoTextField
+        label={`Bot display name for ${val(agent, "name")} (optional)`}
+        value={name}
+        maxLength={200}
+        disabled={disabled}
+        onValue={setName}
+        placeholder="Name shown in Grok"
+      />
       <button
         disabled={
           disabled || (reference.trim() === saved && !nameChanged)

@@ -1397,12 +1397,70 @@ try {
  assert.equal(await claimCard.getByText('Ready',{exact:true}).count(),0);
  assert.equal(await claimCard.getByRole('button',{name:'Filter by label Synthetic-board-agent'}).count(),0);
  const claimChip=claimCard.locator('.crew-claim-chip');
- assert.match(await claimChip.innerText(),/^Codex · (1h 59m|2h 0m) left$/);
- assert.match(await claimChip.getAttribute('title'),/Synthetic · Codex · browser\/1 · abcdef12.*Started.*Until/);
- await claimCard.click();await dialog().waitFor();
- await dialog().locator('.crew-claim-details').waitFor();
- assert.match(await dialog().locator('.crew-claim-details').innerText(),/browser\/1/);
+ assert.match(await claimChip.innerText(),/^Codex · (1 h 59 m|2 h) left$/);
+ assert.match(await claimChip.getAttribute('title'),/Synthetic · Codex · browser\/1 · abcdef12 · Started .*20\d\d.* · Until .*20\d\d/);
+ // Edit task's claim (0.33.0): one compact banner, at most two lines at 390, the agent's name only, relative times, Details and actions in ⋯.
+ for(const width of [390,1024]){
+  await page.setViewportSize({width,height:844});
+  await claimCard.click();await dialog().waitFor();
+  const banner=dialog().getByRole('region',{name:'Claim'});await banner.waitFor();await banner.scrollIntoViewIfNeeded();
+  assert.equal(await banner.locator('.crew-claim-banner-title').innerText(),'Claimed · Synthetic-board-agent',`claim title names the agent at ${width}`);
+  const times=banner.locator('.crew-claim-banner-times');
+  assert.match(await times.innerText(),/^Started (just now|\d min ago) · ends in (1 h 5\d m|2 h) · Details$/,`relative claim times at ${width}`);
+  assert.match(await times.locator('time').first().getAttribute('title'),/20\d\d/,'exact start time on hover');
+  const details=banner.getByText(/browser\/1 · abcdef12/);
+  assert.equal(await details.isVisible(),false,'session details hidden while collapsed');
+  const lines=await banner.evaluate(b=>{const line=parseFloat(getComputedStyle(b.querySelector('.crew-claim-banner-times')).lineHeight);return {times:b.querySelector('.crew-claim-banner-times').getBoundingClientRect().height/line,height:b.getBoundingClientRect().height};});
+  assert.ok(lines.times<1.5&&lines.height<=84,`collapsed claim banner is two lines at ${width} (${JSON.stringify(lines)})`);
+  assert.equal(await dialog().getByRole('button',{name:'Release claim'}).count(),0,'Release claim is not on the main screen');
+  if(width===390){
+   // Even spacing: no group touches the next one's label, and the claim, Status, Labels and Hold groups are 14-26 px apart.
+   const gaps=await dialog().locator('fieldset.crew-form-fields').evaluate(f=>{const blocks=[...f.children].flatMap(c=>c.classList.contains('crew-form-grid')?[...c.children]:[c]).filter(e=>e.getBoundingClientRect().height>0);const out=[];for(let i=1;i<blocks.length;i++){const a=blocks[i-1].getBoundingClientRect(),b=blocks[i].getBoundingClientRect();out.push({from:blocks[i-1].className,to:blocks[i].className,gap:Math.round(b.top-a.bottom)});}return out;});
+   for(const g of gaps)assert.ok(g.gap>=8,`nothing touches the next group: ${JSON.stringify(g)}`);
+   const at=name=>gaps.findIndex(g=>g.from.includes(name));
+   for(const name of ['crew-claim-banner','crew-status-field','crew-labels-field']){const g=gaps[at(name)];assert.ok(g&&g.gap>=14&&g.gap<=26,`even spacing after ${name}: ${JSON.stringify(g)}`);}
+   const labelsBox=await dialog().locator('.crew-chip-input').evaluate(b=>{const tops=new Set([...b.querySelectorAll('.crew-chip,input')].map(e=>Math.round(e.getBoundingClientRect().top)));return {rows:tops.size,height:b.getBoundingClientRect().height};});
+   assert.ok(labelsBox.height<=labelsBox.rows*34+12,`Labels is only as tall as its chip rows plus compact padding (${JSON.stringify(labelsBox)})`);
+  }
+  await snapView(`crew-claim-banner-${width}`);
+  await banner.getByRole('button',{name:'Details'}).click();
+  assert.equal(await details.isVisible(),true,'Details reveals tool, session and hash');
+  await banner.getByRole('button',{name:'Claim actions'}).click();
+  await banner.getByRole('menuitem',{name:'Copy details'}).waitFor();
+  await banner.getByRole('menuitem',{name:'Release claim'}).waitFor();
+  await snapView(`crew-claim-menu-${width}`);
+  await page.keyboard.press('Escape');
+  await banner.getByRole('menuitem',{name:'Release claim'}).waitFor({state:'hidden'});
+  assert.equal(await dialog().isVisible(),true,'Escape closes only the claim menu');
+  await close();await dialog().waitFor({state:'hidden'});
+ }
+ // Long titles and hold reasons wrap at 390 (0.33.0): the title is a growing textarea, and the hold reason reads with linked record titles.
+ {const held=await boardWrite('task.create',{title:'Launch and virality plan for the board catalog (X, LinkedIn and other channels): drafts only',readiness:'waiting',waiting_reason:`Waiting for the claim (${boardTask.id}) first. Then Ready.`,labels:['Synthetic-board']});
+ await page.setViewportSize({width:390,height:844});
+ await page.goto(base+'/#/tasks/'+held.id);await page.reload();await dialog().waitFor();
+ const title=dialog().getByLabel('Title',{exact:true});await title.waitFor();
+ const metrics=await title.evaluate(t=>({tag:t.tagName,sw:t.scrollWidth,cw:t.clientWidth,h:t.getBoundingClientRect().height,line:parseFloat(getComputedStyle(t).lineHeight),font:parseFloat(getComputedStyle(t).fontSize),auto:t.getAttribute('autocomplete')}));
+ assert.equal(metrics.tag,'TEXTAREA','Title is a wrapping textarea');
+ assert.ok(metrics.sw<=metrics.cw,`Title never scrolls sideways (${metrics.sw} > ${metrics.cw})`);
+ assert.ok(metrics.h>=metrics.line*2,'the long title wraps onto more lines');
+ assert.ok(metrics.font>=16,'Title is 16 px or more on a phone (no iOS zoom)');
+ assert.equal(metrics.auto,'off','no AutoFill on Title');
+ const read=dialog().locator('.crew-plain-read');await read.scrollIntoViewIfNeeded();
+ const ref=read.locator('a.crew-ref');await ref.waitFor();
+ assert.equal(await ref.innerText(),'Synthetic compact claim','the id in the hold reason reads as the record title');
+ assert.equal(await dialog().getByLabel('Hold reason',{exact:true}).isVisible(),false,'hold reason opens in Read');
+ assert.equal(await read.evaluate(e=>e.scrollWidth<=e.clientWidth),true,'hold reason wraps');
+ await snapView('crew-edit-task-fields-390');
+ await read.getByText(/Then Ready/).click();
+ const reason=dialog().getByLabel('Hold reason',{exact:true});await reason.waitFor();
+ assert.equal(await reason.inputValue(),`Waiting for the claim (${boardTask.id}) first. Then Ready.`,'Edit shows the raw stored text');
+ await reason.press('End');await reason.press('Enter');
+ assert.doesNotMatch(await reason.inputValue(),/\n/,'Enter never adds a line');
+ await snapView('crew-edit-task-fields-editing-390');
+ await dialog().getByRole('button',{name:'Done'}).click();await ref.waitFor();
  await close();await dialog().waitFor({state:'hidden'});
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto(base+'/#/tasks?label=synthetic-board');await claimCard.waitFor();}
  // Every Home tile opens exactly the number it counted, including old Done and stale holds.
  for(const name of ['To do','In progress','Needs review','Done','on hold over 3 days']){
   await page.goto(base+'/#/');

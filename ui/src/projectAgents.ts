@@ -1,4 +1,5 @@
 import { val, type Row } from "./crewApi";
+import { formatDuration, formatExact, parseInstant } from "./relativeTime";
 
 /**
  * How an agent is started: a webhook-woken bot, a project agent whose coding
@@ -60,40 +61,44 @@ export function claimOf(task: Row | undefined, now = Date.now()): Claim {
   const by = val(task, "claimed_by").trim();
   const until = val(task, "claim_until");
   let state: Claim["state"] = raw === "live" || raw === "expired" ? raw : "";
-  if (state === "live" && until && Date.parse(until) <= now) state = "expired";
+  const end = parseInstant(until);
+  if (state === "live" && end && end.getTime() <= now) state = "expired";
   return { state, by, until, started: val(task, "claimed_at") };
 }
-/** HH:MM in the owner's local time. */
-export const claimTime = (until: string) => {
-  const date = new Date(until);
-  return Number.isNaN(date.getTime())
-    ? ""
-    : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-};
+/** The coding tool named in `claimed_by`, if any. */
+export const claimTool = (claim: Claim) =>
+  claim.by
+    .split(" · ")
+    .find((part) => /^(Codex|Claude Code|Antigravity)$/i.test(part.trim()))
+    ?.trim() || "";
+/**
+ * The agent a claim belongs to: the task's assigned agent when known (only
+ * its sessions can claim), else the first part of `claimed_by`.
+ */
+export const claimAgent = (claim: Claim, assigned = "") =>
+  assigned.trim() || claim.by.split(" · ")[0].trim() || "a session";
+/**
+ * The claim with exact local times, for a tooltip and Copy details:
+ * "Claimed by … · Started Nov 17, 2026, 1:18 PM · Until … · Claim expired".
+ */
 export const claimTitle = (claim: Claim) =>
   [
     claim.by ? `Claimed by ${claim.by}` : "Claimed by a session",
-    claim.started
-      ? `Started ${new Date(claim.started).toLocaleString()}`
+    formatExact(claim.started)
+      ? `Started ${formatExact(claim.started)}`
       : "Start time unavailable",
-    claim.until ? `Until ${new Date(claim.until).toLocaleString()}` : "",
+    formatExact(claim.until) ? `Until ${formatExact(claim.until)}` : "",
     claim.state === "expired" ? "Claim expired" : "",
   ]
     .filter(Boolean)
     .join(" · ");
+/** A card chip: "Claude Code · 1 h 40 m left", or "Claim expired". */
 export function claimLabel(claim: Claim, now = Date.now()) {
   if (claim.state === "expired") return "Claim expired";
-  const tool =
-    claim.by
-      .split(" · ")
-      .find((part) => /^(Codex|Claude Code|Antigravity)$/i.test(part)) ||
-    "Session";
-  const minutes = Math.max(
-    0,
-    Math.ceil((Date.parse(claim.until) - now) / 60000),
-  );
-  if (!Number.isFinite(minutes)) return tool;
-  return `${tool} · ${minutes >= 60 ? `${Math.floor(minutes / 60)}h ` : ""}${minutes % 60}m left`;
+  const tool = claimTool(claim) || "Session";
+  const until = parseInstant(claim.until);
+  if (!until) return tool;
+  return `${tool} · ${formatDuration(Math.max(0, until.getTime() - now))} left`;
 }
 
 /**
