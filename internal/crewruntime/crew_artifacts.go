@@ -9,12 +9,19 @@ package crewruntime
 // 0.22.0 a link may expire: from expires_at on, its token gets that same 404
 // with no manual action, and archived artifacts never serve.
 //
-// The page has no script, no Crew navigation and no links back into Crew:
+// External http(s) links open in a new tab (target=_blank, noopener), so
+// they leave a framed preview or a home-screen app without replacing it.
+//
+// The page has no script, no Crew navigation and no links back into Crew
+// (one scoped exception: a "Back to Crew" bar linking to "/", hidden unless
+// the page shows in the installed home-screen app; see artifactBackBar):
 // Markdown is rendered with the notes' GFM semantics, raw HTML is omitted,
 // images resolve only through the artifact's published file list, and links
 // survive only when they are http(s) or mailto and point to another host.
 // Responses carry noindex, no-referrer, a strict CSP and no-store, so a
-// revoke takes effect on the next request.
+// revoke takes effect on the next request. Since 0.33.0 they may be framed
+// by Crew's own origin only (frame-ancestors 'self', SAMEORIGIN): the
+// reader previews a page in the home-screen app, which has no Back.
 //
 // Rate limits are keyed like the upload-link guard: hosted mode sees one
 // proxy address, so a per-IP limit would throttle everyone together. A
@@ -51,6 +58,7 @@ const (
 	artifactBucketsMax    = 1024
 	artifactMaxFiles      = 9999
 	artifactRelAttribute  = "nofollow noopener noreferrer"
+	artifactLinkTarget    = "_blank"
 	artifactRobotsHeader  = "noindex, nofollow, noarchive"
 	artifactNotFoundBody  = "This link is no longer available.\n"
 	artifactRateLimitBody = "Too many requests. Try again shortly.\n"
@@ -130,14 +138,14 @@ func artifactHeaders(h http.Header) {
 	h.Set("X-Robots-Tag", artifactRobotsHeader)
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("X-Content-Type-Options", "nosniff")
-	h.Set("X-Frame-Options", "DENY")
+	h.Set("X-Frame-Options", "SAMEORIGIN")
 	h.Set("Cross-Origin-Resource-Policy", "same-origin")
 }
 
 func artifactPlain(re *core.RequestEvent, status int, body string) error {
 	h := re.Response.Header()
 	h.Set("Content-Type", "text/plain; charset=utf-8")
-	h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+	h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'self'")
 	re.Response.WriteHeader(status)
 	if re.Request.Method != http.MethodHead {
 		_, _ = re.Response.Write([]byte(body))
@@ -275,13 +283,28 @@ pre code{padding:0;background:none}
 blockquote{margin:16px 0;padding:0 16px;border-left:3px solid var(--rule);color:var(--muted)}
 table{border-collapse:collapse;display:block;overflow-x:auto;margin:16px 0}
 th,td{border:1px solid var(--rule);padding:6px 10px;text-align:left}
-hr{border:0;border-top:1px solid var(--rule);margin:28px 0}`
+hr{border:0;border-top:1px solid var(--rule);margin:28px 0}
+.crew-back{display:none;margin:-40px -20px 24px;padding:calc(10px + env(safe-area-inset-top,0px)) 20px 10px;border-bottom:1px solid var(--rule);font-size:15px}
+.crew-back a{font-weight:600;text-decoration:none}
+@media (display-mode:standalone){.crew-back{display:block}}
+#in-crew{scroll-margin-top:40px}#in-crew:target~.crew-back{display:none}`
 
 var artifactCSP = func() string {
 	sum := sha256.Sum256([]byte(artifactStyle))
 	return "default-src 'none'; img-src 'self'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) +
-		"'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		"'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
 }()
+
+// artifactBackBar is the safety net for the installed home-screen app: a
+// standalone app has no browser Back, so if a published page ever loads in
+// its own window the owner could not leave it. The bar shows only in
+// standalone display mode (CSS, no script); browsers, where every recipient
+// reads the page, never display it, and only the owner installs Crew as a
+// home-screen app. It links to "/", the app's start URL, which reveals
+// nothing beyond the host the visitor already has (no ids, no titles);
+// signed out, it shows the sign-in page. The reader's in-app preview frames
+// the page at "#in-crew", which hides the bar there (:target).
+const artifactBackBar = `<span id="in-crew"></span><nav class="crew-back" aria-label="Crew" hidden><a href="/">‹ Back to Crew</a></nav>`
 
 // renderArtifactPage builds the standalone page for a published snapshot.
 func renderArtifactPage(title, body, publishedAt, token string, files []string, blockedHosts map[string]bool) []byte {
@@ -291,7 +314,9 @@ func renderArtifactPage(title, body, publishedAt, token string, files []string, 
 	out.WriteString("<meta name=\"robots\" content=\"" + artifactRobotsHeader + "\">")
 	out.WriteString("<meta name=\"referrer\" content=\"no-referrer\">")
 	out.WriteString("<title>" + html.EscapeString(title) + "</title>")
-	out.WriteString("<style>" + artifactStyle + "</style></head><body><header><h1>")
+	out.WriteString("<style>" + artifactStyle + "</style></head><body>")
+	out.WriteString(artifactBackBar)
+	out.WriteString("<header><h1>")
 	out.WriteString(html.EscapeString(title))
 	out.WriteString("</h1>")
 	if at, err := time.Parse(time.RFC3339Nano, publishedAt); err == nil {
@@ -340,6 +365,9 @@ func renderArtifactMarkdown(source, token string, files []string, blockedHosts m
 			if allowedArtifactLink(dest, blockedHosts) {
 				v.Destination = []byte(dest)
 				v.SetAttributeString("rel", []byte(artifactRelAttribute))
+				if !strings.HasPrefix(strings.ToLower(dest), "mailto:") {
+					v.SetAttributeString("target", []byte(artifactLinkTarget))
+				}
 			} else {
 				changes = append(changes, change{node: v})
 			}
@@ -350,6 +378,9 @@ func renderArtifactMarkdown(source, token string, files []string, blockedHosts m
 			}
 			if allowedArtifactLink(link, blockedHosts) {
 				v.SetAttributeString("rel", []byte(artifactRelAttribute))
+				if v.AutoLinkType != ast.AutoLinkEmail {
+					v.SetAttributeString("target", []byte(artifactLinkTarget))
+				}
 			} else {
 				changes = append(changes, change{node: v, replace: ast.NewString(v.Label(src))})
 			}

@@ -1,0 +1,43 @@
+/* In-app preview of a published page (PagePreview): one full-window sheet
+   with the reader's floating dialog header over a frame of the page. */
+.crew-dialog.crew-page-preview {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+.crew-page-preview > header.crew-dialog-head {
+  position: relative;
+  padding-top: calc(12px + env(safe-area-inset-top));
+  border-bottom: 1px solid #e0e5d7;
+}
+.crew-page-preview-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #fafaf7;
+}
+.crew-page-preview-copied {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: #233a28;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 4;
+}
+.crew-page-preview-none {
+  margin: 24px;
+  color: #5f6f59;
+}

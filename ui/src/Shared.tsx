@@ -7,6 +7,7 @@ import {
   sharedHash,
   type SharedFilter,
 } from "./itemLink";
+import PagePreview, { isStandaloneDisplay } from "./PagePreview";
 import "./shared.css";
 
 /**
@@ -253,6 +254,7 @@ function ArtifactCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState<"" | "copied" | "failed">("");
+  const [previewing, setPreviewing] = useState(false);
   const url = state === "published" ? artifactUrl(link) : "";
   const run = async (action: string, data: Record<string, unknown> = {}) => {
     setBusy(true);
@@ -373,16 +375,30 @@ function ArtifactCard({
             {copied === "copied" ? "Link copied" : "Copy link"}
           </button>
           {/* Opens what recipients see in a new tab; Crew does not count it
-              as a view (same-origin navigation). */}
+              as a view (same-origin navigation). The home-screen app has no
+              Back, so there it opens in the in-app preview instead. */}
           <a
             className="crew-artifact-open"
             href={url}
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Open ${val(row, "title")} in a new tab`}
+            onClick={(e) => {
+              if (!isStandaloneDisplay()) return;
+              e.preventDefault();
+              setPreviewing(true);
+            }}
           >
             Open
           </a>
+          {previewing && (
+            <PagePreview
+              url={url}
+              title={val(row, "published_title") || val(row, "title")}
+              backLabel="Back to Shared"
+              onClose={() => setPreviewing(false)}
+            />
+          )}
           {copied === "failed" && (
             <span role="alert" className="crew-copy-error">
               Could not copy automatically. Copy it from the box.

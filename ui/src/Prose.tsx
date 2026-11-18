@@ -1,5 +1,6 @@
 import {
   Children,
+  useState,
   type ComponentProps,
   type ReactNode,
 } from "react";
@@ -19,6 +20,7 @@ import {
   remarkCrewRefs,
   useReference,
 } from "./references";
+import PagePreview, { isStandaloneDisplay, publicPagePath } from "./PagePreview";
 import { followLink } from "./trail";
 
 /** A bare id: its record's title when it resolves, otherwise the plain id. */
@@ -88,6 +90,8 @@ function ProseAnchor({
   if (/^mailto:/i.test(href)) return <a href={href}>{children}</a>;
   if (!/^https?:\/\//i.test(href)) return <>{children}</>;
   const shown = pasted ? displayUrl(href) : null;
+  if (publicPagePath(href))
+    return <PublicPageAnchor href={href}>{shown ?? children}</PublicPageAnchor>;
   return (
     <a
       href={href}
@@ -97,6 +101,44 @@ function ProseAnchor({
     >
       {shown ?? children}
     </a>
+  );
+}
+
+/**
+ * A link to one of this Crew's published pages (`/a/<token>`): a new tab in a
+ * browser; in the home-screen app, which keeps in-scope links in its own
+ * window and has no Back, the in-app preview.
+ */
+function PublicPageAnchor({
+  href,
+  children,
+}: {
+  href: string;
+  children?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => {
+          if (!isStandaloneDisplay()) return;
+          e.preventDefault();
+          setOpen(true);
+        }}
+      >
+        {children}
+      </a>
+      {open && (
+        <PagePreview
+          url={href}
+          title={textOf(children) || "Shared page"}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 

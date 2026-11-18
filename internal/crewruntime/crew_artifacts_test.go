@@ -1,6 +1,7 @@
 package crewruntime
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -21,9 +22,9 @@ func TestArtifactMarkdownKeepsOnlyPublishedImagesAndExternalLinks(t *testing.T) 
 	out := string(renderArtifactMarkdown(source, token, []string{"aaaaaaaaaaaaaaa"}, map[string]bool{"crew.example.com": true}))
 	for _, want := range []string{
 		`<img src="/a/` + token + `/files/1" alt="chart">`,
-		`<a href="https://example.com/d" rel="nofollow noopener noreferrer">docs</a>`,
+		`<a href="https://example.com/d" rel="nofollow noopener noreferrer" target="_blank">docs</a>`,
 		`<a href="mailto:a@example.com" rel="nofollow noopener noreferrer">mail</a>`,
-		`<a href="https://example.org/x" rel="nofollow noopener noreferrer">`,
+		`<a href="https://example.org/x" rel="nofollow noopener noreferrer" target="_blank">`,
 		"<table>", "<h1>Plan</h1>",
 	} {
 		if !strings.Contains(out, want) {
@@ -49,8 +50,41 @@ func TestArtifactPageHeadAndStyleHash(t *testing.T) {
 		!strings.Contains(page, "Published 12 November 2026") || strings.Contains(page, "<script") {
 		t.Fatal(page)
 	}
-	if !strings.Contains(artifactCSP, "style-src 'sha256-") || strings.Contains(artifactCSP, "unsafe") || strings.Contains(artifactCSP, "script-src") {
+	if !strings.Contains(artifactCSP, "style-src 'sha256-") || strings.Contains(artifactCSP, "unsafe") || strings.Contains(artifactCSP, "script-src") ||
+		!strings.Contains(artifactCSP, "frame-ancestors 'self'") || !strings.Contains(artifactCSP, "default-src 'none'") {
 		t.Fatal(artifactCSP)
+	}
+}
+
+func TestArtifactPageBackBarOnlyInStandaloneApp(t *testing.T) {
+	page := string(renderArtifactPage("Plan", "Body", "", strings.Repeat("b", 32), nil, nil))
+	bar := `<span id="in-crew"></span><nav class="crew-back" aria-label="Crew" hidden><a href="/">‹ Back to Crew</a></nav>`
+	if !strings.Contains(page, "<body>"+bar+"<header>") {
+		t.Fatal(page)
+	}
+	// Hidden by default, shown only in the home-screen app, hidden again
+	// inside the reader's preview frame (#in-crew).
+	for _, rule := range []string{
+		".crew-back{display:none;",
+		"@media (display-mode:standalone){.crew-back{display:block}}",
+		"#in-crew:target~.crew-back{display:none}",
+	} {
+		if !strings.Contains(artifactStyle, rule) {
+			t.Errorf("missing %q", rule)
+		}
+	}
+	// It is the page's only link into Crew.
+	if strings.Count(page, "<a ") != 1 || strings.Contains(page, "#/") {
+		t.Fatal(page)
+	}
+}
+
+func TestArtifactHeadersAllowOnlyCrewFraming(t *testing.T) {
+	h := http.Header{}
+	artifactHeaders(h)
+	if h.Get("X-Frame-Options") != "SAMEORIGIN" || h.Get("Referrer-Policy") != "no-referrer" ||
+		h.Get("Cache-Control") != "no-store" || !strings.Contains(h.Get("X-Robots-Tag"), "noindex") {
+		t.Fatal(h)
 	}
 }
 

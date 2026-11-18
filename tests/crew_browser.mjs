@@ -1724,6 +1724,28 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  await ownerTab.close();
  await page.reload();
  await artifactCard.getByText('0 views').waitFor();
+ // In the home-screen app (standalone, emulated by a matchMedia override) Open shows the page in the in-app preview; Back returns to Shared with the filter and scroll kept, and the preview is not a view.
+ {const size=page.viewportSize();
+ await page.addInitScript(()=>{if(sessionStorage.getItem('crew-standalone')!=='1')return;const mm=window.matchMedia.bind(window);window.matchMedia=q=>q==='(display-mode: standalone)'?{matches:true,media:q,onchange:null,addEventListener(){},removeEventListener(){},addListener(){},removeListener(){},dispatchEvent(){return false;}}:mm(q);});
+ await page.evaluate(()=>sessionStorage.setItem('crew-standalone','1'));
+ for(const width of [390,1024]){await page.setViewportSize({width,height:844});await page.reload();await artifactCard.getByText('0 views').waitFor();
+  const archivedChip=page.getByRole('group',{name:'Show artifacts'}).getByRole('button',{name:/^Archived/});await archivedChip.click();const hash=await page.evaluate(()=>location.hash);
+  const openLink=artifactCard.getByRole('link',{name:/^Open .* in a new tab$/});await openLink.scrollIntoViewIfNeeded();await page.evaluate(()=>window.scrollBy(0,40));const scrollY=await page.evaluate(()=>scrollY);
+  const tabs=page.context().pages().length;await openLink.click();
+  const sheet=page.getByRole('dialog',{name:'Shared page: Synthetic partner pricing'});await sheet.waitFor();
+  assert.match(page.url(),/#\/shared/,'the app window stays on Crew');assert.equal(page.context().pages().length,tabs,'no new window');
+  const frame=page.frameLocator('.crew-page-preview-frame');await frame.getByRole('heading',{name:'Synthetic partner pricing'}).waitFor();
+  await page.waitForFunction(()=>{const d=document.querySelector('.crew-page-preview-frame')?.contentDocument;const i=d?[...d.images]:[];return i.length===1&&i[0].complete&&i[0].naturalWidth>0;});
+  assert.equal(await frame.locator('nav.crew-back').isVisible(),false,'no Back to Crew bar inside the preview');
+  const box=await sheet.boundingBox();assert.ok(box.width>=width-1&&box.height>=843,'the preview fills the window: '+JSON.stringify(box));
+  await sheet.getByRole('button',{name:'More actions'}).click();for(const item of ['Copy link',/^Open in (Safari|browser)$/])await page.getByRole('menuitem',{name:item}).waitFor();
+  await snapView('crew-page-preview-menu-'+width);await page.keyboard.press('Escape');
+  await snapView('crew-page-preview-'+width);
+  await sheet.getByRole('button',{name:'Back to Shared'}).click();await sheet.waitFor({state:'hidden'});
+  assert.equal(await page.evaluate(()=>location.hash),hash,'the filter stays in the address');assert.equal(await archivedChip.getAttribute('aria-pressed'),'true','the filter stays on');
+  assert.equal(await page.evaluate(()=>scrollY),scrollY,'the scroll position stays');
+  await archivedChip.click();}
+ await page.evaluate(()=>sessionStorage.removeItem('crew-standalone'));await page.setViewportSize(size);await page.reload();await artifactCard.getByText('0 views').waitFor();}
  const visitor=await browser.newContext({viewport:{width:390,height:844}});
  const visitorPage=await visitor.newPage();
  const visitorRequests=[];visitorPage.on('request',r=>visitorRequests.push(r.url()));
@@ -1733,7 +1755,13 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  assert.match(shared.headers()['x-robots-tag'],/noindex/);
  await visitorPage.getByRole('heading',{name:'Synthetic partner pricing'}).waitFor();
  await visitorPage.waitForFunction(()=>{const i=[...document.images];return i.length===1&&i[0].complete&&i[0].naturalWidth>0;});
- assert.equal(await visitorPage.locator('a').count(),0,'no links back into Crew');
+ assert.equal(await visitorPage.locator('a:visible').count(),0,'no visible links back into Crew');
+ // The safety net for the home-screen app: a CSS-only Back to Crew bar, shown only in standalone display mode.
+ assert.equal(await visitorPage.locator('nav.crew-back a[href="/"]').count(),1);assert.equal(await visitorPage.locator('nav.crew-back').isVisible(),false,'browsers never show the bar');
+ assert.ok(await visitorPage.evaluate(()=>[...document.styleSheets].some(s=>[...s.cssRules].some(r=>r.media&&/display-mode: ?standalone/.test(r.media.mediaText)&&r.cssText.includes('.crew-back')))),'the bar has its standalone rule');
+ {const cdp=await visitor.newCDPSession(visitorPage);let emulated=false;try{await cdp.send('Emulation.setEmulatedMedia',{features:[{name:'display-mode',value:'standalone'}]});emulated=await visitorPage.evaluate(()=>matchMedia('(display-mode: standalone)').matches);}catch{}
+  if(emulated){await visitorPage.locator('nav.crew-back').getByRole('link',{name:/Back to Crew/}).waitFor();if(process.env.CREW_SCREENSHOTS) await visitorPage.screenshot({path:path.join(process.env.CREW_SCREENSHOTS,'crew-artifact-public-standalone-390.png')});await cdp.send('Emulation.setEmulatedMedia',{features:[]});}
+  await cdp.detach();}
  assert.equal(await visitorPage.locator('script').count(),0,'no script on the public page');
  assert.equal(await visitorPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'public page fits a phone');
  assert.ok(visitorRequests.every(u=>u.includes('/a/')),'the public page loads only its own files');

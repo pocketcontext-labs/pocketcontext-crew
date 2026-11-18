@@ -620,7 +620,9 @@ and later edits stay private.
   `token`, `link_path` (`/a/<token>`) and `link` (with a domain). The reader's
   **Shared** page (`#/shared`, `#/shared/<id>`) lists every artifact with its
   state, link with Copy link and Open (0.23.0: opens the public page in a new
-  tab; that same-origin visit is not counted as a view), published time, expiry, views, last opened and
+  tab; that same-origin visit is not counted as a view; 0.33.0: in the
+  home-screen app, which has no Back, it opens an in-app preview sheet with
+  Back, the title and More: Copy link, Open in Safari, Share), published time, expiry, views, last opened and
   sources, plus Publish, Update content (same link), Set expiry, Edit draft,
   Revoke, Discard, Archive and Restore. Filters (Drafts, Live, Revoked/expired,
   Archived; Drafts and Live by default) stay in the address
@@ -658,11 +660,18 @@ and later edits stay private.
 - **The public page.** `GET /a/<token>` renders the snapshot in Go with the
   notes' GFM semantics: raw HTML is omitted, images resolve only through
   `/a/<token>/files/<n>` (the nth published image as its 1600 px preview), and
-  links survive only when they are http(s) or mailto to another host. Other
-  links and images keep their text. The page has no script, Crew navigation or
-  links into Crew, and sends `X-Robots-Tag: noindex, nofollow, noarchive`,
+  links survive only when they are http(s) (opening in a new tab) or mailto to
+  another host. Other links and images keep their text. The page has no
+  script, Crew navigation or links into Crew, except (0.33.0) a "Back to Crew"
+  bar linking to `/` that CSS shows only in standalone display mode (the
+  installed home-screen app, which only the owner installs; hidden in the
+  reader's preview frame), and sends `X-Robots-Tag: noindex, nofollow, noarchive`,
   `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and a CSP of
   `default-src 'none'` with only self images and the page's hashed style.
+  Since 0.33.0 only Crew's own origin may frame it (`frame-ancestors 'self'`,
+  `X-Frame-Options: SAMEORIGIN`): the reader's preview frames it with
+  `sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"`
+  (no scripts), and that same-origin load is not counted as a view.
   Unknown, malformed, revoked, expired and archived tokens get the same plain
   404, "This link is no longer available."
   Each page view (not HEAD or images) increments `view_count` and sets

@@ -127,6 +127,99 @@ describe("Shared", () => {
     );
   });
 
+  it("opens a live page in the in-app preview in the home-screen app, and Back returns with the filter and scroll kept", async () => {
+    const token = "Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z";
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          matches: query === "(display-mode: standalone)",
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+    read.mockImplementation(
+      only([
+        {
+          id: "art000000000002",
+          revision: 4,
+          title: "Live",
+          published_title: "Live page",
+          status: "published",
+          published_at: "2026-11-12T10:00:00Z",
+          published_revision: 1,
+        },
+      ]),
+    );
+    artifactLinks.mockResolvedValue([
+      {
+        id: "art000000000002",
+        token,
+        link_path: `/a/${token}`,
+        link: `${location.origin}/a/${token}`,
+      },
+    ]);
+    history.replaceState(null, "", "#/shared?show=live");
+    render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
+    const open = await screen.findByRole("link", {
+      name: "Open Live in a new tab",
+    });
+    window.scrollTo = vi.fn();
+    document.documentElement.scrollTop = 240;
+    expect(fireEvent.click(open)).toBe(false); // the app window stays on Crew
+    const sheet = screen.getByRole("dialog", { name: "Shared page: Live page" });
+    const frame = sheet.querySelector("iframe")!;
+    expect(frame).toHaveAttribute("src", `/a/${token}#in-crew`);
+    expect(frame.getAttribute("sandbox")).toBe(
+      "allow-same-origin allow-popups allow-popups-to-escape-sandbox",
+    );
+    expect(frame).toHaveAttribute("title", "Live page");
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: "Copy link" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /^Open in (Safari|browser)$/ }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Shared" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // The page under the sheet never unmounted: filters and scroll stay.
+    expect(screen.getByRole("button", { name: /^Live/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(location.hash).toBe("#/shared?show=live");
+    expect(document.documentElement.scrollTop).toBe(240);
+    expect(read).toHaveBeenCalledTimes(2); // no reload
+    vi.unstubAllGlobals();
+    history.replaceState(null, "", "#/");
+  });
+
+  it("keeps Open as a new tab in a browser", async () => {
+    read.mockImplementation(
+      only([
+        {
+          id: "art000000000002",
+          revision: 4,
+          title: "Live",
+          status: "published",
+          published_revision: 1,
+        },
+      ]),
+    );
+    artifactLinks.mockResolvedValue([
+      { id: "art000000000002", token: "t", link_path: "/a/t", link: "" },
+    ]);
+    render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
+    const open = await screen.findByRole("link", {
+      name: "Open Live in a new tab",
+    });
+    open.addEventListener("click", (e) => e.preventDefault()); // jsdom has no navigation
+    fireEvent.click(open);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("filters by state, hides archived by default and keeps the choice in the address", async () => {
     history.replaceState(null, "", "#/shared");
     read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
