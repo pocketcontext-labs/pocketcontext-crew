@@ -2225,9 +2225,13 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await page.goto(base+'/#/shared');await page.reload();
   const titles=page.locator('.crew-artifact h3 a');
   await page.getByRole('link',{name:'Listnav page two'}).waitFor();
+  // Shared reads active and archived artifacts separately: let both land so the
+  // list stops moving before clicking a title (CI misclicked during a re-render).
+  await page.waitForLoadState('networkidle');
   const count=await titles.count();
   assert.ok(count>=2,'the Shared list has artifacts to step through');
   await titles.first().click();
+  await page.waitForFunction(()=>/^#\/shared\/[a-z0-9]{15}$/.test(location.hash),null,{timeout:10000}).catch(async()=>{throw new Error('the first Shared title did not open its artifact; hash '+await page.evaluate(()=>location.hash));});
   const group=page.getByRole('group',{name:/^shared page \d+ of \d+$/});
   await group.waitFor();
   assert.equal(await group.getAttribute('aria-label'),`shared page 1 of ${count}`);
