@@ -17,6 +17,7 @@ import {
   type HelpMode,
   type HelpTopic,
 } from "./helpContent";
+import { t } from "./i18n";
 
 export const HelpModeContext = createContext<HelpMode>("other");
 export const helpMode = (connection: ConnectionState): HelpMode =>
@@ -125,11 +126,11 @@ export default function Help({ topic }: { topic: HelpTopic }) {
               ? {
                   target: "_blank",
                   rel: "noopener",
-                  "aria-label": "Learn more (opens in a new tab)",
+                  "aria-label": t("Learn more (opens in a new tab)"),
                 }
               : {})}
           >
-            Learn more
+            {t("Learn more")}
           </a>
         </div>
       )}

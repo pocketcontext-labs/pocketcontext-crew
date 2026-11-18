@@ -8,6 +8,7 @@ import { pb } from "./api";
 import { formatBytes } from "./attachmentsApi";
 import { crewApi, val, type Row } from "./crewApi";
 import { parseInstant, RelativeTime } from "./relativeTime";
+import { t } from "./i18n";
 import { itemPath } from "./itemLink";
 import "./upload.css";
 
@@ -21,18 +22,19 @@ const RECENT_SHOWN = 20;
 export function storageLimitFromGb(text: string): number | string {
   const value = Number(text.trim().replace(",", "."));
   if (!text.trim() || !Number.isFinite(value) || value <= 0)
-    return "Enter a size in GB, for example 5 or 0.5.";
+    return t("Enter a size in GB, for example 5 or 0.5.");
   const bytes = Math.round(value * GIB);
   if (bytes < MIN_STORAGE_LIMIT)
-    return "The limit is at least 1 MB (0.001 GB).";
-  if (bytes > MAX_STORAGE_LIMIT) return "The limit is at most 1 TB (1024 GB).";
+    return t("The limit is at least 1 MB (0.001 GB).");
+  if (bytes > MAX_STORAGE_LIMIT)
+    return t("The limit is at most 1 TB (1024 GB).");
   return bytes;
 }
 
 const gbText = (bytes: number) =>
   String(Math.round((bytes / GIB) * 1000) / 1000);
 
-
+// English link states, translated where shown; the catalogs list them.
 const stateLabels: Record<string, string> = {
   active: "Active",
   used: "Used",
@@ -43,7 +45,7 @@ const stateLabels: Record<string, string> = {
 function errorText(e: unknown, fallback: string) {
   const status = (e as { status?: number })?.status;
   if (status === 409)
-    return "This changed elsewhere. Reloaded; check and try again.";
+    return t("This changed elsewhere. Reloaded; check and try again.");
   const message = (e as { response?: { message?: unknown } })?.response
     ?.message;
   return typeof message === "string" && message ? message : fallback;
@@ -84,7 +86,8 @@ export default function FileSettings({
   useEffect(() => {
     Promise.all([loadSettings(), loadLinks()]).then(
       () => setLoadError(""),
-      () => setLoadError("Could not load file settings. Refresh to try again."),
+      () =>
+        setLoadError(t("Could not load file settings. Refresh to try again.")),
     );
   }, [loadSettings, loadLinks]);
 
@@ -104,9 +107,9 @@ export default function FileSettings({
       );
       setSettings(row);
       setLimit(gbText(Number(row.storage_limit_bytes) || bytes));
-      setNotice("Storage limit saved.");
+      setNotice(t("Storage limit saved."));
     } catch (e) {
-      setLimitError(errorText(e, "Could not save the storage limit."));
+      setLimitError(errorText(e, t("Could not save the storage limit.")));
       if ((e as { status?: number })?.status === 409)
         await loadSettings().catch(() => {});
     } finally {
@@ -120,7 +123,14 @@ export default function FileSettings({
     const parent = titles.get(val(link, "parent"));
     if (
       !window.confirm(
-        `Revoke this upload link${parent ? ` for “${val(parent, "title")}”` : ""}? It stops accepting files right away.`,
+        parent
+          ? t(
+              "Revoke this upload link for “{title}”? It stops accepting files right away.",
+              { title: val(parent, "title") },
+            )
+          : t(
+              "Revoke this upload link? It stops accepting files right away.",
+            ),
       )
     )
       return;
@@ -128,9 +138,9 @@ export default function FileSettings({
     setNotice("");
     try {
       await crewApi.write("upload_link.revoke", {}, link);
-      setNotice("Upload link revoked.");
+      setNotice(t("Upload link revoked."));
     } catch (e) {
-      setNotice(errorText(e, "Could not revoke the upload link."));
+      setNotice(errorText(e, t("Could not revoke the upload link.")));
     } finally {
       await loadLinks().catch(() => {});
       setBusy("");
@@ -159,21 +169,24 @@ export default function FileSettings({
               parent ?? { id: val(link, "parent"), revision: 0 },
             )}
           >
-            {title || (kind === "note" ? "A note" : "A task")}
+            {title || (kind === "note" ? t("A note") : t("A task"))}
           </a>
           <small>
-            {stateLabels[state] ?? state} ·{" "}
-            <RelativeTime value={val(link, "created")} prefix="created " /> ·{" "}
+            {stateLabels[state] ? t(stateLabels[state]) : state} ·{" "}
+            <RelativeTime value={val(link, "created")} prefix={t("created ")} /> ·{" "}
             <RelativeTime
               value={val(link, "expires_at")}
               prefix={
                 (parseInstant(val(link, "expires_at"))?.getTime() ?? 0) > Date.now()
-                  ? "expires "
-                  : "expired "
+                  ? t("expires ")
+                  : t("expired ")
               }
             />{" "}
             ·{" "}
-            {Number(link.files_added) || 0}/{Number(link.max_files) || 0} files
+            {t("{added}/{max} files", {
+              added: Number(link.files_added) || 0,
+              max: Number(link.max_files) || 0,
+            })}
           </small>
         </div>
         {state === "active" && (
@@ -181,9 +194,11 @@ export default function FileSettings({
             type="button"
             disabled={busy === link.id}
             onClick={() => void revoke(link)}
-            aria-label={`Revoke upload link for ${title || kind}`}
+            aria-label={t("Revoke upload link for {title}", {
+              title: title || (kind === "note" ? t("note") : t("task")),
+            })}
           >
-            Revoke
+            {t("Revoke")}
           </button>
         )}
       </li>
@@ -197,29 +212,35 @@ export default function FileSettings({
       aria-labelledby="crew-file-settings-title"
       tabIndex={-1}
     >
-      <h2 id="crew-file-settings-title">Files</h2>
+      <h2 id="crew-file-settings-title">{t("Files")}</h2>
       {loadError && <p role="alert">{loadError}</p>}
       {notice && <p role="status">{notice}</p>}
       {settings && (
         <>
-          <h3>Storage</h3>
+          <h3>{t("Storage")}</h3>
           <p>
-            {formatBytes(used)} of {formatBytes(max)} used
+            {t("{used} of {max} used", {
+              used: formatBytes(used),
+              max: formatBytes(max),
+            })}
           </p>
           <div
             className={`crew-storage-bar${share >= 1 ? " crew-storage-full" : ""}`}
             role="meter"
-            aria-label="Storage used"
+            aria-label={t("Storage used")}
             aria-valuemin={0}
             aria-valuemax={max}
             aria-valuenow={used}
-            aria-valuetext={`${formatBytes(used)} of ${formatBytes(max)}`}
+            aria-valuetext={t("{used} of {max}", {
+              used: formatBytes(used),
+              max: formatBytes(max),
+            })}
           >
             <span style={{ width: `${share * 100}%` }} />
           </div>
           <form className="crew-storage-form" onSubmit={(e) => void save(e)}>
             <label>
-              Storage limit (GB)
+              {t("Storage limit (GB)")}
               <input
                 inputMode="decimal"
                 value={limit}
@@ -229,39 +250,42 @@ export default function FileSettings({
               />
             </label>
             <button type="submit" disabled={busy === "limit"}>
-              Save limit
+              {t("Save limit")}
             </button>
           </form>
           {limitError && <p role="alert">{limitError}</p>}
           <p id="crew-storage-note">
-            From 1 MB to 1 TB. Archived files count too: Crew never deletes
-            files. A limit below what is used deletes nothing; new files are
-            refused until you raise it.
+            {t(
+              "From 1 MB to 1 TB. Archived files count too: Crew never deletes files. A limit below what is used deletes nothing; new files are refused until you raise it.",
+            )}
           </p>
         </>
       )}
       {links && (
         <>
-          <h3>Upload links</h3>
+          <h3>{t("Upload links")}</h3>
           <p>
-            Create a link from a task or note. Each link works once and is shown
-            only when it is created.
+            {t(
+              "Create a link from a task or note. Each link works once and is shown only when it is created.",
+            )}
           </p>
           {active.length ? (
-            <ul className="crew-upload-links" aria-label="Active upload links">
+            <ul className="crew-upload-links" aria-label={t("Active upload links")}>
               {active.map(linkRow)}
             </ul>
           ) : (
-            <p>No active upload links.</p>
+            <p>{t("No active upload links.")}</p>
           )}
           {recent.length > 0 && (
             <details>
               <summary>
-                Recent used, expired or revoked links ({recent.length})
+                {t("Recent used, expired or revoked links ({n})", {
+                  n: recent.length,
+                })}
               </summary>
               <ul
                 className="crew-upload-links"
-                aria-label="Recent upload links"
+                aria-label={t("Recent upload links")}
               >
                 {recent.map(linkRow)}
               </ul>

@@ -8,6 +8,7 @@ import {
   type TouchEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { t } from "./i18n";
 import ViewerBar, { type ArrivedBy } from "./ViewerBar";
 
 export type LightboxItem = {
@@ -353,8 +354,16 @@ export default function Lightbox({
     drag.current = null;
   };
   const label = nav
-    ? `File ${position + 1} of ${total}: ${item.alt}`
-    : `Image ${index + 1} of ${count}: ${item.alt}`;
+    ? t("File {n} of {total}: {name}", {
+        n: position + 1,
+        total,
+        name: item.alt,
+      })
+    : t("Image {n} of {total}: {name}", {
+        n: index + 1,
+        total: count,
+        name: item.alt,
+      });
   const percent = `${Math.round(scale * 100)}%`;
   const imgStyle =
     zoomed && nw
@@ -368,7 +377,7 @@ export default function Lightbox({
     <dialog
       ref={ref}
       className="crew-lightbox crew-viewer"
-      aria-label="Image viewer"
+      aria-label={t("Image viewer")}
       aria-modal="true"
       open={
         typeof HTMLDialogElement.prototype.showModal !== "function"
@@ -410,7 +419,7 @@ export default function Lightbox({
         prevRef={prevRef}
         nextRef={nextRef}
         closeRef={closeRef}
-        closeLabel="Close image viewer"
+        closeLabel={t("Close image viewer")}
         onClose={onClose}
         label={label}
         zoom={
@@ -440,12 +449,12 @@ export default function Lightbox({
             <button
               type="button"
               className="crew-viewer-action"
-              aria-label={`Download ${item.alt}`}
-              title={`Download ${item.alt}`}
+              aria-label={t("Download {name}", { name: item.alt })}
+              title={t("Download {name}", { name: item.alt })}
               onClick={item.onDownload}
             >
               <span aria-hidden="true">⤓</span>
-              <span className="crew-viewer-action-label">Download</span>
+              <span className="crew-viewer-action-label">{t("Download")}</span>
             </button>
           ) : null
         }
@@ -455,11 +464,13 @@ export default function Lightbox({
             href={item.src}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Open original"
-            title="Open the original in a new tab"
+            aria-label={t("Open original")}
+            title={t("Open the original in a new tab")}
           >
             <span aria-hidden="true">↗</span>
-            <span className="crew-viewer-action-label">Open original</span>
+            <span className="crew-viewer-action-label">
+              {t("Open original")}
+            </span>
           </a>
         }
       />
@@ -470,7 +481,7 @@ export default function Lightbox({
       >
         {isBroken ? (
           <p className="crew-lightbox-error" role="alert">
-            Image unavailable: {item.alt}
+            {t("Image unavailable: {name}", { name: item.alt })}
           </p>
         ) : (
           <img

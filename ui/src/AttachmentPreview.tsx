@@ -33,6 +33,7 @@ import {
 import type { FileNav } from "./Lightbox";
 import ViewerBar from "./ViewerBar";
 import { useSwipe } from "./swipe";
+import { locale, t, tn } from "./i18n";
 import "./preview.css";
 
 // pdf.js and its worker load only when a PDF is opened.
@@ -123,12 +124,12 @@ export function AttachmentPreview({
       }
     }
   };
-  const type = attachment.media_type || "file";
+  const type = attachment.media_type || t("file");
   return createPortal(
     <dialog
       ref={ref}
       className={`crew-file-preview crew-viewer crew-file-preview-${kind}`}
-      aria-label={`File: ${attachment.name}`}
+      aria-label={t("File: {name}", { name: attachment.name })}
       open={
         typeof HTMLDialogElement.prototype.showModal !== "function"
           ? true
@@ -160,11 +161,15 @@ export function AttachmentPreview({
         prevRef={prevRef}
         nextRef={nextRef}
         closeRef={closeRef}
-        closeLabel="Close file preview"
+        closeLabel={t("Close file preview")}
         onClose={onClose}
         label={
           nav
-            ? `File ${nav.index + 1} of ${nav.count}: ${attachment.name}`
+            ? t("File {n} of {count}: {name}", {
+                n: nav.index + 1,
+                count: nav.count,
+                name: attachment.name,
+              })
             : attachment.name
         }
         download={
@@ -184,7 +189,7 @@ export default AttachmentPreview;
 function DownloadButton({
   attachment,
   token,
-  label = "Download",
+  label,
   compact,
 }: {
   attachment: Attachment;
@@ -193,6 +198,7 @@ function DownloadButton({
   /** The viewer bar's Download: an icon and a label that hides on phones. */
   compact?: boolean;
 }) {
+  label ??= t("Download");
   return (
     <a
       className={compact ? "crew-viewer-action" : "crew-file-preview-download"}
@@ -246,7 +252,7 @@ function Unavailable({
       <DownloadButton
         attachment={attachment}
         token={token}
-        label={`Download ${attachment.name}`}
+        label={t("Download {name}", { name: attachment.name })}
       />
     </div>
   );
@@ -280,7 +286,7 @@ function PreviewBody({
     default:
       return (
         <Unavailable attachment={attachment} token={token}>
-          No preview for this type of file.
+          {t("No preview for this type of file.")}
         </Unavailable>
       );
   }
@@ -314,7 +320,10 @@ function HtmlPreview({ attachment }: { attachment: Attachment }) {
           setLink((current) =>
             current.state === "ready"
               ? current
-              : { state: "error", message: "The preview could not be opened." },
+              : {
+                  state: "error",
+                  message: t("The preview could not be opened."),
+                },
           ),
       );
     void load();
@@ -341,7 +350,11 @@ function HtmlPreview({ attachment }: { attachment: Attachment }) {
     if (link.state === "ready" && !frameUrl) setFrameUrl(link.value);
   }, [link, frameUrl]);
   if (link.state === "loading")
-    return <p className="crew-preview-note">Opening {attachment.name}…</p>;
+    return (
+      <p className="crew-preview-note">
+        {t("Opening {name}…", { name: attachment.name })}
+      </p>
+    );
   if (link.state === "error")
     return <Unavailable attachment={attachment}>{link.message}</Unavailable>;
   const target = htmlWidths[width];
@@ -353,7 +366,7 @@ function HtmlPreview({ attachment }: { attachment: Attachment }) {
         <div
           className="crew-html-widths"
           role="group"
-          aria-label="Preview width"
+          aria-label={t("Preview width")}
         >
           {(Object.keys(htmlWidths) as (keyof typeof htmlWidths)[]).map(
             (key) => (
@@ -363,7 +376,7 @@ function HtmlPreview({ attachment }: { attachment: Attachment }) {
                 aria-pressed={width === key}
                 onClick={() => setWidth(key)}
               >
-                {key === "desktop" ? "Desktop" : "Mobile"}
+                {key === "desktop" ? t("Desktop") : t("Mobile")}
               </button>
             ),
           )}
@@ -374,16 +387,16 @@ function HtmlPreview({ attachment }: { attachment: Attachment }) {
           rel="noopener noreferrer"
           referrerPolicy="no-referrer"
         >
-          Open in new tab
+          {t("Open in new tab")}
         </a>
         <span className="crew-html-isolated">
-          Preview runs isolated from Crew
+          {t("Preview runs isolated from Crew")}
         </span>
       </div>
       <div className="crew-html-stage" ref={stage}>
         {frameUrl && (
           <iframe
-            title={`Preview of ${attachment.name}`}
+            title={t("Preview of {name}", { name: attachment.name })}
             src={frameUrl}
             sandbox="allow-scripts"
             referrerPolicy="no-referrer"
@@ -410,7 +423,7 @@ function useBytes(attachment: Attachment, limit: number, token?: string) {
   const tooLarge = attachment.size > limit;
   const [result, setResult] = useState<Loaded<ArrayBuffer>>(
     tooLarge
-      ? { state: "error", message: "Too large to preview." }
+      ? { state: "error", message: t("Too large to preview.") }
       : { state: "loading" },
   );
   useEffect(() => {
@@ -428,7 +441,7 @@ function useBytes(attachment: Attachment, limit: number, token?: string) {
           message:
             error instanceof PreviewFetchError
               ? error.message
-              : "The file could not be loaded.",
+              : t("The file could not be loaded."),
         });
       },
     );
@@ -450,7 +463,11 @@ function TextualPreview({
 }) {
   const bytes = useBytes(attachment, TEXT_PREVIEW_LIMIT, token);
   if (bytes.state === "loading")
-    return <p className="crew-preview-note">Loading {attachment.name}…</p>;
+    return (
+      <p className="crew-preview-note">
+        {t("Loading {name}…", { name: attachment.name })}
+      </p>
+    );
   if (bytes.state === "error")
     return (
       <Unavailable attachment={attachment} token={token}>
@@ -461,7 +478,7 @@ function TextualPreview({
   if (text === null)
     return (
       <Unavailable attachment={attachment} token={token}>
-        Not valid text: this file is not UTF-8, so it can't be shown here.
+        {t("Not valid text: this file is not UTF-8, so it can't be shown here.")}
       </Unavailable>
     );
   if (kind === "csv" || kind === "tsv")
@@ -473,7 +490,7 @@ function TextualPreview({
       <>
         {pretty === null && (
           <p className="crew-preview-note">
-            Not valid JSON; showing the text as it is.
+            {t("Not valid JSON; showing the text as it is.")}
           </p>
         )}
         <TextPreview text={pretty ?? text} />
@@ -493,7 +510,7 @@ function TextPreview({ text }: { text: string }) {
           aria-pressed={wrap}
           onClick={() => setWrap((w) => !w)}
         >
-          Wrap lines
+          {t("Wrap lines")}
         </button>
       </div>
       <pre className={wrap ? "crew-text-wrap" : undefined} tabIndex={0}>
@@ -512,7 +529,7 @@ function TablePreview({
 }) {
   const { rows, total } = parseDelimited(text, delimiter, TABLE_ROW_LIMIT);
   if (!rows.length)
-    return <p className="crew-preview-note">The file is empty.</p>;
+    return <p className="crew-preview-note">{t("The file is empty.")}</p>;
   const [header, ...body] = rows;
   const columns = Math.max(...rows.map((r) => r.length));
   const cells = (row: string[]) =>
@@ -521,8 +538,13 @@ function TablePreview({
     <div className="crew-table-preview">
       <p className="crew-preview-note">
         {total > body.length
-          ? `Showing first ${body.length.toLocaleString("en")} of ${total.toLocaleString("en")} rows.`
-          : `${total.toLocaleString("en")} ${total === 1 ? "row" : "rows"}.`}
+          ? t("Showing first {shown} of {total} rows.", {
+              shown: body.length.toLocaleString(locale()),
+              total: total.toLocaleString(locale()),
+            })
+          : tn(total, "{n} row.", "{n} rows.", {
+              n: total.toLocaleString(locale()),
+            })}
       </p>
       <div className="crew-table-scroll" tabIndex={0}>
         <table>
@@ -564,7 +586,9 @@ function MarkdownPreview({ text }: { text: string }) {
         components={{
           img: ({ alt }) => (
             <span className="crew-preview-image-alt">
-              [Image{alt?.trim() ? `: ${alt.trim()}` : ""}]
+              {alt?.trim()
+                ? t("[Image: {alt}]", { alt: alt.trim() })
+                : t("[Image]")}
             </span>
           ),
           a: ({ children, href }) =>
@@ -613,11 +637,15 @@ function MediaPreview({
   if (failed)
     return (
       <Unavailable attachment={attachment} token={token}>
-        Can't play this format here.
+        {t("Can't play this format here.")}
       </Unavailable>
     );
   if (!src)
-    return <p className="crew-preview-note">Loading {attachment.name}…</p>;
+    return (
+      <p className="crew-preview-note">
+        {t("Loading {name}…", { name: attachment.name })}
+      </p>
+    );
   const onError = () => {
     if (retried.current) return setFailed(true);
     retried.current = true;
@@ -671,20 +699,26 @@ function PdfBody({
     return (
       <Unavailable attachment={attachment} token={token}>
         {failure === "password"
-          ? "This PDF is password protected and can't be shown here."
-          : "This PDF can't be shown here."}
+          ? t("This PDF is password protected and can't be shown here.")
+          : t("This PDF can't be shown here.")}
       </Unavailable>
     );
   if (!data)
-    return <p className="crew-preview-note">Loading {attachment.name}…</p>;
+    return (
+      <p className="crew-preview-note">
+        {t("Loading {name}…", { name: attachment.name })}
+      </p>
+    );
   return (
     <Suspense
-      fallback={<p className="crew-preview-note">Opening the PDF viewer…</p>}
+      fallback={
+        <p className="crew-preview-note">{t("Opening the PDF viewer…")}</p>
+      }
     >
       <PdfLoadBoundary
         fallback={
           <Unavailable attachment={attachment} token={token}>
-            The PDF viewer could not be loaded.
+            {t("The PDF viewer could not be loaded.")}
           </Unavailable>
         }
       >

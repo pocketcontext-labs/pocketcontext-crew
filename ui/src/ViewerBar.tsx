@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from "react";
+import { t } from "./i18n";
 import "./viewer.css";
 
 /** Zoom controls of an image; files that are not images get them disabled. */
@@ -73,65 +74,73 @@ export default function ViewerBar({
           {label}
         </span>
       </div>
-      <div className="crew-viewer-zoom" role="toolbar" aria-label="Zoom">
+      <div className="crew-viewer-zoom" role="toolbar" aria-label={t("Zoom")}>
         <span className="crew-viewer-steps">
           <button
             type="button"
-            aria-label="Zoom out"
+            aria-label={t("Zoom out")}
             disabled={off || !zoom.canZoomOut}
             onClick={zoom?.zoomOut}
           >
             −
           </button>
-          <output className="crew-viewer-level" aria-label="Zoom level">
+          <output className="crew-viewer-level" aria-label={t("Zoom level")}>
             {zoom ? zoom.percent : "–"}
           </output>
           <button
             type="button"
-            aria-label="Zoom in"
+            aria-label={t("Zoom in")}
             disabled={off || !zoom.canZoomIn}
             onClick={zoom?.zoomIn}
           >
             +
           </button>
         </span>
-        <span className="crew-viewer-fit" role="group" aria-label="Fit">
+        <span className="crew-viewer-fit" role="group" aria-label={t("Fit")}>
           <button
             type="button"
-            aria-label="Fit to screen"
+            aria-label={t("Fit to screen")}
             aria-pressed={zoom?.mode === "fit"}
             disabled={off}
             onClick={zoom?.fit}
           >
-            Fit
+            {t("Fit")}
           </button>
           <button
             type="button"
-            aria-label="Fit width"
+            aria-label={t("Fit width")}
             aria-pressed={zoom?.mode === "width"}
             disabled={off}
             onClick={zoom?.fitWidth}
           >
-            Fit width
+            {t("Fit width")}
           </button>
           <button
             type="button"
-            aria-label="Actual size"
+            aria-label={t("Actual size")}
             aria-pressed={zoom?.mode === "actual"}
             disabled={off}
             onClick={zoom?.actualSize}
           >
-            Actual size
+            {t("Actual size")}
           </button>
         </span>
       </div>
-      <div className="crew-viewer-cluster" role="group" aria-label="Viewer">
+      <div
+        className="crew-viewer-cluster"
+        role="group"
+        aria-label={t("Viewer")}
+      >
         <button
           ref={prevRef}
           type="button"
           className="crew-viewer-step"
-          aria-label={`Previous ${unit}`}
-          title={`Previous ${unit} (←)`}
+          aria-label={
+            unit === "file" ? t("Previous file") : t("Previous image")
+          }
+          title={
+            unit === "file" ? t("Previous file (←)") : t("Previous image (←)")
+          }
           disabled={!many}
           onClick={() => onStep(-1)}
         >
@@ -144,8 +153,8 @@ export default function ViewerBar({
           ref={nextRef}
           type="button"
           className="crew-viewer-step"
-          aria-label={`Next ${unit}`}
-          title={`Next ${unit} (→)`}
+          aria-label={unit === "file" ? t("Next file") : t("Next image")}
+          title={unit === "file" ? t("Next file (→)") : t("Next image (→)")}
           disabled={!many}
           onClick={() => onStep(1)}
         >
@@ -154,7 +163,7 @@ export default function ViewerBar({
         {download ?? (
           <button type="button" className="crew-viewer-action" disabled>
             <span aria-hidden="true">⤓</span>
-            <span className="crew-viewer-action-label">Download</span>
+            <span className="crew-viewer-action-label">{t("Download")}</span>
           </button>
         )}
         {original ?? (
@@ -162,10 +171,12 @@ export default function ViewerBar({
             type="button"
             className="crew-viewer-action"
             disabled
-            title="Only images open as an original here"
+            title={t("Only images open as an original here")}
           >
             <span aria-hidden="true">↗</span>
-            <span className="crew-viewer-action-label">Open original</span>
+            <span className="crew-viewer-action-label">
+              {t("Open original")}
+            </span>
           </button>
         )}
         <button

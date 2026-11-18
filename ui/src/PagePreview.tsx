@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import DialogHeader, { HeadButton, type MenuItem } from "./DialogHeader";
 import { isStandaloneApp } from "./Login";
+import { t } from "./i18n";
 import "./pagePreview.css";
 
 /** The installed home-screen app (any platform), not a browser tab. */
@@ -55,7 +56,7 @@ const isIOS = () =>
 export default function PagePreview({
   url,
   title,
-  backLabel = "Back",
+  backLabel,
   onClose,
 }: {
   /** The page's full public link (copied and shared as is). */
@@ -89,16 +90,16 @@ export default function PagePreview({
     }
   };
   const menu: MenuItem[] = [
-    { label: "Copy link", icon: "copy", onSelect: () => void copy() },
+    { label: t("Copy link"), icon: "copy", onSelect: () => void copy() },
     {
-      label: isIOS() ? "Open in Safari" : "Open in browser",
+      label: isIOS() ? t("Open in Safari") : t("Open in browser"),
       icon: "forward",
       onSelect: () => openOutside(url),
     },
   ];
   if (typeof navigator.share === "function")
     menu.push({
-      label: "Share",
+      label: t("Share"),
       icon: "share",
       onSelect: () => {
         navigator.share({ title, url }).catch(() => {});
@@ -115,7 +116,7 @@ export default function PagePreview({
     <dialog
       ref={ref}
       className="crew-dialog crew-page-preview"
-      aria-label={`Shared page: ${title}`}
+      aria-label={t("Shared page: {title}", { title })}
       open={
         typeof HTMLDialogElement.prototype.showModal !== "function"
           ? true
@@ -134,8 +135,12 @@ export default function PagePreview({
       <DialogHeader
         title={title}
         nav={
-          <div className="crew-trail-nav" role="group" aria-label="Back">
-            <HeadButton icon="back" label={backLabel} onClick={onClose} />
+          <div className="crew-trail-nav" role="group" aria-label={t("Back")}>
+            <HeadButton
+              icon="back"
+              label={backLabel ?? t("Back")}
+              onClick={onClose}
+            />
           </div>
         }
         menu={menu}
@@ -143,11 +148,11 @@ export default function PagePreview({
         alert={
           notice === "failed" ? (
             <span role="alert" className="crew-head-alert">
-              Could not copy automatically: {url}
+              {t("Could not copy automatically: {url}", { url })}
             </span>
           ) : notice === "copied" ? (
             <span role="status" className="crew-page-preview-copied">
-              Link copied
+              {t("Link copied")}
             </span>
           ) : null
         }
@@ -162,7 +167,7 @@ export default function PagePreview({
         />
       ) : (
         <p className="crew-page-preview-none">
-          This page can only open outside Crew.
+          {t("This page can only open outside Crew.")}
         </p>
       )}
     </dialog>,

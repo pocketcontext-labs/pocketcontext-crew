@@ -36,6 +36,7 @@
 import { useEffect, useState } from "react";
 import { pb } from "./api";
 import { crewApi, type Row } from "./crewApi";
+import { t } from "./i18n";
 
 export type ParentKind = "task" | "note";
 export type ParentRef = { kind: ParentKind; id: string };
@@ -106,16 +107,25 @@ export function checkFiles(
     bytes = batchBytes ?? 0;
   for (const file of files) {
     let message = "";
-    if (file.size === 0) message = `${file.name} is empty.`;
+    if (file.size === 0) message = t("{name} is empty.", { name: file.name });
     else if (file.size > ATTACHMENT_LIMITS.maxFileBytes)
-      message = `${file.name} is larger than 20 MB (${formatBytes(file.size)}).`;
+      message = t("{name} is larger than 20 MB ({size}).", {
+        name: file.name,
+        size: formatBytes(file.size),
+      });
     else if (count >= ATTACHMENT_LIMITS.maxActive)
-      message = `${file.name} was not added: a task or note holds at most 20 files.`;
+      message = t(
+        "{name} was not added: a task or note holds at most 20 files.",
+        { name: file.name },
+      );
     else if (
       batchBytes !== undefined &&
       bytes + file.size > ATTACHMENT_LIMITS.maxBatchBytes
     )
-      message = `${file.name} was not added: files saved with a new item are limited to 89 MB in total. Add it after saving.`;
+      message = t(
+        "{name} was not added: files saved with a new item are limited to 89 MB in total. Add it after saving.",
+        { name: file.name },
+      );
     if (message) {
       refused.push({ file, message });
       continue;
@@ -271,7 +281,7 @@ function fileErrorsFrom(data: unknown): Record<number, FileError> {
     const v = value as { code?: unknown; message?: unknown };
     out[Number(match[1])] = {
       code: String(v.code || ""),
-      message: String(v.message || "This file was refused."),
+      message: String(v.message || t("This file was refused.")),
     };
   }
   return out;
@@ -330,10 +340,10 @@ export const attachmentsApi = {
       signal?.addEventListener("abort", abort, { once: true });
       xhr.onerror = () =>
         reject(
-          new AttachmentError("Network error: the upload did not finish."),
+          new AttachmentError(t("Network error: the upload did not finish.")),
         );
       xhr.onabort = () =>
-        reject(new AttachmentError("Upload cancelled.", 0, "aborted"));
+        reject(new AttachmentError(t("Upload cancelled."), 0, "aborted"));
       xhr.onload = () => {
         signal?.removeEventListener("abort", abort);
         let body: Record<string, unknown> = {};
@@ -350,8 +360,8 @@ export const attachmentsApi = {
           typeof body.message === "string" && body.message
             ? body.message
             : xhr.status === 413
-              ? "The upload is too large."
-              : `Upload failed (HTTP ${xhr.status}).`;
+              ? t("The upload is too large.")
+              : t("Upload failed (HTTP {status}).", { status: xhr.status });
         reject(
           new AttachmentError(
             message,
@@ -397,7 +407,7 @@ export const attachmentsApi = {
     ) as Attachment | undefined;
     if (!attachment)
       throw new AttachmentError(
-        failed?.error?.message || "The file was not attached.",
+        failed?.error?.message || t("The file was not attached."),
         200,
         failed?.error?.code || "",
       );
@@ -488,7 +498,7 @@ export const attachmentsApi = {
     const request = pb
       .send<{ token?: string }>("/api/files/token", { method: "POST" })
       .then((result) => {
-        if (!result.token) throw new Error("File access is unavailable.");
+        if (!result.token) throw new Error(t("File access is unavailable."));
         if (pb.authStore.token === owner)
           cachedToken = { value: result.token, at: Date.now(), owner };
         return result.token;

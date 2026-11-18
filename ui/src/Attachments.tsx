@@ -40,11 +40,32 @@ import type { ArrivedBy } from "./ViewerBar";
 import type { Row } from "./crewApi";
 import { connectSectionHash } from "./itemLink";
 import { RelativeTime } from "./relativeTime";
+import { t, tn } from "./i18n";
 import "./upload.css";
 
-/** Shown after a file change (or a draft edit) withdrew a pending approval. */
+/**
+ * Shown after a file change (or a draft edit) withdrew a pending approval.
+ * `withdrawnNotice` stays the English text for existing callers; render
+ * `withdrawnNoticeText()` for the current language.
+ */
 export const withdrawnNotice =
   "The pending approval was withdrawn because the task changed. Send the draft for approval again when it's ready.";
+export const withdrawnNoticeText = () =>
+  t(
+    "The pending approval was withdrawn because the task changed. Send the draft for approval again when it's ready.",
+  );
+
+/** Puts `node` where `{name}` stands in translated `text`. */
+function withNode(text: string, name: string, node: ReactNode) {
+  const [before, after = ""] = text.split(`{${name}}`);
+  return (
+    <>
+      {before}
+      {node}
+      {after}
+    </>
+  );
+}
 
 const message = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
@@ -184,8 +205,15 @@ function ProtectedMedia({
       });
     });
   };
-  const fallback = <>Your browser can't play {file.name}.</>;
-  if (!src) return <span className="crew-media-pending">Loading {title}…</span>;
+  const fallback = (
+    <>{t("Your browser can't play {name}.", { name: file.name })}</>
+  );
+  if (!src)
+    return (
+      <span className="crew-media-pending">
+        {t("Loading {name}…", { name: title })}
+      </span>
+    );
   return isVideo(file) ? (
     <video
       className="crew-inline-video"
@@ -241,15 +269,24 @@ export function ProseImage({ src, alt }: { src?: unknown; alt?: string }) {
   const label = alt?.trim() || "";
   const id = attachmentRefId(url);
   if (id) {
-    if (!ctx) return <span>[Image: {label || "attachment"}]</span>;
+    if (!ctx)
+      return (
+        <span>{t("[Image: {alt}]", { alt: label || t("attachment") })}</span>
+      );
     const file = ctx.files.find((f) => f.id === id);
-    const name = label || file?.name || "attachment";
+    const name = label || file?.name || t("attachment");
     if (!file)
       return (
-        <span className="crew-image-missing">Image unavailable: {name}</span>
+        <span className="crew-image-missing">
+          {t("Image unavailable: {name}", { name })}
+        </span>
       );
     if (file.archived)
-      return <span className="crew-image-missing">Image removed: {name}</span>;
+      return (
+        <span className="crew-image-missing">
+          {t("Image removed: {name}", { name })}
+        </span>
+      );
     if (file.image) {
       const image = file.blob ? (
         <span
@@ -276,7 +313,7 @@ export function ProseImage({ src, alt }: { src?: unknown; alt?: string }) {
         <button
           type="button"
           className="crew-inline-image"
-          aria-label={`Open image: ${name}`}
+          aria-label={t("Open image: {name}", { name })}
           onClick={() => ctx.open(file.id)}
         >
           {image}
@@ -299,9 +336,11 @@ export function ProseImage({ src, alt }: { src?: unknown; alt?: string }) {
     const domain = domainOf(url);
     return (
       <span className="crew-image-external">
-        {label || "Image"} (
+        {label || t("Image")} (
         <a href={url} target="_blank" rel="noopener noreferrer nofollow">
-          image on {domain || "another site"}
+          {domain
+            ? t("image on {domain}", { domain })
+            : t("image on another site")}
         </a>
         )
       </span>
@@ -309,7 +348,7 @@ export function ProseImage({ src, alt }: { src?: unknown; alt?: string }) {
   }
   return (
     <span className="crew-image-missing">
-      Image unavailable: {label || "image"}
+      {t("Image unavailable: {name}", { name: label || t("image") })}
     </span>
   );
 }
@@ -329,7 +368,7 @@ export function ProseLink({
     if (!file || file.archived)
       return (
         <span className="crew-image-missing">
-          {children} ({file ? "file removed" : "file unavailable"})
+          {children} ({file ? t("file removed") : t("file unavailable")})
         </span>
       );
     return (
@@ -394,7 +433,7 @@ export function useItemAttachments({
         setLoaded(true);
       }
     } catch (e) {
-      if (alive.current) setError(message(e, "Could not load files."));
+      if (alive.current) setError(message(e, t("Could not load files.")));
     }
   }, [id]);
   useEffect(() => {
@@ -422,7 +461,7 @@ export function useItemAttachments({
     file: File,
     onProgress?: (loaded: number, total: number) => void,
   ): Promise<Attachment> => {
-    if (!id || !kind) return Promise.reject(new Error("Save first."));
+    if (!id || !kind) return Promise.reject(new Error(t("Save first.")));
     const run = queue.current.then(async () => {
       const result = await attachmentsApi.upload({ kind, id }, file, {
         onProgress,
@@ -447,7 +486,7 @@ export function useItemAttachments({
         setUploads((list) =>
           list.map((u) =>
             u.key === upload.key
-              ? { ...u, error: message(e, "The file was not attached.") }
+              ? { ...u, error: message(e, t("The file was not attached.")) }
               : u,
           ),
         ),
@@ -513,8 +552,8 @@ export function useItemAttachments({
         message(
           e,
           archive
-            ? "Could not remove the file."
-            : "Could not restore the file.",
+            ? t("Could not remove the file.")
+            : t("Could not restore the file."),
         ),
       );
       void reload();
@@ -816,7 +855,7 @@ function UploadLinkButton({ parent }: { parent: ParentRef }) {
     try {
       setLink(await attachmentsApi.createUploadLink(parent));
     } catch (e) {
-      setError(message(e, "Could not create an upload link."));
+      setError(message(e, t("Could not create an upload link.")));
     } finally {
       setBusy(false);
     }
@@ -825,7 +864,7 @@ function UploadLinkButton({ parent }: { parent: ParentRef }) {
   return (
     <div className="crew-upload-link">
       <button type="button" disabled={busy} onClick={() => void create()}>
-        {link ? "Get a new upload link" : "Get upload link"}
+        {link ? t("Get a new upload link") : t("Get upload link")}
       </button>
       {error && (
         <p className="crew-alert" role="alert">
@@ -835,10 +874,21 @@ function UploadLinkButton({ parent }: { parent: ParentRef }) {
       {link && (
         <div className="crew-upload-link-box" role="status">
           <p>
-            Open this link on your phone or another device to add up to{" "}
-            {link.max_files} {link.max_files === 1 ? "file" : "files"} to this{" "}
-            {parent.kind}. It works once and expires{" "}
-            <RelativeTime value={link.expires_at} />. It is shown only now.
+            {withNode(
+              parent.kind === "note"
+                ? tn(
+                    link.max_files,
+                    "Open this link on your phone or another device to add up to {n} file to this note. It works once and expires {when}. It is shown only now.",
+                    "Open this link on your phone or another device to add up to {n} files to this note. It works once and expires {when}. It is shown only now.",
+                  )
+                : tn(
+                    link.max_files,
+                    "Open this link on your phone or another device to add up to {n} file to this task. It works once and expires {when}. It is shown only now.",
+                    "Open this link on your phone or another device to add up to {n} files to this task. It works once and expires {when}. It is shown only now.",
+                  ),
+              "when",
+              <RelativeTime value={link.expires_at} />,
+            )}
           </p>
           <code>{address}</code>
           <button
@@ -850,18 +900,18 @@ function UploadLinkButton({ parent }: { parent: ParentRef }) {
               )
             }
           >
-            {copied === "copied" ? "Link copied" : "Copy upload link"}
+            {copied === "copied" ? t("Link copied") : t("Copy upload link")}
           </button>
           {copied === "failed" && (
             <span role="alert">
-              Could not copy automatically; copy it from above.
+              {t("Could not copy automatically; copy it from above.")}
             </span>
           )}
           <a
             className="crew-upload-link-manage"
             href={connectSectionHash("files")}
           >
-            Manage upload links
+            {t("Manage upload links")}
           </a>
         </div>
       )}
@@ -883,18 +933,18 @@ export function DownloadLink({
       className="crew-attachment-download"
       href={attachmentUrl(attachment.id, { download: true })}
       download={attachment.name}
-      aria-label={`Download ${attachment.name}`}
+      aria-label={t("Download {name}", { name: attachment.name })}
       onClick={(e) => {
         e.preventDefault();
         void attachmentsApi.download(attachment);
       }}
     >
-      Download
+      {t("Download")}
     </a>
   );
 }
 
-const typeLabel = (type: string) => type.split(";")[0] || "file";
+const typeLabel = (type: string) => type.split(";")[0] || t("file");
 
 /** A short file-type label for tiles: the extension (HTML, PDF), else the type. */
 export function fileKindLabel(name: string, type: string) {
@@ -903,7 +953,7 @@ export function fileKindLabel(name: string, type: string) {
   const ext = dot > 0 ? base.slice(dot + 1) : "";
   if (ext && ext.length <= 5) return ext.toUpperCase();
   const sub = typeLabel(type).split("/")[1] || "";
-  return sub && sub !== "octet-stream" ? sub.toUpperCase().slice(0, 5) : "FILE";
+  return sub && sub !== "octet-stream" ? sub.toUpperCase().slice(0, 5) : t("FILE");
 }
 
 /**
@@ -954,7 +1004,7 @@ export function FileTile({
         <button
           type="button"
           className="crew-file-tile-open"
-          aria-label={`Open ${file.name}`}
+          aria-label={t("Open {name}", { name: file.name })}
           title={file.name}
           onClick={onOpen}
         >
@@ -969,8 +1019,8 @@ export function FileTile({
         <button
           type="button"
           className="crew-file-tile-download"
-          aria-label={`Download ${file.name}`}
-          title={`Download ${file.name}`}
+          aria-label={t("Download {name}", { name: file.name })}
+          title={t("Download {name}", { name: file.name })}
           onClick={onDownload}
         >
           <span aria-hidden="true">⤓</span>
@@ -1024,7 +1074,10 @@ export function AttachmentsSection({
   const remove = (a: Attachment) => {
     if (
       window.confirm(
-        `Remove ${a.name}? It moves to Removed files, where you can restore it.`,
+        t(
+          "Remove {name}? It moves to Removed files, where you can restore it.",
+          { name: a.name },
+        ),
       )
     )
       void item?.archive(a);
@@ -1058,21 +1111,23 @@ export function AttachmentsSection({
       }}
     >
       <div className="crew-attachments-head">
-        <h3 id={headingId}>Files</h3>
+        <h3 id={headingId}>{t("Files")}</h3>
         {count > 0 && (
-          <span className="crew-attachments-count">{count} of 20</span>
+          <span className="crew-attachments-count">
+            {t("{count} of 20", { count })}
+          </span>
         )}
         {!readOnly && (
           <>
             <button type="button" onClick={() => input.current?.click()}>
-              Add files
+              {t("Add files")}
             </button>
             <input
               ref={input}
               type="file"
               multiple
               hidden
-              aria-label="Choose files to add"
+              aria-label={t("Choose files to add")}
               onChange={onPick}
             />
           </>
@@ -1080,13 +1135,13 @@ export function AttachmentsSection({
       </div>
       {!readOnly && (
         <p className="crew-attachments-hint">
-          Drop files here or paste a screenshot. Up to 20 MB each.
-          {!parent && " They are saved with the new item."}
+          {t("Drop files here or paste a screenshot. Up to 20 MB each.")}
+          {!parent && " " + t("They are saved with the new item.")}
         </p>
       )}
       {item?.withdrawn && (
         <p className="crew-notice" role="status">
-          {withdrawnNotice}
+          {withdrawnNoticeText()}
         </p>
       )}
       {item?.error && (
@@ -1095,7 +1150,7 @@ export function AttachmentsSection({
         </p>
       )}
       {!!staged?.refused.length && (
-        <ul className="crew-uploads" aria-label="Files not added">
+        <ul className="crew-uploads" aria-label={t("Files not added")}>
           {staged.refused.map((m) => (
             <li key={m} className="crew-upload-failed">
               <span className="crew-upload-error" role="alert">
@@ -1106,7 +1161,7 @@ export function AttachmentsSection({
         </ul>
       )}
       {!!item?.uploads.length && (
-        <ul className="crew-uploads" aria-label="Uploads">
+        <ul className="crew-uploads" aria-label={t("Uploads")}>
           {item.uploads.map((u) => (
             <li key={u.key} className={u.error ? "crew-upload-failed" : ""}>
               <span className="crew-upload-name">{u.file.name}</span>
@@ -1118,26 +1173,26 @@ export function AttachmentsSection({
                   {!u.refused && (
                     <button
                       type="button"
-                      aria-label={`Retry ${u.file.name}`}
+                      aria-label={t("Retry {name}", { name: u.file.name })}
                       onClick={() => item.retry(u.key)}
                     >
-                      Retry
+                      {t("Retry")}
                     </button>
                   )}
                   <button
                     type="button"
                     className="crew-quiet"
-                    aria-label={`Dismiss ${u.file.name}`}
+                    aria-label={t("Dismiss {name}", { name: u.file.name })}
                     onClick={() => item.dismiss(u.key)}
                   >
-                    Dismiss
+                    {t("Dismiss")}
                   </button>
                 </>
               ) : (
                 <progress
                   max={u.total || 1}
                   value={u.loaded}
-                  aria-label={`Uploading ${u.file.name}`}
+                  aria-label={t("Uploading {name}", { name: u.file.name })}
                 />
               )}
             </li>
@@ -1145,7 +1200,7 @@ export function AttachmentsSection({
         </ul>
       )}
       {(active.length > 0 || stagedFiles.length > 0) && (
-        <ul className="crew-file-tiles" aria-label="Files">
+        <ul className="crew-file-tiles" aria-label={t("Files")}>
           {active.map((a) => (
             <FileTile
               key={a.id}
@@ -1163,10 +1218,10 @@ export function AttachmentsSection({
                 <button
                   type="button"
                   className="crew-quiet"
-                  aria-label={`Remove ${a.name}`}
+                  aria-label={t("Remove {name}", { name: a.name })}
                   onClick={() => remove(a)}
                 >
-                  Remove
+                  {t("Remove")}
                 </button>
               )}
             </FileTile>
@@ -1193,10 +1248,10 @@ export function AttachmentsSection({
               <button
                 type="button"
                 className="crew-quiet"
-                aria-label={`Remove ${s.file.name}`}
+                aria-label={t("Remove {name}", { name: s.file.name })}
                 onClick={() => (onUnstage ?? staged?.unstage)?.(s.key)}
               >
-                Remove
+                {t("Remove")}
               </button>
             </FileTile>
           ))}
@@ -1207,7 +1262,7 @@ export function AttachmentsSection({
       )}
       {removed.length > 0 && (
         <details className="crew-attachments-removed">
-          <summary>Removed files ({removed.length})</summary>
+          <summary>{t("Removed files ({n})", { n: removed.length })}</summary>
           <ul>
             {removed.map((a) => (
               <li key={a.id}>
@@ -1219,10 +1274,10 @@ export function AttachmentsSection({
                 {!readOnly && (
                   <button
                     type="button"
-                    aria-label={`Restore ${a.name}`}
+                    aria-label={t("Restore {name}", { name: a.name })}
                     onClick={() => void item?.restore(a)}
                   >
-                    Restore
+                    {t("Restore")}
                   </button>
                 )}
               </li>
@@ -1253,28 +1308,31 @@ export function CardThumbnail({
 export function eventSummary(event: Row): { title: string; by: string } {
   const action = String(event.action || "");
   const changes = parseChanges(event.changes);
-  const name = String(changes.name || "a file");
+  const name = changes.name ? String(changes.name) : t("a file");
   const actor = String(event.actor || "");
   const viaLink =
     actor.startsWith("upload_link:") || Boolean(changes.via_upload_link);
   const by = viaLink
-    ? "via upload link"
-    : String(event.reported_agent || "") || actor || "Owner / connection";
+    ? t("via upload link")
+    : String(event.reported_agent || "") || actor || t("Owner / connection");
   const title =
     action === "attachment.add"
-      ? `Attached ${name}`
+      ? t("Attached {name}", { name })
       : action === "attachment.archive"
-        ? `Removed ${name}`
+        ? t("Removed {name}", { name })
         : action === "attachment.restore"
-          ? `Restored ${name}`
+          ? t("Restored {name}", { name })
           : action === "upload_link.create"
-            ? "Created an upload link"
+            ? t("Created an upload link")
             : action === "upload_link.revoke"
-              ? "Revoked an upload link"
+              ? t("Revoked an upload link")
               : eventLabel(action);
   return { title, by };
 }
-/** Plain labels for history (0.24.0): people read these, not action names. */
+/**
+ * Plain labels for history (0.24.0): people read these, not action names.
+ * English here, translated by eventLabel (keys listed in locales/../files.ts).
+ */
 const eventLabels: Record<string, string> = {
   "task.create": "Created",
   "task.update": "Updated",
@@ -1316,10 +1374,10 @@ const eventLabels: Record<string, string> = {
   "execution.recover": "Work recovered",
 };
 export function eventLabel(action: string): string {
-  if (eventLabels[action]) return eventLabels[action];
-  if (action.startsWith("webhook.")) return "Webhook activity";
-  if (action.startsWith("execution.")) return "Work activity";
-  return "Change";
+  if (eventLabels[action]) return t(eventLabels[action]);
+  if (action.startsWith("webhook.")) return t("Webhook activity");
+  if (action.startsWith("execution.")) return t("Work activity");
+  return t("Change");
 }
 export const isFileEvent = (event: Row) =>
   /^(attachment|upload_link)\./.test(String(event.action || ""));

@@ -10,6 +10,7 @@ import type {
   PDFDocumentProxy,
   RenderTask,
 } from "pdfjs-dist";
+import { t } from "./i18n";
 import { openPdf } from "./pdfjs";
 
 const MIN_SCALE = 0.25;
@@ -126,14 +127,14 @@ export default function PdfPreview({
             )
               return;
             setRendering(false);
-            setPageError("This page could not be shown.");
+            setPageError(t("This page could not be shown."));
           },
         );
       },
       () => {
         if (!alive) return;
         setRendering(false);
-        setPageError("This page could not be shown.");
+        setPageError(t("This page could not be shown."));
       },
     );
     return () => {
@@ -154,23 +155,27 @@ export default function PdfPreview({
     );
   return (
     <div className="crew-pdf">
-      <div className="crew-pdf-toolbar" role="toolbar" aria-label="PDF pages">
+      <div
+        className="crew-pdf-toolbar"
+        role="toolbar"
+        aria-label={t("PDF pages")}
+      >
         <button
           type="button"
           onClick={() => go(-1)}
           disabled={!doc || page <= 1}
-          aria-label="Previous page"
+          aria-label={t("Previous page")}
         >
           ‹
         </button>
         <span className="crew-pdf-count" aria-live="polite">
-          {doc ? `Page ${page} of ${pages}` : "Opening…"}
+          {doc ? t("Page {page} of {pages}", { page, pages }) : t("Opening…")}
         </span>
         <button
           type="button"
           onClick={() => go(1)}
           disabled={!doc || page >= pages}
-          aria-label="Next page"
+          aria-label={t("Next page")}
         >
           ›
         </button>
@@ -179,7 +184,7 @@ export default function PdfPreview({
           type="button"
           onClick={() => zoomBy(1 / STEP)}
           disabled={!doc || scale <= MIN_SCALE}
-          aria-label="Zoom out"
+          aria-label={t("Zoom out")}
         >
           −
         </button>
@@ -188,7 +193,7 @@ export default function PdfPreview({
           type="button"
           onClick={() => zoomBy(STEP)}
           disabled={!doc || scale >= MAX_SCALE}
-          aria-label="Zoom in"
+          aria-label={t("Zoom in")}
         >
           +
         </button>
@@ -198,7 +203,7 @@ export default function PdfPreview({
           disabled={!doc}
           aria-pressed={zoom === "fit"}
         >
-          Fit width
+          {t("Fit width")}
         </button>
       </div>
       <div
@@ -206,7 +211,7 @@ export default function PdfPreview({
         className="crew-pdf-stage"
         aria-busy={rendering}
         tabIndex={0}
-        aria-label={`${name}, page ${page}`}
+        aria-label={t("{name}, page {page}", { name, page })}
         onKeyDown={(e) => {
           if (e.key === "ArrowRight" || e.key === "PageDown") {
             e.preventDefault();
@@ -222,7 +227,7 @@ export default function PdfPreview({
           ref={canvas}
           className="crew-pdf-page"
           role="img"
-          aria-label={`Page ${page} of ${name}`}
+          aria-label={t("Page {page} of {name}", { page, name })}
           hidden={!!pageError}
         />
       </div>

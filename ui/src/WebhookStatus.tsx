@@ -9,12 +9,15 @@ import {
 import { crewApi, list, val, type Row } from "./crewApi";
 import Help, { HelpField } from "./Help";
 import type { HelpTopic } from "./helpContent";
+import { t, tn } from "./i18n";
 import { itemPath } from "./itemLink";
 import { isBot } from "./projectAgents";
 import { AutoTextField } from "./AutoTextarea";
 import { isClosed } from "./closedTasks";
 import { RelativeTime } from "./relativeTime";
 import { strandedSince, strandedWakes } from "./wakes";
+// Labels and help stay English here and are translated where they render;
+// the catalogs (locales/*/files.ts) list them.
 type WakeRule = {
   reason: string;
   label: string;
@@ -101,6 +104,11 @@ const executionStates: Record<string, string> = {
   completed: "Completed",
   failed: "Failed",
 };
+// Delivery and execution state names, translated where shown.
+const deliveryState = (state: string) =>
+  deliveryStates[state] ? t(deliveryStates[state]) : t("Unknown delivery status");
+const executionState = (state: string, fallback: string) =>
+  executionStates[state] ? t(executionStates[state]) : fallback;
 type Blocker = { code: string; message: string };
 type Setup = {
   can_test: boolean;
@@ -236,7 +244,7 @@ function Step({
               {done ? "✓" : number}
             </span>
             <span className="crew-step-title">{title}</span>
-            {done && <span className="crew-step-complete">Complete</span>}
+            {done && <span className="crew-step-complete">{t("Complete")}</span>}
           </button>
         </h3>
         {help && <Help topic={help} />}
@@ -277,7 +285,7 @@ function PromptActions({
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
         >
-          {open ? "Hide prompt" : "Read prompt"}
+          {open ? t("Hide prompt") : t("Read prompt")}
         </button>
       </div>
       {open && <pre className="crew-copy-prompt">{prompt}</pre>}
@@ -417,7 +425,7 @@ export default function WebhookStatus({
     } catch {
       if (silent || ticket !== loadTicket.current) return;
       loadFailed.current = true;
-      setError("Could not load the integration. Crew will try again shortly.");
+      setError(t("Could not load the integration. Crew will try again shortly."));
       // Status is unknown, so show the error rather than hide live state.
       setOpen(true);
     } finally {
@@ -494,35 +502,39 @@ export default function WebhookStatus({
         ?.code;
     const guidance: Record<string, string> = {
       instructions_mismatch:
-        "The saved routine's managed block does not match Crew. Apply the current block from step 2, then report synchronization again.",
+        t("The saved routine's managed block does not match Crew. Apply the current block from step 2, then report synchronization again."),
       runtime_unverified:
-        "Send the safe connection test and wait for the actual webhook routine to report its capabilities.",
+        t("Send the safe connection test and wait for the actual webhook routine to report its capabilities."),
       native_handoff_missing:
-        "The routine has not reported native messaging. If it uses WakeParent, select the parent bridge and apply its current instructions.",
+        t("The routine has not reported native messaging. If it uses WakeParent, select the parent bridge and apply its current instructions."),
       parent_wake_missing:
-        "The routine has not reported WakeParent. Check its actual tools and run the connection test again.",
+        t("The routine has not reported WakeParent. Check its actual tools and run the connection test again."),
       parent_receipt_missing:
-        "The dispatcher parent has not acknowledged the wake. Check its Grok conversation before sending another test.",
+        t("The dispatcher parent has not acknowledged the wake. Check its Grok conversation before sending another test."),
       parent_native_handoff_missing:
-        "The dispatcher parent has not reported native bot messaging. Check its available tools.",
+        t("The dispatcher parent has not reported native bot messaging. Check its available tools."),
       parent_execution_protocol_missing:
-        "The dispatcher parent cannot use Crew's execution protocol. Refresh its tools before testing again.",
+        t("The dispatcher parent cannot use Crew's execution protocol. Refresh its tools before testing again."),
       recipient_test_required:
-        "Choose a mapped teammate and run the end-to-end test before enabling delivery.",
+        t("Choose a mapped teammate and run the end-to-end test before enabling delivery."),
       recipient_ack_missing:
-        "The recipient has not acknowledged the test. Check its Grok conversation and prior authorization; do not resend an uncertain message.",
+        t("The recipient has not acknowledged the test. Check its Grok conversation and prior authorization; do not resend an uncertain message."),
       execution_required:
-        "Another execution is live on this task. The recipient must use execution.begin and the fenced task protocol, or wait for the live run to end.",
+        t("Another execution is live on this task. The recipient must use execution.begin and the fenced task protocol, or wait for the live run to end."),
       test_ack_missing:
-        "Send the safe connection test and wait for its acknowledgment.",
+        t("Send the safe connection test and wait for its acknowledgment."),
     };
     return {
       conflict,
       text:
         (reason && guidance[reason]) ||
         (conflict
-          ? "This configuration changed elsewhere. Review the latest settings and try again."
-          : "The change could not be confirmed. Check the configuration and try again. Credentials are never included in this message."),
+          ? t(
+              "This configuration changed elsewhere. Review the latest settings and try again.",
+            )
+          : t(
+              "The change could not be confirmed. Check the configuration and try again. Credentials are never included in this message.",
+            )),
     };
   }
   function startWrite() {
@@ -572,15 +584,15 @@ export default function WebhookStatus({
     Number(config.applied_revision) === Number(config.instruction_revision) &&
     ["reported", "verified"].includes(val(config, "sync_status"));
   const syncLabel = !synced
-    ? "Instructions not applied"
+    ? t("Instructions not applied")
     : config?.sync_status === "verified"
-      ? "Matching saved text reported"
-      : "Application reported";
+      ? t("Matching saved text reported")
+      : t("Application reported");
   const baseBlockers: Blocker[] = [];
   if (!currentAgent)
     baseBlockers.push({
       code: "dispatcher_required",
-      message: "Choose an active dispatcher in step 1.",
+      message: t("Choose an active dispatcher in step 1."),
     });
   if (
     currentAgent &&
@@ -589,17 +601,19 @@ export default function WebhookStatus({
     baseBlockers.push({
       code: "dispatcher_mapping_required",
       message:
-        "Ask Grok to confirm the dispatcher's bot mapping using the setup prompt.",
+        t("Ask Grok to confirm the dispatcher's bot mapping using the setup prompt."),
     });
   if (!config?.url_configured || !config?.secret_configured)
     baseBlockers.push({
       code: "credentials_required",
-      message: "Paste the webhook URL and secret in step 3.",
+      message: t("Paste the webhook URL and secret in step 3."),
     });
   if (!synced)
     baseBlockers.push({
       code: "instructions_required",
-      message: `Apply instruction revision ${Number(config?.instruction_revision) || 1} in Grok using the setup prompt.`,
+      message: t("Apply instruction revision {n} in Grok using the setup prompt.", {
+        n: Number(config?.instruction_revision) || 1,
+      }),
     });
   const setup = config?.setup as Setup | undefined;
   const parentBridge = val(config, "dispatch_mode") === "parent_bridge";
@@ -621,7 +635,7 @@ export default function WebhookStatus({
     {
       code: "verification_required",
       message:
-        "Complete the connection test and refresh its acknowledgment before enabling.",
+        t("Complete the connection test and refresh its acknowledgment before enabling."),
     },
   ];
   const mapped = mappings.filter(
@@ -657,7 +671,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
       await navigator.clipboard.writeText(text);
       setMessage(success);
     } catch {
-      setError("Could not copy. Open the prompt and copy its text manually.");
+      setError(t("Could not copy. Open the prompt and copy its text manually."));
     }
   }
   async function saveCredentials(event: FormEvent) {
@@ -669,7 +683,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
       "webhook.credentials.update",
       fields,
       config,
-      "Credentials saved. No request was sent.",
+      t("Credentials saved. No request was sent."),
     );
     if (ok) {
       setUrl("");
@@ -780,11 +794,13 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
     sameSet(subscriptions, recommendedSubscriptions) &&
     (!routing || handoffLimit === String(recommendedHandoffLimit));
   // What webhook.integration.update does to changed subscriptions on the server.
-  const wakeRulesWarning = `Saving changed wake rules ${
-    config?.enabled ? "turns delivery off, " : ""
-  }cancels queued wakes and interrupts bots working on Ready tasks.${
-    config?.enabled ? " Turn delivery back on afterwards." : ""
-  } Ready tasks are not woken again until you put them on hold, then set them Ready.`;
+  const wakeRulesWarning = config?.enabled
+    ? t(
+        "Saving changed wake rules turns delivery off, cancels queued wakes and interrupts bots working on Ready tasks. Turn delivery back on afterwards. Ready tasks are not woken again until you put them on hold, then set them Ready.",
+      )
+    : t(
+        "Saving changed wake rules cancels queued wakes and interrupts bots working on Ready tasks. Ready tasks are not woken again until you put them on hold, then set them Ready.",
+      );
   // Fills the form only; nothing is saved until Save wake rules.
   function resetWakeRules() {
     setSubscriptions(recommendedSubscriptions);
@@ -795,7 +811,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
     if (!canSaveWakeRules) return;
     if (
       subscriptionsChanged &&
-      !window.confirm(`${wakeRulesWarning}\n\nSave the new wake rules?`)
+      !window.confirm(`${wakeRulesWarning}\n\n${t("Save the new wake rules?")}`)
     )
       return;
     if (!startWrite()) return;
@@ -824,15 +840,20 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
       setMessage(
         subscriptionsChanged
           ? config?.enabled
-            ? "Wake rules saved. Delivery is off; turn it back on with Enable delivery."
-            : "Wake rules saved."
-          : "Bot handoff limit saved.",
+            ? t(
+                "Wake rules saved. Delivery is off; turn it back on with Enable delivery.",
+              )
+            : t("Wake rules saved.")
+          : t("Bot handoff limit saved."),
       );
     } catch (failure) {
       const { text } = describeFailure(failure);
       setError(
         limitSaved
-          ? `The handoff limit was saved, but the rule changes were not. ${text}`
+          ? t(
+              "The handoff limit was saved, but the rule changes were not. {reason}",
+              { reason: text },
+            )
           : text,
       );
     } finally {
@@ -844,28 +865,33 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
   if (!open)
     return loading ? null : (
       <button type="button" onClick={() => setOpen(true)}>
-        Set up automatic wake-ups
+        {t("Set up automatic wake-ups")}
       </button>
     );
   return (
-    <section className="crew-webhooks" aria-label="Grok Bot integration">
+    <section className="crew-webhooks" aria-label={t("Grok Bot integration")}>
       <div className="crew-section-title">
-        <h2>Grok setup</h2>
+        <h2>{t("Grok setup")}</h2>
       </div>
       {!setupComplete && (
         <p>
-          One existing bot receives Crew notifications and routes them to your
-          team. Keep your normal bot roles
-          {mcpUrl ? " and one shared MCP connection" : ""}.
+          {mcpUrl
+            ? t(
+                "One existing bot receives Crew notifications and routes them to your team. Keep your normal bot roles and one shared MCP connection.",
+              )
+            : t(
+                "One existing bot receives Crew notifications and routes them to your team. Keep your normal bot roles.",
+              )}
         </p>
       )}
-      {loading && <p role="status">Loading integration…</p>}
+      {loading && <p role="status">{t("Loading integration…")}</p>}
       {error && <p role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
       {!loading && !config && !error && (
         <p>
-          No global integration is available yet. It appears here after the
-          server upgrade completes.
+          {t(
+            "No global integration is available yet. It appears here after the server upgrade completes.",
+          )}
         </p>
       )}
       {config && (
@@ -873,38 +899,45 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
           {setupComplete ? (
             <div className="crew-wake-status">
               <p>
-                <strong>Automatic wake-ups: on</strong> · {mapped} of{" "}
-                {activeAgents.length} agents mapped
+                <strong>{t("Automatic wake-ups: on")}</strong> ·{" "}
+                {t("{mapped} of {total} agents mapped", {
+                  mapped,
+                  total: activeAgents.length,
+                })}
               </p>
               <button
                 type="button"
                 aria-expanded={showSteps}
                 onClick={() => (showSteps ? resetSteps() : setReviewing(true))}
               >
-                {showSteps ? "Hide setup" : "Review setup"}
+                {showSteps ? t("Hide setup") : t("Review setup")}
               </button>
             </div>
           ) : (
             <div className="crew-callout">
               <strong>
-                {config.enabled ? "Delivery enabled" : "Delivery disabled"}
+                {config.enabled ? t("Delivery enabled") : t("Delivery disabled")}
               </strong>{" "}
-              · Dispatcher:{" "}
-              {val(currentAgent, "name") || "Not selected or inactive"}
+              ·{" "}
+              {t("Dispatcher: {name}", {
+                name: val(currentAgent, "name") || t("Not selected or inactive"),
+              })}
               <p>
-                Only Ready tasks can wake a bot. Enabling does not notify
-                existing tasks.
+                {t(
+                  "Only Ready tasks can wake a bot. Enabling does not notify existing tasks.",
+                )}
               </p>
             </div>
           )}
           {showSteps && (
           <div className="crew-setup-list">
-            <Step {...stepProps(1)} title="Choose your dispatcher">
+            <Step {...stepProps(1)} title={t("Choose your dispatcher")}>
               <p>
-                Use an existing bot. It keeps its main job and also routes Crew
-                notifications.
+                {t(
+                  "Use an existing bot. It keeps its main job and also routes Crew notifications.",
+                )}
               </p>
-              <HelpField label="Crew dispatcher" topic="dispatcher">
+              <HelpField label={t("Crew dispatcher")} topic="dispatcher">
                 <select
                   value={val(config, "agent")}
                   disabled={blocked}
@@ -913,11 +946,13 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                       "webhook.integration.update",
                       { agent: e.target.value },
                       config,
-                      "Dispatcher changed. Connect its routine before enabling delivery.",
+                      t(
+                        "Dispatcher changed. Connect its routine before enabling delivery.",
+                      ),
                     )
                   }
                 >
-                  <option value="">Choose an agent</option>
+                  <option value="">{t("Choose an agent")}</option>
                   {activeAgents.map((a) => (
                     <option key={a.id} value={a.id}>
                       {val(a, "name")}
@@ -926,11 +961,12 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 </select>
               </HelpField>
               <p className="crew-footnote">
-                Changing the dispatcher pauses delivery and clears the previous
-                webhook binding.
+                {t(
+                  "Changing the dispatcher pauses delivery and clears the previous webhook binding.",
+                )}
               </p>
               <label className="crew-field">
-                <span>Dispatch path</span>
+                <span>{t("Dispatch path")}</span>
                 <select
                   value={parentBridge ? "parent_bridge" : "native"}
                   disabled={blocked}
@@ -939,36 +975,44 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                       "webhook.integration.update",
                       { dispatch_mode: e.target.value },
                       config,
-                      "Dispatch path changed. Apply the current instructions and test again. Credentials were preserved.",
+                      t(
+                        "Dispatch path changed. Apply the current instructions and test again. Credentials were preserved.",
+                      ),
                     )
                   }
                 >
                   <option value="parent_bridge">
-                    Via the bot's parent conversation
+                    {t("Via the bot's parent conversation")}
                   </option>
                   <option value="native">
-                    Directly inside the webhook routine
+                    {t("Directly inside the webhook routine")}
                   </option>
                 </select>
               </label>
               <p className="crew-footnote">
                 {parentBridge
-                  ? "The routine wakes its parent conversation, which can work or message a teammate."
-                  : "Use direct dispatch only when native bot messaging is available inside the routine. For Grok routines with WakeParent, choose the parent conversation."}
+                  ? t(
+                      "The routine wakes its parent conversation, which can work or message a teammate.",
+                    )
+                  : t(
+                      "Use direct dispatch only when native bot messaging is available inside the routine. For Grok routines with WakeParent, choose the parent conversation.",
+                    )}
               </p>
             </Step>
-            <Step {...stepProps(2)} title="Prepare Grok">
-              <p>Two prompts, in this order. Both are required.</p>
+            <Step {...stepProps(2)} title={t("Prepare Grok")}>
+              <p>{t("Two prompts, in this order. Both are required.")}</p>
               <h4 className="crew-prompt-step">
-                First: paste once into{" "}
-                {val(currentAgent, "name") || "your selected bot"}'s Grok chat
+                {t("First: paste once into {name}'s Grok chat", {
+                  name: val(currentAgent, "name") || t("your selected bot"),
+                })}
               </h4>
               <p>
-                It asks Grok to discover your bots, save mappings and apply the
-                current routine instructions where its tools support them.
+                {t(
+                  "It asks Grok to discover your bots, save mappings and apply the current routine instructions where its tools support them.",
+                )}
               </p>
               <PromptActions
-                readLabel="Read setup prompt"
+                readLabel={t("Read setup prompt")}
                 prompt={setupPrompt}
                 copyButton={
                   <button
@@ -977,27 +1021,31 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     onClick={() =>
                       void copy(
                         setupPrompt,
-                        "Setup prompt copied. It contains no credentials.",
+                        t("Setup prompt copied. It contains no credentials."),
                       )
                     }
                   >
-                    Copy setup prompt
+                    {t("Copy setup prompt")}
                   </button>
                 }
               />
               <p>
-                <strong>{syncLabel}</strong> · Revision{" "}
-                {Number(config.instruction_revision) || 1}
+                <strong>{syncLabel}</strong> ·{" "}
+                {t("Revision {n}", { n: Number(config.instruction_revision) || 1 })}
               </p>
               {!synced && (
                 <p className="crew-assignment-warning">
-                  Apply instruction revision{" "}
-                  {Number(config.instruction_revision) || 1} in Grok. This page
-                  updates automatically.
+                  {t(
+                    "Apply instruction revision {n} in Grok. This page updates automatically.",
+                    { n: Number(config.instruction_revision) || 1 },
+                  )}
                 </p>
               )}
               <p>
-                {mapped} of {activeAgents.length} agents mapped.
+                {t("{mapped} of {total} agents mapped.", {
+                  mapped,
+                  total: activeAgents.length,
+                })}
               </p>
               <ul className="crew-mapping-summary">
                 {activeAgents.map((a) => {
@@ -1009,7 +1057,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                       <strong>{val(a, "name")}</strong>
                       <span>
                         →{" "}
-                        {m ? mappingLabel(a, m) : "Not mapped"}
+                        {m ? mappingLabel(a, m) : t("Not mapped")}
                       </span>
                     </li>
                   );
@@ -1018,19 +1066,21 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               {mcpUrl && (
                 <div>
                   <h4 className="crew-prompt-step">
-                    Then: paste once into a Grok group with all your bots
+                    {t("Then: paste once into a Grok group with all your bots")}
                   </h4>
                   <p>
-                    Create a group chat with you and{" "}
-                    {activeAgents.length > 1
-                      ? `all ${activeAgents.length} bots`
-                      : "your bot"}
-                    , then paste this there. Do it after the first prompt and
-                    before testing. Each bot needs your authorization directly:
-                    the first bot can't give it on your behalf.
+                    {t(
+                      "Create a group chat with you and {who}, then paste this there. Do it after the first prompt and before testing. Each bot needs your authorization directly: the first bot can't give it on your behalf.",
+                      {
+                        who:
+                          activeAgents.length > 1
+                            ? t("all {n} bots", { n: activeAgents.length })
+                            : t("your bot"),
+                      },
+                    )}
                   </p>
                   <PromptActions
-                    readLabel="Read group authorization prompt"
+                    readLabel={t("Read group authorization prompt")}
                     prompt={groupAuthorizationPrompt}
                     copyButton={
                       <button
@@ -1039,20 +1089,22 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                         onClick={() =>
                           void copy(
                             groupAuthorizationPrompt,
-                            "Group authorization prompt copied. Paste it once in the group with all your bots.",
+                            t(
+                              "Group authorization prompt copied. Paste it once in the group with all your bots.",
+                            ),
                           )
                         }
                       >
-                        Copy group authorization prompt
+                        {t("Copy group authorization prompt")}
                       </button>
                     }
                   />
                   <details className="crew-prompt-fallback">
                     <summary>
-                      Can't use a group? Paste into each bot's own chat
+                      {t("Can't use a group? Paste into each bot's own chat")}
                     </summary>
                   <PromptActions
-                    readLabel="Read bot authorization prompt"
+                    readLabel={t("Read bot authorization prompt")}
                     prompt={authorizationPrompt}
                     copyButton={
                       <button
@@ -1060,11 +1112,13 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                         onClick={() =>
                           void copy(
                             authorizationPrompt,
-                            "Authorization prompt copied. Paste it into each bot's own conversation.",
+                            t(
+                              "Authorization prompt copied. Paste it into each bot's own conversation.",
+                            ),
                           )
                         }
                       >
-                        Copy bot authorization prompt
+                        {t("Copy bot authorization prompt")}
                       </button>
                     }
                   />
@@ -1073,27 +1127,34 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               )}
               {mapped < activeAgents.length && (
                 <p className="crew-footnote">
-                  Unmapped agents cannot receive Ready-task notifications. The
-                  setup prompt asks only about ambiguous matches.
+                  {t(
+                    "Unmapped agents cannot receive Ready-task notifications. The setup prompt asks only about ambiguous matches.",
+                  )}
                 </p>
               )}
             </Step>
             <Step
               {...stepProps(3)}
-              title="Enter webhook credentials"
+              title={t("Enter webhook credentials")}
               help="webhook-credentials"
             >
               <p>
-                Copy the URL and key from the selected bot's Grok routine
-                directly into Crew. Never paste them into chat.
+                {t(
+                  "Copy the URL and key from the selected bot's Grok routine directly into Crew. Never paste them into chat.",
+                )}
               </p>
               <p>
-                Endpoint:{" "}
-                {config.url_configured
-                  ? val(config, "receiver_host") || "configured"
-                  : "not configured"}{" "}
-                · Credential:{" "}
-                {config.secret_configured ? "configured" : "not configured"}
+                {t("Endpoint: {endpoint}", {
+                  endpoint: config.url_configured
+                    ? val(config, "receiver_host") || t("configured")
+                    : t("not configured"),
+                })}{" "}
+                ·{" "}
+                {t("Credential: {credential}", {
+                  credential: config.secret_configured
+                    ? t("configured")
+                    : t("not configured"),
+                })}
               </p>
               <details
                 open={
@@ -1105,8 +1166,8 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               >
                 <summary>
                   {config.url_configured && config.secret_configured
-                    ? "Replace saved credentials"
-                    : "Add credentials"}
+                    ? t("Replace saved credentials")
+                    : t("Add credentials")}
                 </summary>
                 <form
                   onSubmit={saveCredentials}
@@ -1116,8 +1177,8 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                   <label className="crew-field">
                     <span>
                       {config.url_configured
-                        ? "Replacement webhook URL"
-                        : "Webhook URL"}
+                        ? t("Replacement webhook URL")
+                        : t("Webhook URL")}
                     </span>
                     <input
                       type="url"
@@ -1132,8 +1193,8 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                   <label className="crew-field">
                     <span>
                       {config.secret_configured
-                        ? "Replacement secret"
-                        : "Webhook secret"}
+                        ? t("Replacement secret")
+                        : t("Webhook secret")}
                     </span>
                     <input
                       type="password"
@@ -1145,9 +1206,9 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     />
                   </label>
                   <p className="crew-footnote">
-                    Saved values are never filled back in. Leave a field empty
-                    to keep it. Replacing the URL requires a new secret. Saving
-                    sends nothing.
+                    {t(
+                      "Saved values are never filled back in. Leave a field empty to keep it. Replacing the URL requires a new secret. Saving sends nothing.",
+                    )}
                   </p>
                   <button
                     className="crew-primary"
@@ -1157,32 +1218,36 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                       (!!url.trim() && !secret)
                     }
                   >
-                    Save credentials
+                    {t("Save credentials")}
                   </button>
                 </form>
               </details>
             </Step>
-            <Step {...stepProps(4)} title="Verify the connection">
+            <Step {...stepProps(4)} title={t("Verify the connection")}>
               <p>
                 {parentBridge
-                  ? "Test the complete route: routine, parent conversation, and selected recipient. This explicitly sends a diagnostic message to a teammate when selected, but performs no task work."
-                  : "Send a connection test to the routine. It acknowledges the test without task work or forwarding."}
+                  ? t(
+                      "Test the complete route: routine, parent conversation, and selected recipient. This explicitly sends a diagnostic message to a teammate when selected, but performs no task work.",
+                    )
+                  : t(
+                      "Send a connection test to the routine. It acknowledges the test without task work or forwarding.",
+                    )}
               </p>
               {parentBridge && (
                 <label className="crew-field">
-                  <span>Test recipient</span>
+                  <span>{t("Test recipient")}</span>
                   <select
                     value={selectedTestRecipient?.id || ""}
                     disabled={blocked}
                     onChange={(e) => setTestRecipient(e.target.value)}
                   >
                     {!testRecipients.length && (
-                      <option value="">Map a bot first</option>
+                      <option value="">{t("Map a bot first")}</option>
                     )}
                     {testRecipients.map((a) => (
                       <option key={a.id} value={a.id}>
                         {val(a, "name")}
-                        {a.id === config.agent ? " (dispatcher)" : ""}
+                        {a.id === config.agent ? ` ${t("(dispatcher)")}` : ""}
                       </option>
                     ))}
                   </select>
@@ -1201,94 +1266,95 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                       ? { recipient_agent_id: selectedTestRecipient?.id }
                       : {},
                     config,
-                    "Test queued. Acknowledgment progress updates here automatically. Do not send another test while the outcome is uncertain.",
+                    t(
+                      "Test queued. Acknowledgment progress updates here automatically. Do not send another test while the outcome is uncertain.",
+                    ),
                   )
                 }
               >
-                Send test
+                {t("Send test")}
               </button>
               {!canTest && <Blockers items={testBlockers} />}
-              <ul aria-label="Connection test progress">
+              <ul aria-label={t("Connection test progress")}>
                 <li>
-                  Webhook:{" "}
+                  {t("Webhook:")}{" "}
                   {testDelivery
-                    ? deliveryStates[val(testDelivery, "state")] ||
-                      "Unknown delivery status"
-                    : "no current delivery recorded"}
+                    ? deliveryState(val(testDelivery, "state"))
+                    : t("no current delivery recorded")}
                 </li>
                 <li>
-                  Routine:{" "}
+                  {t("Routine:")}{" "}
                   {setup?.test_acknowledged
-                    ? "test acknowledged"
-                    : "awaiting acknowledgment"}
+                    ? t("test acknowledged")
+                    : t("awaiting acknowledgment")}
                 </li>
                 <li>
-                  Routine capabilities:{" "}
-                  {setup?.runtime_reported ? "reported" : "awaiting report"}
+                  {t("Routine capabilities:")}{" "}
+                  {setup?.runtime_reported ? t("reported") : t("awaiting report")}
                 </li>
                 {parentBridge && (
                   <>
                     <li>
-                      Parent wake capability:{" "}
+                      {t("Parent wake capability:")}{" "}
                       {setup?.parent_wake_reported
-                        ? "reported"
-                        : "awaiting report"}
+                        ? t("reported")
+                        : t("awaiting report")}
                     </li>
                     <li>
-                      Parent conversation:{" "}
+                      {t("Parent conversation:")}{" "}
                       {setup?.parent_received
-                        ? "receipt recorded"
-                        : "awaiting receipt"}
+                        ? t("receipt recorded")
+                        : t("awaiting receipt")}
                     </li>
                     {setup?.bridge_test_recipient_agent_id &&
                       setup.bridge_test_recipient_agent_id !== config.agent && (
                         <li>
-                          Native send:{" "}
+                          {t("Native send:")}{" "}
                           {setup.bridge_send_reported
-                            ? "reported"
-                            : "not reported"}
+                            ? t("reported")
+                            : t("not reported")}
                         </li>
                       )}
                     <li>
-                      Recipient:{" "}
+                      {t("Recipient:")}{" "}
                       {setup?.bridge_test_recipient_agent_id === config.agent
-                        ? "not needed for this dispatcher-only test"
+                        ? t("not needed for this dispatcher-only test")
                         : setup?.recipient_acknowledged
-                          ? "acknowledgment recorded"
-                          : "awaiting acknowledgment"}
+                          ? t("acknowledgment recorded")
+                          : t("awaiting acknowledgment")}
                     </li>
                   </>
                 )}
               </ul>
               {parentBridge && setup?.bridge_test_overdue && (
                 <p className="crew-assignment-warning">
-                  Test acknowledgment overdue. Check the bot conversations and
-                  authorization before starting a new test. No automatic resend.
+                  {t(
+                    "Test acknowledgment overdue. Check the bot conversations and authorization before starting a new test. No automatic resend.",
+                  )}
                 </p>
               )}
               {parentBridge && setup?.bridge_test_recipient_agent_id && (
                 <p>
-                  Latest test recipient:{" "}
+                  {t("Latest test recipient:")}{" "}
                   {val(
                     agents.find(
                       (a) => a.id === setup.bridge_test_recipient_agent_id,
                     ),
                     "name",
-                  ) || "Unavailable agent"}
+                  ) || t("Unavailable agent")}
                 </p>
               )}
               <p className="crew-footnote">
-                Receiver acceptance, parent receipt and recipient acknowledgment
-                are separate stages. Reports are supplied by bots using the
-                shared connection; they do not independently identify a bot or
-                guarantee reliable delivery. Check Grok before retrying an
-                uncertain outcome.
+                {t(
+                  "Receiver acceptance, parent receipt and recipient acknowledgment are separate stages. Reports are supplied by bots using the shared connection; they do not independently identify a bot or guarantee reliable delivery. Check Grok before retrying an uncertain outcome.",
+                )}
               </p>
             </Step>
-            <Step {...stepProps(5)} title="Enable future notifications">
+            <Step {...stepProps(5)} title={t("Enable future notifications")}>
               <p>
-                Enable delivery after checking the routine's setup. Existing
-                tasks are not replayed.
+                {t(
+                  "Enable delivery after checking the routine's setup. Existing tasks are not replayed.",
+                )}
               </p>
               <button
                 className="crew-primary"
@@ -1300,41 +1366,41 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     {},
                     config,
                     enabling
-                      ? "Delivery enabled. Existing tasks were not replayed."
-                      : "Delivery disabled.",
+                      ? t("Delivery enabled. Existing tasks were not replayed.")
+                      : t("Delivery disabled."),
                   ).then((ok) => {
                     if (ok && enabling) resetSteps();
                   });
                 }}
               >
-                {config.enabled ? "Disable delivery" : "Enable delivery"}
+                {config.enabled ? t("Disable delivery") : t("Enable delivery")}
               </button>
               {!config.enabled && !canEnable && (
                 <Blockers items={enableBlockers} />
               )}
             </Step>
-            <Step {...stepProps(6)} title="Verify task routing (optional)">
+            <Step {...stepProps(6)} title={t("Verify task routing (optional)")}>
               <p>
-                Use an explicit synthetic test to check work for the dispatcher
-                itself and a handoff to another bot. This is separate from the
-                harmless connection test.
+                {t(
+                  "Use an explicit synthetic test to check work for the dispatcher itself and a handoff to another bot. This is separate from the harmless connection test.",
+                )}
               </p>
               <ul>
                 <li>
-                  Dispatcher task:{" "}
+                  {t("Dispatcher task:")}{" "}
                   {selfEvidence
-                    ? "completed execution recorded"
-                    : "not yet verified"}
+                    ? t("completed execution recorded")
+                    : t("not yet verified")}
                 </li>
                 <li>
-                  Specialist task:{" "}
+                  {t("Specialist task:")}{" "}
                   {otherEvidence
-                    ? "completed execution recorded"
-                    : "not yet verified"}
+                    ? t("completed execution recorded")
+                    : t("not yet verified")}
                 </li>
               </ul>
               <PromptActions
-                readLabel="Read routing test prompt"
+                readLabel={t("Read routing test prompt")}
                 prompt={routingPrompt}
                 copyButton={
                   <button
@@ -1342,18 +1408,20 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     onClick={() =>
                       void copy(
                         routingPrompt,
-                        "Routing test prompt copied. It authorizes only the described synthetic tasks.",
+                        t(
+                          "Routing test prompt copied. It authorizes only the described synthetic tasks.",
+                        ),
                       )
                     }
                   >
-                    Copy routing test prompt
+                    {t("Copy routing test prompt")}
                   </button>
                 }
               />
               <p className="crew-footnote">
-                Enable delivery first, then run only the authorized sample
-                tasks. Recorded completion is reported by the worker; check the
-                resulting task and Grok conversation.
+                {t(
+                  "Enable delivery first, then run only the authorized sample tasks. Recorded completion is reported by the worker; check the resulting task and Grok conversation.",
+                )}
               </p>
             </Step>
           </div>
@@ -1364,21 +1432,22 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
             onSubmit={(e) => void saveWakeRules(e)}
           >
             <div className="crew-wake-rules-heading">
-              <h3 id="crew-wake-rules-title">Wake rules</h3>
+              <h3 id="crew-wake-rules-title">{t("Wake rules")}</h3>
               <button
                 type="button"
                 disabled={blocked || atRecommended}
                 onClick={resetWakeRules}
               >
-                Reset to recommended
+                {t("Reset to recommended")}
               </button>
             </div>
             <p>
-              Which changes wake a bot. A task must be Ready, not done and not
-              waiting for approval before any rule can wake it.
+              {t(
+                "Which changes wake a bot. A task must be Ready, not done and not waiting for approval before any rule can wake it.",
+              )}
             </p>
             <fieldset className="crew-integration-events">
-              <legend>Wake a bot when</legend>
+              <legend>{t("Wake a bot when")}</legend>
               {wakeRules.map((rule) => (
                 <div className="crew-wake-rule" key={rule.reason}>
                   <label>
@@ -1395,21 +1464,25 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                         )
                       }
                     />
-                    <span>{rule.label}</span>
+                    <span>{t(rule.label)}</span>
                     <span className="crew-recommended">
                       {rule.recommended
-                        ? "Recommended: on"
-                        : "Recommended: off"}
+                        ? t("Recommended: on")
+                        : t("Recommended: off")}
                     </span>
                   </label>
                   <p id={`crew-wake-${rule.reason}`} className="crew-footnote">
-                    {rule.help}
+                    {t(rule.help)}
                     {rule.reason === "unassigned" && (
                       <>
                         {" "}
                         {triageAgent
-                          ? `Triage agent: ${val(triageAgent, "name")}.`
-                          : "No triage agent is chosen, so this wakes no one; your assistant can choose one. Turn it on only after that."}
+                          ? t("Triage agent: {name}.", {
+                              name: val(triageAgent, "name"),
+                            })
+                          : t(
+                              "No triage agent is chosen, so this wakes no one; your assistant can choose one. Turn it on only after that.",
+                            )}
                       </>
                     )}
                   </p>
@@ -1418,7 +1491,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
             </fieldset>
             {routing && (
               <>
-                <HelpField label="Bot handoff limit" topic="handoff-limit">
+                <HelpField label={t("Bot handoff limit")} topic="handoff-limit">
                   <input
                     type="number"
                     min={1}
@@ -1432,24 +1505,23 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 </HelpField>
                 <p id="crew-handoff-limit-help" className="crew-footnote">
                   <span className="crew-recommended">
-                    Recommended: {recommendedHandoffLimit}
+                    {t("Recommended: {n}", { n: recommendedHandoffLimit })}
                   </span>{" "}
-                  How many times in a row bots can pass a task to each other (1
-                  to 20). When reached, the task goes on hold until you act.
-                  Any edit or comment from you resets the count; an agent
-                  setting it Ready does not.
+                  {t(
+                    "How many times in a row bots can pass a task to each other (1 to 20). When reached, the task goes on hold until you act. Any edit or comment from you resets the count; an agent setting it Ready does not.",
+                  )}
                 </p>
               </>
             )}
             <button className="crew-primary" disabled={!canSaveWakeRules}>
-              Save wake rules
+              {t("Save wake rules")}
             </button>
             {!subscriptions.length && (
-              <p className="crew-footnote">Choose at least one rule.</p>
+              <p className="crew-footnote">{t("Choose at least one rule.")}</p>
             )}
             {routing && !limitValid && (
               <p className="crew-footnote">
-                Enter a whole number from 1 to 20.
+                {t("Enter a whole number from 1 to 20.")}
               </p>
             )}
             {subscriptionsChanged && subscriptions.length > 0 && (
@@ -1461,13 +1533,13 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
           {stranded.length > 0 && (
             <section
               className="crew-webhook-card crew-stranded"
-              aria-label="Wakes not received"
+              aria-label={t("Wakes not received")}
             >
-              <h3>Wakes not received</h3>
+              <h3>{t("Wakes not received")}</h3>
               <p>
-                Crew woke these bots but they never confirmed receiving the
-                wake. Check each bot's conversation; Crew does not resend on
-                its own.
+                {t(
+                  "Crew woke these bots but they never confirmed receiving the wake. Check each bot's conversation; Crew does not resend on its own.",
+                )}
               </p>
               <ul>
                 {stranded.map(({ bridge, task }) => {
@@ -1478,20 +1550,20 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                   return (
                     <li key={bridge.id}>
                       <a href={itemPath("task", task)}>
-                        {val(task, "title") || "Untitled task"}
+                        {val(task, "title") || t("Untitled task")}
                       </a>
                       <span>
                         {recipient
                           ? val(recipient, "name")
                           : recipientId
-                            ? "Unavailable agent"
-                            : "The dispatcher"}
+                            ? t("Unavailable agent")
+                            : t("The dispatcher")}
                       </span>
                       <small>
                         <RelativeTime
                           value={since}
-                          prefix="Overdue, due "
-                          fallback="Overdue since an unknown time"
+                          prefix={t("Overdue, due ")}
+                          fallback={t("Overdue since an unknown time")}
                         />
                       </small>
                     </li>
@@ -1502,15 +1574,16 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
           )}
           <section
             className="crew-webhook-card"
-            aria-label="Notification activity"
+            aria-label={t("Notification activity")}
           >
-            <h3>Notification activity</h3>
+            <h3>{t("Notification activity")}</h3>
             <p>
-              Receiver acceptance does not mean the task started or completed.
-              Human review decisions remain separate.
+              {t(
+                "Receiver acceptance does not mean the task started or completed. Human review decisions remain separate.",
+              )}
             </p>
             {!deliveries.length ? (
-              <p>No deliveries recorded.</p>
+              <p>{t("No deliveries recorded.")}</p>
             ) : (
               shownActivity.map(({ delivery, execution, warning }) => (
                 <EventTimeline
@@ -1525,32 +1598,35 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
             )}
             {shownActivity.length < activity.length ? (
               <button type="button" onClick={() => setShowAllActivity(true)}>
-                Show all ({activity.length})
+                {t("Show all ({n})", { n: activity.length })}
               </button>
             ) : (
               showAllActivity &&
               activity.length > initialActivityEntries && (
                 <button type="button" onClick={() => setShowAllActivity(false)}>
-                  Show fewer
+                  {t("Show fewer")}
                 </button>
               )
             )}
             {showAllActivity && deliveries.length > 30 && (
-              <p>Showing the 30 most recent deliveries.</p>
+              <p>{t("Showing the 30 most recent deliveries.")}</p>
             )}
           </section>
           <details className="crew-webhook-card crew-advanced">
-            <summary>Advanced settings and recovery</summary>
+            <summary>{t("Advanced settings and recovery")}</summary>
             {legacyCount > 0 && (
               <p>
-                {legacyCount} previous per-agent configurations are retained as
-                disabled history.
+                {t(
+                  "{n} previous per-agent configurations are retained as disabled history.",
+                  { n: legacyCount },
+                )}
               </p>
             )}
-            <h3>Bot mappings</h3>
+            <h3>{t("Bot mappings")}</h3>
             <p>
-              Normally your assistant manages these from the setup prompt. Edit
-              a reference only when you can resolve it unambiguously in Grok.
+              {t(
+                "Normally your assistant manages these from the setup prompt. Edit a reference only when you can resolve it unambiguously in Grok.",
+              )}
             </p>
             <div className="crew-integration-mappings">
               {activeAgents.map((a) => (
@@ -1569,23 +1645,29 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                         ...(name === undefined ? {} : { bot_name: name }),
                       },
                       row,
-                      "Bot mapping saved.",
+                      t("Bot mapping saved."),
                       row?.revision ?? 0,
                     )
                   }
                 />
               ))}
             </div>
-            <h3>Managed instructions</h3>
+            <h3>{t("Managed instructions")}</h3>
             <p>
-              {syncLabel}. Matching saved text is reported by the assistant;
-              Crew does not independently inspect Grok.
+              {t(
+                "{status}. Matching saved text is reported by the assistant; Crew does not independently inspect Grok.",
+                { status: syncLabel },
+              )}
             </p>
             {val(config, "routine_ref") && (
-              <p>Routine reference: {val(config, "routine_ref")}</p>
+              <p>
+                {t("Routine reference: {ref}", {
+                  ref: val(config, "routine_ref"),
+                })}
+              </p>
             )}
             <label className="crew-field">
-              <span>Routine instructions</span>
+              <span>{t("Routine instructions")}</span>
               <textarea
                 readOnly
                 rows={10}
@@ -1598,14 +1680,14 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               onClick={() =>
                 void copy(
                   val(config, "instructions"),
-                  "Managed instructions copied. No credentials are included.",
+                  t("Managed instructions copied. No credentials are included."),
                 )
               }
             >
-              Copy instructions
+              {t("Copy instructions")}
             </button>
             <form
-              aria-label="Role and reporting instructions"
+              aria-label={t("Role and reporting instructions")}
               onSubmit={(e) => {
                 e.preventDefault();
                 // Wake rules are saved in their own section, never from here.
@@ -1616,12 +1698,14 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     reporting_instructions: reportingInstructions,
                   },
                   config,
-                  "Instructions saved. Delivery is off until the routine is applied, tested and enabled again.",
+                  t(
+                    "Instructions saved. Delivery is off until the routine is applied, tested and enabled again.",
+                  ),
                 );
               }}
             >
               <label className="crew-field">
-                <span>Bot role instructions</span>
+                <span>{t("Bot role instructions")}</span>
                 <textarea
                   rows={4}
                   value={roleInstructions}
@@ -1630,7 +1714,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 />
               </label>
               <label className="crew-field">
-                <span>Reporting instructions</span>
+                <span>{t("Reporting instructions")}</span>
                 <textarea
                   rows={4}
                   value={reportingInstructions}
@@ -1639,8 +1723,9 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 />
               </label>
               <p className="crew-footnote">
-                These settings stay outside Crew's managed block. After changing
-                them, apply and report the saved routine again.
+                {t(
+                  "These settings stay outside Crew's managed block. After changing them, apply and report the saved routine again.",
+                )}
               </p>
               <button
                 disabled={
@@ -1650,7 +1735,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                       val(config, "reporting_instructions"))
                 }
               >
-                Save instructions
+                {t("Save instructions")}
               </button>
             </form>
             <ExecutionRecovery
@@ -1662,8 +1747,10 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                   { resolution },
                   row,
                   resolution === "retry"
-                    ? "Retry authorized. Ask the intended recipient to resume this execution; no webhook or message was sent."
-                    : "Coordinated work cancelled. External actions were not undone.",
+                    ? t(
+                        "Retry authorized. Ask the intended recipient to resume this execution; no webhook or message was sent.",
+                      )
+                    : t("Coordinated work cancelled. External actions were not undone."),
                 )
               }
             />
@@ -1683,7 +1770,9 @@ export function mappingLabel(agent: Row, mapping?: Row) {
   const name = val(mapping, "bot_name").trim();
   if (name) return name;
   const ref = val(mapping, "bot_ref");
-  return ref ? `${val(agent, "name")} bot (${shortBotRef(ref)})` : "";
+  return ref
+    ? t("{name} bot ({ref})", { name: val(agent, "name"), ref: shortBotRef(ref) })
+    : "";
 }
 // A newer saved value replaces the field only if the owner hasn't edited it.
 function useSavedField(saved: string) {
@@ -1720,7 +1809,7 @@ function AgentMapping({
   return (
     <form
       className="crew-webhook-card"
-      aria-label={`${val(agent, "name")} routing`}
+      aria-label={t("{name} routing", { name: val(agent, "name") })}
       onSubmit={(e) => {
         e.preventDefault();
         void onSave(
@@ -1733,12 +1822,12 @@ function AgentMapping({
       <h4>{val(agent, "name")}</h4>
       {label && <p>{label}</p>}
       <label className="crew-field">
-        <span>Grok Bot reference for {val(agent, "name")}</span>
+        <span>{t("Grok Bot reference for {name}", { name: val(agent, "name") })}</span>
         <input
           value={reference}
           disabled={disabled}
           onChange={(e) => setReference(e.target.value)}
-          placeholder="Confirmed bot reference"
+          placeholder={t("Confirmed bot reference")}
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="none"
@@ -1746,19 +1835,21 @@ function AgentMapping({
         />
       </label>
       <AutoTextField
-        label={`Bot display name for ${val(agent, "name")} (optional)`}
+        label={t("Bot display name for {name} (optional)", {
+          name: val(agent, "name"),
+        })}
         value={name}
         maxLength={200}
         disabled={disabled}
         onValue={setName}
-        placeholder="Name shown in Grok"
+        placeholder={t("Name shown in Grok")}
       />
       <button
         disabled={
           disabled || (reference.trim() === saved && !nameChanged)
         }
       >
-        Save {val(agent, "name")} mapping
+        {t("Save {name} mapping", { name: val(agent, "name") })}
       </button>
     </form>
   );
@@ -1780,31 +1871,31 @@ function EventTimeline({
   const task = val(d, "task");
   const timestamps = [
     {
-      label: deliveryStates[val(d, "state")] || "Unknown delivery status",
+      label: deliveryState(val(d, "state")),
       time:
         val(d, "state") === "accepted"
           ? val(d, "accepted_at")
           : val(d, "created"),
     },
     ...(ex?.dispatch_started_at
-      ? [{ label: "Dispatcher started", time: val(ex, "dispatch_started_at") }]
+      ? [{ label: t("Dispatcher started"), time: val(ex, "dispatch_started_at") }]
       : []),
     ...(ex?.handoff_prepared_at ||
     ex?.handoff_deadline_at ||
     ex?.handoff_at ||
     ex?.state === "handed_off"
-      ? [{ label: "Handoff prepared", time: val(ex, "handoff_prepared_at") }]
+      ? [{ label: t("Handoff prepared"), time: val(ex, "handoff_prepared_at") }]
       : []),
     ...(ex?.handoff_at
-      ? [{ label: "Handoff reported", time: val(ex, "handoff_at") }]
+      ? [{ label: t("Handoff reported"), time: val(ex, "handoff_at") }]
       : []),
     ...(ex?.acquired_at
-      ? [{ label: "Recipient started", time: val(ex, "acquired_at") }]
+      ? [{ label: t("Recipient started"), time: val(ex, "acquired_at") }]
       : []),
     ...(ex
       ? [
           {
-            label: executionStates[val(ex, "state")] || "Execution recorded",
+            label: executionState(val(ex, "state"), t("Execution recorded")),
             time: val(ex, "completed_at"),
           },
         ]
@@ -1814,8 +1905,10 @@ function EventTimeline({
   const quiet = warning === "superseded" || warning === "old";
   const pastNote =
     warning === "superseded"
-      ? "Later activity replaced this attempt; nothing to do here."
-      : "This is more than a day old. Review the bot conversation only if the outcome still matters.";
+      ? t("Later activity replaced this attempt; nothing to do here.")
+      : t(
+          "This is more than a day old. Review the bot conversation only if the outcome still matters.",
+        );
   const pending = ex?.state === "handed_off";
   const leaseExpired =
     ex?.lease_expired === true ||
@@ -1830,13 +1923,15 @@ function EventTimeline({
       <div className="crew-event-heading">
         {task ? (
           <a href={`/#/tasks/${encodeURIComponent(task)}`}>
-            Task wake{recipient ? ` for ${val(recipient, "name")}` : ""}
+            {recipient
+              ? t("Task wake for {name}", { name: val(recipient, "name") })
+              : t("Task wake")}
           </a>
         ) : (
-          <strong>Connection test</strong>
+          <strong>{t("Connection test")}</strong>
         )}
         <span>
-          {attempts} {attempts === 1 ? "attempt" : "attempts"}
+          {tn(attempts, "{n} attempt", "{n} attempts")}
         </span>
       </div>
       <ol className="crew-event-timeline">
@@ -1856,17 +1951,17 @@ function EventTimeline({
           }
         >
           {overdue
-            ? "Recipient acknowledgment overdue"
-            : "Waiting for recipient acquisition"}
+            ? t("Recipient acknowledgment overdue")
+            : t("Waiting for recipient acquisition")}
           {ago(ex?.handoff_at || ex?.created, now)
-            ? ` · ${ago(ex?.handoff_at || ex?.created, now)} elapsed`
+            ? ` · ${t("{time} elapsed", { time: ago(ex?.handoff_at || ex?.created, now) })}`
             : ""}
           .{" "}
           {overdue
             ? quiet
               ? pastNote
-              : "Review the bot conversation before recovery. No automatic resend."
-            : "A reported send is not proof that the recipient started."}
+              : t("Review the bot conversation before recovery. No automatic resend.")
+            : t("A reported send is not proof that the recipient started.")}
         </p>
       )}
       {!!ex?.lease_until && (
@@ -1878,13 +1973,15 @@ function EventTimeline({
           <RelativeTime
             value={val(ex, "lease_until")}
             prefix={
-              leaseExpired ? "Execution lease expired " : "Execution lease expires "
+              leaseExpired
+                ? t("Execution lease expired ")
+                : t("Execution lease expires ")
             }
           />
           {leaseExpired
             ? quiet
               ? `. ${pastNote}`
-              : ". Reconcile the outcome before authorizing another attempt."
+              : `. ${t("Reconcile the outcome before authorizing another attempt.")}`
             : ""}
         </p>
       )}
@@ -1911,14 +2008,16 @@ function ExecutionRecovery({
   if (!recoverable.length) return null;
   return (
     <details className="crew-execution-recovery">
-      <summary>Recover interrupted work ({recoverable.length})</summary>
+      <summary>
+        {t("Recover interrupted work ({n})", { n: recoverable.length })}
+      </summary>
       <p>
-        The bot may already have performed external work. Review the bot
-        conversation and affected systems before deciding. Cancelling cannot
-        undo external actions.
+        {t(
+          "The bot may already have performed external work. Review the bot conversation and affected systems before deciding. Cancelling cannot undo external actions.",
+        )}
       </p>
       <label className="crew-field">
-        <span>Execution to recover</span>
+        <span>{t("Execution to recover")}</span>
         <select
           value={selected}
           disabled={disabled}
@@ -1927,11 +2026,11 @@ function ExecutionRecovery({
             setReviewed(false);
           }}
         >
-          <option value="">Choose an execution</option>
+          <option value="">{t("Choose an execution")}</option>
           {recoverable.map((row) => (
             <option key={row.id} value={row.id}>
-              {val(row, "task") || "Task"} ·{" "}
-              {executionStates[val(row, "state")] || "Unknown"} · {row.id}
+              {val(row, "task") || t("Task")} ·{" "}
+              {executionState(val(row, "state"), t("Unknown"))} · {row.id}
             </option>
           ))}
         </select>
@@ -1943,7 +2042,7 @@ function ExecutionRecovery({
           disabled={disabled || !selected}
           onChange={(e) => setReviewed(e.target.checked)}
         />
-        I reviewed the uncertain outcome and any external actions.
+        {t("I reviewed the uncertain outcome and any external actions.")}
       </label>
       <div className="crew-integration-actions">
         {["cancel", "retry"].map((resolution) => (
@@ -1962,16 +2061,15 @@ function ExecutionRecovery({
             }}
           >
             {resolution === "cancel"
-              ? "Cancel coordinated work"
-              : "Authorize another attempt"}
+              ? t("Cancel coordinated work")
+              : t("Authorize another attempt")}
           </button>
         ))}
       </div>
       <p className="crew-footnote">
-        Retry authorizes another acquisition of this execution. It does not send
-        a webhook or message. Ask the intended bot to resume it after
-        authorization. Cancelling coordination cannot stop a run already in
-        progress or undo external actions.
+        {t(
+          "Retry authorizes another acquisition of this execution. It does not send a webhook or message. Ask the intended bot to resume it after authorization. Cancelling coordination cannot stop a run already in progress or undo external actions.",
+        )}
       </p>
     </details>
   );

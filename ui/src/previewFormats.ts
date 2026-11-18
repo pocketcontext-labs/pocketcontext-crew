@@ -11,6 +11,7 @@ import {
   isVideo,
   type Attachment,
 } from "./attachmentsApi";
+import { t } from "./i18n";
 
 /** Text-like previews read at most this many bytes (2 MiB). */
 export const TEXT_PREVIEW_LIMIT = 2 * 1024 * 1024;
@@ -106,7 +107,7 @@ export async function fetchAttachmentBytes(
       });
     } catch (error) {
       if ((error as Error)?.name === "AbortError") throw error;
-      throw new PreviewFetchError("network", "The file could not be loaded.");
+      throw new PreviewFetchError("network", t("The file could not be loaded."));
     }
     if ((response.status === 401 || response.status === 403) && attempt === 0) {
       token = await attachmentsApi.fileToken({ force: true });
@@ -115,14 +116,16 @@ export async function fetchAttachmentBytes(
     if (!response.ok)
       throw new PreviewFetchError(
         "http",
-        `The file could not be loaded (HTTP ${response.status}).`,
+        t("The file could not be loaded (HTTP {status}).", {
+          status: response.status,
+        }),
       );
     const declared = Number(response.headers.get("Content-Length"));
     if (declared > limit)
-      throw new PreviewFetchError("too_large", "Too large to preview.");
+      throw new PreviewFetchError("too_large", t("Too large to preview."));
     const bytes = await response.arrayBuffer();
     if (bytes.byteLength > limit)
-      throw new PreviewFetchError("too_large", "Too large to preview.");
+      throw new PreviewFetchError("too_large", t("Too large to preview."));
     return bytes;
   }
 }

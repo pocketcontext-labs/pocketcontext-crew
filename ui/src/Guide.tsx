@@ -11,6 +11,7 @@ import {
   type HelpPageTopic,
   type HelpTopic,
 } from "./helpContent";
+import { t } from "./i18n";
 import { viewHashes, type View } from "./itemLink";
 
 const pageViews: Record<HelpPageTopic, View> = {
@@ -24,32 +25,53 @@ const pageViews: Record<HelpPageTopic, View> = {
   search: "search",
 };
 
-const flow: { title: string; detail: string }[] = [
+// Built at render time so a language switch applies at once.
+const flow = (): { title: string; detail: string }[] => [
   {
-    title: "You create a task",
-    detail: "Describe the work on the Tasks board and assign an agent.",
+    title: t("You create a task"),
+    detail: t("Describe the work on the Tasks board and assign an agent."),
   },
   {
-    title: "An agent drafts it",
-    detail: "A connected agent does the work and sends a draft for approval.",
+    title: t("An agent drafts it"),
+    detail: t(
+      "A connected agent does the work and sends a draft for approval.",
+    ),
   },
   {
-    title: "You approve",
-    detail: "Read the exact draft, then approve it, ask for changes or reject it.",
+    title: t("You approve"),
+    detail: t(
+      "Read the exact draft, then approve it, ask for changes or reject it.",
+    ),
   },
   {
-    title: "The result is saved as a note",
-    detail: "You or the agent keep what's worth remembering as a note.",
+    title: t("The result is saved as a note"),
+    detail: t("You or the agent keep what's worth remembering as a note."),
   },
 ];
 
-const connectFirst: Record<HelpMode, string> = {
-  mcp: "Agents must be connected first. Add this Crew's address to your agent platform from Connect an agent.",
-  local:
-    "Agents must be connected first. Install the skill for your coding agent from Connect an agent. This Crew has no domain, so there is no address to add.",
-  other:
-    "Agents must be connected first. Connect an agent shows the steps for this Crew.",
-};
+/** What follows "Agents must be connected first." for each kind of install. */
+const connectFirst = (mode: HelpMode): string =>
+  ({
+    mcp: t(
+      "Add this Crew's address to your agent platform from Connect an agent.",
+    ),
+    local: t(
+      "Install the skill for your coding agent from Connect an agent. This Crew has no domain, so there is no address to add.",
+    ),
+    other: t("Connect an agent shows the steps for this Crew."),
+  })[mode];
+
+/** Fills one `{name}` in translated text with a React node. */
+function withNode(text: string, name: string, node: ReactNode) {
+  const [before, after = ""] = text.split(`{${name}}`);
+  return (
+    <>
+      {before}
+      {node}
+      {after}
+    </>
+  );
+}
 
 function Entry({
   topic,
@@ -94,9 +116,9 @@ export default function Guide() {
   return (
     <div className="crew-guide">
       <section aria-labelledby="guide-how">
-        <h2 id="guide-how">How Crew works</h2>
+        <h2 id="guide-how">{t("How Crew works")}</h2>
         <ol className="crew-guide-flow">
-          {flow.map((step, index) => (
+          {flow().map((step, index) => (
             <li key={step.title}>
               <b aria-hidden="true">{index + 1}</b>
               <strong>{step.title}</strong>
@@ -106,76 +128,91 @@ export default function Guide() {
         </ol>
       </section>
       <section aria-labelledby="guide-know">
-        <h2 id="guide-know">Good to know</h2>
+        <h2 id="guide-know">{t("Good to know")}</h2>
         <ul className="crew-guide-facts">
           <li>
-            <strong>Approving never sends or publishes anything.</strong> It
-            records your decision. Anything outside Crew, you do yourself.
+            <strong>{t("Approving never sends or publishes anything.")}</strong>{" "}
+            {t(
+              "It records your decision. Anything outside Crew, you do yourself.",
+            )}
           </li>
           <li>
-            <strong>Crew doesn't run agents.</strong> They run on your own
-            platform or computer; Crew holds their tasks and notes.
+            <strong>{t("Crew doesn't run agents.")}</strong>{" "}
+            {t(
+              "They run on your own platform or computer; Crew holds their tasks and notes.",
+            )}
           </li>
           <li>
-            <strong>{connectFirst[mode].split(". ")[0]}.</strong>{" "}
-            {connectFirst[mode].split(". ").slice(1).join(". ")}
+            <strong>{t("Agents must be connected first.")}</strong>{" "}
+            {connectFirst(mode)}
           </li>
           <li>
-            <strong>History is kept.</strong> Items are archived rather than
-            deleted, and you can restore them.
+            <strong>{t("History is kept.")}</strong>{" "}
+            {t(
+              "Items are archived rather than deleted, and you can restore them.",
+            )}
           </li>
         </ul>
       </section>
       <section aria-labelledby="guide-sessions">
-        <h2 id="guide-sessions">Project agents and coding sessions</h2>
+        <h2 id="guide-sessions">{t("Project agents and coding sessions")}</h2>
         <ul className="crew-guide-facts">
           <li>
-            <strong>One agent per project.</strong> Create it with{" "}
-            <em>I start it myself</em> and name it after the project, for
-            example pocketcontext-crew. It needs no webhook.
+            <strong>{t("One agent per project.")}</strong>{" "}
+            {withNode(
+              t(
+                "Create it with {option} and name it after the project, for example pocketcontext-crew. It needs no webhook.",
+              ),
+              "option",
+              <em>{t("I start it myself")}</em>,
+            )}
           </li>
           <li>
-            <strong>Its queue is its Ready tasks.</strong> Assign tasks to it
-            and set them Ready; those are what its sessions work on.
+            <strong>{t("Its queue is its Ready tasks.")}</strong>{" "}
+            {t(
+              "Assign tasks to it and set them Ready; those are what its sessions work on.",
+            )}
           </li>
           <li>
-            <strong>Start a session from its card.</strong> Copy coding
-            prompt copies a short prompt to paste into a new Codex or Claude
-            Code session; the ? beside it shows the steps.
+            <strong>{t("Start a session from its card.")}</strong>{" "}
+            {t(
+              "Copy coding prompt copies a short prompt to paste into a new Codex or Claude Code session; the ? beside it shows the steps.",
+            )}
           </li>
           <li>
-            <strong>Its instructions are saved in Crew.</strong> Open Show full
-            instructions to edit them by hand, see their history or restore the
-            default. To change more than a line, use Rewrite with an agent: it
-            copies a prompt for an agent conversation that saves only after you
-            approve.
+            <strong>{t("Its instructions are saved in Crew.")}</strong>{" "}
+            {t(
+              "Open Show full instructions to edit them by hand, see their history or restore the default. To change more than a line, use Rewrite with an agent: it copies a prompt for an agent conversation that saves only after you approve.",
+            )}
           </li>
           <li>
-            <strong>A session claims one task for 2 hours.</strong> It renews
-            the claim while it works, and a second session can't take the same
-            task.
+            <strong>{t("A session claims one task for 2 hours.")}</strong>{" "}
+            {t(
+              "It renews the claim while it works, and a second session can't take the same task.",
+            )}
           </li>
           <li>
-            <strong>An expired claim can be released.</strong> If a session
-            stops, its task shows Claim expired. Open it and use Release claim
-            to put it back in To do.
+            <strong>{t("An expired claim can be released.")}</strong>{" "}
+            {t(
+              "If a session stops, its task shows Claim expired. Open it and use Release claim to put it back in To do.",
+            )}
           </li>
         </ul>
       </section>
       <section aria-labelledby="guide-pages">
-        <h2 id="guide-pages">What each page is for</h2>
+        <h2 id="guide-pages">{t("What each page is for")}</h2>
         <div className="crew-guide-entries">
           {pageTopics.map((page) => (
             <Entry key={page} topic={page} current={topic}>
               <a href={viewHashes[pageViews[page]]}>
-                Open {helpContent[page].name}
+                {t("Open {page}", { page: helpContent[page].name })}
               </a>
             </Entry>
           ))}
         </div>
       </section>
       <section aria-labelledby="guide-words">
-        <h2 id="guide-words">Words used in Crew</h2>
+        <h2 id="guide-words">{t("Words used in Crew")}</h2>
         <div className="crew-guide-entries">
           {glossaryTopics.map((word) => (
             <Entry key={word} topic={word} current={topic} />

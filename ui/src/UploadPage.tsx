@@ -12,8 +12,10 @@ import {
   useState,
   type ChangeEvent,
   type DragEvent,
+  type ReactNode,
 } from "react";
 import Brand from "./Brand";
+import { t, tn } from "./i18n";
 import { RelativeTime } from "./relativeTime";
 import { formatBytes, looksLikeImage, screenshotName } from "./attachmentsApi";
 import "./upload.css";
@@ -147,12 +149,25 @@ type Phase =
   | { kind: "done"; outcome: UploadOutcome; names: string[] }
   | { kind: "gone"; maybeSent: boolean };
 
+/** The English text; the page shows its translation. */
 export const goneMessage =
   "This link has expired or was already used. Ask for a new one.";
 
-const fileCount = (n: number) => `${n} ${n === 1 ? "file" : "files"}`;
+const fileCount = (n: number) => tn(n, "{n} file", "{n} files");
 
 let nextKey = 1;
+
+/** Puts a node where a translated sentence has `{title}`. */
+function withTitle(text: string, title: ReactNode) {
+  const [before, after = ""] = text.split("{title}");
+  return (
+    <>
+      {before}
+      {title}
+      {after}
+    </>
+  );
+}
 
 export default function UploadPage({ token }: { token: string }) {
   const [info, setInfo] = useState<UploadInfo | null>(null);
@@ -203,8 +218,10 @@ export default function UploadPage({ token }: { token: string }) {
         if (e.status === 429) setWait(e.retryAfter || 5);
         setError(
           e.status === 429
-            ? "Too many upload requests right now."
-            : "Could not open this upload link. Check your connection and try again.",
+            ? t("Too many upload requests right now.")
+            : t(
+                "Could not open this upload link. Check your connection and try again.",
+              ),
         );
       },
     );
@@ -279,21 +296,27 @@ export default function UploadPage({ token }: { token: string }) {
     !info
       ? ""
       : file.size === 0
-        ? "Empty file"
+        ? t("Empty file")
         : file.size > info.max_file_bytes
-          ? `Larger than ${formatBytes(info.max_file_bytes)}`
+          ? t("Larger than {size}", { size: formatBytes(info.max_file_bytes) })
           : "";
   const problems: string[] = [];
   if (info) {
     if (staged.length > info.max_files)
       problems.push(
-        `This link takes at most ${fileCount(info.max_files)}. Remove ${fileCount(staged.length - info.max_files)}.`,
+        t("This link takes at most {max}. Remove {over}.", {
+          max: fileCount(info.max_files),
+          over: fileCount(staged.length - info.max_files),
+        }),
       );
     if (staged.some((s) => fileProblem(s.file)))
-      problems.push("Remove the files marked below before sending.");
+      problems.push(t("Remove the files marked below before sending."));
     if (total > info.max_request_bytes)
       problems.push(
-        `All files together must be at most ${formatBytes(info.max_request_bytes)}. Remove some files to send fewer at once.`,
+        t(
+          "All files together must be at most {size}. Remove some files to send fewer at once.",
+          { size: formatBytes(info.max_request_bytes) },
+        ),
       );
   }
   const canSend = open && staged.length > 0 && !problems.length && wait === 0;
@@ -324,23 +347,28 @@ export default function UploadPage({ token }: { token: string }) {
       if (e.status === 0) {
         networkFailed.current = true;
         setError(
-          "Network error: the files may not have arrived. Check your connection and send again.",
+          t(
+            "Network error: the files may not have arrived. Check your connection and send again.",
+          ),
         );
       } else if (e.status === 429) {
         setWait(e.retryAfter || 5);
-        setError("Too many upload requests right now.");
+        setError(t("Too many upload requests right now."));
       } else if (e.status === 503) {
         setWait(e.retryAfter || 5);
-        setError("Another upload is in progress right now.");
+        setError(t("Another upload is in progress right now."));
       } else if (e.status === 413) {
-        setError("These files are too large to send together. Remove some.");
+        setError(t("These files are too large to send together. Remove some."));
       } else if (e.results.length) {
         setFailures(e.results.filter((r) => !r.ok));
         setError(
-          "No file was added. Fix or remove the files below and send again.",
+          t("No file was added. Fix or remove the files below and send again."),
         );
       } else {
-        setError(e.message || `The upload failed (HTTP ${e.status}).`);
+        setError(
+          e.message ||
+            t("The upload failed (HTTP {status}).", { status: e.status }),
+        );
       }
     }
   };
@@ -368,34 +396,37 @@ export default function UploadPage({ token }: { token: string }) {
           <strong>Crew</strong>
         </div>
         {phase.kind === "loading" && !error && (
-          <p role="status">Opening the upload link…</p>
+          <p role="status">{t("Opening the upload link…")}</p>
         )}
         {phase.kind === "loading" && error && (
           <>
-            <h1 id="upload-title">Add screenshots</h1>
+            <h1 id="upload-title">{t("Add screenshots")}</h1>
             <p role="alert" className="upload-error">
               {error}
-              {wait > 0 && ` Try again in ${wait} seconds.`}
+              {wait > 0 && ` ${t("Try again in {n} seconds.", { n: wait })}`}
             </p>
             <button
               className="primary-button"
               disabled={wait > 0}
               onClick={() => setLoadAttempt((n) => n + 1)}
             >
-              Try again
+              {t("Try again")}
             </button>
           </>
         )}
         {phase.kind === "gone" && (
           <>
-            <h1 id="upload-title">Upload link unavailable</h1>
+            <h1 id="upload-title">{t("Upload link unavailable")}</h1>
             <p role="alert" className="upload-error">
-              {goneMessage}
+              {t(
+                "This link has expired or was already used. Ask for a new one.",
+              )}
             </p>
             {phase.maybeSent && (
               <p>
-                If your earlier send finished before the connection dropped, its
-                files were added. Ask the person who shared the link to check.
+                {t(
+                  "If your earlier send finished before the connection dropped, its files were added. Ask the person who shared the link to check.",
+                )}
               </p>
             )}
           </>
@@ -404,14 +435,22 @@ export default function UploadPage({ token }: { token: string }) {
           <>
             <h1 id="upload-title">
               {phase.outcome.added === phase.names.length
-                ? "Done"
-                : "Partly done"}
+                ? t("Done")
+                : t("Partly done")}
             </h1>
             <p role="status">
-              {fileCount(phase.outcome.added)} added to the {kind}{" "}
-              <strong>{info.title}</strong>.
+              {withTitle(
+                kind === "note"
+                  ? t("{files} added to the note {title}.", {
+                      files: fileCount(phase.outcome.added),
+                    })
+                  : t("{files} added to the task {title}.", {
+                      files: fileCount(phase.outcome.added),
+                    }),
+                <strong>{info.title}</strong>,
+              )}
             </p>
-            <ul className="upload-results" aria-label="Upload results">
+            <ul className="upload-results" aria-label={t("Upload results")}>
               {phase.names.map((name, i) => {
                 const result = phase.outcome.results.find(
                   (r) => r.index === i + 1,
@@ -421,27 +460,34 @@ export default function UploadPage({ token }: { token: string }) {
                   <li key={i} className={ok ? "upload-ok" : "upload-failed"}>
                     <span className="upload-name">{name}</span>
                     <span>
-                      {ok ? "Saved" : result?.error?.message || "Not added"}
+                      {ok
+                        ? t("Saved")
+                        : result?.error?.message || t("Not added")}
                     </span>
                   </li>
                 );
               })}
             </ul>
-            <p>This link is now used. You can close this page.</p>
+            <p>{t("This link is now used. You can close this page.")}</p>
           </>
         )}
         {(phase.kind === "ready" || phase.kind === "sending") && info && (
           <>
             <h1 id="upload-title">
-              Add screenshots to: <span>{info.title}</span>
+              {t("Add screenshots to:")} <span>{info.title}</span>
             </h1>
             <p className="upload-meta">
-              {kind === "note" ? "Note" : "Task"} ·{" "}
-              <RelativeTime value={info.expires_at} prefix="expires " />
+              {kind === "note" ? t("Note") : t("Task")} ·{" "}
+              <RelativeTime value={info.expires_at} prefix={t("expires ")} />
               <br />
-              Up to {fileCount(info.max_files)},{" "}
-              {formatBytes(info.max_file_bytes)} each,{" "}
-              {formatBytes(info.max_request_bytes)} in total. Any file type.
+              {t(
+                "Up to {files}, {each} each, {total} in total. Any file type.",
+                {
+                  files: fileCount(info.max_files),
+                  each: formatBytes(info.max_file_bytes),
+                  total: formatBytes(info.max_request_bytes),
+                },
+              )}
             </p>
             <div className="upload-drop">
               <input
@@ -454,14 +500,14 @@ export default function UploadPage({ token }: { token: string }) {
                 disabled={phase.kind === "sending"}
               />
               <label htmlFor="upload-input" className="upload-choose">
-                Choose photos or files
+                {t("Choose photos or files")}
               </label>
               <p className="upload-hint">
-                You can also paste or drag files here.
+                {t("You can also paste or drag files here.")}
               </p>
             </div>
             {staged.length > 0 && (
-              <ul className="upload-staged" aria-label="Files to send">
+              <ul className="upload-staged" aria-label={t("Files to send")}>
                 {staged.map((s, i) => {
                   const problem =
                     fileProblem(s.file) || failureFor(i + 1) || "";
@@ -488,11 +534,11 @@ export default function UploadPage({ token }: { token: string }) {
                       <button
                         type="button"
                         className="upload-remove"
-                        aria-label={`Remove ${s.file.name}`}
+                        aria-label={t("Remove {name}", { name: s.file.name })}
                         disabled={phase.kind === "sending"}
                         onClick={() => remove(s.key)}
                       >
-                        Remove
+                        {t("Remove")}
                       </button>
                     </li>
                   );
@@ -501,7 +547,10 @@ export default function UploadPage({ token }: { token: string }) {
             )}
             {staged.length > 0 && (
               <p className="upload-total">
-                {fileCount(staged.length)}, {formatBytes(total)}
+                {t("{files}, {size}", {
+                  files: fileCount(staged.length),
+                  size: formatBytes(total),
+                })}
               </p>
             )}
             {problems.map((p) => (
@@ -512,21 +561,22 @@ export default function UploadPage({ token }: { token: string }) {
             {error && (
               <p role="alert" className="upload-error">
                 {error}
-                {wait > 0 && ` Try again in ${wait} seconds.`}
+                {wait > 0 && ` ${t("Try again in {n} seconds.", { n: wait })}`}
               </p>
             )}
             {phase.kind === "sending" && (
               <div className="upload-progress" role="status">
                 <progress
-                  aria-label="Upload progress"
+                  aria-label={t("Upload progress")}
                   max={phase.total || 1}
                   value={phase.total ? phase.loaded : undefined}
                 />
                 <span>
-                  Sending
                   {phase.total
-                    ? ` ${Math.round((phase.loaded / phase.total) * 100)}%`
-                    : "…"}
+                    ? t("Sending {percent}%", {
+                        percent: Math.round((phase.loaded / phase.total) * 100),
+                      })
+                    : t("Sending…")}
                 </span>
               </div>
             )}
@@ -537,14 +587,19 @@ export default function UploadPage({ token }: { token: string }) {
               onClick={() => void send()}
             >
               {phase.kind === "sending"
-                ? "Sending…"
+                ? t("Sending…")
                 : staged.length
-                  ? `Send ${fileCount(staged.length)}`
-                  : "Send"}
+                  ? t("Send {files}", { files: fileCount(staged.length) })
+                  : t("Send")}
             </button>
             <p className="upload-note">
-              The link works for one send. Files are added to this {kind} only;
-              nothing else in Crew is visible here.
+              {kind === "note"
+                ? t(
+                    "The link works for one send. Files are added to this note only; nothing else in Crew is visible here.",
+                  )
+                : t(
+                    "The link works for one send. Files are added to this task only; nothing else in Crew is visible here.",
+                  )}
             </p>
           </>
         )}
