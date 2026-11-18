@@ -95,7 +95,7 @@ import {
   filesOf,
   useItemAttachments,
   useStagedFiles,
-  withdrawnNotice,
+  withdrawnNoticeText,
 } from "./Attachments";
 import {
   attachmentsApi,
@@ -350,7 +350,7 @@ function HoldChip({
   const reason = val(task, "waiting_reason").trim();
   const content = (
     <>
-      {t("On hold")}{heldDuration(task) ? ` ${heldDuration(task)}` : ""}
+      {heldDuration(task) ? t("On hold {duration}", { duration: heldDuration(task) }) : t("On hold")}
       {reason && <span className="sr-only">: {reason}</span>}
     </>
   );
@@ -1678,7 +1678,7 @@ export default function CrewWorkspace() {
     if (
       await perform(
         () => crewApi.write(action, fields, row, reason),
-        withdraws ? `${t("Saved.")} ${t(withdrawnNotice)}` : t("Saved."),
+        withdraws ? `${t("Saved.")} ${withdrawnNoticeText()}` : t("Saved."),
       )
     )
       closeDialog();
@@ -4587,7 +4587,7 @@ function Editor({
                     return summary ? <p>{summary}</p> : null;
                   })()}
                   {summary.by.startsWith(
-                    "via upload link",
+                    t("via upload link"),
                   ) ? null : val(x, "action") === "task.comment" &&
                     val(x, "body") ? (
                     // Sanitized Markdown: raw HTML is shown as text, never run.

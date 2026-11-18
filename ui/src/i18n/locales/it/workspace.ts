@@ -361,6 +361,7 @@ const it: Record<string, string> = {
   "{n} tasks": "{n} attività",
   "{n} note": "{n} nota",
   "{n} notes": "{n} note",
+  "On hold {duration}": "In pausa · {duration}",
 };
 
 export default it;

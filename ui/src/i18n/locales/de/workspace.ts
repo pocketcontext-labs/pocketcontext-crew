@@ -364,6 +364,7 @@ const de: Record<string, string> = {
   "{n} tasks": "{n} Aufgaben",
   "{n} note": "{n} Notiz",
   "{n} notes": "{n} Notizen",
+  "On hold {duration}": "Angehalten · {duration}",
 };
 
 export default de;
