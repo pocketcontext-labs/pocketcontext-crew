@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AutoTextarea, { singleLine } from "./AutoTextarea";
 import ClaimBanner from "./ClaimBanner";
 import HoldReasonField from "./HoldReasonField";
-import PlainRefs, { plainParts } from "./PlainRefs";
+import PlainRefs, { PlainTitles, plainParts } from "./PlainRefs";
 import { crewApi } from "./crewApi";
 import type { Claim } from "./projectAgents";
 import { resetReferencesForTests } from "./references";
@@ -142,6 +142,19 @@ describe("PlainRefs", () => {
     fireEvent.click(task);
     expect(location.hash).toBe(taskRef.path);
     expect(trailPosition()).toBe(1);
+  });
+  it("reads ids as titles without links in one-tap rows", async () => {
+    render(
+      <button type="button" data-testid="row">
+        <PlainTitles text="Shipped note00000000001 after zzzz00000000009." />
+      </button>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("row")).toHaveTextContent(
+        "Shipped Catalog spec after zzzz00000000009.",
+      ),
+    );
+    expect(screen.queryByRole("link")).toBeNull();
   });
   it("opens other web addresses in a new tab", () => {
     render(<PlainRefs text="See https://example.com/page." />);

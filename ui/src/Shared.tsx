@@ -13,6 +13,7 @@ import {
   sharedHash,
   type SharedFilter,
 } from "./itemLink";
+import AutoTextarea from "./AutoTextarea";
 import PagePreview, { isStandaloneDisplay } from "./PagePreview";
 import { parseInstant, RelativeTime, type Instant } from "./relativeTime";
 import "./shared.css";
@@ -458,12 +459,12 @@ function ArtifactCard({
         >
           <label>
             Title
-            <input
+            <AutoTextarea
               aria-label="Artifact title"
               value={title}
               maxLength={300}
               required
-              onChange={(e) => setTitle(e.target.value)}
+              onValue={setTitle}
             />
           </label>
           <label>

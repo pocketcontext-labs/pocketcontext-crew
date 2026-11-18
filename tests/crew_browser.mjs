@@ -1575,8 +1575,10 @@ try {
  assert.match(await claimChip.getAttribute('title'),/Synthetic · Codex · browser\/1 · abcdef12 · Started .*20\d\d.* · Until .*20\d\d/);
  // Edit task's claim (0.33.0): one compact banner, at most two lines at 390, the agent's name only, relative times, Details and actions in ⋯.
  for(const width of [390,1024]){
-  await page.setViewportSize({width,height:844});
+  // Open from the desktop board (a phone shows one column at a time), then size the dialog.
+  await page.setViewportSize({width:1024,height:844});
   await claimCard.click();await dialog().waitFor();
+  await page.setViewportSize({width,height:844});
   const banner=dialog().getByRole('region',{name:'Claim'});await banner.waitFor();await banner.scrollIntoViewIfNeeded();
   assert.equal(await banner.locator('.crew-claim-banner-title').innerText(),'Claimed · Synthetic-board-agent',`claim title names the agent at ${width}`);
   const times=banner.locator('.crew-claim-banner-times');

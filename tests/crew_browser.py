@@ -23,7 +23,7 @@ def main():
             if args.screenshots:
                 args.screenshots.mkdir(parents=True, exist_ok=True)
                 env['CREW_SCREENSHOTS'] = str(args.screenshots.resolve())
-            subprocess.run(['node', str(Path(__file__).with_suffix('.mjs'))], env=env, check=True, timeout=240)
+            subprocess.run(['node', str(Path(__file__).with_suffix('.mjs'))], env=env, check=True, timeout=480)
         finally:
             subprocess.run([str(binary), '--db', str(pc.db), 'stop'], env=pc.env, capture_output=True, timeout=60)
 

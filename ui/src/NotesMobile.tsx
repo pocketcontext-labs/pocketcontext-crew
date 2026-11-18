@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { PlainTitles } from "./PlainRefs";
 import { val, type Row } from "./crewApi";
 import { noteSorts, type NoteSort } from "./itemLink";
 import { Sheet } from "./MobileChrome";
@@ -182,7 +183,9 @@ export function NoteRows({
             <span aria-hidden="true"> · </span>
             <RelativeTime value={val(note, "updated")} fallback="Just now" />
           </span>
-          <span className="crew-note-row-snippet">{snippet(note)}</span>
+          <span className="crew-note-row-snippet">
+            <PlainTitles text={snippet(note)} />
+          </span>
         </button>
       ))}
     </div>

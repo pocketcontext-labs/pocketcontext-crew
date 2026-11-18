@@ -35,8 +35,11 @@ Read README.md, docs/crew.md and docs/hosting.md before relevant changes.
   single batch, revocable, rate-limited, never readable. Published artifact
   pages (`/a/<token>`, `/a/<token>/files/<n>`) are read-only frozen snapshots
   the owner published: 32-character random token, the same plain 404 for
-  unknown, revoked, expired and archived tokens, rate-limited, no script, no links into Crew,
-  noindex/no-referrer/no-store; images only from the published list.
+  unknown, revoked, expired and archived tokens, rate-limited, no script, no links into Crew
+  (one exception since 0.33.0: a CSS-only "Back to Crew" bar to `/`, shown only in
+  standalone display mode), framed only by Crew's own origin (`frame-ancestors 'self'`,
+  for the home-screen app's in-app preview), noindex/no-referrer/no-store; images only
+  from the published list.
 - Attachments are immutable protected files under storage/. Archive, never
   purge; only `/api/crew/attachment` (signed in) serves bytes, with nosniff and
   a download disposition for every non-image. One exception: the HTML/SVG

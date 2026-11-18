@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { CrewLink, RecordRef } from "./Prose";
-import { crewAddress, displayUrl, findIds } from "./references";
+import { crewAddress, displayUrl, findIds, useReference } from "./references";
 
 // A web address in running text, without the punctuation that ends a sentence.
 const urlPattern = /\bhttps?:\/\/[^\s<>"'`]+/gi;
@@ -85,4 +85,23 @@ export default function PlainRefs({
       </a>
     );
   });
+}
+
+function RefTitle({ id }: { id: string }) {
+  const ref = useReference(id);
+  return <>{ref?.title || id}</>;
+}
+
+/**
+ * Plain text for places that are one tap target (a list row is a button, so
+ * it cannot hold links): bare record ids read as the record's title, as text.
+ */
+export function PlainTitles({ text }: { text: string }): ReactNode {
+  return plainParts(text).map((part, i) =>
+    part.kind === "id" ? (
+      <RefTitle key={i} id={part.id} />
+    ) : (
+      <Fragment key={i}>{part.kind === "text" ? part.text : part.url}</Fragment>
+    ),
+  );
 }
