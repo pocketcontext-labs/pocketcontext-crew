@@ -529,8 +529,8 @@ const de: Record<string, string> = {
   "What is Get started?": "Was ist Erste Schritte?",
   "Four steps that take you from an empty Crew to your first reviewed draft.":
     "Vier Schritte, die dich von einem leeren Crew zu deinem ersten freigegebenen Entwurf führen.",
-  "Do the current step. Hide removes this list from this browser.":
-    "Erledige den aktuellen Schritt. Ausblenden entfernt diese Liste aus diesem Browser.",
+  "Do the current step. Don't show this again hides this list.":
+    "Erledige den aktuellen Schritt. Nicht mehr anzeigen blendet diese Liste aus.",
   "Needs you": "Braucht dich",
   "What goes under Needs you?": "Was steht unter Braucht dich?",
   "How many drafts wait for your approval and how many open tasks are on hold, then the items that can't move without you: drafts waiting for approval, tasks stopped by the handoff limit and tasks whose assigned agent is unavailable.":

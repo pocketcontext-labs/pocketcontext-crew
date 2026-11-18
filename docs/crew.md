@@ -116,8 +116,11 @@ the same pressed state. The background refresh every 30 seconds stays silent.
 On a phone (680 px wide or less, since 0.33.0) the reader has a slim one-row top
 bar: the Crew mark, the page title, then Search, the page's filter icon (with a count
 of active filters), + (New task, New note or New agent; on Home a create menu) and ⋯,
-the page menu, which holds the page's intro, its help, Refresh and other secondary
-actions (New bucket, Clear all filters, How it works on Home). The bottom tabs (since
+the page menu, which holds secondary actions (New bucket, Clear all filters), How it
+works, Refresh and the page's How it works panel (its intro and help). Since 0.37.0 the
+panel ends with "Don't show this again": once ticked it no longer shows by itself, How
+it works opens it in place (the box checked; unticking lets it show again), and with the
+panel showing How it works opens the page's Guide section. The bottom tabs (since
 0.34.0 a floating, frosted pill inset from the screen edges, with the page scrolling
 under it; the current tab has a soft grey-green highlight) open Home, Tasks, Notes and
 Approvals (a small dot while drafts wait; the count is in the tab's accessible name);
@@ -130,9 +133,20 @@ bucket), then the notes as rows; search, sort, bucket and responsible agent are 
 its filter sheet. Desktop layouts are unchanged.
 
 **Home (0.34.0)** is the same sectioned page on every width. A first-run row, "New to
-Crew? Read how it works", at least 44 px tall, opens the Guide; its ✕ (44 px) hides
-it in that browser, and How it works stays in the phone page ⋯. Get started follows
-for a new workspace. **Needs you** has two tiles with live counts: approvals waiting
+Crew? Read how it works", at least 44 px tall, opens the Guide; its "Don't show this
+again" row (since 0.37.0; until then a ✕ that hid it in that browser) hides it, and How
+it works stays in the phone page ⋯. Get started follows for a new workspace, ending with
+the same row.
+
+**Don't show this again (0.37.0)** is one control on every help that shows by itself:
+the page How it works panels, the Home How it works row, Get started and the Start a
+session guide. It is a 44 px checkbox row under a hairline; the help stays on screen
+until the owner leaves, then stops showing by itself. Hides are kept on the server
+(`crew_settings.hidden_help`, help ids such as `page.home`, `home.guide_row`,
+`home.get_started`; the session guide keeps `session_guide_off`), so they hold across
+browsers; Home's two per-browser hides from earlier releases are carried over once.
+Settings has a Help section whose Show all help again clears every hide and confirms
+"All help will show again". Short "?" help popovers are unchanged. **Needs you** has two tiles with live counts: approvals waiting
 (pending reviews; opens Approvals) and tasks on hold (open tasks on hold; opens
 `#/tasks?hold=on_hold`), then the drafts waiting and any task stopped by the handoff
 limit or assigned to an unavailable agent. **Agents** lists every active agent A–Z
@@ -334,7 +348,7 @@ All run on `POST /api/crew/write` (reader) and `POST /api/crew/agent-write`
 | `upload_link.create` | none | `task` or `note`, `expires_in_minutes` (1–1440, default 15), `max_files` (1–20, default 10) | link record plus `token`, `path` (`#/upload/<token>`) and `url` (with a domain); reader route only |
 | `upload_link.revoke` | link id, its revision | `{}` | link record |
 | `storage.update` | settings id, its revision | `storage_limit_bytes` (1 MiB to 1 TiB) | settings record |
-| `settings.update` | settings id, its revision | any of `session_guide_off` (boolean; the reader's "Don't show this again" for the Start a session guide), `language` (`""` follows the browser, or `en`, `de`, `it`) and `agent_tap` (what tapping an agent on Home runs: `{all, agents}`, `all` `open_agent` or `show_tasks`, `agents` an existing agent id to `open_agent`, `show_tasks` or `copy_prompt`, at most 200; replaces the whole value, `null` clears it) | settings record |
+| `settings.update` | settings id, its revision | any of `session_guide_off` (boolean; the reader's "Don't show this again" for the Start a session guide), `language` (`""` follows the browser, or `en`, `de`, `it`) and `agent_tap` (what tapping an agent on Home runs: `{all, agents}`, `all` `open_agent` or `show_tasks`, `agents` an existing agent id to `open_agent`, `show_tasks` or `copy_prompt`, at most 200; replaces the whole value, `null` clears it) and `hidden_help` (the help panels hidden with the reader's "Don't show this again": an array of at most 100 ids of 1–64 characters `a-z`, `0-9`, `_`, `.`, `-`, such as `page.home`; replaces the whole list, `[]` or `null` shows all help again) | settings record |
 
 `attachment.add` saves each file independently: a file that fails (see codes
 below) is reported in `results` while the others are saved; HTTP 200 when at

@@ -12,6 +12,7 @@ import { markdownSummary } from "./markdownText";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
 import { copyText } from "./projectAgents";
 import { useSessionGuideOff } from "./sessionGuide";
+import HideHelp, { helpIds } from "./HideHelp";
 import { t } from "./i18n";
 
 /** What one click on Start a session did, for the workspace toast. */
@@ -104,7 +105,7 @@ export function useSessionStart(
   };
   const [guide, setGuide] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const [guideLoaded, guideOff, setGuideOff] = useSessionGuideOff();
+  const [guideLoaded, guideOff] = useSessionGuideOff();
   useEffect(() => {
     let alive = true;
     void crewApi.session(agent.id).then(
@@ -173,8 +174,6 @@ export function useSessionStart(
       <SessionGuide
         name={name}
         prompt={prompt}
-        off={guideOff}
-        setOff={(off) => void setGuideOff(off).catch(() => undefined)}
         copy={() => void copy()}
         close={() => setGuide(false)}
       />
@@ -257,21 +256,17 @@ const focusable =
 
 /**
  * The guide dialog: three steps, the prompt in full (wrapped, read-only) with
- * a copy icon, and "Don't show this again" beside Got it. Focus moves in, is
+ * a copy icon, and "Don't show this again" (HideHelp) beside Got it. Focus moves in, is
  * kept inside while it is open and returns to the control that opened it.
  */
 function SessionGuide({
   name,
   prompt,
-  off,
-  setOff,
   copy,
   close,
 }: {
   name: string;
   prompt: string;
-  off: boolean;
-  setOff: (off: boolean) => void;
   copy: () => void;
   close: () => void;
 }) {
@@ -387,14 +382,7 @@ function SessionGuide({
         </button>
       </div>
       <footer>
-        <label>
-          <input
-            type="checkbox"
-            checked={off}
-            onChange={(e) => setOff(e.target.checked)}
-          />
-          {t("Don't show this again")}
-        </label>
+        <HideHelp id={helpIds.sessionGuide} />
         <button
           ref={done}
           type="button"

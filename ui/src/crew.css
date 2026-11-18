@@ -3786,14 +3786,11 @@ a.crew-logo:hover .product-brand span {
   gap: 10px;
   padding: 14px 18px 16px;
 }
-.crew-session-guide > footer label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
-}
-.crew-session-guide > footer input {
+.crew-session-guide > footer .crew-hide-help {
   margin: 0;
+  padding: 0;
+  border-top: 0;
+  font-size: 14px;
 }
 @media (max-width: 680px) {
   .crew-dialog.crew-session-guide {

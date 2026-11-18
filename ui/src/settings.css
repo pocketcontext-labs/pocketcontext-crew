@@ -160,3 +160,14 @@
   text-transform: none;
   white-space: nowrap;
 }
+
+/* Show all help again's confirmation (0.37.0): one line, centred. */
+.crew-toast.crew-settings-toast {
+  padding: 14px 16px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+}
+.crew-toast.crew-settings-toast p {
+  margin: 0;
+}

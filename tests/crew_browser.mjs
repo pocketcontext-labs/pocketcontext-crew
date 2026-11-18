@@ -586,12 +586,13 @@ try {
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`help overflow at ${width}`);
    await snapView('crew-help-popover-'+width);
    await page.keyboard.press('Escape');await pop.waitFor({state:'hidden'});
-   // The How it works row: the row and its ✕ are at least 44 px tall.
+   // The How it works row: a full-width link and its Don't show this again row, each at least 44 px tall (0.37.0).
    {
     const row=await page.locator('.crew-home-guide').boundingBox();
-    const close=await page.getByRole('button',{name:'Dismiss How it works',exact:true}).boundingBox();
-    assert.ok(row.height>=44&&row.width>=width-40,`How it works is a full-width row at ${width}`);
-    assert.ok(close.width>=44&&close.height>=44,`How it works ✕ tap target at ${width}`);
+    const link=await page.getByRole('link',{name:'New to Crew? Read how it works',exact:true}).boundingBox();
+    const hide=await page.locator('.crew-home-guide .crew-hide-help').boundingBox();
+    assert.ok(row.width>=width-40&&link.height>=44,`How it works is a full-width row at ${width}`);
+    assert.ok(hide.height>=44,`How it works Don't show this again row at ${width}`);
    }
    await page.getByRole('link',{name:'New to Crew? Read how it works',exact:true}).click();
    await page.waitForURL('**/#/guide');
@@ -1435,6 +1436,102 @@ try {
   await back('Back to Settings');
   await page.getByRole('button',{name:/^synthetic-repo/}).filter({hasText:'Open agent'}).waitFor();
   await page.waitForLoadState('networkidle');
+ }
+
+ // Don't show this again (0.37.0): every help that shows by itself ends with the
+ // same 44 px checkbox row under a hairline, kept on the server. Hidden help
+ // stays in the page ⋯ How it works (checked there; unchecking shows it again),
+ // and Settings' Show all help again clears every hide with a toast. 390 and 1280.
+ {
+  const settingsSaved=()=>page.waitForResponse(r=>r.url().endsWith('/api/crew/write')&&r.request().postDataJSON()?.action==='settings.update'&&r.ok());
+  const hideBox=loc=>loc.getByRole('checkbox',{name:"Don't show this again",exact:true});
+  const rowLook=loc=>loc.locator('.crew-hide-help').evaluate(l=>{const b=l.getBoundingClientRect(),cs=getComputedStyle(l);return {h:b.height,hairline:cs.borderTopStyle==='solid'&&parseFloat(cs.borderTopWidth)>=1,inside:b.left>=0&&b.right<=innerWidth};});
+  const toggle=async(box,on)=>{const saved=settingsSaved();if(on) await box.check();else await box.uncheck();await saved;};
+  const home=async()=>{await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();await page.waitForLoadState('networkidle');};
+  const guideRow=()=>page.locator('.crew-home-guide');
+  const showAllAgain=async(width)=>{
+   if(width>680) await page.locator('.crew-sidebar').getByRole('link',{name:'Settings',exact:true}).click();
+   else{await page.getByRole('navigation',{name:'Workspace'}).getByRole('button',{name:'More',exact:true}).click();
+    const more=page.getByRole('dialog',{name:'More'});await more.getByRole('link',{name:'Settings',exact:true}).click();await more.waitFor({state:'hidden'});}
+   const help=page.getByRole('region',{name:'Help',exact:true});
+   const row=help.getByRole('button',{name:'Show all help again',exact:true});
+   assert.ok((await row.boundingBox()).height>=44,`Show all help again is at least 44 px at ${width}`);
+   const saved=settingsSaved();await row.click();
+   const sent=(await saved).request().postDataJSON().data;
+   assert.deepEqual(sent,{hidden_help:[],session_guide_off:false},'Show all help again clears every hide');
+   const toast=page.locator('.crew-settings-toast');
+   await toast.getByText('All help will show again',{exact:true}).waitFor();
+   const box=await toast.boundingBox();
+   assert.ok(box.x>=0&&box.x+box.width<=width,`the toast fits at ${width}`);
+   await snapView('crew-help-shown-again-'+width);
+   await toast.waitFor({state:'hidden'});
+  };
+  // 390: the Home ⋯ How it works panel.
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(base+'/#/');await home();
+  const openMenu=async()=>{await page.getByRole('button',{name:'Page options',exact:true}).click();const m=page.getByRole('dialog',{name:'Home'});await m.waitFor();return m;};
+  let menu=await openMenu();
+  let about=menu.getByRole('region',{name:'About this page'});
+  await about.getByText(/^Your starting point\./).waitFor();
+  {const r=await rowLook(about);assert.ok(r.h>=44&&r.hairline&&r.inside,'the panel ends with a 44 px row under a hairline at 390 '+JSON.stringify(r));}
+  await snapView('crew-help-panel-390');
+  await toggle(hideBox(about),true);
+  // Ticked: still on screen until the menu closes.
+  assert.equal(await about.isVisible(),true,'the panel stays while the menu is open');
+  await menu.getByRole('button',{name:'Done',exact:true}).click();await menu.waitFor({state:'hidden'});
+  await page.reload();await home();
+  menu=await openMenu();
+  assert.equal(await about.count(),0,'hidden help no longer shows in the page menu after a reload');
+  const how=menu.getByRole('button',{name:'How it works',exact:true});
+  assert.equal(await how.getAttribute('aria-expanded'),'false');
+  await snapView('crew-help-hidden-menu-390');
+  // On demand from ⋯ How it works: shown checked; unchecking lets it show by itself again.
+  await how.click();
+  await about.getByText(/^Your starting point\./).waitFor();
+  assert.equal(await hideBox(about).isChecked(),true,'opened on demand, the box shows checked');
+  await toggle(hideBox(about),false);
+  await menu.getByRole('button',{name:'Done',exact:true}).click();await menu.waitFor({state:'hidden'});
+  menu=await openMenu();
+  await about.waitFor();
+  assert.equal(await hideBox(about).isChecked(),false);
+  // Hide it again, and the Home How it works row too.
+  await toggle(hideBox(about),true);
+  await menu.getByRole('button',{name:'Done',exact:true}).click();await menu.waitFor({state:'hidden'});
+  {const r=await rowLook(guideRow());assert.ok(r.h>=44&&r.hairline&&r.inside,'the How it works row hides with the same control at 390 '+JSON.stringify(r));}
+  await toggle(hideBox(guideRow()),true);
+  await page.reload();await home();
+  assert.equal(await guideRow().count(),0,'the hidden How it works row stays hidden after a reload');
+  menu=await openMenu();
+  assert.equal(await about.count(),0,'the panel stays hidden');
+  await menu.getByRole('button',{name:'Done',exact:true}).click();await menu.waitFor({state:'hidden'});
+  // Tasks has the same control and the same How it works item.
+  await go('Tasks');await onPage('Tasks');
+  await page.getByRole('button',{name:'Page options',exact:true}).click();
+  {const m=page.getByRole('dialog',{name:'Tasks'});await m.waitFor();
+   const a=m.getByRole('region',{name:'About this page'});await a.waitFor();
+   assert.equal(await hideBox(a).isChecked(),false,'each page has its own help id');
+   assert.equal(await m.getByRole('button',{name:'How it works',exact:true}).count(),1,'Tasks ⋯ has How it works');
+   await m.getByRole('button',{name:'Done',exact:true}).click();await m.waitFor({state:'hidden'});}
+  await showAllAgain(390);
+  await go('Home');await home();
+  await guideRow().waitFor();
+  menu=await openMenu();
+  await about.waitFor();
+  assert.equal(await hideBox(about).isChecked(),false,'Show all help again shows the panel again');
+  await menu.getByRole('button',{name:'Done',exact:true}).click();await menu.waitFor({state:'hidden'});
+  // 1280: the Home How it works row (wide screens have no page menu).
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto(base+'/#/');await home();
+  {const r=await rowLook(guideRow());assert.ok(r.h>=44&&r.hairline,'How it works row at 1280 '+JSON.stringify(r));}
+  await snapView('crew-help-row-1280');
+  await toggle(hideBox(guideRow()),true);
+  assert.equal(await guideRow().isVisible(),true,'the row stays until the owner leaves');
+  await page.reload();await home();
+  assert.equal(await guideRow().count(),0,'hidden at 1280 after a reload');
+  await showAllAgain(1280);
+  await go('Home');await home();
+  await guideRow().waitFor();
+  assert.equal(await hideBox(guideRow()).isChecked(),false);
  }
  await page.setViewportSize({width:1280,height:800});
  // Search boxes draw one focus ring, on the box, never a second one on the field inside.

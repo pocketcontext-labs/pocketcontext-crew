@@ -1,5 +1,6 @@
 import {
   useContext,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -11,6 +12,7 @@ import { HelpModeContext } from "./Help";
 import { guideHash, helpContent, textFor, type HelpTopic } from "./helpContent";
 import { viewHashes, type View } from "./itemLink";
 import { t, tc } from "./i18n";
+import HideHelp, { helpIds, useHelpShown } from "./HideHelp";
 import "./chrome.css";
 import "./home.css";
 
@@ -318,10 +320,13 @@ export function PopoverMenu({
 /**
  * The phone's one-row top bar: the mark, the page title, then search, the
  * page's filter (with its active count), + and the page menu (⋯), which holds
- * the page's intro, its help and Refresh.
+ * the page's actions, How it works, Refresh and the page's How it works panel
+ * (its intro and help). Since 0.37.0 the panel ends with "Don't show this
+ * again": hidden, it no longer shows by itself and How it works opens it.
  */
 export function MobileTopBar({
   title,
+  view,
   search,
   filter,
   add,
@@ -331,6 +336,8 @@ export function MobileTopBar({
   refresh,
 }: {
   title: string;
+  /** The page, for its help id (`page.<view>`). */
+  view: View;
   search: ReactNode;
   filter?: { label: string; count: number; open: boolean; onOpen: () => void };
   add?: PageAction;
@@ -340,8 +347,6 @@ export function MobileTopBar({
   refresh: { busy: boolean; disabled: boolean; run: () => void };
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const mode = useContext(HelpModeContext);
-  const entry = help ? helpContent[help] : null;
   return (
     <header className="crew-mtopbar">
       <a
@@ -406,54 +411,113 @@ export function MobileTopBar({
         </button>
       </div>
       {menuOpen && (
-        <Sheet
+        <PageMenu
           title={title}
-          className="crew-page-menu"
-          onClose={() => setMenuOpen(false)}
-        >
-          <div className="crew-sheet-actions">
-            {actions.map((action) => (
-              <button
-                type="button"
-                key={action.label}
-                disabled={action.disabled}
-                onClick={() => {
-                  setMenuOpen(false);
-                  action.onClick();
-                }}
-              >
-                {action.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={`crew-sheet-refresh${refresh.busy ? " is-refreshing" : ""}`}
-              disabled={refresh.disabled}
-              aria-busy={refresh.busy || undefined}
-              onClick={() => {
-                setMenuOpen(false);
-                refresh.run();
-              }}
-            >
-              <span className="crew-refresh-icon">{icons.refresh}</span>
-              {t("Refresh")}
-            </button>
-          </div>
-          <section className="crew-sheet-about" aria-label={t("About this page")}>
-            <p className="crew-sheet-intro">{description}</p>
-            {entry && (
-              <>
-                <p>{textFor(entry.what, mode)}</p>
-                <p>{textFor(entry.action, mode)}</p>
-                <a href={guideHash(help!)} onClick={() => setMenuOpen(false)}>
-                  {t("Learn more in the Guide")}
-                </a>
-              </>
-            )}
-          </section>
-        </Sheet>
+          view={view}
+          description={description}
+          help={help}
+          actions={actions}
+          refresh={refresh}
+          close={() => setMenuOpen(false)}
+        />
       )}
     </header>
+  );
+}
+
+/**
+ * The page menu sheet. The How it works panel shows by itself unless the owner
+ * hid it (decided when the sheet opens); How it works opens a hidden panel in
+ * place, and with the panel showing it goes on to the Guide.
+ */
+function PageMenu({
+  title,
+  view,
+  description,
+  help,
+  actions,
+  refresh,
+  close,
+}: {
+  title: string;
+  view: View;
+  description: string;
+  help?: HelpTopic;
+  actions: PageAction[];
+  refresh: { busy: boolean; disabled: boolean; run: () => void };
+  close: () => void;
+}) {
+  const mode = useContext(HelpModeContext);
+  const entry = help ? helpContent[help] : null;
+  const id = helpIds.page(view);
+  const shown = useHelpShown(id);
+  const [asked, setAsked] = useState(false);
+  const about = useRef<HTMLElement>(null);
+  const open = shown || asked;
+  useEffect(() => {
+    if (asked) about.current?.scrollIntoView?.({ block: "nearest" });
+  }, [asked]);
+  return (
+    <Sheet title={title} className="crew-page-menu" onClose={close}>
+      <div className="crew-sheet-actions">
+        {actions.map((action) => (
+          <button
+            type="button"
+            key={action.label}
+            disabled={action.disabled}
+            onClick={() => {
+              close();
+              action.onClick();
+            }}
+          >
+            {action.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => {
+            if (!open) return setAsked(true);
+            close();
+            location.hash = help ? guideHash(help) : viewHashes.guide;
+          }}
+        >
+          {t("How it works")}
+        </button>
+        <button
+          type="button"
+          className={`crew-sheet-refresh${refresh.busy ? " is-refreshing" : ""}`}
+          disabled={refresh.disabled}
+          aria-busy={refresh.busy || undefined}
+          onClick={() => {
+            close();
+            refresh.run();
+          }}
+        >
+          <span className="crew-refresh-icon">{icons.refresh}</span>
+          {t("Refresh")}
+        </button>
+      </div>
+      {open && (
+        <section
+          ref={about}
+          className="crew-sheet-about"
+          aria-label={t("About this page")}
+        >
+          <p className="crew-sheet-intro">{description}</p>
+          {entry && (
+            <>
+              <p>{textFor(entry.what, mode)}</p>
+              <p>{textFor(entry.action, mode)}</p>
+              <a href={guideHash(help!)} onClick={close}>
+                {t("Learn more in the Guide")}
+              </a>
+            </>
+          )}
+          <HideHelp id={id} />
+        </section>
+      )}
+    </Sheet>
   );
 }
 

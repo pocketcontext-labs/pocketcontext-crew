@@ -133,7 +133,7 @@ function glossaryEntries() {
         "Four steps that take you from an empty Crew to your first reviewed draft.",
       ),
       action: t(
-        "Do the current step. Hide removes this list from this browser.",
+        "Do the current step. Don't show this again hides this list.",
       ),
     },
     "needs-you": {

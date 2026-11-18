@@ -5,6 +5,7 @@ import Help from "./Help";
 import { RelativeTime } from "./relativeTime";
 import { t, tn } from "./i18n";
 import { useReaderSettings } from "./sessionGuide";
+import HideHelp, { helpIds, useHelpShown } from "./HideHelp";
 import {
   isCodingAgent,
   resolveAgentTap,
@@ -34,9 +35,9 @@ import {
 
 type Data = Record<string, Row[]>;
 const connectedKey = "pocketcontext.crew.agent_connected";
-const hiddenKey = "pocketcontext.crew.get_started_hidden";
-const guideRowKey = "pocketcontext.crew.how_it_works_hidden";
-// Per-browser conveniences: progress itself comes from the workspace data.
+// A per-browser convenience: progress itself comes from the workspace data.
+// Since 0.37.0 the How it works row and Get started hide with "Don't show this
+// again" (HideHelp), kept on the server.
 function stored(key: string) {
   try {
     return localStorage.getItem(key) === "1";
@@ -84,9 +85,9 @@ export default function Home({
   /** One click on a Start a session button: the workspace shows the toast. */
   onStartSession: (start: SessionStart) => void;
 }) {
-  const [guideRow, setGuideRow] = useState(() => !stored(guideRowKey));
+  const guideRow = useHelpShown(helpIds.homeGuideRow);
   const [connected, setConnected] = useState(() => stored(connectedKey));
-  const [hidden, setHidden] = useState(() => stored(hiddenKey));
+  const getStarted = useHelpShown(helpIds.homeGetStarted);
   const { agentTap } = useReaderSettings();
   if (!ready) return <p role="status">{t("Loading your workspace…")}</p>;
 
@@ -214,20 +215,10 @@ export default function Home({
               {t("Read how it works")}
             </span>
           </a>
-          <button
-            type="button"
-            aria-label={t("Dismiss How it works")}
-            title={t("Dismiss")}
-            onClick={() => {
-              remember(guideRowKey);
-              setGuideRow(false);
-            }}
-          >
-            {icons.close}
-          </button>
+          <HideHelp id={helpIds.homeGuideRow} />
         </div>
       )}
-      {current >= 0 && !hidden && (
+      {current >= 0 && getStarted && (
         <section className="crew-home-start" aria-label={t("Get started")}>
           <header>
             <h2>{t("Get started")}</h2>
@@ -238,14 +229,6 @@ export default function Home({
                 total: steps.length,
               })}
             </span>
-            <button
-              onClick={() => {
-                remember(hiddenKey);
-                setHidden(true);
-              }}
-            >
-              {t("Hide")}
-            </button>
           </header>
           <ol>
             {steps.map((step, index) => (
@@ -267,6 +250,7 @@ export default function Home({
               </li>
             ))}
           </ol>
+          <HideHelp id={helpIds.homeGetStarted} />
         </section>
       )}
       <section className="crew-home-section" aria-label={t("Needs you")}>

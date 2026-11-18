@@ -2001,7 +2001,7 @@ export default function CrewWorkspace() {
     search: t("Every task, note, agent and bucket that matches your words."),
     shared:
       t("Frozen copies of notes, shared by a secret link with no sign-in. Agents draft them; only you publish, update, expire, revoke or archive them. Editing a source note never changes a published page."),
-    settings: t("Language, what tapping an agent does, your account and the server version."),
+    settings: t("Language, what tapping an agent does, help, your account and the server version."),
   };
   // The board's controls: one toolbar row on a desktop, the filter sheet on a phone.
   const boardSearchField = (
@@ -2256,16 +2256,7 @@ export default function CrewWorkspace() {
         ]
       : view === "board" && (boardFiltered || boardSearched)
         ? [{ label: t("Clear all filters"), onClick: clearBoard }]
-        : view === "home"
-          ? [
-              {
-                label: t("How it works"),
-                onClick: () => {
-                  location.hash = viewHashes.guide;
-                },
-              },
-            ]
-          : [];
+        : [];
   const globalSearch = (
     <GlobalSearch
       agents={data.agents}
@@ -2339,6 +2330,7 @@ export default function CrewWorkspace() {
         {phone ? (
           <MobileTopBar
             title={t(pages.find((x) => x[0] === view)?.[1] ?? "")}
+            view={view}
             search={globalSearch}
             filter={
               view === "board"

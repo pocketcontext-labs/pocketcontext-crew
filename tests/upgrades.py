@@ -269,6 +269,11 @@ def rehearse(target, previous, root):
             # 0.36.0: the reader's language and agent tap choice are settings, empty by default.
             assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801900000_crew_reader_preferences.js'").fetchone() == (1,)
             assert current.execute("SELECT language, coalesce(agent_tap, 'null') FROM crew_settings").fetchall() in ([('', 'null')], [('', '')]), current.execute('SELECT language, agent_tap FROM crew_settings').fetchall()
+            # 0.37.0: the help panels the owner hid are a setting, empty by default.
+            assert current.execute("SELECT count(*) FROM _migrations WHERE file='1802000000_crew_hidden_help.js'").fetchone() == (1,)
+            settings_fields = {f['name']: f['type'] for f in json.loads(current.execute("SELECT fields FROM _collections WHERE name='crew_settings'").fetchone()[0])}
+            assert settings_fields.get('hidden_help') == 'json', settings_fields
+            assert current.execute("SELECT coalesce(hidden_help, 'null') FROM crew_settings").fetchall() in ([('null',)], [('',)]), current.execute('SELECT hidden_help FROM crew_settings').fetchall()
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()

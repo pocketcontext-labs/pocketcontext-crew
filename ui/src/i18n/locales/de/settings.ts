@@ -21,13 +21,16 @@ const de: Record<string, string> = {
   "Checking…": "Wird geprüft…",
   Unavailable: "Nicht verfügbar",
   Build: "Build",
+  Help: "Hilfe",
+  "Show all help again": "Alle Hilfen wieder anzeigen",
+  "All help will show again": "Alle Hilfen werden wieder angezeigt",
   "Back to Settings": "Zurück zu den Einstellungen",
   "Open agent": "Agent öffnen",
   "Show tasks": "Aufgaben anzeigen",
   "Copy prompt for coding agent": "Prompt für Coding-Agent kopieren",
   "YOUR PREFERENCES": "DEINE EINSTELLUNGEN",
-  "Language, what tapping an agent does, your account and the server version.":
-    "Sprache, was ein Tippen auf einen Agenten macht, dein Konto und die Serverversion.",
+  "Language, what tapping an agent does, help, your account and the server version.":
+    "Sprache, was ein Tippen auf einen Agenten macht, Hilfe, dein Konto und die Serverversion.",
 
   // Home
   "Loading your workspace…": "Dein Arbeitsbereich wird geladen…",
@@ -53,11 +56,9 @@ const de: Record<string, string> = {
   "Untitled draft": "Entwurf ohne Titel",
   "New to Crew?": "Neu bei Crew?",
   "Read how it works": "Lies, wie es funktioniert",
-  "Dismiss How it works": "„So funktioniert es“ ausblenden",
   Dismiss: "Ausblenden",
   "Get started": "Erste Schritte",
   "{done} of {total} done": "{done} von {total} erledigt",
-  Hide: "Ausblenden",
   "(done)": "(erledigt)",
   "Needs you": "Braucht dich",
   "Approvals waiting": "Wartende Freigaben",

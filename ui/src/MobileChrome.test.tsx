@@ -287,18 +287,93 @@ describe("phone Home", () => {
     await waitFor(() => expect(location.hash).toBe("#/shared/artifact0000001"));
   });
 
-  it("has a dismissible 44 px How it works row, then How it works in the page menu", async () => {
-    render(<CrewWorkspace />);
+  it("hides the How it works row with Don't show this again, kept on the server", async () => {
+    const view = render(<CrewWorkspace />);
     const link = await screen.findByRole("link", {
       name: "New to Crew? Read how it works",
     });
     expect(link).toHaveAttribute("href", "#/guide");
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss How it works" }));
+    const box = within(link.closest(".crew-home-guide") as HTMLElement).getByRole(
+      "checkbox",
+      { name: "Don't show this again" },
+    );
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    expect(box).toBeChecked();
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "settings.update",
+        { hidden_help: ["home.guide_row"] },
+        expect.objectContaining({ id: "settings0000001" }),
+      ),
+    );
+    // Still on screen until the owner leaves; gone on the next visit.
+    expect(screen.getByRole("link", { name: /Read how it works/ })).toBeTruthy();
+    view.unmount();
+    render(<CrewWorkspace />);
+    await screen.findByRole("region", { name: "Agents" });
     expect(screen.queryByRole("link", { name: /Read how it works/ })).toBeNull();
-    expect(localStorage.getItem("pocketcontext.crew.how_it_works_hidden")).toBe("1");
+  });
+
+  it("carries the old per-browser hides over to the server once", async () => {
+    localStorage.setItem("pocketcontext.crew.how_it_works_hidden", "1");
+    localStorage.setItem("pocketcontext.crew.get_started_hidden", "1");
+    render(<CrewWorkspace />);
+    await screen.findByRole("region", { name: "Agents" });
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "settings.update",
+        { hidden_help: ["home.guide_row", "home.get_started"] },
+        expect.anything(),
+      ),
+    );
+    await waitFor(() =>
+      expect(localStorage.getItem("pocketcontext.crew.how_it_works_hidden")).toBeNull(),
+    );
+    expect(localStorage.getItem("pocketcontext.crew.get_started_hidden")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Read how it works/ })).toBeNull();
+  });
+
+  it("shows How it works in the page menu until hidden, then on demand", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("region", { name: "Agents" });
     fireEvent.click(screen.getByRole("button", { name: "Page options" }));
-    fireEvent.click(sheet("Home").getByRole("button", { name: "How it works" }));
-    await waitFor(() => expect(location.hash).toBe("#/guide"));
+    let menu = sheet("Home");
+    const about = menu.getByRole("region", { name: "About this page" });
+    expect(about).toHaveTextContent(/^Where you and your AI agents/);
+    const box = within(about).getByRole("checkbox", { name: "Don't show this again" });
+    fireEvent.click(box);
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "settings.update",
+        { hidden_help: ["page.home"] },
+        expect.anything(),
+      ),
+    );
+    // Kept while the menu is open; with the panel showing, How it works goes on to the Guide.
+    expect(menu.getByRole("region", { name: "About this page" })).toBeTruthy();
+    fireEvent.click(menu.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Home" })).toBeNull());
+    // Hidden: the menu opens without it, and How it works opens it in place, checked.
+    fireEvent.click(screen.getByRole("button", { name: "Page options" }));
+    menu = sheet("Home");
+    expect(menu.queryByRole("region", { name: "About this page" })).toBeNull();
+    const how = menu.getByRole("button", { name: "How it works" });
+    expect(how).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(how);
+    const shown = menu.getByRole("region", { name: "About this page" });
+    const again = within(shown).getByRole("checkbox", { name: "Don't show this again" });
+    expect(again).toBeChecked();
+    fireEvent.click(again);
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenLastCalledWith(
+        "settings.update",
+        { hidden_help: [] },
+        expect.anything(),
+      ),
+    );
+    fireEvent.click(menu.getByRole("button", { name: "How it works" }));
+    await waitFor(() => expect(location.hash).toBe("#/guide/home"));
   });
 
   it("keeps + a direct create on Tasks and Notes", async () => {

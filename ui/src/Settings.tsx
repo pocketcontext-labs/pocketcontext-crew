@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { languages, t, useLanguage, setLanguage, type Language } from "./i18n";
 import { localIdentity, pb } from "./api";
 import { val, type Row } from "./crewApi";
@@ -14,7 +14,7 @@ import {
 } from "./agentTap";
 import { homeAgents } from "./listSource";
 import { icons } from "./MobileChrome";
-import { saveSettings, useReaderSettings } from "./sessionGuide";
+import { saveSettings, showAllHelp, useReaderSettings } from "./sessionGuide";
 import "./settings.css";
 
 export type ServerVersion = { version: string; commit: string };
@@ -25,6 +25,7 @@ type Picker =
 /**
  * Settings (0.36.0), from More on a phone and the sidebar on a desktop:
  * Language, Tapping an agent (what a tap on an agent row on Home runs),
+ * Help (0.37.0: Show all help again clears every "Don't show this again"),
  * Account with Sign out, and About with the server version and build. Each
  * choice opens a list with a check on the current value and applies at once;
  * the server keeps it (crew_settings), so it holds across browsers.
@@ -44,6 +45,7 @@ export default function Settings({
   const prefs = useReaderSettings();
   const [picker, setPicker] = useState<Picker | null>(null);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState(0);
   const tap = prefs.agentTap;
   const save = (patch: Parameters<typeof saveSettings>[0]) => {
     setError("");
@@ -186,6 +188,34 @@ export default function Settings({
         )}
       </section>
 
+      <section aria-labelledby="crew-settings-help">
+        <h2 id="crew-settings-help">{t("Help")}</h2>
+        <ul className="crew-settings-group">
+          <li>
+            <button
+              type="button"
+              className="crew-settings-row"
+              onClick={() => {
+                setError("");
+                showAllHelp().then(
+                  () => setToast((n) => n + 1),
+                  () =>
+                    setError(
+                      t(
+                        "Couldn't save the setting. Check your connection and try again.",
+                      ),
+                    ),
+                );
+              }}
+            >
+              <span className="crew-settings-label">
+                {t("Show all help again")}
+              </span>
+            </button>
+          </li>
+        </ul>
+      </section>
+
       <section aria-labelledby="crew-settings-account">
         <h2 id="crew-settings-account">{t("Account")}</h2>
         <ul className="crew-settings-group">
@@ -236,6 +266,32 @@ export default function Settings({
           )}
         </ul>
       </section>
+      {toast > 0 && (
+        <SettingsToast key={toast} dismiss={() => setToast(0)}>
+          {t("All help will show again")}
+        </SettingsToast>
+      )}
+    </div>
+  );
+}
+
+/** A short confirmation over the page, gone after a few seconds. */
+function SettingsToast({
+  children,
+  dismiss,
+}: {
+  children: ReactNode;
+  dismiss: () => void;
+}) {
+  const latest = useRef(dismiss);
+  latest.current = dismiss;
+  useEffect(() => {
+    const timer = setTimeout(() => latest.current(), 4000);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <div className="crew-toast crew-settings-toast" role="status">
+      <p>{children}</p>
     </div>
   );
 }

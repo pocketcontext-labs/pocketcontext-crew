@@ -527,8 +527,8 @@ const it: Record<string, string> = {
   "What is Get started?": "Cos'è Inizia?",
   "Four steps that take you from an empty Crew to your first reviewed draft.":
     "Quattro passaggi che ti portano da un Crew vuoto alla tua prima bozza approvata.",
-  "Do the current step. Hide removes this list from this browser.":
-    "Completa il passaggio attuale. Nascondi rimuove questo elenco da questo browser.",
+  "Do the current step. Don't show this again hides this list.":
+    "Completa il passaggio attuale. Non mostrare più nasconde questo elenco.",
   "Needs you": "Tocca a te",
   "What goes under Needs you?": "Cosa c'è in Serve a te?",
   "How many drafts wait for your approval and how many open tasks are on hold, then the items that can't move without you: drafts waiting for approval, tasks stopped by the handoff limit and tasks whose assigned agent is unavailable.":

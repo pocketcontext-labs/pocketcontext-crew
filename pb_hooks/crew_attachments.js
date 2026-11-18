@@ -54,7 +54,12 @@ function only(o, allowed) {
     if (!allowed.includes(k)) bad("Unsupported field: " + k);
 }
 // Reader preferences (settings.update). language "" follows the browser.
-const SETTINGS_FIELDS = ["session_guide_off", "language", "agent_tap"];
+const SETTINGS_FIELDS = [
+  "session_guide_off",
+  "language",
+  "agent_tap",
+  "hidden_help",
+];
 const LANGUAGES = ["", "en", "de", "it"];
 // What tapping an agent row on Home runs (0.36.0): one default for all agents
 // (only actions every agent has) and per-agent overrides keyed by agent id.
@@ -94,6 +99,32 @@ function agentTap(app, value) {
     }
   }
   return out;
+}
+// Help panels the owner hid with "Don't show this again" (0.37.0): short ids
+// such as "page.home"; the whole list is replaced, [] or null shows all help.
+const HELP_ID = /^[a-z0-9_.-]{1,64}$/;
+const MAX_HIDDEN_HELP = 100;
+function hiddenHelp(value) {
+  if (value === null) return [];
+  if (!Array.isArray(value)) bad("hidden_help must be an array of help ids");
+  if (value.length > MAX_HIDDEN_HELP)
+    bad("hidden_help has more than " + MAX_HIDDEN_HELP + " ids");
+  const out = [];
+  for (const id of value) {
+    if (typeof id !== "string" || !HELP_ID.test(id))
+      bad("hidden_help ids are 1-64 characters of a-z, 0-9, _, . and -");
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+function storedHelp(s) {
+  const raw = s.getString("hidden_help");
+  if (!raw || raw === "null") return [];
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return [];
+  }
 }
 function storedTap(s) {
   const raw = s.getString("agent_tap");
@@ -715,17 +746,19 @@ function handle(app, e, b, actor, isAgent, files, h) {
   if (b.action === "settings.update") {
     // Reader preferences of the one owner: session_guide_off (0.26.0) is the
     // session guide's "Don't show this again"; language and agent_tap (0.36.0)
-    // are the reader's language and what tapping an agent on Home does. Kept
-    // across browsers; send any of them.
+    // are the reader's language and what tapping an agent on Home does;
+    // hidden_help (0.37.0) lists the help panels hidden with "Don't show this
+    // again". Kept across browsers; send any of them.
     only(d, SETTINGS_FIELDS);
     const s = get(app, "crew_settings", b.id);
     const keys = SETTINGS_FIELDS.filter((k) => k in (d || {}));
-    if (!keys.length) bad("Send session_guide_off, language or agent_tap");
+    if (!keys.length) bad("Send session_guide_off, language, agent_tap or hidden_help");
     if ("session_guide_off" in d && typeof d.session_guide_off !== "boolean")
       bad("session_guide_off must be true or false");
     if ("language" in d && !LANGUAGES.includes(d.language))
       bad('language must be "", "en", "de" or "it"');
     const tap = "agent_tap" in d ? agentTap(app, d.agent_tap) : null;
+    const help = "hidden_help" in d ? hiddenHelp(d.hidden_help) : null;
     return webhooks.idempotent(app, b, () => {
       check(s, b);
       const changes = {};
@@ -743,6 +776,10 @@ function handle(app, e, b, actor, isAgent, files, h) {
       if ("agent_tap" in d) {
         changes.agent_tap = { old: storedTap(s), new: tap };
         s.set("agent_tap", tap);
+      }
+      if ("hidden_help" in d) {
+        changes.hidden_help = { old: storedHelp(s), new: help };
+        s.set("hidden_help", help);
       }
       s.set("revision", s.getInt("revision") + 1);
       app.save(s);

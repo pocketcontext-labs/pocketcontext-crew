@@ -177,6 +177,27 @@ describe("Settings", () => {
     ).toBeNull();
   });
 
+  it("shows all help again from Help: clears every hide and confirms", async () => {
+    fixtures.settings[0].hidden_help = ["page.home", "home.guide_row"];
+    render(<Root />);
+    const help = within(await screen.findByRole("region", { name: "Help" }));
+    // An old per-browser hide left behind is cleared too.
+    localStorage.setItem("pocketcontext.crew.get_started_hidden", "1");
+    const row = help.getByRole("button", { name: "Show all help again" });
+    fireEvent.click(row);
+    await waitFor(() =>
+      expect(settingsWrites().at(-1)?.[1]).toEqual({
+        hidden_help: [],
+        session_guide_off: false,
+      }),
+    );
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "All help will show again",
+    );
+    expect(localStorage.getItem("pocketcontext.crew.get_started_hidden")).toBeNull();
+    localStorage.clear();
+  });
+
   it("switches the language without a reload, saves it, and leaves agent names alone", async () => {
     render(<Root />);
     await screen.findByRole("heading", { name: "Tapping an agent" });
