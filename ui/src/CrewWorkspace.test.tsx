@@ -4065,7 +4065,7 @@ describe("links in rendered text (0.29.0)", () => {
     revision: 1,
     title: "Weekly digest",
     bucket: bucket.id,
-    body: "Picked up task00000000001 and an unknown zzzzzzzzzzzzzzz, see `task00000000001`.",
+    body: "Picked up task00000000001 and an unknown zzzzzzzzzzzzzzz, see `zzzzzzzzzzzzzzy`.",
     links: [],
     path: "#/notes/weekly-digest-note00000000002",
   };
@@ -4086,12 +4086,12 @@ describe("links in rendered text (0.29.0)", () => {
     expect(link).toHaveAttribute("href", taskRef.path);
     expect(link).toHaveAttribute("title", "Task · task00000000001");
     expect(link).not.toHaveAttribute("target");
-    // Unknown ids and code stay as written; one batched request asked.
+    // Unknown ids stay as written (in code, code); one batched request asked.
     expect(dialog.getByText(/an unknown zzzzzzzzzzzzzzz/)).toBeInTheDocument();
-    expect(dialog.getByText("task00000000001").tagName).toBe("CODE");
+    expect(dialog.getByText("zzzzzzzzzzzzzzy").tagName).toBe("CODE");
     expect(crewApi.references).toHaveBeenCalledTimes(1);
     expect(vi.mocked(crewApi.references).mock.calls[0][0].sort()).toEqual(
-      ["task00000000001", "zzzzzzzzzzzzzzz"],
+      ["task00000000001", "zzzzzzzzzzzzzzy", "zzzzzzzzzzzzzzz"],
     );
     const back = dialog.getByRole("button", { name: "Back" });
     const forward = dialog.getByRole("button", { name: "Forward" });

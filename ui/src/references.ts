@@ -14,7 +14,10 @@ import {
  * Record ids and Crew addresses written in rendered Markdown (0.29.0). Bare
  * 15-character ids become links titled with the record they name, resolved in
  * one batch per page by the `references` read; ids that resolve to nothing
- * stay plain text. Stored text never changes.
+ * stay plain text. Since 0.37.0 an inline code span that is exactly one id
+ * links too (it stays code when it resolves to nothing), and an id right after
+ * a link to the same record keeps the id as its text, the title in its
+ * tooltip. Stored text never changes.
  */
 export type Reference = {
   id: string;
@@ -46,13 +49,71 @@ type MdNode = {
   url?: string;
   children?: MdNode[];
 };
-// Never inside a link (or a reference-style one), code or raw HTML; code and
-// HTML have no text children, so skipping links is enough.
+
+/**
+ * How a `crew-ref:` link was written: `code` when the id was an inline code
+ * span (it stays code when it resolves to nothing), `beside` when it follows
+ * a link to the same record, so it keeps the id as its text instead of
+ * repeating the title.
+ */
+export type RefHint = { id: string; code: boolean; beside: boolean };
+export function refHref(hint: RefHint): string {
+  const flags = [hint.code && "code", hint.beside && "beside"].filter(Boolean);
+  return refScheme + hint.id + (flags.length ? `?${flags.join("&")}` : "");
+}
+export function parseRefHref(href: string): RefHint | null {
+  if (!href.startsWith(refScheme)) return null;
+  const [id, query = ""] = href.slice(refScheme.length).split("?");
+  const flags = query.split("&");
+  return { id, code: flags.includes("code"), beside: flags.includes("beside") };
+}
+
+/** An inline code span that is exactly one record id. */
+function codeId(value: string): string | null {
+  const ids = findIds(value);
+  return ids.length === 1 && ids[0].id === value ? value : null;
+}
+
+/** Whether a link's address names this record (a slug, a path or the id). */
+function urlNames(url: string, id: string): boolean {
+  if (url.startsWith(refScheme)) return parseRefHref(url)?.id === id;
+  return new RegExp(`(?:^|[-/=])${id}(?:$|[?&#/])`).test(url);
+}
+
+// Spaces and opening punctuation between a link and an id beside it.
+const joiner = /^[\s([{,:;–—-]*$/;
+/**
+ * Whether the siblings so far end with a link to this record followed only by
+ * `before` and spaces or opening punctuation: `[Title](…/slug-<id>) (<id>)`.
+ */
+function besideLink(siblings: MdNode[], before: string, id: string): boolean {
+  if (!joiner.test(before)) return false;
+  let i = siblings.length - 1;
+  if (!before && siblings[i]?.type === "text") {
+    if (!joiner.test(siblings[i].value ?? "")) return false;
+    i--;
+  }
+  const prev = siblings[i];
+  return prev?.type === "link" && !!prev.url && urlNames(prev.url, id);
+}
+
+// Never inside a link (or a reference-style one), fenced code or raw HTML;
+// those have no text children, so skipping links is enough. An inline code
+// span that is exactly one id becomes a link as well (0.37.0).
 const skip = new Set(["link", "linkReference", "definition"]);
 function linkIds(node: MdNode) {
   if (!node.children || skip.has(node.type)) return;
   const next: MdNode[] = [];
   for (const child of node.children) {
+    const id = child.type === "inlineCode" ? codeId(child.value ?? "") : null;
+    if (id) {
+      next.push({
+        type: "link",
+        url: refHref({ id, code: true, beside: besideLink(next, "", id) }),
+        children: [{ type: "text", value: id }],
+      });
+      continue;
+    }
     if (child.type !== "text" || !child.value) {
       linkIds(child);
       next.push(child);
@@ -61,10 +122,13 @@ function linkIds(node: MdNode) {
     const text = child.value;
     let at = 0;
     for (const { id, index } of findIds(text)) {
-      if (index > at) next.push({ type: "text", value: text.slice(at, index) });
+      const before = text.slice(at, index);
+      // Only the first id of a text node can sit right after a link.
+      const beside = at === 0 && besideLink(next, before, id);
+      if (index > at) next.push({ type: "text", value: before });
       next.push({
         type: "link",
-        url: refScheme + id,
+        url: refHref({ id, code: false, beside }),
         children: [{ type: "text", value: id }],
       });
       at = index + id.length;
@@ -75,7 +139,7 @@ function linkIds(node: MdNode) {
   }
   node.children = next;
 }
-/** remark plugin: bare record ids become `crew-ref:` links. */
+/** remark plugin: bare ids and inline-code ids become `crew-ref:` links. */
 export function remarkCrewRefs() {
   return (tree: MdNode) => linkIds(tree);
 }

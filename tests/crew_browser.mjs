@@ -230,12 +230,12 @@ try {
  const reviewId=reviewLink.split('/').pop();
  const linkedTask=(await api({collection:'tasks',query:'Synthetic launch post'})).items[0];
  const linkBucket=(await api({collection:'buckets'})).items[0];
- const digest=await crewWrite('note.create',{bucket:linkBucket.id,title:'Weekly link digest',body:`Shipped ${linkedTask.id} after ${reviewId}; unknown zzzzzzzzzzzzzzz; see https://example.com/page and \`${linkedTask.id}\`.`});
+ const digest=await crewWrite('note.create',{bucket:linkBucket.id,title:'Weekly link digest',body:`Shipped ${linkedTask.id} after ${reviewId}; unknown zzzzzzzzzzzzzzz; see https://example.com/page and \`zzzzzzzzzzzzzzy\`.`});
  await page.goto(base+'/'+digest.path);await page.reload();
  const taskLink=dialog().getByRole('link',{name:'Synthetic launch post',exact:true});await taskLink.waitFor();
  assert.equal(await taskLink.getAttribute('target'),null,'a Crew link opens in the app');
  assert.equal(await dialog().getByRole('link',{name:'https://example.com/page'}).getAttribute('rel'),'noopener noreferrer');
- assert.equal(await dialog().locator('.crew-prose code').innerText(),linkedTask.id,'code keeps the raw id');
+ assert.equal(await dialog().locator('.crew-prose code').innerText(),'zzzzzzzzzzzzzzy','an unknown id in code stays code');
  await dialog().getByText(/unknown zzzzzzzzzzzzzzz/).waitFor();
  const back=()=>dialog().getByRole('button',{name:'Back',exact:true}),forward=()=>dialog().getByRole('button',{name:'Forward',exact:true});
  assert.equal(await back().isDisabled(),true,'Back is disabled at the start of a trail');
@@ -267,6 +267,25 @@ try {
  await close();await dialog().waitFor({state:'hidden'});
  // The reload above opened the task link, whose page underneath is Tasks.
  assert.equal(new URL(page.url()).hash,'#/tasks','closing returns to the page underneath');
+ // Ids in inline code (0.37.0): a resolvable id alone reads as its title; beside
+ // a link to the same record it keeps the id (title in the tooltip); unknown ids
+ // stay code and fenced blocks are never linked.
+ const codeNote=await crewWrite('note.create',{bucket:linkBucket.id,title:'Inline code ids',body:`Tracked in [Synthetic launch post](#/tasks/synthetic-launch-post-${linkedTask.id}) (\`${linkedTask.id}\`). Approved in \`${reviewId}\`; unknown \`zzzzzzzzzzzzzzy\`.\n\n\`\`\`\n${linkedTask.id}\n\`\`\``});
+ await page.goto(base+'/'+codeNote.path);await page.reload();
+ const prose=dialog().locator('.crew-prose');
+ const besideRef=prose.getByRole('link',{name:linkedTask.id,exact:true});await besideRef.waitFor();
+ assert.match(await besideRef.getAttribute('title'),/^Synthetic launch post · /,'the id beside its link has the title as tooltip');
+ assert.equal(await besideRef.locator('code').count(),1,'the id beside its link stays code-styled');
+ assert.equal(await prose.getByRole('link',{name:'Synthetic launch post',exact:true}).count(),1,'the title is not repeated');
+ assert.match(await prose.getByRole('link',{name:'Review: Synthetic launch post',exact:true}).getAttribute('class'),/crew-ref/,'an id alone in code reads as its title');
+ assert.deepEqual(await prose.locator('code').evaluateAll(cs=>cs.filter(c=>!c.closest('a')).map(c=>c.textContent.trim())),['zzzzzzzzzzzzzzy',linkedTask.id],'unknown and fenced ids stay code');
+ assert.equal(await prose.locator('pre a').count(),0,'fenced code is never linked');
+ {const size=page.viewportSize();await page.setViewportSize({width:390,height:844});await besideRef.waitFor();await snapView('crew-links-inline-code-390');await page.setViewportSize(size);}
+ await snapView('crew-links-inline-code-1440');
+ await besideRef.click();
+ await dialog().getByRole('tab',{name:'Comments'}).waitFor();
+ assert.equal(await dialog().getByLabel('Title',{exact:true}).inputValue(),'Synthetic launch post','the id in code opens its task');
+ await close();await dialog().waitFor({state:'hidden'});
 }
  await go('Tasks');
  await onPage('Tasks');

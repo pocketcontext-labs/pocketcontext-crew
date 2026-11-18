@@ -91,7 +91,7 @@ describe("displayUrl", () => {
 });
 
 describe("Prose links", () => {
-  it("titles resolved ids, leaves the rest as written, in one request", async () => {
+  it("titles resolved ids (also in inline code), leaves the rest as written, in one request", async () => {
     render(
       <>
         <Prose>
@@ -103,7 +103,7 @@ describe("Prose links", () => {
       </>,
     );
     const links = await screen.findAllByRole("link", { name: "Launch post" });
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(4);
     expect(links[0]).toHaveAttribute("href", taskRef.path);
     const bucket = screen.getByRole("link", { name: "NETWORK" });
     expect(bucket).toHaveAttribute("title", "Bucket (archived) · bucket000000001");
@@ -112,7 +112,7 @@ describe("Prose links", () => {
       "href",
       "https://example.com",
     );
-    expect(document.querySelectorAll("code")).toHaveLength(2);
+    expect(document.querySelectorAll("code")).toHaveLength(1);
     for (const code of document.querySelectorAll("code"))
       expect(code.textContent?.trim()).toBe("task00000000001");
     expect(crewApi.references).toHaveBeenCalledTimes(1);
@@ -164,6 +164,60 @@ describe("Prose links", () => {
     expect(screen.queryByRole("link", { name: "bad" })).toBeNull();
     expect(screen.queryByRole("link", { name: "file" })).toBeNull();
     expect(screen.getByText(/bad/)).toBeInTheDocument();
+  });
+  it("links ids in inline code, keeps unknown ones code, leaves fenced code", async () => {
+    render(
+      <Prose>
+        {"Crew task: [Launch post](https://crew.example/#/tasks/launch-post-task00000000001) (`task00000000001`). " +
+          "Bucket `bucket000000001`, unknown `zzzzzzzzzzzzzzz`, not one id `task00000000001 and more`.\n\n" +
+          "```\ntask00000000001\n```"}
+      </Prose>,
+    );
+    // Beside its own link: the id stays the text (as code), the title is the tooltip.
+    const beside = await screen.findByRole("link", { name: "task00000000001" });
+    expect(beside).toHaveClass("crew-ref");
+    expect(beside).toHaveAttribute("href", taskRef.path);
+    expect(beside).toHaveAttribute("title", "Launch post · Task · task00000000001");
+    expect(beside.querySelector("code")?.textContent).toBe("task00000000001");
+    // The written title link is untouched (another origin stays external).
+    expect(screen.getByRole("link", { name: "Launch post" })).toHaveAttribute(
+      "href",
+      "https://crew.example/#/tasks/launch-post-task00000000001",
+    );
+    // The only mention reads as the title.
+    expect(screen.getByRole("link", { name: "NETWORK" })).toHaveAttribute(
+      "href",
+      bucketRef.path,
+    );
+    const codes = [...document.querySelectorAll(".crew-prose code")].map(
+      (code) => [code.closest("a") !== null, code.textContent?.trim()],
+    );
+    expect(codes).toEqual([
+      [true, "task00000000001"],
+      [false, "zzzzzzzzzzzzzzz"],
+      [false, "task00000000001 and more"],
+      [false, "task00000000001"],
+    ]);
+    expect(document.querySelector("pre a")).toBeNull();
+    expect(crewApi.references).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(crewApi.references).mock.calls[0][0].sort()).toEqual([
+      "bucket000000001",
+      "task00000000001",
+      "zzzzzzzzzzzzzzz",
+    ]);
+  });
+  it("keeps a bare id beside its own link as the id", async () => {
+    render(
+      <Prose>
+        {"See [the post](#/tasks/launch-post-task00000000001) (task00000000001) and later task00000000001; " +
+          "[elsewhere](https://example.com/x) task00000000001."}
+      </Prose>,
+    );
+    const beside = await screen.findByRole("link", { name: "task00000000001" });
+    expect(beside).toHaveAttribute("title", "Launch post · Task · task00000000001");
+    expect(beside.querySelector("code")).toBeNull();
+    // Not beside a link to the same record: the title.
+    expect(screen.getAllByRole("link", { name: "Launch post" })).toHaveLength(2);
   });
   it("keeps ids plain when the resolver fails", async () => {
     vi.mocked(crewApi.references).mockRejectedValue(new Error("offline"));

@@ -15,6 +15,7 @@ import {
 import {
   crewAddress,
   displayUrl,
+  parseRefHref,
   referenceLabel,
   refScheme,
   remarkCrewRefs,
@@ -28,11 +29,26 @@ import { t } from "./i18n";
 const shorten = (text: string, max?: number) =>
   max && text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 
-/** A bare id: its record's title when it resolves, otherwise the plain id. */
-export function RecordRef({ id, max }: { id: string; max?: number }) {
+/**
+ * A bare id: its record's title when it resolves, otherwise the plain id. An
+ * id written as inline code stays code when it resolves to nothing; an id
+ * beside a link to the same record (`beside`) keeps the id as its text, the
+ * title in the tooltip, so the sentence does not repeat the title.
+ */
+export function RecordRef({
+  id,
+  max,
+  code = false,
+  beside = false,
+}: {
+  id: string;
+  max?: number;
+  code?: boolean;
+  beside?: boolean;
+}) {
   const ref = useReference(id);
-  if (!ref) return <>{id}</>;
-  const shown = shorten(ref.title, max);
+  if (!ref) return code ? <code>{id}</code> : <>{id}</>;
+  const shown = beside ? id : shorten(ref.title, max) || id;
   return (
     <a
       href={ref.path}
@@ -45,7 +61,7 @@ export function RecordRef({ id, max }: { id: string; max?: number }) {
       data-collection={ref.collection}
       onClick={(e) => followLink(e, ref.path)}
     >
-      {shown || id}
+      {beside && code ? <code>{id}</code> : shown}
     </a>
   );
 }
@@ -94,7 +110,8 @@ function ProseAnchor({
   href?: string;
   children?: ReactNode;
 }) {
-  if (href.startsWith(refScheme)) return <RecordRef id={href.slice(refScheme.length)} />;
+  const ref = parseRefHref(href);
+  if (ref) return <RecordRef {...ref} />;
   if (attachmentRefId(href)) return <ProseLink href={href}>{children}</ProseLink>;
   const crew = crewAddress(href);
   if (crew) return <CrewLink href={href} {...crew}>{children}</CrewLink>;
