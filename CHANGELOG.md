@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.36.0](docs/releases/0.36.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.36.0) · The reader in English, Deutsch or Italiano; a Settings page (language, what tapping an agent does, account, about); Home agent rows run their default action and coding agents carry a Coding agent tag. One data migration.
 - **[0.35.0](docs/releases/0.35.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.35.0) · Previous/next with "x of y" on every detail dialog (Home sections, links and Shared included), one phone switcher for Tasks and Notes without dots, and the Crew mark in the header.
 - **[0.34.0](docs/releases/0.34.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.34.0) · A sectioned Home (Needs you tiles, every agent A–Z with a ⋯ menu, Recent) with a dismissible How it works row, a create menu on Home's +, and a floating frosted tab bar on phones.
 - **[0.33.1](docs/releases/0.33.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.33.1) · Phone Notes switch buckets with the same fixed ‹ › switcher as the Tasks board (All first, then buckets A–Z with counts), replacing the bucket chip row.
