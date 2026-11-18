@@ -1,5 +1,27 @@
 # Crew upgrades and rollback
 
+## Crew 0.36.0 to 0.37.0
+
+One data migration (`1802000000_crew_hidden_help.js`) adds `hidden_help` to
+`crew_settings`: the help ids the owner chose not to show again (empty, so every
+help shows as before). Home's per-browser hides of the How it works row and Get
+started move into it on first load. Nothing else in the data changes.
+
+1. Take a complete stopped backup first: `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` (when present), the matching 0.36.0 binary and,
+   with webhooks, the private webhook key. Hosted deployment prepares a verified
+   complete backup before replacement.
+2. Replace the binary or image (`CREW_REPLACE_VERSION=0.36.0` for the installer)
+   and upgrade paired clients with the server to 0.37.0.
+3. Refresh MCP tool schemas: `settings.update` also accepts `hidden_help`, so
+   `capabilities_digest` changes and agents reread capabilities. Protocol 3 and the
+   managed instruction block stay unchanged; this upgrade does not pause delivery.
+
+Older binaries refuse the migrated database without changing it. Rollback requires
+restoring the complete pre-upgrade backup with the matching 0.36.0 binary or image;
+changes made after the backup are not preserved. From 0.35.0 or earlier, also read
+the notes below.
+
 ## Crew 0.35.0 to 0.36.0
 
 One data migration (`1801900000_crew_reader_preferences.js`) adds two reader
