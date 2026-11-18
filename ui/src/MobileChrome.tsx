@@ -6,7 +6,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import logo from "./assets/brand/logo.svg?no-inline";
+import mark from "./assets/brand/favicon.svg?no-inline";
 import { HelpModeContext } from "./Help";
 import { guideHash, helpContent, textFor, type HelpTopic } from "./helpContent";
 import { viewHashes, type View } from "./itemLink";
@@ -346,9 +346,9 @@ export function MobileTopBar({
       <a
         className="crew-mlogo"
         href={viewHashes.home}
-        aria-label="PocketContext Crew, go to Home"
+        aria-label="Crew, go to Home"
       >
-        <img src={logo} width="28" height="28" alt="" />
+        <img className="crew-mark" src={mark} width="28" height="28" alt="Crew" />
       </a>
       <h1>{title}</h1>
       <div className="crew-mactions">

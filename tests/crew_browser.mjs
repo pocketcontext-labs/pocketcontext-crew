@@ -492,6 +492,15 @@ try {
   for(const name of ['Home','Tasks','Notes','Approvals','Agents','Archive']){
    await go(name);
    await onPage(name);
+   // 0.35.0: the top-left header mark is the Crew app mark (the favicon master), named Crew, at its usual size.
+   {const mark=page.locator(width<=680?'.crew-mlogo img':'.crew-sidebar .crew-logo img');
+    await mark.evaluate(async i=>{await i.decode();});
+    const info=await mark.evaluate(i=>({src:i.getAttribute('src'),alt:i.alt,w:i.getBoundingClientRect().width,natural:i.naturalWidth}));
+    assert.match(info.src,/favicon[^/]*\.svg/,`${name} header mark is the Crew mark at ${width}: ${info.src}`);
+    assert.equal(info.alt,'Crew',`${name} header mark is named Crew at ${width}`);
+    assert.ok(info.natural>0,`${name} header mark renders at ${width}`);
+    assert.equal(Math.round(info.w),width<=680?28:34,`${name} header mark keeps its size at ${width}`);
+    assert.match(await page.locator(width<=680?'.crew-mlogo':'.crew-sidebar .crew-logo').getAttribute('aria-label'),/^Crew\b/,`${name} home link is named Crew at ${width}`);}
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
    if(width<=680){await topBarOneRow(name+' '+width);await tabBarCheck(name+' '+width);
     // Intro text and page help live in the page menu, not on the screen.

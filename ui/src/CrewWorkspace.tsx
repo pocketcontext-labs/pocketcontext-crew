@@ -2200,7 +2200,7 @@ export default function CrewWorkspace() {
         <a
           className="crew-logo"
           href={viewHashes.home}
-          aria-label="PocketContext Crew, go to Home"
+          aria-label="Crew, go to Home"
         >
           <Brand />
           <strong>Crew</strong>
