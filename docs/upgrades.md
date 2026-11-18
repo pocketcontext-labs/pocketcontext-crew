@@ -1,5 +1,15 @@
 # Crew upgrades and rollback
 
+## Crew 0.34.0 to 0.35.0
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.35.0. Reader change only: every
+record dialog has previous/next with "x of y" (items opened from Home step through
+their Home section; links use the collection's list), Shared artifacts can be
+focused and stepped, Tasks and Notes share one phone switcher without dots, and the
+header shows the Crew mark. Rollback to 0.34.0 needs no restore. From 0.33.1 or
+earlier, follow the 0.33.1 to 0.34.0 notes first.
+
 ## Crew 0.33.1 to 0.34.0
 
 No data migration, protocol, managed block, skill or capabilities change. Replace
