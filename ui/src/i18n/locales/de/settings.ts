@@ -89,7 +89,7 @@ const de: Record<string, string> = {
     "{n} Aufgaben angehalten, auf dem Aufgaben-Board zeigen",
 
   // Phone chrome. Tab and More labels are translated where they render.
-  Done: "Fertig",
+  Done: "Erledigt",
   "Crew, go to Home": "Crew, zur Startseite",
   "{label}, {count} on": "{label}, {count} aktiv",
   "Page options": "Seitenoptionen",
@@ -107,7 +107,7 @@ const de: Record<string, string> = {
   Archive: "Archiv",
   Settings: "Einstellungen",
   "Connect an agent": "Agent verbinden",
-  Guide: "Leitfaden",
+  Guide: "Anleitung",
 
   // Start a session
   "Agent {name}: {summary}": "Agent {name}: {summary}",
@@ -145,6 +145,7 @@ const de: Record<string, string> = {
   "Could not prepare the session prompt for {name}. Check your connection and try again.":
     "Der Sitzungs-Prompt für {name} konnte nicht vorbereitet werden. Prüfe deine Verbindung und versuche es noch einmal.",
   View: "Ansehen",
+  "sheet|Done": "Fertig",
 };
 
 export default de;

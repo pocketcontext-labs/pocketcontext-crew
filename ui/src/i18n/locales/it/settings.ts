@@ -59,7 +59,7 @@ const it: Record<string, string> = {
   "{done} of {total} done": "{done} di {total} completati",
   Hide: "Nascondi",
   "(done)": "(fatto)",
-  "Needs you": "Serve il tuo intervento",
+  "Needs you": "Tocca a te",
   "Approvals waiting": "Approvazioni in attesa",
   "Tasks on hold": "Attività in pausa",
   "Draft waiting for your approval": "Bozza in attesa della tua approvazione",
@@ -89,7 +89,7 @@ const it: Record<string, string> = {
     "{n} attività in pausa, mostra nella bacheca",
 
   // Phone chrome. Tab and More labels are translated where they render.
-  Done: "Fine",
+  Done: "Fatto",
   "Crew, go to Home": "Crew, vai alla Home",
   "{label}, {count} on": "{label}, {count} attivi",
   "Page options": "Opzioni pagina",
@@ -98,7 +98,7 @@ const it: Record<string, string> = {
   "Learn more in the Guide": "Scopri di più nella Guida",
   Workspace: "Spazio di lavoro",
   "{label}, {n} pending": "{label}, {n} in attesa",
-  "One owner. One shared context.": "Un titolare. Un contesto condiviso.",
+  "One owner. One shared context.": "Un proprietario. Un contesto condiviso.",
   Home: "Home",
   Tasks: "Attività",
   Notes: "Note",
@@ -146,6 +146,7 @@ const it: Record<string, string> = {
   "Could not prepare the session prompt for {name}. Check your connection and try again.":
     "Impossibile preparare il prompt di sessione per {name}. Controlla la connessione e riprova.",
   View: "Visualizza",
+  "sheet|Done": "Fine",
 };
 
 export default it;

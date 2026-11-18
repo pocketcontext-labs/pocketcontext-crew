@@ -190,14 +190,14 @@ const it: Record<string, string> = {
   "All buckets, {n} notes": "Tutti i bucket, {n} note",
   "{name}, {n} note": "{name}, {n} nota",
   "{name}, {n} notes": "{name}, {n} note",
-  "Last updated": "Ultimo aggiornamento",
+  "Last updated": "Ultima modifica",
   "Newest first": "Più recenti prima",
   Name: "Nome",
   pending: "in attesa",
-  approved: "approvato",
+  approved: "approvata",
   "changes requested": "modifiche richieste",
-  rejected: "rifiutato",
-  withdrawn: "ritirato",
+  rejected: "rifiutata",
+  withdrawn: "ritirata",
   "This draft mentions files that aren't attached to Crew. Request changes and ask the agent to attach them.":
     "Questa bozza cita file non allegati a Crew. Richiedi modifiche e chiedi all'agente di allegarli.",
   "Files submitted for review": "File inviati per l'approvazione",
@@ -228,8 +228,7 @@ const it: Record<string, string> = {
   "This is the exact submitted draft. Approval does not send, post or publish it.":
     "Questa è esattamente la bozza inviata. L'approvazione non la invia, non la pubblica e non la posta.",
   "Link copied": "Link copiato",
-  "Could not copy automatically. Copy it from here:":
-    "Impossibile copiare automaticamente. Copialo da qui:",
+  "Could not copy automatically. Copy it from here:": "Copia automatica non riuscita. Copialo da qui:",
   "Your decision note:": "La tua nota sulla decisione:",
   "Check every option you approve and add feedback on any option.":
     "Seleziona ogni opzione che approvi e aggiungi un feedback su qualsiasi opzione.",
@@ -316,7 +315,7 @@ const it: Record<string, string> = {
   "Rewrite with an agent": "Riscrivi con un agente",
   "Recommended. Copies a prompt for an agent conversation: the agent reads the current text, asks what to change, shows you the new version and saves it only after you approve.":
     "Consigliato. Copia un prompt per una conversazione con un agente: l'agente legge il testo attuale, chiede cosa cambiare, ti mostra la nuova versione e la salva solo dopo la tua approvazione.",
-  View: "Vista",
+  View: "Visualizza",
   Read: "Leggi",
   History: "Cronologia",
   "These are already the built-in instructions":

@@ -10,7 +10,7 @@ import mark from "./assets/brand/favicon.svg?no-inline";
 import { HelpModeContext } from "./Help";
 import { guideHash, helpContent, textFor, type HelpTopic } from "./helpContent";
 import { viewHashes, type View } from "./itemLink";
-import { t } from "./i18n";
+import { t, tc } from "./i18n";
 import "./chrome.css";
 import "./home.css";
 
@@ -177,7 +177,7 @@ export function Sheet({
       <header className="crew-sheet-head">
         <h2>{title}</h2>
         <button type="button" className="crew-sheet-done" onClick={onClose}>
-          {t("Done")}
+          {tc("sheet", "Done")}
         </button>
       </header>
       <div className="crew-sheet-body">{children}</div>

@@ -523,13 +523,13 @@ const it: Record<string, string> = {
     "Trova attività e note in base alle parole di titoli, descrizioni, bozze e testo delle note, e agenti e bucket per nome. Ogni parola deve corrispondere; l'ultima corrisponde anche a parole più lunghe che iniziano così.",
   "Type in the search box at the top of any page, or press / or Ctrl+K (⌘K on a Mac). Use the arrow keys and Enter to open a result, or See all results for the full list. Archived items appear only when you turn on Include archived.":
     "Scrivi nella casella di ricerca in cima a ogni pagina, oppure premi / o Ctrl+K (⌘K su Mac). Usa le frecce e Invio per aprire un risultato, oppure Vedi tutti i risultati per l'elenco completo. Gli elementi archiviati compaiono solo se attivi Includi archiviati.",
-  "Get started": "Inizia",
+  "Get started": "Per iniziare",
   "What is Get started?": "Cos'è Inizia?",
   "Four steps that take you from an empty Crew to your first reviewed draft.":
     "Quattro passaggi che ti portano da un Crew vuoto alla tua prima bozza approvata.",
   "Do the current step. Hide removes this list from this browser.":
     "Completa il passaggio attuale. Nascondi rimuove questo elenco da questo browser.",
-  "Needs you": "Serve a te",
+  "Needs you": "Tocca a te",
   "What goes under Needs you?": "Cosa c'è in Serve a te?",
   "How many drafts wait for your approval and how many open tasks are on hold, then the items that can't move without you: drafts waiting for approval, tasks stopped by the handoff limit and tasks whose assigned agent is unavailable.":
     "Quante bozze aspettano la tua approvazione e quante attività aperte sono in pausa, poi gli elementi che non vanno avanti senza di te: bozze in attesa di approvazione, attività fermate dal limite di passaggi e attività il cui agente assegnato non è disponibile.",
@@ -604,7 +604,7 @@ const it: Record<string, string> = {
     "Una pagina Markdown in un bucket, come una decisione, una preferenza o una scoperta. Ogni modifica salvata diventa una nuova revisione.",
   "Keep what's worth remembering. Use History to see earlier versions; restoring one adds a new revision.":
     "Conserva ciò che vale la pena ricordare. Usa Cronologia per vedere le versioni precedenti; ripristinarne una aggiunge una nuova revisione.",
-  Related: "Correlati",
+  Related: "Collegati",
   "What are related tasks and notes?": "Cosa sono attività e note correlate?",
   "Links from this item to other tasks and notes, so you and your agents can find the background. Items that link here show under Linked from.":
     "Collegamenti da questo elemento ad altre attività e note, così tu e i tuoi agenti trovate il contesto. Gli elementi che rimandano qui compaiono in Collegato da.",
@@ -736,7 +736,7 @@ const it: Record<string, string> = {
   "Retry {name}": "Riprova {name}",
   Retry: "Riprova",
   "Dismiss {name}": "Ignora {name}",
-  Dismiss: "Ignora",
+  Dismiss: "Chiudi",
   "Uploading {name}": "Caricamento di {name}",
   "Remove {name}": "Rimuovi {name}",
   Remove: "Rimuovi",

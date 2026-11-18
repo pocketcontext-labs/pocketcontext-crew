@@ -38,11 +38,11 @@ const it: Record<string, string> = {
   "Webhook (bot)": "Webhook (bot)",
   "I start it myself (no webhook)": "Lo avvio io (nessun webhook)",
   Person: "Persona",
-  "Started manually · no webhook": "Avviato a mano · nessun webhook",
+  "Started manually · no webhook": "Avviato manualmente · nessun webhook",
   " · manual": " · manuale",
   " · person": " · persona",
 
-  "just now": "proprio ora",
+  "just now": "adesso",
   "Filter by readiness Ready": "Filtra per prontezza: Pronta",
   Ready: "Pronta",
   "On hold": "In pausa",
@@ -52,8 +52,7 @@ const it: Record<string, string> = {
   "Wake not received": "Risveglio non ricevuto",
   "Copy link": "Copia link",
   "Link copied": "Link copiato",
-  "Could not copy automatically. Copy it from here:":
-    "Copia automatica non riuscita. Copialo da qui:",
+  "Could not copy automatically. Copy it from here:": "Copia automatica non riuscita. Copialo da qui:",
   Copied: "Copiato",
   "Markdown supported": "Markdown supportato",
   "{label} view": "Vista {label}",
@@ -208,7 +207,7 @@ const it: Record<string, string> = {
   Human: "Umano",
   "Stopped after too many consecutive agent reassignments. Review it, then set Ready.":
     "Fermata dopo troppe riassegnazioni consecutive tra agenti. Controllala, poi impostala su Pronta.",
-  "Handoff limit": "Limite passaggi",
+  "Handoff limit": "Limite di passaggi",
   "Your comment wakes the assignee when the current execution finishes.":
     "Il tuo commento risveglia l'assegnatario quando l'esecuzione in corso finisce.",
   "Comment wake pending": "Risveglio da commento in attesa",
@@ -341,7 +340,7 @@ const it: Record<string, string> = {
   "No earlier revisions available.":
     "Nessuna revisione precedente disponibile.",
   "File activity": "Attività sui file",
-  "Owner / connection": "Proprietario / collegamento",
+  "Owner / connection": "Proprietario / connessione",
   "Changed section compared with current":
     "Sezione cambiata rispetto alla versione attuale",
   "The ordered section replaced between this revision and the current version.":

@@ -12,6 +12,7 @@ import {
   resetLanguageForTests,
   setLanguage,
   t,
+  tc,
   tn,
   type Language,
 } from "./index";
@@ -42,10 +43,13 @@ function usedKeys(): Map<string, string> {
     String.raw`(?<![\w.$])tn\(\s*[^,()]+(?:\([^()]*\))?\s*,\s*` + literal + String.raw`\s*,\s*` + literal,
     "g",
   );
+  const contextual = new RegExp(String.raw`(?<![\w.$])tc\(\s*` + literal + String.raw`\s*,\s*` + literal, "g");
   for (const file of sources(src)) {
     const text = readFileSync(file, "utf8");
     const name = file.slice(src.length);
     for (const m of text.matchAll(single)) keys.set(unquote(m[1]), name);
+    for (const m of text.matchAll(contextual))
+      keys.set(`${unquote(m[1])}|${unquote(m[2])}`, name);
     for (const m of text.matchAll(plural)) {
       keys.set(unquote(m[1]), name);
       keys.set(unquote(m[2]), name);
@@ -95,6 +99,13 @@ describe("t", () => {
   it("falls back to the English key and fills placeholders", () => {
     setLanguage("de");
     expect(t("A key no catalog has {x}", { x: 1 })).toBe("A key no catalog has 1");
+  });
+
+  it("prefers a context key and falls back to the plain key", () => {
+    setLanguage("de");
+    expect(tc("sheet", "Done")).toBe("Fertig");
+    expect(t("Done")).toBe("Erledigt");
+    expect(tc("nowhere", "Sign out")).toBe("Abmelden");
   });
 
   it("picks plural forms by the language's rules", () => {

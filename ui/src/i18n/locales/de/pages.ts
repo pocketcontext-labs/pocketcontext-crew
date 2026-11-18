@@ -189,7 +189,7 @@ const de: Record<string, string> = {
   "All buckets, {n} notes": "Alle Buckets, {n} Notizen",
   "{name}, {n} note": "{name}, {n} Notiz",
   "{name}, {n} notes": "{name}, {n} Notizen",
-  "Last updated": "Zuletzt aktualisiert",
+  "Last updated": "Zuletzt geändert",
   "Newest first": "Neueste zuerst",
   Name: "Name",
   pending: "ausstehend",
@@ -227,8 +227,7 @@ const de: Record<string, string> = {
   "This is the exact submitted draft. Approval does not send, post or publish it.":
     "Das ist genau der eingereichte Entwurf. Eine Freigabe sendet, postet oder veröffentlicht ihn nicht.",
   "Link copied": "Link kopiert",
-  "Could not copy automatically. Copy it from here:":
-    "Automatisches Kopieren nicht möglich. Kopiere ihn von hier:",
+  "Could not copy automatically. Copy it from here:": "Automatisches Kopieren fehlgeschlagen. Kopiere es von hier:",
   "Your decision note:": "Deine Entscheidungsnotiz:",
   "Check every option you approve and add feedback on any option.":
     "Hake jede Option an, die du freigibst, und gib zu jeder Option Feedback.",
@@ -315,7 +314,7 @@ const de: Record<string, string> = {
   "Rewrite with an agent": "Mit einem Agenten umschreiben",
   "Recommended. Copies a prompt for an agent conversation: the agent reads the current text, asks what to change, shows you the new version and saves it only after you approve.":
     "Empfohlen. Kopiert einen Prompt für ein Agenten-Gespräch: Der Agent liest den aktuellen Text, fragt, was sich ändern soll, zeigt dir die neue Fassung und speichert sie erst nach deiner Zustimmung.",
-  View: "Ansicht",
+  View: "Ansehen",
   Read: "Lesen",
   History: "Verlauf",
   "These are already the built-in instructions":

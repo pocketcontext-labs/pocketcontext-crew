@@ -122,6 +122,17 @@ export function t(key: string, vars?: Vars): string {
 }
 
 /**
+ * Translates an English string whose meaning depends on where it shows: the
+ * catalog key is "context|English" (e.g. "sheet|Done" for a button that
+ * closes a sheet, versus the status Done), falling back to the plain key and
+ * then to English.
+ */
+export function tc(context: string, key: string, vars?: Vars): string {
+  const catalog = catalogs[current];
+  return fill(catalog?.[`${context}|${key}`] ?? catalog?.[key] ?? key, vars);
+}
+
+/**
  * Translates a counted string: `one` when the language's plural rule says
  * "one" for n, else `other`. `{n}` is filled with n.
  */
