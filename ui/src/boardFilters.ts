@@ -1,6 +1,7 @@
 import { list, statuses, val, type Row } from "./crewApi";
 import type { ViewState } from "./itemLink";
 import { isClosed } from "./closedTasks";
+import { t, tn } from "./i18n";
 
 export const longHoldMs = 3 * 24 * 60 * 60 * 1000;
 export const heldSince = (task: Row) =>
@@ -17,9 +18,7 @@ export const heldDuration = (task: Row, now = Date.now()) => {
   const elapsed = now - heldSince(task);
   if (!Number.isFinite(elapsed) || elapsed < 0) return "";
   const days = Math.floor(elapsed / 86400000);
-  return days > 0
-    ? `${days} ${days === 1 ? "day" : "days"}`
-    : "less than a day";
+  return days > 0 ? tn(days, "{n} day", "{n} days") : t("less than a day");
 };
 /** Home's Done tile means Done, not Won't do; the unfiltered Done column includes both. */
 export const statusMatches = (status: string, task: Row) =>
@@ -150,21 +149,30 @@ export function filterChips(state: ViewState): FilterChip[] {
   if (state.heldOver)
     chips.push({
       key: "hold",
-      label: "On hold · over 3 days",
+      label: t("On hold · over 3 days"),
       clear: { hold: "all", heldOver: "" },
     });
   else if (state.hold !== "all")
     chips.push({
       key: "hold",
-      label: state.hold === "ready" ? "Ready" : "On hold",
+      label: state.hold === "ready" ? t("Ready") : t("On hold"),
       clear: { hold: "all" },
     });
   if (state.label)
-    chips.push({ key: "label", label: `Label ${state.label}`, clear: { label: "" } });
+    chips.push({
+      key: "label",
+      label: t("Label {label}", { label: state.label }),
+      clear: { label: "" },
+    });
   if (state.status) {
-    const name =
-      statuses.find(([s]) => s === state.status)?.[1] ?? state.status;
-    chips.push({ key: "status", label: `Status ${name}`, clear: { status: "" } });
+    // The English status names, translated here (catalog: pages.ts).
+    const known = statuses.find(([s]) => s === state.status)?.[1];
+    const name = known ? t(known) : state.status;
+    chips.push({
+      key: "status",
+      label: t("Status {name}", { name }),
+      clear: { status: "" },
+    });
   }
   return chips;
 }

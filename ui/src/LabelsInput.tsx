@@ -6,6 +6,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
+import { t } from "./i18n";
 
 const sameLabel = (a: string, b: string) =>
   a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
@@ -18,7 +19,7 @@ const sameLabel = (a: string, b: string) =>
  * Duplicates are never added: the existing chip is highlighted instead.
  */
 export default function LabelsInput({
-  label = "Labels",
+  label,
   value,
   onChange,
   suggestions = [],
@@ -135,7 +136,7 @@ export default function LabelsInput({
   const listId = `${id}-suggestions`;
   return (
     <div className="crew-field crew-labels-field">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>{label ?? t("Labels")}</label>
       <div
         className={`crew-chip-input${disabled ? " disabled" : ""}`}
         onMouseDown={(e) => {
@@ -158,7 +159,7 @@ export default function LabelsInput({
               <button
                 type="button"
                 tabIndex={-1}
-                aria-label={`Remove label ${labelText}`}
+                aria-label={t("Remove label {label}", { label: labelText })}
                 onClick={() => remove(index)}
               >
                 ×
@@ -178,7 +179,7 @@ export default function LabelsInput({
           }
           disabled={disabled}
           value={text}
-          placeholder={value.length ? "" : "Add a label"}
+          placeholder={value.length ? "" : t("Add a label")}
           autoComplete="off"
           // Typing is not an edit until it becomes a chip.
           onChange={(e) => {

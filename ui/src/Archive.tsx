@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { list, val, type Row } from "./crewApi";
+import { t, tn } from "./i18n";
 import { RelativeTime } from "./relativeTime";
 
 /**
@@ -25,12 +26,52 @@ export type ArchiveState = {
   filter: string;
 };
 export const archivePageSize = 50;
+// English labels, translated where they render (catalog: pages.ts).
 const tabLabels: Record<ArchiveTab, string> = {
   tasks: "Tasks",
   notes: "Notes",
   buckets: "Buckets",
   agents: "Inactive agents",
 };
+/** The tab's sentences, whole so each language can order them. */
+function tabTexts(tab: ArchiveTab) {
+  switch (tab) {
+    case "tasks":
+      return {
+        search: t("Search archived tasks by title"),
+        noQuery: (q: string) => t("No archived tasks match “{q}”.", { q }),
+        noFilter: t("No archived tasks match this filter."),
+        empty: t(
+          "No archived tasks. Anything you archive appears here and can be restored.",
+        ),
+      };
+    case "notes":
+      return {
+        search: t("Search archived notes by title"),
+        noQuery: (q: string) => t("No archived notes match “{q}”.", { q }),
+        noFilter: t("No archived notes match this filter."),
+        empty: t(
+          "No archived notes. Anything you archive appears here and can be restored.",
+        ),
+      };
+    case "buckets":
+      return {
+        search: t("Search archived buckets by title"),
+        noQuery: (q: string) => t("No archived buckets match “{q}”.", { q }),
+        noFilter: t("No archived buckets match this filter."),
+        empty: t(
+          "No archived buckets. Anything you archive appears here and can be restored.",
+        ),
+      };
+    case "agents":
+      return {
+        search: t("Search inactive agents by title"),
+        noQuery: (q: string) => t("No inactive agents match “{q}”.", { q }),
+        noFilter: t("No inactive agents match this filter."),
+        empty: t("No inactive agents. Deactivated agents appear here."),
+      };
+  }
+}
 const defaultState: ArchiveState = {
   tab: "tasks",
   query: "",
@@ -69,11 +110,18 @@ const archivedTime = (row: Row) => Date.parse(val(row, "archived_at")) || 0;
 function ArchivedLine({ row }: { row: Row }) {
   const at = archivedTime(row);
   const by = val(row, "archived_by");
-  if (!at) return <>{by ? `Archived by ${by}` : `Revision ${row.revision}`}</>;
+  if (!at)
+    return (
+      <>
+        {by
+          ? t("Archived by {by}", { by })
+          : t("Revision {n}", { n: String(row.revision) })}
+      </>
+    );
   return (
     <>
-      <RelativeTime value={at} prefix="Archived " />
-      {by ? ` by ${by}` : ""}
+      <RelativeTime value={at} prefix={t("Archived ")} />
+      {by ? t(" by {by}", { by }) : ""}
     </>
   );
 }
@@ -127,7 +175,7 @@ export default function Archive({
     const names = new Map<string, string>();
     for (const b of [...buckets, ...(archived.buckets ?? [])])
       names.set(b.id, val(b, "name"));
-    return (id: string) => names.get(id) ?? "Unknown bucket";
+    return (id: string) => names.get(id) ?? t("Unknown bucket");
   }, [buckets, archived.buckets]);
   const archivedBuckets = useMemo(
     () => new Map((archived.buckets ?? []).map((b) => [b.id, b])),
@@ -199,15 +247,14 @@ export default function Archive({
       else next.delete(id);
       return next;
     });
-  const noun =
-    state.tab === "agents" ? "inactive agents" : `archived ${state.tab}`;
+  const texts = tabTexts(state.tab);
 
   return (
     <div className="crew-archive">
       <div
         className="crew-archive-tabs"
         role="tablist"
-        aria-label="Archive categories"
+        aria-label={t("Archive categories")}
       >
         {archiveTabs.map((tab) => (
           <button
@@ -220,7 +267,7 @@ export default function Archive({
             className={state.tab === tab ? "active" : undefined}
             onClick={() => update({ tab, filter: "" })}
           >
-            {tabLabels[tab]}{" "}
+            {t(tabLabels[tab])}{" "}
             <span className="crew-archive-count">({counts[tab]})</span>
           </button>
         ))}
@@ -234,8 +281,8 @@ export default function Archive({
           <label className="crew-search">
             <input
               type="search"
-              aria-label={`Search ${noun} by title`}
-              placeholder="Search by title"
+              aria-label={texts.search}
+              placeholder={t("Search by title")}
               value={state.query}
               onChange={(e) => update({ query: e.target.value })}
             />
@@ -243,13 +290,15 @@ export default function Archive({
           {filterOptions.length > 0 && (
             <select
               aria-label={
-                state.tab === "tasks" ? "Filter by label" : "Filter by bucket"
+                state.tab === "tasks"
+                  ? t("Filter by label")
+                  : t("Filter by bucket")
               }
               value={state.filter}
               onChange={(e) => update({ filter: e.target.value })}
             >
               <option value="">
-                {state.tab === "tasks" ? "All labels" : "All buckets"}
+                {state.tab === "tasks" ? t("All labels") : t("All buckets")}
               </option>
               {filterOptions.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -259,12 +308,12 @@ export default function Archive({
             </select>
           )}
           <select
-            aria-label="Sort archive"
+            aria-label={t("Sort archive")}
             value={state.sort}
             onChange={(e) => update({ sort: e.target.value as ArchiveSort })}
           >
-            <option value="archived">Archived, newest first</option>
-            <option value="title">Title, A to Z</option>
+            <option value="archived">{t("Archived, newest first")}</option>
+            <option value="title">{t("Title, A to Z")}</option>
           </select>
         </div>
         {filtered.length > 0 && (
@@ -283,11 +332,13 @@ export default function Archive({
                   })
                 }
               />
-              Select shown
+              {t("Select shown")}
             </label>
             <span role="status">
-              {filtered.length} {filtered.length === 1 ? "item" : "items"}
-              {selectedRows.length ? ` · ${selectedRows.length} selected` : ""}
+              {tn(filtered.length, "{n} item", "{n} items")}
+              {selectedRows.length
+                ? t(" · {n} selected", { n: selectedRows.length })
+                : ""}
             </span>
             <button
               type="button"
@@ -299,8 +350,9 @@ export default function Archive({
                 setSelected(new Set());
               }}
             >
-              Restore selected
-              {selectedRows.length ? ` (${selectedRows.length})` : ""}
+              {selectedRows.length
+                ? t("Restore selected ({n})", { n: selectedRows.length })
+                : t("Restore selected")}
             </button>
           </div>
         )}
@@ -312,8 +364,12 @@ export default function Archive({
               <div className="crew-archive-row">
                 <div>
                   <strong>
-                    {notes.length} {notes.length === 1 ? "note" : "notes"}{" "}
-                    hidden by archived bucket {bucketName(bucketId)}
+                    {tn(
+                      notes.length,
+                      "{n} note hidden by archived bucket {bucket}",
+                      "{n} notes hidden by archived bucket {bucket}",
+                      { bucket: bucketName(bucketId) },
+                    )}
                   </strong>
                   <button
                     type="button"
@@ -328,7 +384,7 @@ export default function Archive({
                       })
                     }
                   >
-                    {open ? "Hide notes" : "Show notes"}
+                    {open ? t("Hide notes") : t("Show notes")}
                   </button>
                 </div>
                 {bucket && (
@@ -339,7 +395,7 @@ export default function Archive({
                       restore([{ collection: "buckets", row: bucket }])
                     }
                   >
-                    Restore bucket
+                    {t("Restore bucket")}
                   </button>
                 )}
               </div>
@@ -355,19 +411,19 @@ export default function Archive({
         })}
         {!filtered.length && !groups.length && (
           <p className="crew-archive-empty">
-            {needle || state.filter
-              ? `No ${noun} match${needle ? ` “${state.query.trim()}”` : " this filter"}.`
-              : state.tab === "agents"
-                ? "No inactive agents. Deactivated agents appear here."
-                : `No ${noun}. Anything you archive appears here and can be restored.`}
+            {needle
+              ? texts.noQuery(state.query.trim())
+              : state.filter
+                ? texts.noFilter
+                : texts.empty}
           </p>
         )}
-        <ul className="crew-archive-list" aria-label={tabLabels[state.tab]}>
+        <ul className="crew-archive-list" aria-label={t(tabLabels[state.tab])}>
           {visible.map((x) => (
             <li className="crew-archive-row" key={x.id}>
               <input
                 type="checkbox"
-                aria-label={`Select ${title(x)}`}
+                aria-label={t("Select {title}", { title: title(x) })}
                 checked={selected.has(x.id)}
                 onChange={(e) => toggle(x.id, e.target.checked)}
               />
@@ -383,10 +439,10 @@ export default function Archive({
               <button
                 type="button"
                 disabled={busy}
-                aria-label={`Restore ${title(x)}`}
+                aria-label={t("Restore {title}", { title: title(x) })}
                 onClick={() => restore([{ collection: state.tab, row: x }])}
               >
-                Restore
+                {t("Restore")}
               </button>
             </li>
           ))}
@@ -397,7 +453,7 @@ export default function Archive({
             className="crew-archive-more"
             onClick={() => setShown((n) => n + archivePageSize)}
           >
-            Show more ({filtered.length - visible.length} left)
+            {t("Show more ({n} left)", { n: filtered.length - visible.length })}
           </button>
         )}
       </div>

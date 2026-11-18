@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { crewApi } from "./crewApi";
+import { t } from "./i18n";
 import {
   legacyRedirect,
   parseItemHash,
@@ -158,6 +159,7 @@ export function resetReferencesForTests() {
   notify();
 }
 
+// English labels, translated in referenceLabel (catalog: pages.ts).
 const collectionLabels: Record<string, string> = {
   tasks: "Task",
   notes: "Note",
@@ -172,9 +174,10 @@ const collectionLabels: Record<string, string> = {
   session_revisions: "Session instructions revision",
 };
 export function referenceLabel(ref: Reference): string {
-  const kind = collectionLabels[ref.collection] ?? "Record";
-  const state = ref.archived ? " (archived)" : "";
-  return `${kind}${state} · ${ref.id}`;
+  const kind = t(collectionLabels[ref.collection] ?? "Record");
+  return ref.archived
+    ? t("{kind} (archived) · {id}", { kind, id: ref.id })
+    : `${kind} · ${ref.id}`;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { t, tn } from "./i18n";
 import { icons } from "./MobileChrome";
 
 export type SwitcherColumn = { status: string; label: string; count: number };
@@ -29,7 +30,6 @@ export default function ColumnSwitcher({
   noun?: [string, string];
   className?: string;
 }) {
-  const Item = item.charAt(0).toUpperCase() + item.slice(1);
   const id = useId();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -58,6 +58,18 @@ export default function ColumnSwitcher({
     };
   }, [open]);
   if (!column) return null;
+  // Whole sentences per kind of option, so each language orders them.
+  const bucket = item === "bucket";
+  const previous = bucket ? t("Previous bucket") : t("Previous column");
+  const next = bucket ? t("Next bucket") : t("Next column");
+  const count =
+    noun[0] === "note"
+      ? tn(column.count, "{n} note", "{n} notes")
+      : tn(column.count, "{n} task", "{n} tasks");
+  const where = { name: column.label, count, i: index + 1, total: columns.length };
+  const nameLabel = bucket
+    ? t("Bucket {name}, {count}, {i} of {total}. Choose a bucket", where)
+    : t("Column {name}, {count}, {i} of {total}. Choose a column", where);
   const go = (to: number) => {
     const next = columns[to];
     if (next) onSelect(next.status);
@@ -67,8 +79,8 @@ export default function ColumnSwitcher({
       <button
         type="button"
         className="crew-switch-step"
-        aria-label={`Previous ${item}`}
-        title={`Previous ${item}`}
+        aria-label={previous}
+        title={previous}
         disabled={index === 0}
         onClick={() => go(index - 1)}
       >
@@ -81,22 +93,22 @@ export default function ColumnSwitcher({
         aria-haspopup="true"
         aria-expanded={open}
         aria-controls={open ? `${id}-picker` : undefined}
-        aria-label={`${Item} ${column.label}, ${column.count} ${column.count === 1 ? noun[0] : noun[1]}, ${index + 1} of ${columns.length}. Choose a ${item}`}
+        aria-label={nameLabel}
         onClick={() => setOpen((value) => !value)}
       >
         <span className="crew-switch-title">
           <strong>{column.label}</strong>
           <span className="crew-switch-count">· {column.count}</span>
           <span className="crew-switch-of">
-            ({index + 1} of {columns.length})
+            {t("({i} of {total})", { i: index + 1, total: columns.length })}
           </span>
         </span>
       </button>
       <button
         type="button"
         className="crew-switch-step"
-        aria-label={`Next ${item}`}
-        title={`Next ${item}`}
+        aria-label={next}
+        title={next}
         disabled={index === columns.length - 1}
         onClick={() => go(index + 1)}
       >
@@ -107,7 +119,7 @@ export default function ColumnSwitcher({
           id={`${id}-picker`}
           className="crew-switch-picker"
           role="group"
-          aria-label={pickerLabel}
+          aria-label={t(pickerLabel)}
         >
           {columns.map((c) => (
             <button

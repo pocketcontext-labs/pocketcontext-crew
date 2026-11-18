@@ -1,4 +1,5 @@
 import { val, type Row } from "./crewApi";
+import { t } from "./i18n";
 import { formatDuration, formatExact, parseInstant } from "./relativeTime";
 
 /**
@@ -14,6 +15,8 @@ export const agentKind = (agent: Row | undefined): AgentKind => {
 };
 /** Only bots are woken by webhook, so only bots have bot mappings. */
 export const isBot = (agent: Row | undefined) => agentKind(agent) === "bot";
+// The three tables below hold English, translated with t() where they render
+// (catalog: pages.ts lists every value).
 export const agentKindChoices: Record<AgentKind, string> = {
   bot: "Webhook (bot)",
   external: "I start it myself (no webhook)",
@@ -76,29 +79,36 @@ export const claimTool = (claim: Claim) =>
  * its sessions can claim), else the first part of `claimed_by`.
  */
 export const claimAgent = (claim: Claim, assigned = "") =>
-  assigned.trim() || claim.by.split(" · ")[0].trim() || "a session";
+  assigned.trim() || claim.by.split(" · ")[0].trim() || t("a session");
 /**
  * The claim with exact local times, for a tooltip and Copy details:
  * "Claimed by … · Started Nov 17, 2026, 1:18 PM · Until … · Claim expired".
  */
 export const claimTitle = (claim: Claim) =>
   [
-    claim.by ? `Claimed by ${claim.by}` : "Claimed by a session",
+    claim.by
+      ? t("Claimed by {by}", { by: claim.by })
+      : t("Claimed by a session"),
     formatExact(claim.started)
-      ? `Started ${formatExact(claim.started)}`
-      : "Start time unavailable",
-    formatExact(claim.until) ? `Until ${formatExact(claim.until)}` : "",
-    claim.state === "expired" ? "Claim expired" : "",
+      ? t("Started {time}", { time: formatExact(claim.started) })
+      : t("Start time unavailable"),
+    formatExact(claim.until)
+      ? t("Until {time}", { time: formatExact(claim.until) })
+      : "",
+    claim.state === "expired" ? t("Claim expired") : "",
   ]
     .filter(Boolean)
     .join(" · ");
 /** A card chip: "Claude Code · 1 h 40 m left", or "Claim expired". */
 export function claimLabel(claim: Claim, now = Date.now()) {
-  if (claim.state === "expired") return "Claim expired";
-  const tool = claimTool(claim) || "Session";
+  if (claim.state === "expired") return t("Claim expired");
+  const tool = claimTool(claim) || t("Session");
   const until = parseInstant(claim.until);
   if (!until) return tool;
-  return `${tool} · ${formatDuration(Math.max(0, until.getTime() - now))} left`;
+  return t("{tool} · {duration} left", {
+    tool,
+    duration: formatDuration(Math.max(0, until.getTime() - now)),
+  });
 }
 
 /**

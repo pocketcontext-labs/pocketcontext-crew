@@ -1,11 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PlainTitles } from "./PlainRefs";
 import { val, type Row } from "./crewApi";
+import { t, tn } from "./i18n";
 import { noteSorts, type NoteSort } from "./itemLink";
 import { Sheet } from "./MobileChrome";
 import { RelativeTime } from "./relativeTime";
 
-/** The phone's names for the note sorts; Title A–Z reads as Name. */
+/**
+ * The phone's names for the note sorts; Title A–Z reads as Name. English,
+ * translated where they render (catalog: pages.ts).
+ */
 export const phoneNoteSortLabels: Record<NoteSort, string> = {
   updated: "Last updated",
   created: "Newest first",
@@ -62,8 +66,8 @@ function BucketMenu({ name, onEdit }: { name: string; onEdit: () => void }) {
         type="button"
         ref={button}
         className="crew-bucket-chip-more"
-        aria-label={`Bucket ${name} options`}
-        title="Bucket options"
+        aria-label={t("Bucket {name} options", { name })}
+        title={t("Bucket options")}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
@@ -80,7 +84,7 @@ function BucketMenu({ name, onEdit }: { name: string; onEdit: () => void }) {
               onEdit();
             }}
           >
-            Edit bucket
+            {t("Edit bucket")}
           </button>
         </div>
       )}
@@ -116,16 +120,16 @@ export function BucketChips({
     <div
       className={`crew-bucket-chips ${className}`.trim()}
       role="group"
-      aria-label="Filter by bucket"
+      aria-label={t("Filter by bucket")}
     >
       <span className="crew-bucket-chip">
         <button
           type="button"
           aria-pressed={!selected}
-          aria-label={`All buckets, ${total} ${total === 1 ? "note" : "notes"}`}
+          aria-label={tn(total, "All buckets, {n} note", "All buckets, {n} notes")}
           onClick={() => onSelect("")}
         >
-          All <span className="crew-bucket-chip-count">· {total}</span>
+          {t("All")} <span className="crew-bucket-chip-count">· {total}</span>
         </button>
       </span>
       {buckets.map((bucket) => {
@@ -140,7 +144,7 @@ export function BucketChips({
             <button
               type="button"
               aria-pressed={isSelected}
-              aria-label={`${name}, ${count} ${count === 1 ? "note" : "notes"}`}
+              aria-label={tn(count, "{name}, {n} note", "{name}, {n} notes", { name })}
               title={val(bucket, "purpose") || undefined}
               onClick={() => onSelect(isSelected ? "" : bucket.id)}
             >
@@ -181,7 +185,7 @@ export function NoteRows({
           <span className="crew-note-row-meta">
             <span>{bucketName(val(note, "bucket"))}</span>
             <span aria-hidden="true"> · </span>
-            <RelativeTime value={val(note, "updated")} fallback="Just now" />
+            <RelativeTime value={val(note, "updated")} fallback={t("Just now")} />
           </span>
           <span className="crew-note-row-snippet">
             <PlainTitles text={snippet(note)} />
@@ -215,7 +219,7 @@ export function NotesFilterSheet({
 }) {
   return (
     <Sheet
-      title="Filter and sort"
+      title={t("Filter and sort")}
       className="crew-filter-sheet"
       onClose={onClose}
     >
@@ -223,14 +227,14 @@ export function NotesFilterSheet({
         <span aria-hidden="true">⌕</span>
         <input
           type="search"
-          aria-label="Search notes"
-          placeholder="Search notes"
+          aria-label={t("Search notes")}
+          placeholder={t("Search notes")}
           value={search}
           onChange={(e) => onSearch(e.target.value)}
         />
       </label>
       <fieldset className="crew-sheet-section">
-        <legend>Sort</legend>
+        <legend>{t("Sort")}</legend>
         <div className="crew-sheet-radios">
           {noteSorts.map((key) => (
             <label key={key}>
@@ -241,7 +245,7 @@ export function NotesFilterSheet({
                 checked={sort === key}
                 onChange={() => onSort(key)}
               />
-              <span>{phoneNoteSortLabels[key]}</span>
+              <span>{t(phoneNoteSortLabels[key])}</span>
               <span className="crew-sheet-check" aria-hidden="true">
                 {sort === key ? "✓" : ""}
               </span>
@@ -250,17 +254,17 @@ export function NotesFilterSheet({
         </div>
       </fieldset>
       <div className="crew-sheet-section">
-        <h3>Bucket</h3>
+        <h3>{t("Bucket")}</h3>
         <BucketChips {...chips} menus className="is-wrapped" />
       </div>
       <div className="crew-sheet-section crew-sheet-field">
-        <h3>Agent</h3>
+        <h3>{t("Agent")}</h3>
         <select
-          aria-label="Filter by responsible agent"
+          aria-label={t("Filter by responsible agent")}
           value={agent}
           onChange={(e) => onAgent(e.target.value)}
         >
-          <option value="">All agents</option>
+          <option value="">{t("All agents")}</option>
           {agents.map((x) => (
             <option key={x.id} value={x.id}>
               {val(x, "name")}

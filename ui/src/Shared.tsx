@@ -18,6 +18,7 @@ import {
 import AutoTextarea from "./AutoTextarea";
 import PagePreview, { isStandaloneDisplay } from "./PagePreview";
 import { ListNavCluster } from "./DialogHeader";
+import { t, tn } from "./i18n";
 import { listKeyStep, type Step } from "./swipe";
 import { parseInstant, RelativeTime, type Instant } from "./relativeTime";
 import "./shared.css";
@@ -31,7 +32,11 @@ import "./shared.css";
  */
 export const PUBLISH_RISK =
   "Anyone with this link can view it until you revoke it or it expires.";
+/** PUBLISH_RISK in the reader's language. */
+const publishRisk = () =>
+  t("Anyone with this link can view it until you revoke it or it expires.");
 
+// English labels, translated where they render (catalog: pages.ts).
 const filterLabels: Record<SharedFilter, string> = {
   drafts: "Drafts",
   live: "Live",
@@ -121,7 +126,7 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
       setLinks(Object.fromEntries(published.map((l) => [l.id, l])));
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load artifacts.");
+      setError(e instanceof Error ? e.message : t("Could not load artifacts."));
       setRows((r) => r ?? []);
     }
   }, []);
@@ -178,7 +183,8 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
       );
   };
 
-  if (!rows) return <p className="crew-shared-loading">Loading artifacts…</p>;
+  if (!rows)
+    return <p className="crew-shared-loading">{t("Loading artifacts…")}</p>;
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
   const counts = Object.fromEntries(
     sharedFilters.map((f) => [
@@ -191,7 +197,7 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
     (r) => r.id === focus || filters.includes(filterOf(artifactState(r))),
   );
   return (
-    <section className="crew-shared" aria-label="Shared artifacts">
+    <section className="crew-shared" aria-label={t("Shared artifacts")}>
       {error && (
         <p role="alert" className="crew-alert">
           {error}
@@ -201,7 +207,7 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
         <div
           className="crew-shared-filters"
           role="group"
-          aria-label="Show artifacts"
+          aria-label={t("Show artifacts")}
         >
           {sharedFilters.map((f) => (
             <button
@@ -210,7 +216,7 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
               aria-pressed={filters.includes(f)}
               onClick={() => toggle(f)}
             >
-              {filterLabels[f]} <span>{counts[f]}</span>
+              {t(filterLabels[f])} <span>{counts[f]}</span>
             </button>
           ))}
         </div>
@@ -218,15 +224,16 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
       {!rows.length && (
         <div className="crew-empty">
           <span aria-hidden="true">↗</span>
-          <h3>Nothing shared yet</h3>
+          <h3>{t("Nothing shared yet")}</h3>
           <p>
-            Open a note and choose Share as artifact, or ask an agent to make an
-            artifact from your notes.
+            {t(
+              "Open a note and choose Share as artifact, or ask an agent to make an artifact from your notes.",
+            )}
           </p>
         </div>
       )}
       {rows.length > 0 && !shown.length && (
-        <p className="crew-shared-none">No artifacts match these filters.</p>
+        <p className="crew-shared-none">{t("No artifacts match these filters.")}</p>
       )}
       <ol className="crew-shared-list">
         {shown.map((row) => (
@@ -262,6 +269,7 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
   );
 }
 
+// English labels, translated where they render (catalog: pages.ts).
 const stateLabels: Record<State, string> = {
   draft: "Draft",
   published: "Published",
@@ -325,7 +333,7 @@ function ArtifactCard({
       setExpiring(false);
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "That did not work.");
+      setError(e instanceof Error ? e.message : t("That did not work."));
     } finally {
       setBusy(false);
     }
@@ -344,7 +352,7 @@ function ArtifactCard({
     const item = note || task;
     return {
       id,
-      title: item ? val(item, "title") : "Unavailable item",
+      title: item ? val(item, "title") : t("Unavailable item"),
       href: item ? itemPath(note ? "note" : "task", item) : "",
     };
   });
@@ -365,21 +373,21 @@ function ArtifactCard({
           </a>
         </h3>
         <span className={`crew-artifact-status crew-artifact-${state}`}>
-          {stateLabels[state]}
+          {t(stateLabels[state])}
         </span>
         {pending && (
-          <span className="crew-artifact-pending">Changes not live</span>
+          <span className="crew-artifact-pending">{t("Changes not live")}</span>
         )}
         {listNav}
       </header>
       {mergedInto && (
         <>
           <p className="crew-artifact-update">
-            Merged into{" "}
+            {t("Merged into")}{" "}
             {target ? (
               <a href={`#/shared/${target.id}`}>{val(target, "title")}</a>
             ) : (
-              "an unavailable artifact"
+              t("an unavailable artifact")
             )}
             {val(row, "merged_at") ? (
               <>
@@ -391,46 +399,46 @@ function ArtifactCard({
             )}
           </p>
           <p className="crew-artifact-note">
-            {targetLive ? "Its content is live in that link. " : ""}Restore
-            brings back this draft only; the link does not change.
+            {targetLive ? t("Its content is live in that link.") + " " : ""}
+            {t("Restore brings back this draft only; the link does not change.")}
           </p>
         </>
       )}
       {updates && !mergedInto && (
         <p className="crew-artifact-update">
-          Update of:{" "}
+          {t("Update of:")}{" "}
           {target ? (
             <a href={`#/shared/${target.id}`}>{val(target, "title")}</a>
           ) : (
-            "an unavailable artifact"
+            t("an unavailable artifact")
           )}
-          {target && !targetLive ? " (its link no longer works)" : ""}
+          {target && !targetLive ? t(" (its link no longer works)") : ""}
         </p>
       )}
       <p className="crew-artifact-meta">
         {[
           state === "published" && val(row, "published_at")
-            ? at("Published ", row.published_at)
+            ? at(t("Published "), row.published_at)
             : "",
           Number(row.published_revision) > 1
-            ? `revision ${row.published_revision}`
+            ? t("revision {n}", { n: String(row.published_revision) })
             : "",
           state === "published"
             ? expires
-              ? at("expires ", expires)
-              : "no expiry"
+              ? at(t("expires "), expires)
+              : t("no expiry")
             : "",
-          state === "expired" ? at("Expired ", expires) : "",
-          state === "revoked" ? at("Revoked ", row.revoked_at) : "",
-          state === "archived" ? at("Archived ", row.archived_at) : "",
-          everPublished ? `${views} ${views === 1 ? "view" : "views"}` : "",
+          state === "expired" ? at(t("Expired "), expires) : "",
+          state === "revoked" ? at(t("Revoked "), row.revoked_at) : "",
+          state === "archived" ? at(t("Archived "), row.archived_at) : "",
+          everPublished ? tn(views, "{n} view", "{n} views") : "",
           everPublished
             ? row.last_viewed_at
-              ? at("last opened ", row.last_viewed_at)
-              : "never opened"
+              ? at(t("last opened "), row.last_viewed_at)
+              : t("never opened")
             : "",
           val(row, "created_by_agent")
-            ? `drafted by ${val(row, "created_by_agent")}`
+            ? t("drafted by {agent}", { agent: val(row, "created_by_agent") })
             : "",
         ]
           .filter(Boolean)
@@ -445,12 +453,12 @@ function ArtifactCard({
         <div className="crew-artifact-link">
           <input
             readOnly
-            aria-label={`Link to ${val(row, "title")}`}
+            aria-label={t("Link to {title}", { title: val(row, "title") })}
             value={url}
             onFocus={(e) => e.currentTarget.select()}
           />
           <button type="button" onClick={() => void copy()}>
-            {copied === "copied" ? "Link copied" : "Copy link"}
+            {copied === "copied" ? t("Link copied") : t("Copy link")}
           </button>
           {/* Opens what recipients see in a new tab; Crew does not count it
               as a view (same-origin navigation). The home-screen app has no
@@ -460,39 +468,40 @@ function ArtifactCard({
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`Open ${val(row, "title")} in a new tab`}
+            aria-label={t("Open {title} in a new tab", { title: val(row, "title") })}
             onClick={(e) => {
               if (!isStandaloneDisplay()) return;
               e.preventDefault();
               setPreviewing(true);
             }}
           >
-            Open
+            {t("Open")}
           </a>
           {previewing && (
             <PagePreview
               url={url}
               title={val(row, "published_title") || val(row, "title")}
-              backLabel="Back to Shared"
+              backLabel={t("Back to Shared")}
               onClose={() => setPreviewing(false)}
             />
           )}
           {copied === "failed" && (
             <span role="alert" className="crew-copy-error">
-              Could not copy automatically. Copy it from the box.
+              {t("Could not copy automatically. Copy it from the box.")}
             </span>
           )}
         </div>
       )}
       {(state === "expired" || state === "revoked") && (
         <p className="crew-artifact-note">
-          The link no longer works: visitors see “This link is no longer
-          available”. Publishing again gives a new link.
+          {t(
+            "The link no longer works: visitors see “This link is no longer available”. Publishing again gives a new link.",
+          )}
         </p>
       )}
       {sources.length > 0 && (
         <p className="crew-artifact-sources">
-          Sources:{" "}
+          {t("Sources:")}{" "}
           {sources.map((s, i) => (
             <span key={s.id}>
               {i > 0 && ", "}
@@ -503,8 +512,9 @@ function ArtifactCard({
       )}
       {pending && (
         <p className="crew-artifact-note">
-          The draft differs from the published page. Update content to put it
-          live under the same link.
+          {t(
+            "The draft differs from the published page. Update content to put it live under the same link.",
+          )}
         </p>
       )}
       {editing ? (
@@ -520,9 +530,9 @@ function ArtifactCard({
           }}
         >
           <label>
-            Title
+            {t("Title")}
             <AutoTextarea
-              aria-label="Artifact title"
+              aria-label={t("Artifact title")}
               value={title}
               maxLength={300}
               required
@@ -530,9 +540,9 @@ function ArtifactCard({
             />
           </label>
           <label>
-            Page
+            {t("Page")}
             <textarea
-              aria-label="Artifact page"
+              aria-label={t("Artifact page")}
               value={body}
               rows={12}
               onChange={(e) => setBody(e.target.value)}
@@ -540,7 +550,7 @@ function ArtifactCard({
           </label>
           <div className="crew-artifact-actions">
             <button type="submit" className="crew-primary" disabled={busy}>
-              Save draft
+              {t("Save draft")}
             </button>
             <button
               type="button"
@@ -551,7 +561,7 @@ function ArtifactCard({
                 setEditing(false);
               }}
             >
-              Cancel
+              {t("Cancel")}
             </button>
           </div>
         </form>
@@ -562,7 +572,7 @@ function ArtifactCard({
               {val(row, "body").trim() ? (
                 <Prose>{val(row, "body")}</Prose>
               ) : (
-                <p>Nothing written yet.</p>
+                <p>{t("Nothing written yet.")}</p>
               )}
             </div>
           )}
@@ -570,9 +580,13 @@ function ArtifactCard({
             <div
               className="crew-artifact-choice"
               role="group"
-              aria-label="How to publish this update"
+              aria-label={t("How to publish this update")}
             >
-              <p>This draft updates “{target ? val(target, "title") : ""}”.</p>
+              <p>
+                {t("This draft updates “{title}”.", {
+                  title: target ? val(target, "title") : "",
+                })}
+              </p>
               <button
                 type="button"
                 className="crew-primary"
@@ -581,26 +595,30 @@ function ArtifactCard({
                   void run("artifact.publish", { mode: "replace" })
                 }
               >
-                Replace the existing link's content
+                {t("Replace the existing link's content")}
               </button>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void run("artifact.publish", { mode: "new" })}
               >
-                Publish as a new link
+                {t("Publish as a new link")}
               </button>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => setChoosing(false)}
               >
-                Cancel
+                {t("Cancel")}
               </button>
               <small>
                 {targetLive
-                  ? "Replace keeps the same link and shows this draft from now on; the earlier version stays in history and this draft is archived."
-                  : "The link this draft updates no longer works, so it can only be published as a new link."}
+                  ? t(
+                      "Replace keeps the same link and shows this draft from now on; the earlier version stays in history and this draft is archived.",
+                    )
+                  : t(
+                      "The link this draft updates no longer works, so it can only be published as a new link.",
+                    )}
               </small>
             </div>
           )}
@@ -615,22 +633,22 @@ function ArtifactCard({
               }}
             >
               <label>
-                Link expires
+                {t("Link expires")}
                 <select
-                  aria-label="Link expires"
+                  aria-label={t("Link expires")}
                   value={expiryChoice}
                   onChange={(e) => setExpiryChoice(e.target.value)}
                 >
-                  <option value="none">Never</option>
-                  <option value="7">In 7 days</option>
-                  <option value="30">In 30 days</option>
-                  <option value="date">On a date…</option>
+                  <option value="none">{t("Never")}</option>
+                  <option value="7">{t("In 7 days")}</option>
+                  <option value="30">{t("In 30 days")}</option>
+                  <option value="date">{t("On a date…")}</option>
                 </select>
               </label>
               {expiryChoice === "date" && (
                 <input
                   type="date"
-                  aria-label="Expiry date"
+                  aria-label={t("Expiry date")}
                   required
                   value={expiryDate}
                   min={localDate(new Date())}
@@ -638,14 +656,14 @@ function ArtifactCard({
                 />
               )}
               <button type="submit" className="crew-primary" disabled={busy}>
-                Save expiry
+                {t("Save expiry")}
               </button>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => setExpiring(false)}
               >
-                Cancel
+                {t("Cancel")}
               </button>
             </form>
           )}
@@ -663,12 +681,14 @@ function ArtifactCard({
                   }
                 >
                   {state === "draft"
-                    ? "Publish"
-                    : "Publish again with a new link"}
+                    ? t("Publish")
+                    : t("Publish again with a new link")}
                 </button>
                 <small>
-                  {PUBLISH_RISK}
-                  {state !== "draft" ? " The old link never works again." : ""}
+                  {publishRisk()}
+                  {state !== "draft"
+                    ? " " + t("The old link never works again.")
+                    : ""}
                 </small>
               </span>
             )}
@@ -679,7 +699,7 @@ function ArtifactCard({
                 disabled={busy}
                 onClick={() => void run("artifact.replace")}
               >
-                Update content (same link)
+                {t("Update content (same link)")}
               </button>
             )}
             <button
@@ -687,7 +707,7 @@ function ArtifactCard({
               disabled={busy}
               onClick={() => setPreview((p) => !p)}
             >
-              {preview ? "Hide draft" : "Show draft"}
+              {preview ? t("Hide draft") : t("Show draft")}
             </button>
             {state !== "archived" && (
               <button
@@ -695,7 +715,7 @@ function ArtifactCard({
                 disabled={busy}
                 onClick={() => setEditing(true)}
               >
-                Edit draft
+                {t("Edit draft")}
               </button>
             )}
             {state === "published" && !expiring && (
@@ -710,7 +730,7 @@ function ArtifactCard({
                   setExpiring(true);
                 }}
               >
-                Set expiry
+                {t("Set expiry")}
               </button>
             )}
             {state === "published" && (
@@ -721,13 +741,15 @@ function ArtifactCard({
                 onClick={() => {
                   if (
                     confirm(
-                      "Revoke this link? It stops working at once for everyone who has it.",
+                      t(
+                        "Revoke this link? It stops working at once for everyone who has it.",
+                      ),
                     )
                   )
                     void run("artifact.revoke");
                 }}
               >
-                Revoke
+                {t("Revoke")}
               </button>
             )}
             {state === "draft" && (
@@ -737,13 +759,15 @@ function ArtifactCard({
                 onClick={() => {
                   if (
                     confirm(
-                      "Discard this draft? It moves to Archived, where you can restore it.",
+                      t(
+                        "Discard this draft? It moves to Archived, where you can restore it.",
+                      ),
                     )
                   )
                     void run("artifact.archive");
                 }}
               >
-                Discard
+                {t("Discard")}
               </button>
             )}
             {(state === "expired" || state === "revoked") && (
@@ -752,7 +776,7 @@ function ArtifactCard({
                 disabled={busy}
                 onClick={() => void run("artifact.archive")}
               >
-                Archive
+                {t("Archive")}
               </button>
             )}
             {state === "archived" && (
@@ -761,7 +785,7 @@ function ArtifactCard({
                 disabled={busy}
                 onClick={() => void run("artifact.restore")}
               >
-                Restore
+                {t("Restore")}
               </button>
             )}
           </div>

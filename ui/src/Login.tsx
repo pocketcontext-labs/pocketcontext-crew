@@ -1,11 +1,14 @@
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
   type ClipboardEvent,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import Brand from "./Brand";
+import { t } from "./i18n";
 import { api, localIdentity, type AuthMode } from "./api";
 import {
   clearLoginReturn,
@@ -49,6 +52,20 @@ const codeDigits = (value: string) =>
 /** These server answers end the login request; only a new email helps. */
 const spentCode = /Too many wrong codes|expired or was already used/;
 
+/** Fills a translated sentence's {name} slots with elements. */
+function fillNodes(text: string, nodes: Record<string, ReactNode>): ReactNode[] {
+  return text
+    .split(/(\{\w+\})/)
+    .map((part, i) => {
+      const name = /^\{(\w+)\}$/.exec(part)?.[1];
+      return name && name in nodes ? (
+        <Fragment key={i}>{nodes[name]}</Fragment>
+      ) : (
+        part
+      );
+    });
+}
+
 export default function Login({
   emailLink,
   onEmailComplete,
@@ -78,7 +95,7 @@ export default function Login({
       })
       .catch(() => {
         if (active)
-          setError("Unable to load sign-in options. Please try again.");
+          setError(t("Unable to load sign-in options. Please try again."));
       });
     return () => {
       active = false;
@@ -91,7 +108,9 @@ export default function Login({
       await action();
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "Unable to sign in. Please try again.",
+        e instanceof Error
+          ? e.message
+          : t("Unable to sign in. Please try again."),
       );
     } finally {
       setBusy(false);
@@ -126,7 +145,7 @@ export default function Login({
   const redeem = (value: string) => {
     if (redeeming.current) return;
     if (value.length !== codeLength) {
-      setError("Enter the 6-digit code from the email.");
+      setError(t("Enter the 6-digit code from the email."));
       return;
     }
     redeeming.current = true;
@@ -182,19 +201,19 @@ export default function Login({
           <strong>Crew</strong>
         </div>
         {mode === null && !error && (
-          <p role="status">Loading sign-in options…</p>
+          <p role="status">{t("Loading sign-in options…")}</p>
         )}
         {mode === null && error && (
           <button
             className="primary-button"
             onClick={() => setRetry((value) => value + 1)}
           >
-            Try again
+            {t("Try again")}
           </button>
         )}
         {mode === "password" && (
           <>
-            <h1>Log in to Crew</h1>
+            <h1>{t("Log in to Crew")}</h1>
             <form onSubmit={password}>
               <input
                 type="hidden"
@@ -203,7 +222,7 @@ export default function Login({
                 value={localIdentity}
               />
               <label>
-                Password
+                {t("Password")}
                 <input
                   required
                   autoFocus
@@ -213,13 +232,19 @@ export default function Login({
                 />
               </label>
               <button className="primary-button" disabled={busy}>
-                Sign in
+                {t("Sign in")}
               </button>
             </form>
             <p className="login-hint">
-              Use the password you chose with <code>pocketcontext init</code>,
-              or run <code>pocketcontext open</code> to sign in with a
-              single-use link.
+              {fillNodes(
+                t(
+                  "Use the password you chose with {init}, or run {open} to sign in with a single-use link.",
+                ),
+                {
+                  init: <code>pocketcontext init</code>,
+                  open: <code>pocketcontext open</code>,
+                },
+              )}
             </p>
           </>
         )}
@@ -227,19 +252,19 @@ export default function Login({
           (link ? (
             link.otpId && !linkFailed ? (
               <>
-                <h1 className="sr-only">Log in to Crew</h1>
+                <h1 className="sr-only">{t("Log in to Crew")}</h1>
                 <button
                   className="primary-button"
                   autoFocus
                   disabled={busy}
                   onClick={confirm}
                 >
-                  Continue to Crew
+                  {t("Continue to Crew")}
                 </button>
               </>
             ) : (
               <>
-                <h1>This link no longer works</h1>
+                <h1>{t("This link no longer works")}</h1>
                 <button
                   className="primary-button"
                   autoFocus
@@ -248,25 +273,31 @@ export default function Login({
                     setLinkFailed(false);
                   }}
                 >
-                  Send a new link
+                  {t("Send a new link")}
                 </button>
               </>
             )
           ) : sentTo ? (
             <>
-              <h1>Check your inbox</h1>
+              <h1>{t("Check your inbox")}</h1>
               <p role="status">
-                If {sentTo} is the owner's address, a sign-in code and link are
-                on their way. They work for 15 minutes.
+                {t(
+                  "If {address} is the owner's address, a sign-in code and link are on their way. They work for 15 minutes.",
+                  { address: sentTo },
+                )}
               </p>
               <p className="login-code-hint">
                 {isStandaloneApp()
-                  ? "Enter the code from the email here. The link in the email opens your browser, not this app."
-                  : "Enter the code from the email here, or open the link in it. Either one signs you in."}
+                  ? t(
+                      "Enter the code from the email here. The link in the email opens your browser, not this app.",
+                    )
+                  : t(
+                      "Enter the code from the email here, or open the link in it. Either one signs you in.",
+                    )}
               </p>
               {codeSpent ? (
                 <button className="primary-button" autoFocus onClick={newCode}>
-                  Send a new code
+                  {t("Send a new code")}
                 </button>
               ) : (
                 <form
@@ -276,7 +307,7 @@ export default function Login({
                   }}
                 >
                   <label>
-                    Code from the email
+                    {t("Code from the email")}
                     <input
                       className="login-code"
                       required
@@ -294,20 +325,20 @@ export default function Login({
                     />
                   </label>
                   <button className="primary-button" disabled={busy}>
-                    Sign in
+                    {t("Sign in")}
                   </button>
                 </form>
               )}
               <button className="login-link" onClick={newCode}>
-                Use a different email
+                {t("Use a different email")}
               </button>
             </>
           ) : (
             <>
-              <h1>Log in to Crew</h1>
+              <h1>{t("Log in to Crew")}</h1>
               <form onSubmit={email}>
                 <label>
-                  Email
+                  {t("Email")}
                   <input
                     required
                     autoFocus
@@ -319,7 +350,7 @@ export default function Login({
                   />
                 </label>
                 <button className="primary-button" disabled={busy}>
-                  Email me a sign-in code
+                  {t("Email me a sign-in code")}
                 </button>
               </form>
             </>

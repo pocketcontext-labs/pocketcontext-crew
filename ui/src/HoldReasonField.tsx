@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import AutoTextarea from "./AutoTextarea";
 import { Icon } from "./DialogHeader";
+import { t } from "./i18n";
 import PlainRefs from "./PlainRefs";
 
 /**
@@ -13,8 +14,8 @@ export default function HoldReasonField({
   value,
   onValue,
   readOnly = false,
-  label = "Hold reason",
-  placeholder = "What needs to happen first?",
+  label: labelProp,
+  placeholder,
   maxLength = 2000,
 }: {
   value: string;
@@ -25,6 +26,10 @@ export default function HoldReasonField({
   maxLength?: number;
 }) {
   const id = useId();
+  const label = labelProp ?? t("Hold reason");
+  const editLabel = labelProp
+    ? t("Edit {label}", { label: labelProp.toLowerCase() })
+    : t("Edit hold reason");
   const box = useRef<HTMLTextAreaElement>(null);
   const [editing, setEditing] = useState(() => !value.trim());
   const focusOnEdit = useRef(false);
@@ -51,11 +56,11 @@ export default function HoldReasonField({
             <button
               type="button"
               className="crew-plain-field-toggle"
-              aria-label={`Edit ${label.toLowerCase()}`}
+              aria-label={editLabel}
               onClick={edit}
             >
               <Icon name="pencil" />
-              Edit
+              {t("Edit")}
             </button>
           ) : value.trim() ? (
             <button
@@ -63,7 +68,7 @@ export default function HoldReasonField({
               className="crew-plain-field-toggle"
               onClick={() => setEditing(false)}
             >
-              Done
+              {t("Done")}
             </button>
           ) : null)}
       </div>
@@ -74,7 +79,7 @@ export default function HoldReasonField({
         hidden={reading}
         value={value}
         onValue={onValue}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("What needs to happen first?")}
         maxLength={maxLength}
       />
       {reading && (

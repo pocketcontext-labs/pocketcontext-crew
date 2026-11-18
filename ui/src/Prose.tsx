@@ -22,6 +22,7 @@ import {
 } from "./references";
 import PagePreview, { isStandaloneDisplay, publicPagePath } from "./PagePreview";
 import { followLink } from "./trail";
+import { t } from "./i18n";
 
 /** A long title shortened for running text; the tooltip names the record. */
 const shorten = (text: string, max?: number) =>
@@ -145,7 +146,7 @@ function PublicPageAnchor({
       {open && (
         <PagePreview
           url={href}
-          title={textOf(children) || "Shared page"}
+          title={textOf(children) || t("Shared page")}
           onClose={() => setOpen(false)}
         />
       )}

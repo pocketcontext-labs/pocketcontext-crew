@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { MoreMenu, type MenuItem } from "./DialogHeader";
+import { t } from "./i18n";
 import { claimTitle, copyText, type Claim } from "./projectAgents";
 import {
   RelativeTime,
@@ -39,7 +40,7 @@ export default function ClaimBanner({
   const until = parseInstant(claim.until);
   const items: MenuItem[] = [
     {
-      label: "Copy details",
+      label: t("Copy details"),
       icon: "copy",
       onSelect: () =>
         void copyText(claimTitle(claim)).then((ok) =>
@@ -49,7 +50,7 @@ export default function ClaimBanner({
   ];
   if (!readOnly)
     items.push({
-      label: "Release claim",
+      label: t("Release claim"),
       icon: "unlock",
       disabled: busy,
       onSelect: onRelease,
@@ -57,28 +58,30 @@ export default function ClaimBanner({
   return (
     <section
       className={`crew-claim-banner${expired ? " is-expired" : ""}`}
-      aria-label="Claim"
+      aria-label={t("Claim")}
     >
       <div className="crew-claim-banner-head">
         <strong className="crew-claim-banner-title">
-          {expired ? "Claim expired" : "Claimed"} · {agent}
+          {expired ? t("Claim expired · {agent}", { agent }) : t("Claimed · {agent}", { agent })}
         </strong>
-        <MoreMenu items={items} label="Claim actions" />
+        <MoreMenu items={items} label={t("Claim actions")} />
       </div>
       <p className="crew-claim-banner-times">
         <RelativeTime
           value={claim.started}
-          prefix="Started "
-          fallback="Start time unavailable"
+          prefix={t("Started ")}
+          fallback={t("Start time unavailable")}
         />
         {until && (
           <>
             <span aria-hidden="true"> · </span>
             {expired ? (
-              <RelativeTime value={claim.until} prefix="expired " />
+              <RelativeTime value={claim.until} prefix={t("expired ")} />
             ) : (
               <time dateTime={until.toISOString()} title={formatExact(until)}>
-                ends in {formatDuration(until.getTime() - now.getTime())}
+                {t("ends in {duration}", {
+                  duration: formatDuration(until.getTime() - now.getTime()),
+                })}
               </time>
             )}
           </>
@@ -91,17 +94,17 @@ export default function ClaimBanner({
           aria-controls={id}
           onClick={() => setOpen((v) => !v)}
         >
-          Details
+          {t("Details")}
         </button>
       </p>
       <p id={id} className="crew-claim-banner-details" hidden={!open}>
-        {claim.by || "No session details reported."}
+        {claim.by || t("No session details reported.")}
       </p>
       {copied && (
         <p className="crew-claim-banner-copied" role="status">
           {copied === "copied"
-            ? "Claim details copied."
-            : "Couldn't copy the claim details."}
+            ? t("Claim details copied.")
+            : t("Couldn't copy the claim details.")}
         </p>
       )}
     </section>

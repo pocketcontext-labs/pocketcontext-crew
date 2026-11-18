@@ -10,6 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { statuses, val, type Row } from "./crewApi";
+import { t } from "./i18n";
 import {
   failureText,
   matchNames,
@@ -53,12 +54,15 @@ export function Excerpt({ text }: { text: unknown }) {
   );
 }
 
-const statusLabel = (status?: string) =>
-  statuses.find(([key]) => key === status)?.[1] ?? "Task";
+// The English status names, translated here (catalog: pages.ts).
+const statusLabel = (status?: string) => {
+  const label = statuses.find(([key]) => key === status)?.[1];
+  return label ? t(label) : t("Task");
+};
 
 /** The note's bucket or the task's status, as one short line. */
 export function hitMeta(hit: SearchHit): string {
-  if (hit.collection === "notes") return hit.bucket_name || "Note";
+  if (hit.collection === "notes") return hit.bucket_name || t("Note");
   return [statusLabel(hit.status), hit.assigned_agent_name]
     .filter(Boolean)
     .join(" · ");
@@ -313,13 +317,15 @@ export function GlobalSearch({
   const status = problem
     ? problem === "empty"
       ? ""
-      : problemText[problem]
+      : problemText(problem)
     : live.status === "error" && live.failure
-      ? failureText[live.failure]
+      ? failureText(live.failure)
       : live.status === "loading" && !hits.length
-        ? "Searching…"
+        ? t("Searching…")
         : live.status === "done" && options.length === 1
-          ? `No tasks, notes, agents or buckets match “${text.trim()}”.`
+          ? t("No tasks, notes, agents or buckets match “{q}”.", {
+              q: text.trim(),
+            })
           : "";
   let index = -1;
   const renderOption = (option: Option) => {
@@ -341,7 +347,7 @@ export function GlobalSearch({
     if (option.kind === "all")
       return (
         <div key={option.key} {...props} className={`${props.className} all`}>
-          See all results for “{text.trim()}”
+          {t("See all results for “{q}”", { q: text.trim() })}
         </div>
       );
     if ("row" in option)
@@ -350,14 +356,14 @@ export function GlobalSearch({
           <strong>{val(option.row, "name")}</strong>
           <small>
             {option.kind === "agent"
-              ? "Agent"
-              : val(option.row, "purpose") || "Bucket"}
+              ? t("Agent")
+              : val(option.row, "purpose") || t("Bucket")}
           </small>
         </div>
       );
     return (
       <div key={option.key} {...props}>
-        <strong>{option.hit.title || "Untitled"}</strong>
+        <strong>{option.hit.title || t("Untitled")}</strong>
         <small>{hitMeta(option.hit)}</small>
         <Excerpt text={option.hit.excerpt} />
       </div>
@@ -375,8 +381,8 @@ export function GlobalSearch({
         ref={toggleRef}
         type="button"
         className="crew-search-toggle"
-        aria-label="Search"
-        title="Search"
+        aria-label={t("Search")}
+        title={t("Search")}
         aria-expanded={expanded}
         onClick={() => {
           setExpanded(true);
@@ -391,7 +397,7 @@ export function GlobalSearch({
           ref={inputRef}
           type="search"
           role="combobox"
-          aria-label="Search Crew"
+          aria-label={t("Search Crew")}
           aria-autocomplete="list"
           aria-expanded={showPopup}
           aria-controls={listId}
@@ -402,7 +408,7 @@ export function GlobalSearch({
           autoComplete="off"
           spellCheck={false}
           enterKeyHint="search"
-          placeholder="Search tasks, notes, agents…"
+          placeholder={t("Search tasks, notes, agents…")}
           value={text}
           onChange={(e) => {
             setText(e.target.value);
@@ -414,7 +420,7 @@ export function GlobalSearch({
         <button
           type="button"
           className="crew-search-close"
-          aria-label="Close search"
+          aria-label={t("Close search")}
           onClick={() => {
             close();
             setExpanded(false);
@@ -428,7 +434,7 @@ export function GlobalSearch({
         <p role="status" className="crew-search-status" hidden={!status}>
           {showPopup ? status : ""}
         </p>
-        <div id={listId} role="listbox" aria-label="Search results">
+        <div id={listId} role="listbox" aria-label={t("Search results")}>
           {showPopup &&
             groups.map(
               (group) =>
@@ -443,7 +449,8 @@ export function GlobalSearch({
                       role="presentation"
                       className="crew-search-group"
                     >
-                      {group.label}
+                      {/* English labels, translated here (catalog: pages.ts). */}
+                      {t(group.label)}
                     </div>
                     {group.options.map(renderOption)}
                   </div>
@@ -605,12 +612,12 @@ function ResultList({
   onOpenHit: (hit: SearchHit, archived: boolean) => void;
 }) {
   const { state, more, retry } = paged;
-  if (state.status === "loading") return <p role="status">Searching…</p>;
+  if (state.status === "loading") return <p role="status">{t("Searching…")}</p>;
   if (state.status === "error")
     return (
       <div className="crew-alert" role="alert">
-        {failureText[state.failure ?? "failed"]}{" "}
-        <button onClick={retry}>Try again</button>
+        {failureText(state.failure ?? "failed")}{" "}
+        <button onClick={retry}>{t("Try again")}</button>
       </div>
     );
   if (state.status !== "ready") return null;
@@ -618,15 +625,16 @@ function ResultList({
     <>
       {state.restarted && (
         <p className="crew-notice" role="status">
-          Crew changed while you were looking, so the results started again from
-          the top.
+          {t(
+            "Crew changed while you were looking, so the results started again from the top.",
+          )}
         </p>
       )}
       {!state.items.length ? (
         <p className="crew-search-none">
           {archived
-            ? "No archived tasks or notes match."
-            : "No tasks or notes match. Try fewer or different words."}
+            ? t("No archived tasks or notes match.")
+            : t("No tasks or notes match. Try fewer or different words.")}
         </p>
       ) : (
         <ol className="crew-search-results" aria-label={label}>
@@ -637,9 +645,9 @@ function ResultList({
                 onClick={() => onOpenHit(hit, archived)}
               >
                 <span className="crew-search-kind">
-                  {hit.collection === "tasks" ? "Task" : "Note"}
+                  {hit.collection === "tasks" ? t("Task") : t("Note")}
                 </span>
-                <strong>{hit.title || "Untitled"}</strong>
+                <strong>{hit.title || t("Untitled")}</strong>
                 <small>{hitMeta(hit)}</small>
                 <Excerpt text={hit.excerpt} />
               </button>
@@ -649,7 +657,7 @@ function ResultList({
       )}
       {state.moreFailure && (
         <div className="crew-alert" role="alert">
-          {failureText[state.moreFailure]}
+          {failureText(state.moreFailure)}
         </div>
       )}
       {state.next !== null && (
@@ -658,14 +666,27 @@ function ResultList({
           disabled={state.loadingMore}
           onClick={more}
         >
-          {state.loadingMore ? "Loading more…" : "Show more results"}
+          {state.loadingMore ? t("Loading more…") : t("Show more results")}
         </button>
       )}
       {state.capped && (
         <p className="crew-footnote">
-          That's as far as search goes. Add words to narrow it down.
+          {t("That's as far as search goes. Add words to narrow it down.")}
         </p>
       )}
+    </>
+  );
+}
+
+/** "Results for {q}" with the query in <strong>, wherever the language puts it. */
+function fillStrong(text: string, query: string) {
+  const at = text.indexOf("{q}");
+  if (at < 0) return text;
+  return (
+    <>
+      {text.slice(0, at)}
+      <strong>{query}</strong>
+      {text.slice(at + 3)}
     </>
   );
 }
@@ -739,10 +760,14 @@ export function SearchPage({
       <div className="crew-search-page">
         <p className="crew-search-prompt">
           {text === null
-            ? "This search address isn't complete. Type what you're looking for in the search box at the top."
+            ? t(
+                "This search address isn't complete. Type what you're looking for in the search box at the top.",
+              )
             : problem === "empty"
-              ? "Type what you're looking for in the search box at the top. Crew searches task and note text, and agent and bucket names."
-              : problemText[problem]}
+              ? t(
+                  "Type what you're looking for in the search box at the top. Crew searches task and note text, and agent and bucket names.",
+                )
+              : problemText(problem)}
         </p>
       </div>
     );
@@ -753,7 +778,7 @@ export function SearchPage({
     <div className="crew-search-page">
       <div className="crew-search-summary">
         <p>
-          Results for <strong>“{query.trim()}”</strong>
+          {fillStrong(t("Results for {q}"), `“${query.trim()}”`)}
         </p>
         <label>
           <input
@@ -761,18 +786,18 @@ export function SearchPage({
             checked={includeArchived}
             onChange={(e) => setIncludeArchived(e.target.checked)}
           />
-          Include archived
+          {t("Include archived")}
         </label>
       </div>
       {agentMatches.length > 0 && (
         <section aria-labelledby="search-agents">
-          <h2 id="search-agents">Agents</h2>
+          <h2 id="search-agents">{t("Agents")}</h2>
           <ul className="crew-search-names">
             {agentMatches.map((row) => (
               <li key={row.id}>
                 <button onClick={() => onOpenAgent(row)}>
                   <strong>{val(row, "name")}</strong>
-                  <small>Agent</small>
+                  <small>{t("Agent")}</small>
                 </button>
               </li>
             ))}
@@ -781,13 +806,13 @@ export function SearchPage({
       )}
       {bucketMatches.length > 0 && (
         <section aria-labelledby="search-buckets">
-          <h2 id="search-buckets">Buckets</h2>
+          <h2 id="search-buckets">{t("Buckets")}</h2>
           <ul className="crew-search-names">
             {bucketMatches.map((row) => (
               <li key={row.id}>
                 <button onClick={() => onOpenBucket(row)}>
                   <strong>{val(row, "name")}</strong>
-                  <small>{val(row, "purpose") || "Bucket"}</small>
+                  <small>{val(row, "purpose") || t("Bucket")}</small>
                 </button>
               </li>
             ))}
@@ -795,9 +820,9 @@ export function SearchPage({
         </section>
       )}
       <section aria-labelledby="search-items">
-        <h2 id="search-items">Tasks and notes</h2>
+        <h2 id="search-items">{t("Tasks and notes")}</h2>
         <ResultList
-          label="Tasks and notes"
+          label={t("Tasks and notes")}
           archived={false}
           paged={current}
           onOpenHit={onOpenHit}
@@ -805,9 +830,9 @@ export function SearchPage({
       </section>
       {includeArchived && (
         <section aria-labelledby="search-archived">
-          <h2 id="search-archived">Archived tasks and notes</h2>
+          <h2 id="search-archived">{t("Archived tasks and notes")}</h2>
           <ResultList
-            label="Archived tasks and notes"
+            label={t("Archived tasks and notes")}
             archived
             paged={old}
             onOpenHit={onOpenHit}

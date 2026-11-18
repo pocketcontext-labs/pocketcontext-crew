@@ -6,37 +6,40 @@ import {
   type Row,
   type SessionChange,
 } from "./crewApi";
+import { t } from "./i18n";
 import { copyText } from "./projectAgents";
 import PlainRefs from "./PlainRefs";
 import { parseInstant, RelativeTime } from "./relativeTime";
 
 /** "Revision N · edited by X, <relative date>", or the built-in default at revision 0. */
 function SessionRevisionLine({ session }: { session: AgentSession }) {
-  if (!session.revision) return <>Built-in default · not edited yet</>;
-  const by = session.edited_by || "unknown";
+  if (!session.revision) return <>{t("Built-in default · not edited yet")}</>;
+  const by = session.edited_by || t("unknown");
   return (
     <>
-      Revision {session.revision} · edited by {by}
+      {t("Revision {n} · edited by {by}", { n: session.revision, by })}
       {parseInstant(session.edited_at) && (
         <>
           , <RelativeTime value={session.edited_at} />
         </>
       )}
-      {session.is_default ? " · built-in default" : ""}
+      {session.is_default ? t(" · built-in default") : ""}
     </>
   );
 }
 
-const conflictMessage =
-  "Someone saved a newer revision meanwhile. Reload it, then make your change again.";
+const conflictMessage = () =>
+  t(
+    "Someone saved a newer revision meanwhile. Reload it, then make your change again.",
+  );
 
 function failure(e: unknown) {
   const status = (e as { status?: number })?.status;
-  if (status === 409) return conflictMessage;
+  if (status === 409) return conflictMessage();
   const message =
     (e as { response?: { message?: string } })?.response?.message ||
     (e instanceof Error ? e.message : "");
-  return message || "Could not save. Check your connection and try again.";
+  return message || t("Could not save. Check your connection and try again.");
 }
 
 /**
@@ -143,8 +146,9 @@ export default function SessionInstructions({
   return (
     <div className="crew-dialog-body crew-session-dialog">
       <p className="crew-session-hint">
-        These instructions are saved in Crew, not in the code. Edit them by
-        hand, or ask an agent to rewrite them.
+        {t(
+          "These instructions are saved in Crew, not in the code. Edit them by hand, or ask an agent to rewrite them.",
+        )}
       </p>
       <p className="crew-footnote crew-session-revision">
         <SessionRevisionLine session={session} />
@@ -157,25 +161,27 @@ export default function SessionInstructions({
             disabled={!session.rewrite_prompt}
             onClick={() => void rewrite()}
           >
-            {copied === "copied" ? "Rewrite prompt copied" : "Rewrite with an agent"}
+            {copied === "copied"
+              ? t("Rewrite prompt copied")
+              : t("Rewrite with an agent")}
           </button>
           <small>
-            Recommended. Copies a prompt for an agent conversation: the agent
-            reads the current text, asks what to change, shows you the new
-            version and saves it only after you approve.
+            {t(
+              "Recommended. Copies a prompt for an agent conversation: the agent reads the current text, asks what to change, shows you the new version and saves it only after you approve.",
+            )}
           </small>
         </div>
         <div
           className="crew-session-views"
           role="group"
-          aria-label="View"
+          aria-label={t("View")}
         >
           <button
             type="button"
             aria-pressed={mode === "read"}
             onClick={() => show("read")}
           >
-            Read
+            {t("Read")}
           </button>
           <button
             type="button"
@@ -183,7 +189,7 @@ export default function SessionInstructions({
             disabled={busy && mode !== "edit"}
             onClick={() => show("edit")}
           >
-            Edit
+            {t("Edit")}
           </button>
           <button
             type="button"
@@ -191,7 +197,7 @@ export default function SessionInstructions({
             disabled={busy && mode !== "history"}
             onClick={() => show("history")}
           >
-            History
+            {t("History")}
           </button>
         </div>
         <button
@@ -199,14 +205,14 @@ export default function SessionInstructions({
           disabled={busy || session.is_default}
           title={
             session.is_default
-              ? "These are already the built-in instructions"
+              ? t("These are already the built-in instructions")
               : undefined
           }
           onClick={() =>
             void save({ restore_default: true }, "Restore default")
           }
         >
-          Restore default
+          {t("Restore default")}
         </button>
       </div>
       {/* Only this area changes between Read, Edit and History; the
@@ -214,10 +220,14 @@ export default function SessionInstructions({
       <div className={`crew-session-view crew-session-view-${mode}`}>
         {copied === "manual" && (
           <div role="alert" className="crew-session-note">
-            <p>Could not copy automatically. Copy this into an agent conversation:</p>
+            <p>
+              {t(
+                "Could not copy automatically. Copy this into an agent conversation:",
+              )}
+            </p>
             <textarea
               readOnly
-              aria-label={`Rewrite prompt for ${name}`}
+              aria-label={t("Rewrite prompt for {name}", { name })}
               value={session.rewrite_prompt}
               rows={5}
               onFocus={(e) => e.currentTarget.select()}
@@ -227,7 +237,7 @@ export default function SessionInstructions({
         {error && (
           <div role="alert" className="crew-session-note crew-session-error">
             <p>{error}</p>
-            {error === conflictMessage && (
+            {error === conflictMessage() && (
               <button
                 type="button"
                 disabled={busy}
@@ -237,7 +247,7 @@ export default function SessionInstructions({
                   })
                 }
               >
-                Reload latest
+                {t("Reload latest")}
               </button>
             )}
           </div>
@@ -251,7 +261,7 @@ export default function SessionInstructions({
             }}
           >
             <label htmlFor={editorId}>
-              Session instructions <small>Markdown supported</small>
+              {t("Session instructions")} <small>{t("Markdown supported")}</small>
             </label>
             <textarea
               id={editorId}
@@ -260,8 +270,9 @@ export default function SessionInstructions({
               onChange={(e) => setText(e.target.value)}
             />
             <p className="crew-footnote">
-              The agent brief is added after these instructions; edit it on the
-              agent card.
+              {t(
+                "The agent brief is added after these instructions; edit it on the agent card.",
+              )}
             </p>
             <div className="crew-session-actions">
               <button
@@ -269,7 +280,7 @@ export default function SessionInstructions({
                 className="crew-primary"
                 disabled={busy || !draft.trim()}
               >
-                {busy ? "Saving…" : "Save"}
+                {busy ? t("Saving…") : t("Save")}
               </button>
               <button
                 type="button"
@@ -280,17 +291,19 @@ export default function SessionInstructions({
                   setMode("read");
                 }}
               >
-                Cancel
+                {t("Cancel")}
               </button>
             </div>
           </form>
         )}
         {mode === "history" && (
-          <section aria-label="Revision history" className="crew-session-history">
-            <p>Restoring creates a new revision and keeps every earlier one.</p>
-            {history === null && !error && <p>Loading history…</p>}
+          <section aria-label={t("Revision history")} className="crew-session-history">
+            <p>{t("Restoring creates a new revision and keeps every earlier one.")}</p>
+            {history === null && !error && <p>{t("Loading history…")}</p>}
             {history?.length === 0 && (
-              <p>No saved revisions yet: these are the built-in instructions.</p>
+              <p>
+                {t("No saved revisions yet: these are the built-in instructions.")}
+              </p>
             )}
             {history && history.length > 0 && (
               <ol>
@@ -298,11 +311,11 @@ export default function SessionInstructions({
                   <li key={x.id}>
                     <details>
                       <summary>
-                        Revision {x.revision} ·{" "}
-                        {val(x, "edited_by") || val(x, "reported_agent") || "unknown"}{" "}
+                        {t("Revision {n}", { n: String(x.revision) })} ·{" "}
+                        {val(x, "edited_by") || val(x, "reported_agent") || t("unknown")}{" "}
                         · <RelativeTime value={val(x, "created")} />
-                        {x.is_default === true ? " · built-in default" : ""}
-                        {x.revision === session.revision ? " · current" : ""}
+                        {x.is_default === true ? t(" · built-in default") : ""}
+                        {x.revision === session.revision ? t(" · current") : ""}
                       </summary>
                       {val(x, "reason") && (
                         <p className="crew-footnote">
@@ -315,7 +328,7 @@ export default function SessionInstructions({
                       <button
                         type="button"
                         disabled={busy}
-                        aria-label={`Restore revision ${x.revision}`}
+                        aria-label={t("Restore revision {n}", { n: String(x.revision) })}
                         onClick={() =>
                           void save(
                             { restore_revision: x.revision },
@@ -323,7 +336,7 @@ export default function SessionInstructions({
                           )
                         }
                       >
-                        Restore
+                        {t("Restore")}
                       </button>
                     )}
                   </li>

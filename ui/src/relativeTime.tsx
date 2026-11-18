@@ -6,10 +6,18 @@
 // time is in the title (hover, long-press) and the instant in <time datetime>.
 // Mounted <RelativeTime> elements share one minute ticker.
 import { useEffect, useState } from "react";
+import { getLanguage, locale, t, tn, useLanguage } from "./i18n";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
+
+/**
+ * The Intl locale for dates: the browser default in English (unchanged since
+ * 0.33.0), else the chosen language (Crew 0.36.0).
+ */
+const dateLocale = (): string | undefined =>
+  getLanguage() === "en" ? undefined : locale();
 
 export type Instant = string | number | Date | null | undefined;
 
@@ -36,14 +44,14 @@ export function formatShortDate(date: Date, now: Date = new Date()): string {
     day: "numeric",
   };
   if (date.getFullYear() !== now.getFullYear()) options.year = "numeric";
-  return date.toLocaleDateString(undefined, options);
+  return date.toLocaleDateString(dateLocale(), options);
 }
 
 /** Exact local date and time, e.g. "Nov 17, 2026, 9:10 AM". */
 export function formatExact(raw: Instant): string {
   const date = parseInstant(raw);
   if (!date) return "";
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(dateLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -55,14 +63,14 @@ export function formatExact(raw: Instant): string {
 /** A span of time: "45 min", "1 h 45 m", "3 days". */
 export function formatDuration(ms: number): string {
   const abs = Math.max(0, Math.abs(ms));
-  if (abs < HOUR) return `${Math.max(1, Math.floor(abs / MINUTE))} min`;
+  if (abs < HOUR) return t("{n} min", { n: Math.max(1, Math.floor(abs / MINUTE)) });
   if (abs < DAY) {
     const h = Math.floor(abs / HOUR);
     const m = Math.floor((abs % HOUR) / MINUTE);
-    return m ? `${h} h ${m} m` : `${h} h`;
+    return m ? t("{h} h {m} m", { h, m }) : t("{h} h", { h });
   }
   const d = Math.floor(abs / DAY);
-  return `${d} ${d === 1 ? "day" : "days"}`;
+  return tn(d, "{n} day", "{n} days");
 }
 
 /**
@@ -78,18 +86,19 @@ export function formatRelative(raw: Instant, now: Date = new Date()): string {
   const past = diff >= 0;
   // Under a minute either way is "just now": a record saved this moment can
   // carry a server time a few seconds ahead of the browser's clock.
-  if (abs < MINUTE) return "just now";
+  if (abs < MINUTE) return t("just now");
   if (abs < HOUR) {
     const n = Math.floor(abs / MINUTE);
-    return past ? `${n} min ago` : `in ${n} min`;
+    return past ? t("{n} min ago", { n }) : t("in {n} min", { n });
   }
   if (abs < DAY) {
     const n = Math.floor(abs / HOUR);
-    return past ? `${n} h ago` : `in ${n} h`;
+    return past ? t("{n} h ago", { n }) : t("in {n} h", { n });
   }
-  if (abs < 2 * DAY) return past ? "yesterday" : "tomorrow";
+  if (abs < 2 * DAY) return past ? t("yesterday") : t("tomorrow");
   const days = Math.floor(abs / DAY);
-  if (days <= 7) return past ? `${days} days ago` : `in ${days} days`;
+  if (days <= 7)
+    return past ? t("{n} days ago", { n: days }) : t("in {n} days", { n: days });
   return formatShortDate(date, now);
 }
 
@@ -135,6 +144,8 @@ export function RelativeTime({
   fallback?: string;
 }) {
   const now = useNow();
+  // Subscribed so a memoised parent still re-renders on a language change.
+  useLanguage();
   const date = parseInstant(value);
   if (!date)
     return fallback ? <span className={className}>{fallback}</span> : null;

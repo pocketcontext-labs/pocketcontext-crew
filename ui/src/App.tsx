@@ -10,7 +10,7 @@ import {
   uploadTokenFromHash,
 } from "./itemLink";
 import UploadPage from "./UploadPage";
-import { useLanguage } from "./i18n";
+import { t, useLanguage } from "./i18n";
 
 const currentSigninHash = () =>
   isSigninHash(location.hash) ? location.hash : "";
@@ -22,14 +22,14 @@ function SigninStatus({ onRetry }: { onRetry?: () => void }) {
         {onRetry ? (
           <>
             <p role="alert" className="login-error">
-              Unable to check your sign-in. Please try again.
+              {t("Unable to check your sign-in. Please try again.")}
             </p>
             <button className="primary-button" onClick={onRetry}>
-              Try again
+              {t("Try again")}
             </button>
           </>
         ) : (
-          <p role="status">Returning to the connection request…</p>
+          <p role="status">{t("Returning to the connection request…")}</p>
         )}
       </section>
     </main>

@@ -1,4 +1,5 @@
 import { val, type Row } from "./crewApi";
+import { t } from "./i18n";
 
 /** Done and Won't do are closed: no hold, no wakes, shown in the Done column. */
 export const closedStatuses = ["done", "wont_do"] as const;
@@ -39,6 +40,9 @@ export function approvalLine(
   task: Row | undefined,
 ): { text: string; at: string } | null {
   if (val(task, "review_mode") !== "in_session") return null;
-  const by = val(task, "approved_by") || "owner";
-  return { text: `Approved in session by ${by}`, at: val(task, "approved_at") };
+  const by = val(task, "approved_by") || t("owner");
+  return {
+    text: t("Approved in session by {by}", { by }),
+    at: val(task, "approved_at"),
+  };
 }

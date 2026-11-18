@@ -1,5 +1,6 @@
 import { val, type Row } from "./crewApi";
 import type { Attachment } from "./attachmentsApi";
+import { t } from "./i18n";
 
 export type ReviewOption = { key: string; label: string; body: string };
 export type OptionDecision = {
@@ -65,18 +66,24 @@ export const isImageOption = (option: ReviewOption) =>
 export function decisionSummary(row: Row, status = val(row, "status")): string {
   const choices = optionDecisions(row);
   const options = reviewOptions(row);
-  const words: Record<string, [string, string]> = {
-    approved: ["Approved", "Not selected"],
-    changes_requested: ["Selected", "Not selected"],
-  };
-  const [yes, no] = words[status] || ["Approved", "Rejected"];
+  const [yes, no] =
+    status === "approved"
+      ? [t("Approved"), t("Not selected")]
+      : status === "changes_requested"
+        ? [t("Selected"), t("Not selected")]
+        : [t("Approved"), t("Rejected")];
   return ["approved", "rejected"]
     .flatMap((decision) => {
       const labels = choices
         .filter((x) => x.decision === decision)
         .map((x) => options.find((o) => o.key === x.key)?.label || x.key);
       return labels.length
-        ? [`${decision === "approved" ? yes : no}: ${labels.join(", ")}`]
+        ? [
+            t("{word}: {options}", {
+              word: decision === "approved" ? yes : no,
+              options: labels.join(", "),
+            }),
+          ]
         : [];
     })
     .join("; ");

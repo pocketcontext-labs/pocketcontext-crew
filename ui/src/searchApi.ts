@@ -1,5 +1,6 @@
 import { pb } from "./api";
 import { val, type Row } from "./crewApi";
+import { t } from "./i18n";
 
 /**
  * Global search: the request and response of `POST /api/crew/search`, the
@@ -117,13 +118,21 @@ export function searchFailure(error: unknown): SearchFailure {
   }
 }
 
-export const failureText: Record<Exclude<SearchFailure, "aborted">, string> = {
-  changed: "Results changed while you were looking. Search again.",
-  invalid: "Search couldn't use those words. Try different ones.",
-  busy: "Search is busy right now. Try again in a moment.",
-  failed:
-    "Search isn't available right now. Check your connection and try again.",
-};
+/** What to tell the reader about a failed search, in the reader's language. */
+export function failureText(failure: Exclude<SearchFailure, "aborted">): string {
+  switch (failure) {
+    case "changed":
+      return t("Results changed while you were looking. Search again.");
+    case "invalid":
+      return t("Search couldn't use those words. Try different ones.");
+    case "busy":
+      return t("Search is busy right now. Try again in a moment.");
+    case "failed":
+      return t(
+        "Search isn't available right now. Check your connection and try again.",
+      );
+  }
+}
 
 // eslint-disable-next-line no-control-regex
 const controlChars = /[\u0000-\u001f\u007f]/;
@@ -142,11 +151,19 @@ export function queryProblem(text: string): QueryProblem | null {
   return null;
 }
 
-export const problemText: Record<QueryProblem, string> = {
-  empty: "Type a word or two to search tasks, notes, agents and buckets.",
-  long: `That search is too long. Use at most ${maxTerms} words.`,
-  invalid: "That search contains characters Crew can't search for.",
-};
+/** Why this text can't be searched, in the reader's language. */
+export function problemText(problem: QueryProblem): string {
+  switch (problem) {
+    case "empty":
+      return t("Type a word or two to search tasks, notes, agents and buckets.");
+    case "long":
+      return t("That search is too long. Use at most {n} words.", {
+        n: maxTerms,
+      });
+    case "invalid":
+      return t("That search contains characters Crew can't search for.");
+  }
+}
 
 /**
  * The text sent to the server. Every word must match; the last word also

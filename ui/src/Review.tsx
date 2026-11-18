@@ -1,4 +1,12 @@
-import { useEffect, useId, useRef, useState, type ComponentType, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import {
   AttachmentsProvider,
   FileTile,
@@ -25,6 +33,33 @@ import { copyText } from "./projectAgents";
 import "./review.css";
 import AutoTextarea, { AutoTextField } from "./AutoTextarea";
 import PlainRefs from "./PlainRefs";
+import { t } from "./i18n";
+
+/** Fills a translated sentence's {name} slots with elements. */
+function fillNodes(text: string, nodes: Record<string, ReactNode>): ReactNode[] {
+  return text.split(/(\{\w+\})/).map((part, i) => {
+    const name = /^\{(\w+)\}$/.exec(part)?.[1];
+    return name && name in nodes ? <Fragment key={i}>{nodes[name]}</Fragment> : part;
+  });
+}
+
+/** A review status as the pill shows it ("changes requested"). */
+function reviewStatusText(status: string): string {
+  switch (status) {
+    case "pending":
+      return t("pending");
+    case "approved":
+      return t("approved");
+    case "changes_requested":
+      return t("changes requested");
+    case "rejected":
+      return t("rejected");
+    case "withdrawn":
+      return t("withdrawn");
+    default:
+      return status.replaceAll("_", " ");
+  }
+}
 
 type ProseComponent = ComponentType<{ children: string }>;
 export function ReviewContent({
@@ -48,8 +83,9 @@ export function ReviewContent({
         {missing.length > 0 && (
           <div className="crew-alert" role="alert">
             <p>
-              This draft mentions files that aren't attached to Crew. Request
-              changes and ask the agent to attach them.
+              {t(
+                "This draft mentions files that aren't attached to Crew. Request changes and ask the agent to attach them.",
+              )}
             </p>
             <ul>
               {missing.map((path) => (
@@ -65,8 +101,8 @@ export function ReviewContent({
         </div>
         {children}
         {files.length > 0 && (
-          <section aria-label="Files submitted for review">
-            <h3>Files submitted for review</h3>
+          <section aria-label={t("Files submitted for review")}>
+            <h3>{t("Files submitted for review")}</h3>
             <ReviewFileTiles files={files} />
           </section>
         )}
@@ -121,8 +157,8 @@ function FeedbackButton({
       type="button"
       className="crew-pick-comment"
       data-note={hasNote || undefined}
-      aria-label={`Feedback on ${label}`}
-      title={`Feedback on ${label}`}
+      aria-label={t("Feedback on {label}", { label })}
+      title={t("Feedback on {label}", { label })}
       disabled={!onClick}
       onClick={onClick}
     >
@@ -166,15 +202,15 @@ export function ReviewChoices({
       <AutoTextarea
         id={`${prefix}-${option.key}`}
         className="crew-pick-note"
-        aria-label={`Feedback on ${option.label}`}
-        placeholder={`Feedback on ${option.label}…`}
+        aria-label={t("Feedback on {label}", { label: option.label })}
+        placeholder={t("Feedback on {label}…", { label: option.label })}
         maxLength={20000}
         value={pick.note}
         onValue={(note) => onChange(option.key, { ...pick, note })}
       />
     ) : (
       <p className="crew-pick-feedback">
-        <strong>Feedback:</strong> {pick.note}
+        <strong>{t("Feedback:")}</strong> {pick.note}
       </p>
     );
   const toggleFeedback = (option: ReviewOption, pick: OptionPick) => {
@@ -206,14 +242,19 @@ export function ReviewChoices({
       <span className="crew-pick-label">{option.label}</span>
     </label>
     );
-  const heading = (name: string) => (editable ? `${name} · pick any` : name);
+  const textHeading = images.length
+    ? editable
+      ? t("Text · pick any")
+      : t("Text")
+    : editable
+      ? t("Options · pick any")
+      : t("Options");
+  const imagesHeading = editable ? t("Images · pick any") : t("Images");
   return (
     <div className="crew-review-options">
       {text.length > 0 && (
-        <section aria-label={images.length ? "Text options" : "Options"}>
-          <h3 className="crew-pick-heading">
-            {heading(images.length ? "Text" : "Options")}
-          </h3>
+        <section aria-label={images.length ? t("Text options") : t("Options")}>
+          <h3 className="crew-pick-heading">{textHeading}</h3>
           {text.map((option) => {
             const pick = pickFor(option.key);
             return (
@@ -243,10 +284,8 @@ export function ReviewChoices({
         </section>
       )}
       {images.length > 0 && (
-        <section aria-label="Image options">
-          <h3 className="crew-pick-heading">
-            {heading("Images")}
-          </h3>
+        <section aria-label={t("Image options")}>
+          <h3 className="crew-pick-heading">{imagesHeading}</h3>
           <ul className="crew-pick-tiles">
             {images.map((option) => {
               const pick = pickFor(option.key);
@@ -292,20 +331,27 @@ export function ReviewChoices({
   );
 }
 
-const decisionLabels: Record<string, string> = {
-  approved: "Approved",
-  changes_requested: "Changes requested",
-  rejected: "Rejected",
-};
 const decisionLabel = (status: string) =>
-  decisionLabels[status] || "Decided";
-/** decided_by is the actor: the owner's browser, or a work client (MCP or CLI). */
-const decidedBy = (actor: string) =>
-  actor.startsWith("owner:")
-    ? "you"
+  status === "approved"
+    ? t("Approved")
+    : status === "changes_requested"
+      ? t("Changes requested")
+      : status === "rejected"
+        ? t("Rejected")
+        : t("Decided");
+/**
+ * "Approved 5 min ago by you.": decided_by is the actor, the owner's
+ * browser or a work client (MCP or CLI).
+ */
+const decidedLine = (status: string, actor: string, when: ReactNode) => {
+  const decision = decisionLabel(status);
+  const text = actor.startsWith("owner:")
+    ? t("{decision} {when} by you.", { decision })
     : actor.startsWith("mcp:")
-      ? "an agent"
-      : "someone";
+      ? t("{decision} {when} by an agent.", { decision })
+      : t("{decision} {when} by someone.", { decision });
+  return fillNodes(text, { when });
+};
 
 /** The review's own address: the server's url on a domain, else this reader's. */
 const reviewUrl = (row: Row) =>
@@ -351,8 +397,10 @@ export function ReviewDecision({
       requestAnimationFrame(() =>
         body.current
           ?.querySelector<HTMLInputElement>(
-            `input[aria-label="Feedback on ${CSS.escape(
-              options.find((o) => o.key === key)?.label || "",
+            `input[aria-label="${CSS.escape(
+              t("Feedback on {label}", {
+                label: options.find((o) => o.key === key)?.label || "",
+              }),
             )}"]`,
           )
           ?.focus(),
@@ -395,26 +443,26 @@ export function ReviewDecision({
     const items: MenuItem[] = [];
     if (pending)
       items.push({
-        label: "Add note",
+        label: t("Add note"),
         icon: "note",
         onSelect: () => note.current?.focus(),
       });
     items.push({
-      label: "Copy link",
+      label: t("Copy link"),
       icon: "link",
       onSelect: () =>
         void copyText(url).then((ok) => setCopied(ok ? "copied" : "failed")),
     });
     if (typeof navigator.share === "function")
       items.push({
-        label: "Share",
+        label: t("Share"),
         icon: "share",
         onSelect: () =>
-          void navigator.share({ title: "Review draft", url }).catch(() => undefined),
+          void navigator.share({ title: t("Review draft"), url }).catch(() => undefined),
       });
     if (pending)
       items.push({
-        label: "Reject",
+        label: t("Reject"),
         icon: "reject",
         destructive: true,
         disabled: busy,
@@ -427,15 +475,16 @@ export function ReviewDecision({
     <div className="crew-dialog-body crew-review-body" ref={body}>
       <div className="crew-review-meta">
         <span className={pending ? "crew-human" : "crew-pill"}>
-          {val(row, "status").replaceAll("_", " ")}
+          {reviewStatusText(val(row, "status"))}
         </span>
         <span>
-          Snapshot {row.id} · {when(row.created)}
+          {t("Snapshot {id}", { id: row.id })} · {when(row.created)}
         </span>
       </div>
       <p>
-        This is the exact submitted draft. Approval does not send, post or
-        publish it.
+        {t(
+          "This is the exact submitted draft. Approval does not send, post or publish it.",
+        )}
       </p>
       {copied && (
         <p
@@ -443,10 +492,10 @@ export function ReviewDecision({
           role={copied === "copied" ? "status" : "alert"}
         >
           {copied === "copied" ? (
-            "Link copied"
+            t("Link copied")
           ) : (
             <>
-              Could not copy automatically. Copy it from here:{" "}
+              {t("Could not copy automatically. Copy it from here:")}{" "}
               <code>{reviewUrl(row)}</code>
             </>
           )}
@@ -467,8 +516,11 @@ export function ReviewDecision({
       </ReviewContent>
       {!pending && val(row, "decided_at") && (
         <p className="crew-review-decided">
-          {decisionLabel(val(row, "status"))} {when(val(row, "decided_at"))} by{" "}
-          {decidedBy(val(row, "decided_by"))}.
+          {decidedLine(
+            val(row, "status"),
+            val(row, "decided_by"),
+            when(val(row, "decided_at")),
+          )}
         </p>
       )}
       {!!decisionSummary(row) && (
@@ -476,7 +528,7 @@ export function ReviewDecision({
       )}
       {val(row, "decision_note") && (
         <p>
-          <strong>Your decision note:</strong>{" "}
+          <strong>{t("Your decision note:")}</strong>{" "}
           <PlainRefs text={val(row, "decision_note")} />
         </p>
       )}
@@ -484,9 +536,11 @@ export function ReviewDecision({
         <>
           <p className="crew-footnote">
             {options.length > 0 &&
-              "Check every option you approve and add feedback on any option. "}
-            After approval, perform the external action yourself and mark the
-            task Done. Reject is in the More menu.
+              t("Check every option you approve and add feedback on any option.") +
+                " "}
+            {t(
+              "After approval, perform the external action yourself and mark the task Done. Reject is in the More menu.",
+            )}
           </p>
           {/* Pinned to the bottom (0.31.0) and compact (0.32.0): a one-line
               note that grows upward on focus, then the two primary actions,
@@ -500,11 +554,11 @@ export function ReviewDecision({
             <textarea
               ref={note}
               className="crew-review-note"
-              aria-label="Decision note"
+              aria-label={t("Decision note")}
               rows={1}
               defaultValue=""
               maxLength={20000}
-              placeholder="Add a note…"
+              placeholder={t("Add a note…")}
             />
             <div className="crew-actions">
               <button
@@ -512,10 +566,12 @@ export function ReviewDecision({
                 disabled={busy || (options.length > 0 && selected === 0)}
                 onClick={() => submit("approved")}
               >
-                {options.length ? `Approve ${selected} selected` : "Approve draft"}
+                {options.length
+                  ? t("Approve {n} selected", { n: selected })
+                  : t("Approve draft")}
               </button>
               <button disabled={busy} onClick={() => submit("changes_requested")}>
-                Request changes
+                {t("Request changes")}
               </button>
             </div>
           </div>
@@ -552,22 +608,23 @@ export function ReviewRequest({
           disabled={busy || !valid}
           onClick={() => submit(options)}
         >
-          Request approval
+          {t("Request approval")}
         </button>
         {help}
       </div>
       <details>
-        <summary>Review alternatives (optional)</summary>
+        <summary>{t("Review alternatives (optional)")}</summary>
         <p>
-          Give each draft or platform its own option so the reviewer can choose
-          exactly what to approve. Options are saved when you send the review.
+          {t(
+            "Give each draft or platform its own option so the reviewer can choose exactly what to approve. Options are saved when you send the review.",
+          )}
         </p>
         {options.map((option, index) => (
           <fieldset key={option.key} className="crew-review-option">
-            <legend>Option {index + 1}</legend>
+            <legend>{t("Option {n}", { n: index + 1 })}</legend>
             <AutoTextField
               className="crew-option-note"
-              label={`Option ${index + 1} label`}
+              label={t("Option {n} label", { n: index + 1 })}
               maxLength={200}
               value={option.label}
               onValue={(label) =>
@@ -579,7 +636,7 @@ export function ReviewRequest({
               }
             />
             <label className="crew-option-note">
-              Option {index + 1} draft
+              {t("Option {n} draft", { n: index + 1 })}
               <textarea
                 maxLength={100000}
                 value={option.body}
@@ -598,7 +655,7 @@ export function ReviewRequest({
                 setOptions(options.filter((o) => o.key !== option.key))
               }
             >
-              Remove option {index + 1}
+              {t("Remove option {n}", { n: index + 1 })}
             </button>
           </fieldset>
         ))}
@@ -613,7 +670,7 @@ export function ReviewRequest({
             setNextKey(nextKey + 1);
           }}
         >
-          Add review option
+          {t("Add review option")}
         </button>
       </details>
     </div>
@@ -633,7 +690,7 @@ export function ReviewRequestBlocked({
     <div className="crew-review-request">
       <div className="crew-review-actions">
         <button type="button" className="crew-review-submit" disabled aria-describedby={id}>
-          Request approval
+          {t("Request approval")}
         </button>
         {help}
         <span id={id} className="crew-review-hint">

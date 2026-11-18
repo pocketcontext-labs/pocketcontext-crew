@@ -1,5 +1,6 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetLanguageForTests, setLanguage } from "./i18n";
 import {
   RelativeTime,
   formatDuration,
@@ -17,6 +18,7 @@ const D = 24 * H;
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  resetLanguageForTests();
 });
 
 describe("relative dates", () => {
@@ -74,5 +76,51 @@ describe("relative dates", () => {
   it("shows the fallback for a missing value", () => {
     render(<RelativeTime value="" fallback="never" />);
     expect(screen.getByText("never")).toBeTruthy();
+  });
+});
+
+describe("relative dates in the chosen language", () => {
+  it("speaks German", () => {
+    setLanguage("de");
+    expect(formatRelative(ago(20_000), now)).toBe("gerade eben");
+    expect(formatRelative(ago(5 * MIN), now)).toBe("vor 5 Min.");
+    expect(formatRelative(ago(19 * H), now)).toBe("vor 19 Std.");
+    expect(formatRelative(ago(30 * H), now)).toBe("gestern");
+    expect(formatRelative(ago(3 * D + H), now)).toBe("vor 3 Tagen");
+    expect(formatRelative(new Date(now.getTime() + 10 * MIN), now)).toBe(
+      "in 10 Min.",
+    );
+    expect(formatRelative(new Date(now.getTime() + 30 * H), now)).toBe("morgen");
+    expect(formatDuration(105 * MIN)).toBe("1 Std. 45 Min.");
+    expect(formatDuration(D)).toBe("1 Tag");
+    expect(formatDuration(3 * D)).toBe("3 Tage");
+    // Short and exact dates use German month names.
+    expect(formatRelative(ago(8 * D), now)).toMatch(/10\. Nov/);
+    expect(formatExact(now)).toMatch(/Nov\. 2026/);
+  });
+
+  it("speaks Italian", () => {
+    setLanguage("it");
+    expect(formatRelative(ago(20_000), now)).toBe("adesso");
+    expect(formatRelative(ago(5 * MIN), now)).toBe("5 min fa");
+    expect(formatRelative(ago(19 * H), now)).toBe("19 h fa");
+    expect(formatRelative(ago(30 * H), now)).toBe("ieri");
+    expect(formatRelative(ago(3 * D + H), now)).toBe("3 giorni fa");
+    expect(formatRelative(new Date(now.getTime() + 2 * H), now)).toBe("tra 2 h");
+    expect(formatRelative(new Date(now.getTime() + 30 * H), now)).toBe("domani");
+    expect(formatDuration(105 * MIN)).toBe("1 h 45 min");
+    expect(formatDuration(D)).toBe("1 giorno");
+    expect(formatRelative(ago(8 * D), now)).toMatch(/10 nov/);
+  });
+
+  it("re-renders a mounted time when the language changes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    render(<RelativeTime value={ago(5 * MIN).toISOString()} />);
+    expect(screen.getByText("5 min ago")).toBeTruthy();
+    act(() => setLanguage("de"));
+    expect(screen.getByText("vor 5 Min.")).toBeTruthy();
+    act(() => setLanguage("it"));
+    expect(screen.getByText("5 min fa")).toBeTruthy();
   });
 });

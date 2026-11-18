@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { t } from "./i18n";
 
 /**
  * The one floating header of every reader dialog (0.30.0), in the style of
@@ -126,12 +127,13 @@ export const menuIsOpenIn = (element: Element | null) =>
  */
 export function MoreMenu({
   items,
-  label = "More actions",
+  label: labelProp,
 }: {
   items: MenuItem[];
   /** The button's and the menu's accessible name. */
   label?: string;
 }) {
+  const label = labelProp ?? t("More actions");
   const [open, setOpen] = useState(false);
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -244,11 +246,11 @@ export function NavCluster({
   forward?: () => void;
 }) {
   return (
-    <div className="crew-trail-nav" role="group" aria-label="Link history">
-      <HeadButton icon="back" label="Back" disabled={!back} onClick={back} />
+    <div className="crew-trail-nav" role="group" aria-label={t("Link history")}>
+      <HeadButton icon="back" label={t("Back")} disabled={!back} onClick={back} />
       <HeadButton
         icon="forward"
-        label="Forward"
+        label={t("Forward")}
         disabled={!forward}
         onClick={forward}
       />
@@ -265,6 +267,70 @@ export function NavCluster({
  * A record dialog with no list to step (0.35.0: an item its list is hiding)
  * keeps the capsule's slot, hidden, so More and close never shift.
  */
+/**
+ * The capsule's names for the nouns the reader passes, as whole sentences so
+ * each language can inflect them; any other noun keeps the English pattern.
+ */
+function listNavTexts(noun: string, i: number, count: number) {
+  const v = { i, count, noun };
+  switch (noun) {
+    case "task":
+      return {
+        group: t("task {i} of {count}", v),
+        previous: t("Previous task (K)"),
+        next: t("Next task (J)"),
+      };
+    case "note":
+      return {
+        group: t("note {i} of {count}", v),
+        previous: t("Previous note (K)"),
+        next: t("Next note (J)"),
+      };
+    case "bucket":
+      return {
+        group: t("bucket {i} of {count}", v),
+        previous: t("Previous bucket (K)"),
+        next: t("Next bucket (J)"),
+      };
+    case "agent":
+      return {
+        group: t("agent {i} of {count}", v),
+        previous: t("Previous agent (K)"),
+        next: t("Next agent (J)"),
+      };
+    case "review":
+      return {
+        group: t("review {i} of {count}", v),
+        previous: t("Previous review (K)"),
+        next: t("Next review (J)"),
+      };
+    case "result":
+      return {
+        group: t("result {i} of {count}", v),
+        previous: t("Previous result (K)"),
+        next: t("Next result (J)"),
+      };
+    case "shared page":
+      return {
+        group: t("shared page {i} of {count}", v),
+        previous: t("Previous shared page (K)"),
+        next: t("Next shared page (J)"),
+      };
+    case "item":
+      return {
+        group: t("item {i} of {count}", v),
+        previous: t("Previous item (K)"),
+        next: t("Next item (J)"),
+      };
+    default:
+      return {
+        group: `${noun} ${i} of ${count}`,
+        previous: `Previous ${noun} (K)`,
+        next: `Next ${noun} (J)`,
+      };
+  }
+}
+
 export function ListNavCluster({
   noun,
   index,
@@ -283,6 +349,7 @@ export function ListNavCluster({
   hidden?: boolean;
 }) {
   const digits = String(Math.max(count, 1)).length;
+  const texts = listNavTexts(noun, index + 1, count);
   if (hidden)
     return (
       <div className="crew-list-nav crew-list-nav-hidden" aria-hidden="true">
@@ -292,10 +359,10 @@ export function ListNavCluster({
       </div>
     );
   return (
-    <div className="crew-list-nav" role="group" aria-label={`${noun} ${index + 1} of ${count}`}>
+    <div className="crew-list-nav" role="group" aria-label={texts.group}>
       <HeadButton
         icon="up"
-        label={`Previous ${noun} (K)`}
+        label={texts.previous}
         disabled={!previous}
         onClick={previous}
       />
@@ -304,11 +371,11 @@ export function ListNavCluster({
         aria-hidden="true"
         style={{ width: `${digits * 2 + 3}ch` }}
       >
-        {index + 1} of {count}
+        {t("{i} of {count}", { i: index + 1, count })}
       </span>
       <HeadButton
         icon="down"
-        label={`Next ${noun} (J)`}
+        label={texts.next}
         disabled={!next}
         onClick={next}
       />
@@ -342,13 +409,13 @@ export default function DialogHeader({
       {nav ?? <NavCluster />}
       <h2 title={title}>{title}</h2>
       {listNav}
-      <div className="crew-head-pill" role="toolbar" aria-label="Actions">
+      <div className="crew-head-pill" role="toolbar" aria-label={t("Actions")}>
         {actions}
         <MoreMenu items={menu} />
       </div>
       <HeadButton
         icon="close"
-        label="Close dialog"
+        label={t("Close dialog")}
         className="crew-head-close"
         onClick={close}
       />
