@@ -270,13 +270,13 @@ try {
  // Ids in inline code (0.37.0): a resolvable id alone reads as its title; beside
  // a link to the same record it keeps the id (title in the tooltip); unknown ids
  // stay code and fenced blocks are never linked.
- const codeNote=await crewWrite('note.create',{bucket:linkBucket.id,title:'Inline code ids',body:`Tracked in [Synthetic launch post](#/tasks/synthetic-launch-post-${linkedTask.id}) (\`${linkedTask.id}\`). Approved in \`${reviewId}\`; unknown \`zzzzzzzzzzzzzzy\`.\n\n\`\`\`\n${linkedTask.id}\n\`\`\``});
+ const codeNote=await crewWrite('note.create',{bucket:linkBucket.id,title:'Inline code ids',body:`Tracked in [the launch post](#/tasks/${linkedTask.id}) (\`${linkedTask.id}\`). Approved in \`${reviewId}\`; unknown \`zzzzzzzzzzzzzzy\`.\n\n\`\`\`\n${linkedTask.id}\n\`\`\``});
  await page.goto(base+'/'+codeNote.path);await page.reload();
  const prose=dialog().locator('.crew-prose');
  const besideRef=prose.getByRole('link',{name:linkedTask.id,exact:true});await besideRef.waitFor();
  assert.match(await besideRef.getAttribute('title'),/^Synthetic launch post · /,'the id beside its link has the title as tooltip');
  assert.equal(await besideRef.locator('code').count(),1,'the id beside its link stays code-styled');
- assert.equal(await prose.getByRole('link',{name:'Synthetic launch post',exact:true}).count(),1,'the title is not repeated');
+ assert.equal(await prose.getByRole('link',{name:'the launch post',exact:true}).count(),1,'the written link stays and the title is not repeated'); assert.equal(await prose.getByRole('link',{name:'Synthetic launch post',exact:true}).count(),0,'no title link beside the written one');
  assert.match(await prose.getByRole('link',{name:'Review: Synthetic launch post',exact:true}).getAttribute('class'),/crew-ref/,'an id alone in code reads as its title');
  assert.deepEqual(await prose.locator('code').evaluateAll(cs=>cs.filter(c=>!c.closest('a')).map(c=>c.textContent.trim())),['zzzzzzzzzzzzzzy',linkedTask.id],'unknown and fenced ids stay code');
  assert.equal(await prose.locator('pre a').count(),0,'fenced code is never linked');
