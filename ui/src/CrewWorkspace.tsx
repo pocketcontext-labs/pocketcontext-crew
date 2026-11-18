@@ -34,6 +34,8 @@ import Help, {
 } from "./Help";
 import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
+import Settings from "./Settings";
+import { loadReaderSettings } from "./sessionGuide";
 import LabelsInput from "./LabelsInput";
 import { markdownText } from "./markdownText";
 import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest, ReviewRequestBlocked } from "./Review";
@@ -202,6 +204,7 @@ const pages: [View, string, string][] = [
   ["connect", "Connect an agent", "⇄"],
   ["guide", "Guide", "?"],
   ["search", "Search", "⌕"],
+  ["settings", "Settings", "⚙"],
 ];
 const eyebrows: Record<View, string> = {
   home: "START HERE",
@@ -214,6 +217,7 @@ const eyebrows: Record<View, string> = {
   guide: "HOW IT WORKS",
   search: "FIND ANYTHING",
   shared: "PAGES YOU SHARE BY LINK",
+  settings: "YOUR PREFERENCES",
 };
 const viewHelp: Partial<Record<View, HelpTopic>> = {
   home: "home",
@@ -1087,6 +1091,8 @@ export default function CrewWorkspace() {
     return () => clearTimeout(timer);
   }, [notice]);
   const [serverVersion, setServerVersion] = useState<ServerVersion | null>();
+  // The owner's reader settings (0.36.0: the language) apply on load.
+  useEffect(() => void loadReaderSettings(), []);
   const [connection, setConnection] = useState<ConnectionState>({
     kind: "checking",
   });
@@ -1995,6 +2001,7 @@ export default function CrewWorkspace() {
     search: t("Every task, note, agent and bucket that matches your words."),
     shared:
       t("Frozen copies of notes, shared by a secret link with no sign-in. Agents draft them; only you publish, update, expire, revoke or archive them. Editing a source note never changes a published page."),
+    settings: t("Language, what tapping an agent does, your account and the server version."),
   };
   // The board's controls: one toolbar row on a desktop, the filter sheet on a phone.
   const boardSearchField = (
@@ -2274,11 +2281,7 @@ export default function CrewWorkspace() {
     <HelpModeContext.Provider value={helpMode(connection)}>
     <div className={phone ? "crew-app crew-phone" : "crew-app"}>
       {phone ? (
-        <MobileTabBar
-          view={view}
-          pending={pending.length}
-          onSignOut={() => api.logout()}
-        />
+        <MobileTabBar view={view} pending={pending.length} />
       ) : (
       <aside className="crew-sidebar">
         <a
@@ -2318,6 +2321,13 @@ export default function CrewWorkspace() {
             aria-current={view === "guide" ? "page" : undefined}
           >
             {t("Guide")}
+          </a>
+          <a
+            className="crew-sidebar-link"
+            href={viewHashes.settings}
+            aria-current={view === "settings" ? "page" : undefined}
+          >
+            Settings
           </a>
           <span />
           {t("One owner. One shared context.")}
@@ -2458,7 +2468,8 @@ export default function CrewWorkspace() {
             view !== "archive" &&
             view !== "home" &&
             view !== "search" &&
-            view !== "guide" && (
+            view !== "guide" &&
+            view !== "settings" && (
               <div className="crew-welcome">
                 <div>
                   <span className="crew-eyebrow">{t("START WITH A SMALL CREW")}</span>
@@ -2643,6 +2654,13 @@ export default function CrewWorkspace() {
             />
           )}
           {view === "guide" && <Guide />}
+          {view === "settings" && (
+            <Settings
+              agents={data.agents}
+              serverVersion={serverVersion}
+              onSignOut={() => api.logout()}
+            />
+          )}
           {view === "shared" && (
             <Shared
               notes={[...data.notes, ...archived.notes]}
@@ -3205,38 +3223,6 @@ export default function CrewWorkspace() {
             </>
           )}
         </section>
-        <footer
-          className="crew-server-version"
-          role="contentinfo"
-          aria-label="Running server"
-        >
-          <span>
-            {serverVersion === undefined ? (
-              "Checking server version…"
-            ) : serverVersion === null ? (
-              "Server version unavailable"
-            ) : (
-              <>
-                Server {serverVersion.version}
-                {serverVersion.commit && (
-                  <>
-                    {" · Build "}
-                    <span
-                      title={serverVersion.commit}
-                      role="note"
-                      aria-label={`Build ${serverVersion.commit}`}
-                    >
-                      {serverVersion.commit.slice(0, 12)}
-                    </span>
-                  </>
-                )}
-              </>
-            )}
-          </span>
-          <button className="crew-footer-signout" onClick={() => api.logout()}>
-            Sign out
-          </button>
-        </footer>
       </main>
       {sessionStart && (
         <SessionToast

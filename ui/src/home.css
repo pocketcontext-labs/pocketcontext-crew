@@ -206,6 +206,28 @@
   outline-offset: -2px;
 }
 
+/* Home's Coding agent tag: a small sage pill beside the name. */
+.crew-home-agent-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.crew-home-agent-line strong {
+  min-width: 0;
+}
+.crew-coding-pill {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #e5ece0;
+  color: #34513f;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 /* Recent and the Needs you items: rows in one card, like the agents. */
 .crew-home-section .crew-home-list {
   gap: 0;

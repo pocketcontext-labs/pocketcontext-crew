@@ -210,11 +210,13 @@ describe("phone chrome", () => {
       "Shared",
       "Agents",
       "Archive",
+      "Settings",
       "Connect an agent",
       "Guide",
     ])
       expect(more.getByRole("link", { name })).toBeTruthy();
-    expect(more.getByRole("button", { name: "Sign out" })).toBeTruthy();
+    // Since 0.36.0 Sign out is in Settings.
+    expect(more.queryByRole("button", { name: "Sign out" })).toBeNull();
     fireEvent.click(more.getByRole("link", { name: "Agents" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     location.hash = "#/agents";

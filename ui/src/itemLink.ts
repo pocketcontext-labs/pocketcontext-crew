@@ -42,6 +42,7 @@ export const viewHashes = {
   guide: "#/guide",
   search: "#/search",
   shared: "#/shared",
+  settings: "#/settings",
 } as const;
 export type View = keyof typeof viewHashes;
 

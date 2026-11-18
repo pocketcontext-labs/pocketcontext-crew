@@ -3,6 +3,14 @@ import { icons, PopoverMenu, type MenuItem } from "./MobileChrome";
 import { ConnectionPending, skillCommand } from "./Connect";
 import Help from "./Help";
 import { RelativeTime } from "./relativeTime";
+import { t, tn } from "./i18n";
+import { useReaderSettings } from "./sessionGuide";
+import {
+  isCodingAgent,
+  resolveAgentTap,
+  type AgentTap,
+  type TapAction,
+} from "./agentTap";
 import { val, type ConnectionState, type Row } from "./crewApi";
 import { isClosed } from "./closedTasks";
 import {
@@ -11,7 +19,6 @@ import {
   homeStuckTasks,
   type ListSource,
 } from "./listSource";
-import { agentKind } from "./projectAgents";
 import {
   agentInitials,
   useSessionStart,
@@ -80,30 +87,31 @@ export default function Home({
   const [guideRow, setGuideRow] = useState(() => !stored(guideRowKey));
   const [connected, setConnected] = useState(() => stored(connectedKey));
   const [hidden, setHidden] = useState(() => stored(hiddenKey));
-  if (!ready) return <p role="status">Loading your workspace…</p>;
+  const { agentTap } = useReaderSettings();
+  if (!ready) return <p role="status">{t("Loading your workspace…")}</p>;
 
   const allTasks = [...data.tasks, ...archived.tasks];
   const agentSeen =
     allTasks.some((x) => val(x, "created_by_agent")) || data.reviews.length > 0;
   const steps: { title: string; done: boolean; body: ReactNode }[] = [
     {
-      title: "Create your crew",
+      title: t("Create your crew"),
       done: data.agents.length + archived.agents.length > 0,
       body: (
         <>
           <p>
-            Agents are the AI workers on your team. Each one gets a brief and a
-            place to keep what it learns. Start with five ready-made roles and
-            edit them later.
+            {t(
+              "Agents are the AI workers on your team. Each one gets a brief and a place to keep what it learns. Start with five ready-made roles and edit them later.",
+            )}
           </p>
           <button className="crew-primary" disabled={busy} onClick={seed}>
-            Set up starter crew
+            {t("Set up starter crew")}
           </button>
         </>
       ),
     },
     {
-      title: "Connect your first agent",
+      title: t("Connect your first agent"),
       done: connected || agentSeen,
       body: (
         <>
@@ -111,8 +119,9 @@ export default function Home({
           {connection.kind === "mcp" && (
             <>
               <p>
-                Crew doesn't run agents itself. Add this address to your agent
-                platform and approve the connection with your account.
+                {t(
+                  "Crew doesn't run agents itself. Add this address to your agent platform and approve the connection with your account.",
+                )}
               </p>
               <div className="crew-home-endpoint">
                 <code>{connection.url}</code>
@@ -123,8 +132,9 @@ export default function Home({
           {connection.kind === "local" && (
             <>
               <p>
-                Crew doesn't run agents itself. Your coding agent uses Crew
-                through a skill. Run this once in your Crew folder.
+                {t(
+                  "Crew doesn't run agents itself. Your coding agent uses Crew through a skill. Run this once in your Crew folder.",
+                )}
               </p>
               <div className="crew-home-endpoint">
                 <code>{skillCommand}</code>
@@ -139,39 +149,41 @@ export default function Home({
                 setConnected(true);
               }}
             >
-              I've connected it
+              {t("I've connected it")}
             </button>
           )}
-          <a href={viewHashes.connect}>See full setup</a>
+          <a href={viewHashes.connect}>{t("See full setup")}</a>
         </>
       ),
     },
     {
-      title: "Give your crew a first task",
+      title: t("Give your crew a first task"),
       done: allTasks.length > 0,
       body: (
         <>
           <p>
-            Describe a piece of work and assign it to an agent. It appears on
-            the Tasks board.
+            {t(
+              "Describe a piece of work and assign it to an agent. It appears on the Tasks board.",
+            )}
           </p>
           <button className="crew-primary" onClick={newTask}>
-            ＋ New task
+            {t("＋ New task")}
           </button>
         </>
       ),
     },
     {
-      title: "Review the first draft",
+      title: t("Review the first draft"),
       done: data.reviews.some((x) => val(x, "status") !== "pending"),
       body: (
         <>
           <p>
-            When an agent finishes a draft it asks for your approval. Approving
-            never sends or publishes anything.
+            {t(
+              "When an agent finishes a draft it asks for your approval. Approving never sends or publishes anything.",
+            )}
           </p>
           <a className="crew-home-action" href={viewHashes.reviews}>
-            Open Approvals
+            {t("Open Approvals")}
           </a>
         </>
       ),
@@ -182,7 +194,7 @@ export default function Home({
     val(
       allTasks.find((x) => x.id === val(review, "task")),
       "title",
-    ) || "Untitled draft";
+    ) || t("Untitled draft");
   // Each section's list is also what its items' previous/next walk
   // (listSource.ts), so both use the same helpers.
   const stuck = homeStuckTasks(data.tasks, invalidAssignment);
@@ -198,14 +210,14 @@ export default function Home({
         <div className="crew-home-guide">
           <a href={viewHashes.guide}>
             <span>
-              <span className="crew-home-guide-lead">New to Crew?</span> Read
-              how it works
+              <span className="crew-home-guide-lead">{t("New to Crew?")}</span>{" "}
+              {t("Read how it works")}
             </span>
           </a>
           <button
             type="button"
-            aria-label="Dismiss How it works"
-            title="Dismiss"
+            aria-label={t("Dismiss How it works")}
+            title={t("Dismiss")}
             onClick={() => {
               remember(guideRowKey);
               setGuideRow(false);
@@ -216,12 +228,15 @@ export default function Home({
         </div>
       )}
       {current >= 0 && !hidden && (
-        <section className="crew-home-start" aria-label="Get started">
+        <section className="crew-home-start" aria-label={t("Get started")}>
           <header>
-            <h2>Get started</h2>
+            <h2>{t("Get started")}</h2>
             <Help topic="get-started" />
             <span>
-              {steps.filter((step) => step.done).length} of {steps.length} done
+              {t("{done} of {total} done", {
+                done: steps.filter((step) => step.done).length,
+                total: steps.length,
+              })}
             </span>
             <button
               onClick={() => {
@@ -229,7 +244,7 @@ export default function Home({
                 setHidden(true);
               }}
             >
-              Hide
+              {t("Hide")}
             </button>
           </header>
           <ol>
@@ -243,7 +258,9 @@ export default function Home({
                 <div>
                   <h3>
                     {step.title}
-                    {step.done && <span className="sr-only"> (done)</span>}
+                    {step.done && (
+                      <span className="sr-only"> {t("(done)")}</span>
+                    )}
                   </h3>
                   {index === current && step.body}
                 </div>
@@ -252,25 +269,33 @@ export default function Home({
           </ol>
         </section>
       )}
-      <section className="crew-home-section" aria-label="Needs you">
+      <section className="crew-home-section" aria-label={t("Needs you")}>
         <div className="crew-title-row">
-          <h2>Needs you</h2>
+          <h2>{t("Needs you")}</h2>
           <Help topic="needs-you" />
         </div>
         <div className="crew-home-tiles">
           <a
             href={viewHashes.reviews}
-            aria-label={`${pending.length} ${pending.length === 1 ? "approval" : "approvals"} waiting, open Approvals`}
+            aria-label={tn(
+              pending.length,
+              "{n} approval waiting, open Approvals",
+              "{n} approvals waiting, open Approvals",
+            )}
           >
             <b>{pending.length}</b>
-            Approvals waiting
+            {t("Approvals waiting")}
           </a>
           <a
             href={boardHeldHash}
-            aria-label={`${held} ${held === 1 ? "task" : "tasks"} on hold, show on the Tasks board`}
+            aria-label={tn(
+              held,
+              "{n} task on hold, show on the Tasks board",
+              "{n} tasks on hold, show on the Tasks board",
+            )}
           >
             <b>{held}</b>
-            Tasks on hold
+            {t("Tasks on hold")}
           </a>
         </div>
         {(pending.length > 0 || stuck.length > 0) && (
@@ -278,7 +303,7 @@ export default function Home({
             {pending.map((review) => (
               <button key={review.id} onClick={() => openReview(review)}>
                 <strong>{taskTitle(review)}</strong>
-                <small>Draft waiting for your approval</small>
+                <small>{t("Draft waiting for your approval")}</small>
               </button>
             ))}
             {stuck.map((task) => (
@@ -289,8 +314,8 @@ export default function Home({
                 <strong>{val(task, "title")}</strong>
                 <small>
                   {task.handoff_limited === true
-                    ? "Stopped after too many agent handoffs"
-                    : "Assigned agent is unavailable"}
+                    ? t("Stopped after too many agent handoffs")
+                    : t("Assigned agent is unavailable")}
                 </small>
               </button>
             ))}
@@ -298,8 +323,8 @@ export default function Home({
         )}
       </section>
       {agents.length > 0 && (
-        <section className="crew-home-section" aria-label="Agents">
-          <h2>Agents</h2>
+        <section className="crew-home-section" aria-label={t("Agents")}>
+          <h2>{t("Agents")}</h2>
           <ul className="crew-home-agents">
             {agents.map((agent) => (
               <AgentRow
@@ -307,6 +332,7 @@ export default function Home({
                 agent={agent}
                 agents={data.agents}
                 status={agentStatus(agent, open)}
+                tap={agentTap}
                 openItem={openItem}
                 onStartSession={onStartSession}
               />
@@ -315,8 +341,8 @@ export default function Home({
         </section>
       )}
       {recent.length > 0 && (
-        <section className="crew-home-section" aria-label="Recent">
-          <h2>Recent</h2>
+        <section className="crew-home-section" aria-label={t("Recent")}>
+          <h2>{t("Recent")}</h2>
           <div className="crew-home-list">
             {recent.map(({ kind, row }) => (
               <button
@@ -325,7 +351,7 @@ export default function Home({
               >
                 <strong>{val(row, "title")}</strong>
                 <small>
-                  {kind === "task" ? "Task" : "Note"}
+                  {kind === "task" ? t("Task") : t("Note")}
                   {val(row, "updated") && (
                     <>
                       {" · "}
@@ -351,51 +377,64 @@ export function agentStatus(agent: Row, open: Row[]) {
   const count = (match: (task: Row) => boolean) => mine.filter(match).length;
   const parts = (
     [
-      [count((x) => val(x, "status") === "needs_review"), "in review"],
-      [count((x) => val(x, "status") === "in_progress"), "in progress"],
+      [
+        count((x) => val(x, "status") === "needs_review"),
+        (n: number) => t("{n} in review", { n }),
+      ],
+      [
+        count((x) => val(x, "status") === "in_progress"),
+        (n: number) => t("{n} in progress", { n }),
+      ],
       [
         count(
           (x) => val(x, "status") === "todo" && val(x, "readiness") !== "ready",
         ),
-        "on hold",
+        (n: number) => t("{n} on hold", { n }),
       ],
       [
         count(
           (x) => val(x, "status") === "todo" && val(x, "readiness") === "ready",
         ),
-        "to do",
+        (n: number) => t("{n} to do", { n }),
       ],
-    ] as [number, string][]
+    ] as [number, (n: number) => string][]
   )
     .filter(([n]) => n > 0)
     .slice(0, 2)
-    .map(([n, label]) => `${n} ${label}`);
-  return parts.length ? parts.join(" · ") : "No open tasks";
+    .map(([n, label]) => label(n));
+  return parts.length ? parts.join(" · ") : t("No open tasks");
 }
 
 type AgentRowProps = {
   agent: Row;
   agents: Row[];
   status: string;
+  /** Settings > Tapping an agent. */
+  tap: AgentTap;
   openItem: (kind: ItemKind, row: Row, source?: ListSource) => void;
   onStartSession: (start: SessionStart) => void;
 };
 
-/** A manually started (coding) agent: its ⋯ also copies the session prompt. */
+/**
+ * A coding agent (started manually; Crew builds its session prompt): a
+ * Coding agent tag, and its ⋯ also copies the prompt, which a tap can run.
+ */
 function CodingAgentRow(props: AgentRowProps) {
   const session = useSessionStart(props.agent, props.onStartSession);
   return (
     <AgentRowView
       {...props}
+      coding
+      copyPrompt={session.start}
       extra={[
         {
           label: session.loading
-            ? "Preparing the prompt…"
-            : "Copy prompt for a coding agent",
+            ? t("Preparing the prompt…")
+            : t("Copy prompt for coding agent"),
           disabled: session.loading,
           onSelect: session.start,
         },
-        { label: "How coding sessions work", onSelect: session.openGuide },
+        { label: t("How coding sessions work"), onSelect: session.openGuide },
       ]}
     >
       {session.guide}
@@ -404,7 +443,7 @@ function CodingAgentRow(props: AgentRowProps) {
 }
 
 function AgentRow(props: AgentRowProps) {
-  return agentKind(props.agent) === "external" ? (
+  return isCodingAgent(props.agent) ? (
     <CodingAgentRow {...props} />
   ) : (
     <AgentRowView {...props} extra={[]} />
@@ -412,39 +451,63 @@ function AgentRow(props: AgentRowProps) {
 }
 
 /**
- * An agent on Home (0.34.0): initials, name and status open the agent; its ⋯
- * opens the agent, shows its tasks and, for coding agents, copies the prompt.
+ * An agent on Home (0.34.0): initials, name and status. Since 0.36.0 a tap
+ * anywhere on the row but ⋯ runs the action chosen in Settings > Tapping an
+ * agent (Open agent by default); its ⋯ opens the agent, shows its tasks and,
+ * for coding agents, copies the prompt.
  */
 function AgentRowView({
   agent,
   agents,
   status,
+  tap,
   openItem,
+  coding = false,
+  copyPrompt,
   extra,
   children,
-}: AgentRowProps & { extra: MenuItem[]; children?: ReactNode }) {
+}: AgentRowProps & {
+  coding?: boolean;
+  copyPrompt?: () => void;
+  extra: MenuItem[];
+  children?: ReactNode;
+}) {
   const name = val(agent, "name");
   const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const open = () => openItem("agent", agent, "home:agents");
+  const showTasks = () => {
+    location.hash = boardAgentHash(agent.id);
+  };
+  const run = (action: TapAction) => {
+    if (action === "copy_prompt" && copyPrompt) copyPrompt();
+    else if (action === "show_tasks") showTasks();
+    else open();
+  };
   return (
     <li>
       <button
         type="button"
         className="crew-home-agent"
-        onClick={() => openItem("agent", agent, "home:agents")}
+        onClick={() => run(resolveAgentTap(tap, agent))}
       >
         <span className="crew-avatar" aria-hidden="true">
           {agentInitials(name, agents)}
         </span>
         <span className="crew-home-agent-text">
-          <strong>{name}</strong>
+          <span className="crew-home-agent-line">
+            <strong>{name}</strong>
+            {coding && (
+              <span className="crew-coding-pill">{t("Coding agent")}</span>
+            )}
+          </span>
           <small>{status}</small>
         </span>
       </button>
       <button
         type="button"
         className="crew-home-agent-more"
-        aria-label={`More for ${name}`}
-        title="More"
+        aria-label={t("More for {name}", { name })}
+        title={t("More")}
         aria-haspopup="dialog"
         aria-expanded={!!menu}
         onClick={(e) => setMenu(e.currentTarget)}
@@ -457,16 +520,8 @@ function AgentRowView({
           anchor={menu}
           onClose={() => setMenu(null)}
           items={[
-            {
-              label: "Open agent",
-              onSelect: () => openItem("agent", agent, "home:agents"),
-            },
-            {
-              label: "Show tasks",
-              onSelect: () => {
-                location.hash = boardAgentHash(agent.id);
-              },
-            },
+            { label: t("Open agent"), onSelect: open },
+            { label: t("Show tasks"), onSelect: showTasks },
             ...extra,
           ]}
         />

@@ -1,0 +1,162 @@
+/* Settings (0.36.0): grouped rows in rounded cards, like Home's agents. Every
+   row is at least 48 px; choice lists put a check on the current value. */
+.crew-settings {
+  display: grid;
+  gap: 18px;
+  max-width: 640px;
+}
+.crew-settings section {
+  display: grid;
+  gap: 8px;
+}
+.crew-settings h2 {
+  margin: 0;
+  padding: 0 4px;
+  color: #66745f;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.crew-settings-hint {
+  margin: 0;
+  padding: 0 4px;
+  color: #71806e;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.crew-settings-group {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #dfe4da;
+  border-radius: 16px;
+  background: #fffefb;
+  overflow: hidden;
+}
+.crew-settings-group + .crew-settings-group {
+  margin-top: 4px;
+}
+.crew-settings-group > li + li {
+  border-top: 1px solid #e8ebe4;
+}
+.crew-app .crew-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  margin: 0;
+  padding: 10px 14px 10px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #263b32;
+  font: inherit;
+  font-size: 16px;
+  text-align: left;
+  touch-action: manipulation;
+}
+.crew-app button.crew-settings-row {
+  cursor: pointer;
+}
+.crew-app button.crew-settings-row:hover {
+  background: #f6f8f3;
+}
+.crew-app button.crew-settings-row:active {
+  background: #eef2ea;
+}
+@media (hover: none) {
+  .crew-app button.crew-settings-row:hover {
+    background: transparent;
+  }
+  .crew-app button.crew-settings-row:active {
+    background: #eef2ea;
+  }
+}
+.crew-app .crew-settings-row:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: -2px;
+}
+.crew-settings-label {
+  flex: 1 1 auto;
+  min-width: 30%;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crew-settings-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 62%;
+  color: #71806e;
+  line-height: 1.3;
+  text-align: right;
+  /* A long action wraps rather than hide what it does. */
+  overflow-wrap: anywhere;
+}
+.crew-settings-chevron,
+.crew-settings-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: #8a9886;
+}
+.crew-settings-chevron .crew-micon-svg {
+  width: 18px;
+  height: 18px;
+}
+.crew-settings-check {
+  color: #2f5b3f;
+}
+.crew-app .crew-settings-signout {
+  color: #263b32;
+}
+.crew-settings-error {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fbeaea;
+  color: #8a2a2a;
+  font-size: 14px;
+}
+
+/* A choice list's page: a round back button and the title. */
+.crew-settings-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.crew-app .crew-settings-back {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #dfe4da;
+  border-radius: 999px;
+  background: #fffefb;
+  color: #263b32;
+  touch-action: manipulation;
+}
+.crew-app .crew-settings-back:hover {
+  background: #f3f5ef;
+}
+.crew-app .crew-settings-back:active {
+  background: #e9eee4;
+}
+.crew-settings .crew-settings-picker-head h2 {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  color: #263b32;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}

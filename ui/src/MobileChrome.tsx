@@ -10,6 +10,7 @@ import mark from "./assets/brand/favicon.svg?no-inline";
 import { HelpModeContext } from "./Help";
 import { guideHash, helpContent, textFor, type HelpTopic } from "./helpContent";
 import { viewHashes, type View } from "./itemLink";
+import { t } from "./i18n";
 import "./chrome.css";
 import "./home.css";
 
@@ -176,7 +177,7 @@ export function Sheet({
       <header className="crew-sheet-head">
         <h2>{title}</h2>
         <button type="button" className="crew-sheet-done" onClick={onClose}>
-          Done
+          {t("Done")}
         </button>
       </header>
       <div className="crew-sheet-body">{children}</div>
@@ -346,7 +347,7 @@ export function MobileTopBar({
       <a
         className="crew-mlogo"
         href={viewHashes.home}
-        aria-label="Crew, go to Home"
+        aria-label={t("Crew, go to Home")}
       >
         <img className="crew-mark" src={mark} width="28" height="28" alt="Crew" />
       </a>
@@ -359,7 +360,10 @@ export function MobileTopBar({
             className={`crew-micon${filter.count ? " is-active" : ""}`}
             aria-label={
               filter.count
-                ? `${filter.label}, ${filter.count} on`
+                ? t("{label}, {count} on", {
+                    label: filter.label,
+                    count: filter.count,
+                  })
                 : filter.label
             }
             title={filter.label}
@@ -392,8 +396,8 @@ export function MobileTopBar({
         <button
           type="button"
           className="crew-micon"
-          aria-label="Page options"
-          title="Page options"
+          aria-label={t("Page options")}
+          title={t("Page options")}
           aria-haspopup="dialog"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen(true)}
@@ -432,17 +436,17 @@ export function MobileTopBar({
               }}
             >
               <span className="crew-refresh-icon">{icons.refresh}</span>
-              Refresh
+              {t("Refresh")}
             </button>
           </div>
-          <section className="crew-sheet-about" aria-label="About this page">
+          <section className="crew-sheet-about" aria-label={t("About this page")}>
             <p className="crew-sheet-intro">{description}</p>
             {entry && (
               <>
                 <p>{textFor(entry.what, mode)}</p>
                 <p>{textFor(entry.action, mode)}</p>
                 <a href={guideHash(help!)} onClick={() => setMenuOpen(false)}>
-                  Learn more in the Guide
+                  {t("Learn more in the Guide")}
                 </a>
               </>
             )}
@@ -453,6 +457,9 @@ export function MobileTopBar({
   );
 }
 
+// Labels stay English here and are translated where they render; the
+// settings catalogs list them (Home, Tasks, Notes, Approvals, Shared, Agents,
+// Archive, Settings, Connect an agent, Guide).
 const tabs: [View, string, keyof typeof icons][] = [
   ["home", "Home", "home"],
   ["board", "Tasks", "tasks"],
@@ -463,6 +470,7 @@ const moreLinks: [View, string][] = [
   ["shared", "Shared"],
   ["agents", "Agents"],
   ["archive", "Archive"],
+  ["settings", "Settings"],
   ["connect", "Connect an agent"],
   ["guide", "Guide"],
 ];
@@ -470,21 +478,14 @@ const moreLinks: [View, string][] = [
 /**
  * The phone's bottom tabs: Home, Tasks, Notes, Approvals (a dot while drafts
  * wait; the count is in its name) and More, whose sheet reaches every other
- * page and Sign out. Since 0.34.0 a floating frosted pill the page scrolls under.
+ * page. Since 0.34.0 a floating frosted pill the page scrolls under; since
+ * 0.36.0 Sign out is in Settings (a More row), which keeps More selected.
  */
-export function MobileTabBar({
-  view,
-  pending,
-  onSignOut,
-}: {
-  view: View;
-  pending: number;
-  onSignOut: () => void;
-}) {
+export function MobileTabBar({ view, pending }: { view: View; pending: number }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const inMore = moreLinks.some(([key]) => key === view);
   return (
-    <nav className="crew-tabbar" aria-label="Workspace">
+    <nav className="crew-tabbar" aria-label={t("Workspace")}>
       {tabs.map(([key, label, icon]) => (
         <a
           key={key}
@@ -492,7 +493,7 @@ export function MobileTabBar({
           aria-current={view === key ? "page" : undefined}
           aria-label={
             key === "reviews" && pending > 0
-              ? `${label}, ${pending} pending`
+              ? t("{label}, {n} pending", { label: t(label), n: pending })
               : undefined
           }
         >
@@ -502,7 +503,7 @@ export function MobileTabBar({
               <b className="crew-tab-dot" aria-hidden="true" />
             )}
           </span>
-          {label}
+          {t(label)}
         </a>
       ))}
       <button
@@ -513,11 +514,11 @@ export function MobileTabBar({
         onClick={() => setMoreOpen(true)}
       >
         <span className="crew-tab-icon">{icons.more}</span>
-        More
+        {t("More")}
       </button>
       {moreOpen && (
         <Sheet
-          title="More"
+          title={t("More")}
           className="crew-more-sheet"
           onClose={() => setMoreOpen(false)}
         >
@@ -529,17 +530,12 @@ export function MobileTabBar({
                   aria-current={view === key ? "page" : undefined}
                   onClick={() => setMoreOpen(false)}
                 >
-                  {label}
+                  {t(label)}
                 </a>
               </li>
             ))}
           </ul>
-          <p className="crew-more-foot">
-            One owner. One shared context.
-            <button type="button" onClick={onSignOut}>
-              Sign out
-            </button>
-          </p>
+          <p className="crew-more-foot">{t("One owner. One shared context.")}</p>
         </Sheet>
       )}
     </nav>

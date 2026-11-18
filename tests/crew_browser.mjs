@@ -505,10 +505,11 @@ try {
    if(width<=680){await topBarOneRow(name+' '+width);await tabBarCheck(name+' '+width);
     // Intro text and page help live in the page menu, not on the screen.
     assert.equal(await page.locator('.crew-heading').count(),0,`no page heading block at ${width}`);
-    // Page content never hides under the tabs: the footer clears them at the end of the page.
+    // Page content never hides under the tabs: the content clears them at the end of the page
+    // (0.36.0: no server footer; the version is in Settings).
     await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
-    const [footer,tabs]=await Promise.all([page.locator('.crew-main > footer.crew-server-version').boundingBox(),page.getByRole('navigation',{name:'Workspace'}).boundingBox()]);
-    if(footer) assert.ok(footer.y+footer.height<=tabs.y+1,`${name}: content ends above the tabs at ${width}`);
+    const [content,tabs]=await Promise.all([page.locator('.crew-main > .crew-content').evaluate(c=>{const kids=[...c.children].filter(k=>k.getClientRects().length&&getComputedStyle(k).position!=='fixed');const last=kids[kids.length-1];if(!last)return null;const b=last.getBoundingClientRect();return {y:b.y,height:b.height};}),page.locator('nav.crew-tabbar').boundingBox()]);
+    if(content) assert.ok(content.y+content.height<=tabs.y+1,`${name}: content ends above the tabs at ${width}`);
     await page.evaluate(()=>window.scrollTo(0,0));
    }
    if(name==='Tasks'&&width>680) {
@@ -581,7 +582,8 @@ try {
    await go('Home');await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
   }
   await go('Tasks');await onPage('Tasks');await snap('crew-board-'+width);
-  assert.equal(await page.locator('button:visible').filter({hasText:/^Sign out$/}).count(),1,`one Sign out at ${width}`);
+  // Since 0.36.0 Sign out is in Settings; the desktop sidebar keeps one too.
+  assert.equal(await page.locator('button:visible').filter({hasText:/^Sign out$/}).count(),width>680?1:0,`Sign out at ${width}`);
   assert.equal(await page.getByRole('button',{name:width>680?'Refresh':'Page options',exact:true}).isVisible(),true,`Refresh or the page menu at ${width}`);
   assert.equal(await page.locator('.crew-topbar > span').isVisible(),width>680,`top bar at ${width}`);
  }
@@ -1255,7 +1257,7 @@ try {
   assert.deepEqual(await botMenu.getByRole('button').allInnerTexts(),['Open agent','Show tasks'],'a bot has no session actions');
   await page.keyboard.press('Escape');await botMenu.waitFor({state:'hidden'});
   let menu=await openMenu('synthetic-repo');
-  assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Copy prompt for a coding agent','How coding sessions work']);
+  assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Copy prompt for coding agent','How coding sessions work']);
   await menu.getByRole('button',{name:'How coding sessions work',exact:true}).click();
   const homeGuide=page.getByRole('dialog',{name:'Start a coding session as synthetic-repo'});
   await homeGuide.waitFor();
@@ -1270,9 +1272,150 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Home overflow at ${width}`);
   menu=await openMenu('synthetic-repo');
   if(width===390) await snapView('crew-home-agent-menu-390');
-  await menu.getByRole('button',{name:'Copy prompt for a coding agent',exact:true}).click();
+  await menu.getByRole('button',{name:'Copy prompt for coding agent',exact:true}).click();
   await page.locator('.crew-toast').getByText('Copied the session prompt for synthetic-repo.').waitFor();
   await page.locator('.crew-toast').getByRole('button',{name:'Dismiss'}).click();
+ }
+ // Settings (0.36.0): from More on a phone (More stays selected) and the sidebar
+ // on a desktop. The language applies at once (tab labels, html lang) and is
+ // kept on the server; Tapping an agent sets what a Home row tap runs. English
+ // and the default tap (Open agent) are restored for the sections after this.
+ {
+  const tabbar=()=>page.locator('nav.crew-tabbar');
+  const tabLabels=()=>tabbar().evaluate(n=>[...n.children].filter(c=>c.matches('a,button')).map(c=>c.textContent.trim()));
+  const back=async name=>{await page.getByRole('button',{name,exact:true}).click();};
+  const openSettings=async width=>{
+   if(width>680) await page.locator('.crew-sidebar').getByRole('link',{name:'Settings',exact:true}).click();
+   else{
+    await page.getByRole('navigation',{name:'Workspace'}).getByRole('button',{name:'More',exact:true}).click();
+    const more=page.getByRole('dialog',{name:'More'});
+    assert.deepEqual(await more.getByRole('link').allInnerTexts(),['Shared','Agents','Archive','Settings','Connect an agent','Guide'],'Settings is a More row');
+    assert.equal(await more.getByRole('button',{name:'Sign out'}).count(),0,'Sign out moved to Settings');
+    await more.getByRole('link',{name:'Settings',exact:true}).click();await more.waitFor({state:'hidden'});
+   }
+   await page.waitForURL('**/#/settings');
+   await page.getByRole('heading',{name:'Tapping an agent',exact:true}).waitFor();
+  };
+  const rowsFit=async where=>{
+   const r=await page.locator('.crew-settings').evaluate(el=>({rows:[...el.querySelectorAll('.crew-settings-row')].map(b=>b.getBoundingClientRect().height),over:document.documentElement.scrollWidth>innerWidth+1,
+    clipped:[...el.querySelectorAll('.crew-settings-row')].some(b=>b.getBoundingClientRect().right>innerWidth)}));
+   assert.ok(r.rows.length&&r.rows.every(h=>h>=44),`${where}: rows at least 44 px `+JSON.stringify(r.rows));
+   assert.ok(!r.over&&!r.clipped,`${where}: Settings fits the screen`);
+  };
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto(base+'/#/');
+  await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
+  assert.equal(await page.locator('footer.crew-server-version').count(),0,'no server footer on Home');
+  await openSettings(1280);
+  const about=page.locator('[aria-labelledby="crew-settings-about"]');
+  await page.waitForFunction(()=>!document.querySelector('[aria-labelledby="crew-settings-about"]').textContent.includes('Checking'));
+  assert.match(await about.innerText(),/Server/,'About shows the server version');
+  assert.equal(await page.getByRole('region',{name:'Account'}).getByRole('button',{name:'Sign out',exact:true}).isVisible(),true,'Sign out in Account');
+  await rowsFit('settings 1280');
+  await snap('settings-1280');
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(base+'/#/tasks');await onPage('Tasks');
+  await openSettings(390);
+  await onPage('Settings');
+  assert.equal(await tabbar().getByRole('button',{name:'More',exact:true}).evaluate(b=>b.classList.contains('is-current')),true,'Settings keeps More selected');
+  await topBarOneRow('settings 390');await tabBarCheck('settings 390');await rowsFit('settings 390');
+  await snap('settings-en-390');
+  // Language: English, Deutsch, Italiano in their own names, a check on the current one.
+  await page.getByRole('button',{name:/^Language/}).click();
+  let langs=page.getByRole('radiogroup',{name:'Language'});
+  assert.deepEqual(await langs.getByRole('radio').allInnerTexts(),['English','Deutsch','Italiano']);
+  assert.equal(await langs.getByRole('radio',{name:'English'}).getAttribute('aria-checked'),'true');
+  assert.ok(await langs.getByRole('radio').evaluateAll(rs=>rs.every(r=>r.getBoundingClientRect().height>=44)),'language rows at least 44 px');
+  await snapView('settings-language-390');
+  await langs.getByRole('radio',{name:'Deutsch'}).click();
+  await page.waitForFunction(()=>document.documentElement.lang==='de');
+  assert.deepEqual(await tabLabels(),['Start','Aufgaben','Notizen','Freigaben','Mehr'],'German tab labels');
+  langs=page.getByRole('radiogroup',{name:'Sprache'});
+  assert.equal(await langs.getByRole('radio',{name:'Deutsch'}).getAttribute('aria-checked'),'true');
+  await snapView('settings-language-de-390');
+  await back('Zurück zu den Einstellungen');
+  await page.getByRole('heading',{name:'Beim Tippen auf einen Agenten',exact:true}).waitFor();
+  await topBarOneRow('settings de 390');await rowsFit('settings de 390');
+  await snap('settings-de-390');
+  await page.getByRole('button',{name:/^Sprache/}).click();
+  await page.getByRole('radiogroup',{name:'Sprache'}).getByRole('radio',{name:'Italiano'}).click();
+  await page.waitForFunction(()=>document.documentElement.lang==='it');
+  assert.deepEqual(await tabLabels(),['Home','Attività','Note','Approvazioni','Altro'],'Italian tab labels');
+  await back('Torna alle impostazioni');
+  await page.getByRole('heading',{name:'Tocco su un agente',exact:true}).waitFor();
+  await rowsFit('settings it 390');
+  await snap('settings-it-390');
+  // The server keeps the choice: a reload starts in Italian.
+  for(let i=0;i<50&&!writeActions.includes('settings.update');i++) await page.waitForTimeout(100);
+  await page.waitForLoadState('networkidle');
+  await page.reload();
+  await page.getByRole('heading',{name:'Tocco su un agente',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>document.documentElement.lang),'it','the language survives a reload');
+  // Agent names stay as written in every language.
+  await page.getByRole('button',{name:/^synthetic-repo/}).waitFor();
+  await page.getByRole('button',{name:/^Network/}).filter({hasText:'Apri agente'}).waitFor();
+  await page.getByRole('button',{name:/^Lingua/}).click();
+  await page.getByRole('radiogroup',{name:'Lingua'}).getByRole('radio',{name:'English'}).click();
+  await page.waitForFunction(()=>document.documentElement.lang==='en');
+  assert.deepEqual(await tabLabels(),['Home','Tasks','Notes','Approvals','More'],'English again');
+  await back('Back to Settings');
+  // Tapping an agent: All agents offers Open agent and Show tasks; the coding agent adds its copy action.
+  await page.getByRole('button',{name:/^All agents/}).click();
+  let picks=page.getByRole('radiogroup',{name:'All agents'});
+  assert.deepEqual(await picks.getByRole('radio').allInnerTexts(),['Open agent','Show tasks']);
+  await picks.getByRole('radio',{name:'Show tasks'}).click();
+  await page.waitForFunction(()=>document.querySelector('[role=radio][aria-checked=true]')?.textContent==='Show tasks');
+  await snapView('settings-all-agents-390');
+  await back('Back to Settings');
+  await page.getByRole('button',{name:/^Network/}).filter({hasText:'Show tasks'}).waitFor();
+  await page.getByRole('button',{name:/^synthetic-repo/}).click();
+  picks=page.getByRole('radiogroup',{name:'synthetic-repo'});
+  assert.deepEqual(await picks.getByRole('radio').allInnerTexts(),['Open agent','Show tasks','Copy prompt for coding agent']);
+  assert.equal(await picks.getByRole('radio',{name:'Show tasks'}).getAttribute('aria-checked'),'true','follows All agents');
+  await picks.getByRole('radio',{name:'Copy prompt for coding agent'}).click();
+  await page.waitForFunction(()=>document.querySelector('[role=radio][aria-checked=true]')?.textContent==='Copy prompt for coding agent');
+  await snapView('settings-agent-picker-390');
+  await back('Back to Settings');
+  await page.getByRole('button',{name:/^synthetic-repo/}).filter({hasText:'Copy prompt for coding agent'}).waitFor();
+  await rowsFit('settings tap 390');
+  await snap('settings-tap-390');
+  // Home: a tap on a row runs that action; ⋯ still opens the full menu; only the coding agent has the tag.
+  for(const width of [390,1280]){
+   await page.setViewportSize({width,height:844});
+   await page.goto(base+'/#/');await page.reload();
+   const agents=page.getByRole('region',{name:'Agents',exact:true});
+   await agents.waitFor();
+   const pills=agents.locator('.crew-coding-pill');
+   assert.equal(await pills.count(),1,`one Coding agent tag at ${width}`);
+   assert.equal(await pills.first().innerText(),'Coding agent');
+   const fit=await agents.locator('li',{has:page.locator('.crew-coding-pill')}).evaluate(li=>{const p=li.querySelector('.crew-coding-pill').getBoundingClientRect(),m=li.querySelector('.crew-home-agent-more').getBoundingClientRect(),r=li.getBoundingClientRect();return {gap:m.left-p.right,height:r.height,name:li.querySelector('strong').textContent};});
+   assert.equal(fit.name,'synthetic-repo');
+   assert.ok(fit.gap>=4&&fit.height<=76,`the tag clears ⋯ and the row stays compact at ${width}: `+JSON.stringify(fit));
+   if(width===390) await snapView('home-agents-tap-390');
+   await agents.locator('.crew-home-agent').filter({hasText:'Network'}).click();
+   await page.waitForURL(u=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(u.hash));
+   await page.goBack();await agents.waitFor();
+   const menu=await (async()=>{await agents.getByRole('button',{name:'More for Network',exact:true}).click();const m=page.getByRole('dialog',{name:'Network',exact:true});await m.waitFor();return m;})();
+   assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks'],'⋯ keeps the full menu');
+   await page.keyboard.press('Escape');await menu.waitFor({state:'hidden'});
+   await agents.locator('.crew-home-agent').filter({hasText:'synthetic-repo'}).click();
+   await page.locator('.crew-toast').getByText('Copied the session prompt for synthetic-repo.').waitFor();
+   const guide=page.getByRole('dialog',{name:'Start a coding session as synthetic-repo'});
+   if(await guide.isVisible()){await page.keyboard.press('Escape');await guide.waitFor({state:'hidden'});}
+   await page.locator('.crew-toast').getByRole('button',{name:'Dismiss'}).click();
+   assert.equal(await page.evaluate(()=>location.hash),'#/','copying stays on Home');
+  }
+  // Back to the product default for the sections after this one.
+  await page.setViewportSize({width:1280,height:800});
+  await openSettings(1280);
+  await page.getByRole('button',{name:/^synthetic-repo/}).click();
+  await page.getByRole('radiogroup',{name:'synthetic-repo'}).getByRole('radio',{name:'Show tasks'}).click();
+  await back('Back to Settings');
+  await page.getByRole('button',{name:/^All agents/}).click();
+  await page.getByRole('radiogroup',{name:'All agents'}).getByRole('radio',{name:'Open agent'}).click();
+  await back('Back to Settings');
+  await page.getByRole('button',{name:/^synthetic-repo/}).filter({hasText:'Open agent'}).waitFor();
+  await page.waitForLoadState('networkidle');
  }
  await page.setViewportSize({width:1280,height:800});
  // Search boxes draw one focus ring, on the box, never a second one on the field inside.
@@ -2249,7 +2392,8 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await snapView(`listnav-shared-${width}`);
  }}
  await visitor.close();
- await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();
+ await page.goto(base+'/#/settings');
+ await page.getByRole('region',{name:'Account'}).getByRole('button',{name:'Sign out',exact:true}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');

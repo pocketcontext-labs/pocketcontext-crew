@@ -1197,24 +1197,28 @@ it("shows Refresh in flight, ignores a second tap and confirms the result", asyn
   await waitFor(() => expect(refresh).toBeEnabled());
 });
 
-it("displays the running server release and build and refreshes them", async () => {
+// Since 0.36.0 the server release and build are in Settings > About.
+const aboutServer = () => screen.getByRole("region", { name: "About" });
+it("displays the running server release and build in Settings and refreshes them", async () => {
   const commit = "0123456789abcdef0123456789abcdef01234567";
   vi.mocked(crewApi.serverVersion).mockResolvedValueOnce({
     version: "0.2.0",
     commit,
   });
+  history.replaceState(null, "", "/#/settings");
   render(<CrewWorkspace />);
-  const footer = screen.getByRole("contentinfo", { name: "Running server" });
+  const footer = aboutServer();
   await waitFor(() =>
-    expect(footer).toHaveTextContent("Server 0.2.0 · Build 0123456789ab"),
+    expect(footer).toHaveTextContent("Server0.2.0Build0123456789ab"),
   );
-  expect(within(footer).getByLabelText(`Build ${commit}`)).toHaveAttribute(
+  expect(within(footer).getByText("0123456789ab")).toHaveAttribute(
     "title",
     commit,
   );
+  expect(screen.queryByRole("contentinfo", { name: "Running server" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await waitFor(() =>
-    expect(footer).toHaveTextContent("Server 0.3.1 · Build synthetic-bu"),
+    expect(footer).toHaveTextContent("Server0.3.1Buildsynthetic-bu"),
   );
   expect(crewApi.serverVersion).toHaveBeenCalledTimes(2);
 });
@@ -1225,14 +1229,15 @@ it("keeps the workspace usable when server metadata is missing and never substit
   );
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Launch post" });
-  const footer = screen.getByRole("contentinfo", { name: "Running server" });
-  await waitFor(() =>
-    expect(footer).toHaveTextContent("Server version unavailable"),
-  );
-  expect(footer).not.toHaveTextContent("0.3.1");
-  expect(footer).not.toHaveTextContent("Synthetic metadata unavailable");
   fireEvent.click(screen.getByRole("button", { name: /Launch post/ }));
   expect(screen.getByRole("dialog")).toBeInTheDocument();
+  cleanup();
+  history.replaceState(null, "", "/#/settings");
+  render(<CrewWorkspace />);
+  const footer = aboutServer();
+  await waitFor(() => expect(footer).toHaveTextContent("ServerUnavailable"));
+  expect(footer).not.toHaveTextContent("0.3.1");
+  expect(footer).not.toHaveTextContent("Synthetic metadata unavailable");
 });
 
 it("renders development and older hosted version strings without inventing a release or commit", async () => {
@@ -1240,15 +1245,12 @@ it("renders development and older hosted version strings without inventing a rel
     version: "hosted-0123456789ab",
     commit: "",
   });
+  history.replaceState(null, "", "/#/settings");
   render(<CrewWorkspace />);
   await waitFor(() =>
-    expect(
-      screen.getByRole("contentinfo", { name: "Running server" }),
-    ).toHaveTextContent("Server hosted-0123456789ab"),
+    expect(aboutServer()).toHaveTextContent("Serverhosted-0123456789ab"),
   );
-  expect(
-    screen.getByRole("contentinfo", { name: "Running server" }),
-  ).not.toHaveTextContent("Build");
+  expect(aboutServer()).not.toHaveTextContent("Build");
 });
 it("marks a hop-limit stop and a pending owner comment wake on task cards", async () => {
   fixtures.reviews = [];
@@ -2127,9 +2129,6 @@ describe("automatic refresh", () => {
     await screen.findByRole("heading", { name: "Fresh from server" });
     expect(screen.queryByText("Saved.")).toBeNull();
     expect(screen.queryByText("Loading your workspace…")).toBeNull();
-    expect(
-      screen.getByRole("contentinfo", { name: "Running server" }),
-    ).toHaveTextContent("Server 0.3.1");
   });
 
   it("reloads about every 30 seconds while visible", async () => {
@@ -2148,11 +2147,7 @@ describe("automatic refresh", () => {
   it("stays quiet about background failures and keeps the version", async () => {
     render(<CrewWorkspace />);
     await settled();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("contentinfo", { name: "Running server" }),
-      ).toHaveTextContent("Server 0.3.1"),
-    );
+    await waitFor(() => expect(crewApi.serverVersion).toHaveBeenCalled());
     vi.mocked(crewApi.read).mockRejectedValue(new Error("Synthetic outage"));
     vi.mocked(crewApi.serverVersion).mockRejectedValue(new Error("Synthetic"));
     const reads = vi.mocked(crewApi.read).mock.calls.length;
@@ -2162,9 +2157,9 @@ describe("automatic refresh", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(
-      screen.getByRole("contentinfo", { name: "Running server" }),
-    ).toHaveTextContent("Server 0.3.1");
+    // The version from the last good load stays (Settings > About).
+    location.hash = "#/settings";
+    await waitFor(() => expect(aboutServer()).toHaveTextContent("Server0.3.1"));
   });
 
   it("keeps a failed save's error and in-progress edits", async () => {
@@ -3461,10 +3456,10 @@ describe("project agents and coding sessions", () => {
     expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Open agent",
       "Show tasks",
-      "Copy prompt for a coding agent",
+      "Copy prompt for coding agent",
       "How coding sessions work",
     ]);
-    fireEvent.click(menu.getByRole("button", { name: "Copy prompt for a coding agent" }));
+    fireEvent.click(menu.getByRole("button", { name: "Copy prompt for coding agent" }));
     expect(writeText).toHaveBeenCalledWith(session.prompt);
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Copied the session prompt for synthetic-repo.",

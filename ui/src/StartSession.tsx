@@ -12,6 +12,7 @@ import { markdownSummary } from "./markdownText";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
 import { copyText } from "./projectAgents";
 import { useSessionGuideOff } from "./sessionGuide";
+import { t } from "./i18n";
 
 /** What one click on Start a session did, for the workspace toast. */
 export type SessionStart = {
@@ -50,13 +51,17 @@ export function AgentChip({ agent, agents }: { agent: Row; agents: Row[] }) {
       className="crew-agent-chip"
       tabIndex={summary ? 0 : undefined}
       title={summary || undefined}
-      aria-label={`Agent ${name}${summary ? `: ${summary}` : ""}`}
+      aria-label={
+        summary
+          ? t("Agent {name}: {summary}", { name, summary })
+          : t("Agent {name}", { name })
+      }
     >
       <span className="crew-avatar" aria-hidden="true">
         {agentInitials(name, agents)}
       </span>
       <span aria-hidden="true">{name}</span>
-      <small aria-hidden="true">Agent</small>
+      <small aria-hidden="true">{t("Agent")}</small>
     </span>
   );
 }
@@ -215,26 +220,26 @@ export default function StartSession({
           type="button"
           className="crew-session-copy"
           disabled={session.loading}
-          aria-label={`Copy prompt for a coding agent as ${name}`}
+          aria-label={t("Copy prompt for a coding agent as {name}", { name })}
           onClick={session.start}
         >
           <span className="crew-session-copy-icon" aria-hidden="true">
             {session.copied ? "✓" : "⧉"}
           </span>
           {session.loading
-            ? "Preparing…"
+            ? t("Preparing…")
             : session.copied
-              ? "Copied"
+              ? t("Copied")
               : compact
-                ? "Copy coding prompt"
-                : "Copy prompt for a coding agent"}
+                ? t("Copy coding prompt")
+                : t("Copy prompt for a coding agent")}
         </button>
         <div className="crew-help">
           <button
             type="button"
             className="crew-help-button"
-            aria-label={`How to start a session as ${name}`}
-            title="How it works"
+            aria-label={t("How to start a session as {name}", { name })}
+            title={t("How it works")}
             aria-haspopup="dialog"
             onClick={session.openGuide}
           >
@@ -330,12 +335,12 @@ function SessionGuide({
       onPointerDown={(e) => e.stopPropagation()}
     >
       <header>
-        <h2 id={titleId}>Start a coding session as {name}</h2>
+        <h2 id={titleId}>{t("Start a coding session as {name}", { name })}</h2>
         <button
           type="button"
           className="crew-session-guide-close"
-          aria-label="Close"
-          title="Close"
+          aria-label={t("Close")}
+          title={t("Close")}
           onClick={close}
         >
           <span aria-hidden="true">×</span>
@@ -343,29 +348,36 @@ function SessionGuide({
       </header>
       <ol>
         <li>
-          <strong>Copy the prompt.</strong> The button copies the two lines
-          below, which tell a coding agent to act as {name} in Crew.
+          <strong>{t("Copy the prompt.")}</strong>{" "}
+          {t(
+            "The button copies the two lines below, which tell a coding agent to act as {name} in Crew.",
+            { name },
+          )}
         </li>
         <li>
-          <strong>Open your coding agent.</strong> Start a new session in Codex,
-          Claude Code or another coding agent, in the repository you want to
-          work on.
+          <strong>{t("Open your coding agent.")}</strong>{" "}
+          {t(
+            "Start a new session in Codex, Claude Code or another coding agent, in the repository you want to work on.",
+          )}
         </li>
         <li>
-          <strong>Paste and send.</strong> The agent connects to Crew, picks up{" "}
-          {name}'s Ready tasks, and works by the instructions you keep in Crew.
+          <strong>{t("Paste and send.")}</strong>{" "}
+          {t(
+            "The agent connects to Crew, picks up {name}'s Ready tasks, and works by the instructions you keep in Crew.",
+            { name },
+          )}
         </li>
       </ol>
       <div className="crew-session-guide-prompt">
-        <pre aria-label={`Session prompt for ${name}`}>
-          <code>{prompt || "Loading the prompt…"}</code>
+        <pre aria-label={t("Session prompt for {name}", { name })}>
+          <code>{prompt || t("Loading the prompt…")}</code>
         </pre>
         <button
           type="button"
           className="crew-session-guide-copy"
           disabled={!prompt}
-          aria-label={`Copy session prompt for ${name}`}
-          title="Copy"
+          aria-label={t("Copy session prompt for {name}", { name })}
+          title={t("Copy")}
           onClick={copy}
         >
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -381,7 +393,7 @@ function SessionGuide({
             checked={off}
             onChange={(e) => setOff(e.target.checked)}
           />
-          Don't show this again
+          {t("Don't show this again")}
         </label>
         <button
           ref={done}
@@ -389,7 +401,7 @@ function SessionGuide({
           className="crew-primary"
           onClick={close}
         >
-          Got it
+          {t("Got it")}
         </button>
       </footer>
     </dialog>,
@@ -464,27 +476,31 @@ export function SessionToast({
       <button
         type="button"
         className="crew-toast-close"
-        aria-label="Dismiss"
-        title="Dismiss"
+        aria-label={t("Dismiss")}
+        title={t("Dismiss")}
         onClick={dismiss}
       >
         <span aria-hidden="true">×</span>
       </button>
       {start.state === "copied" && (
         <p>
-          Copied the session prompt for {start.name}. Paste it into a new
-          session in your coding agent.
+          {t(
+            "Copied the session prompt for {name}. Paste it into a new session in your coding agent.",
+            { name: start.name },
+          )}
         </p>
       )}
       {start.state === "manual" && (
         <>
           <p>
-            Could not copy automatically. Copy the session prompt for{" "}
-            {start.name} into a new agent session:
+            {t(
+              "Could not copy automatically. Copy the session prompt for {name} into a new agent session:",
+              { name: start.name },
+            )}
           </p>
           <textarea
             readOnly
-            aria-label={`Session prompt for ${start.name}`}
+            aria-label={t("Session prompt for {name}", { name: start.name })}
             value={start.prompt}
             rows={3}
             onFocus={(e) => e.currentTarget.select()}
@@ -493,14 +509,16 @@ export function SessionToast({
       )}
       {start.state === "failed" && (
         <p>
-          Could not prepare the session prompt for {start.name}. Check your
-          connection and try again.
+          {t(
+            "Could not prepare the session prompt for {name}. Check your connection and try again.",
+            { name: start.name },
+          )}
         </p>
       )}
       {start.session && (
         <div className="crew-toast-actions">
           <button type="button" aria-haspopup="dialog" onClick={view}>
-            View
+            {t("View")}
           </button>
         </div>
       )}

@@ -53,6 +53,57 @@ function only(o, allowed) {
   for (const k of Object.keys(o || {}))
     if (!allowed.includes(k)) bad("Unsupported field: " + k);
 }
+// Reader preferences (settings.update). language "" follows the browser.
+const SETTINGS_FIELDS = ["session_guide_off", "language", "agent_tap"];
+const LANGUAGES = ["", "en", "de", "it"];
+// What tapping an agent row on Home runs (0.36.0): one default for all agents
+// (only actions every agent has) and per-agent overrides keyed by agent id.
+// The reader falls back when a stored action is no longer in an agent's menu.
+const TAP_ALL = ["open_agent", "show_tasks"];
+const TAP_AGENT = ["open_agent", "show_tasks", "copy_prompt"];
+const MAX_TAP_AGENTS = 200;
+function agentTap(app, value) {
+  if (value === null) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    bad("agent_tap must be an object {all, agents}");
+  only(value, ["all", "agents"]);
+  const out = {};
+  if (value.all !== undefined) {
+    if (!TAP_ALL.includes(value.all))
+      bad("agent_tap.all must be open_agent or show_tasks");
+    out.all = value.all;
+  }
+  if (value.agents !== undefined) {
+    const agents = value.agents;
+    if (!agents || typeof agents !== "object" || Array.isArray(agents))
+      bad("agent_tap.agents must be an object of agent id to action");
+    const ids = Object.keys(agents);
+    if (ids.length > MAX_TAP_AGENTS)
+      bad("agent_tap.agents has more than " + MAX_TAP_AGENTS + " agents");
+    out.agents = {};
+    for (const id of ids) {
+      if (!TAP_AGENT.includes(agents[id]))
+        bad("agent_tap.agents values must be open_agent, show_tasks or copy_prompt");
+      if (!ID.test(id)) bad("Unknown agent in agent_tap: " + id);
+      try {
+        app.findRecordById("crew_agents", id);
+      } catch (_) {
+        bad("Unknown agent in agent_tap: " + id);
+      }
+      out.agents[id] = agents[id];
+    }
+  }
+  return out;
+}
+function storedTap(s) {
+  const raw = s.getString("agent_tap");
+  if (!raw || raw === "null") return {};
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return {};
+  }
+}
 function get(app, collection, id) {
   if (typeof id !== "string" || !ID.test(id))
     throw new NotFoundError("Record not found");
@@ -662,21 +713,40 @@ function handle(app, e, b, actor, isAgent, files, h) {
     });
   }
   if (b.action === "settings.update") {
-    // Reader preferences of the one owner (0.26.0): session_guide_off is the
-    // session guide's "Don't show this again", kept across browsers.
-    only(d, ["session_guide_off"]);
+    // Reader preferences of the one owner: session_guide_off (0.26.0) is the
+    // session guide's "Don't show this again"; language and agent_tap (0.36.0)
+    // are the reader's language and what tapping an agent on Home does. Kept
+    // across browsers; send any of them.
+    only(d, SETTINGS_FIELDS);
     const s = get(app, "crew_settings", b.id);
-    if (typeof d.session_guide_off !== "boolean")
+    const keys = SETTINGS_FIELDS.filter((k) => k in (d || {}));
+    if (!keys.length) bad("Send session_guide_off, language or agent_tap");
+    if ("session_guide_off" in d && typeof d.session_guide_off !== "boolean")
       bad("session_guide_off must be true or false");
+    if ("language" in d && !LANGUAGES.includes(d.language))
+      bad('language must be "", "en", "de" or "it"');
+    const tap = "agent_tap" in d ? agentTap(app, d.agent_tap) : null;
     return webhooks.idempotent(app, b, () => {
       check(s, b);
-      const old = s.getBool("session_guide_off");
-      s.set("session_guide_off", d.session_guide_off);
+      const changes = {};
+      if ("session_guide_off" in d) {
+        changes.session_guide_off = {
+          old: s.getBool("session_guide_off"),
+          new: d.session_guide_off,
+        };
+        s.set("session_guide_off", d.session_guide_off);
+      }
+      if ("language" in d) {
+        changes.language = { old: s.getString("language"), new: d.language };
+        s.set("language", d.language);
+      }
+      if ("agent_tap" in d) {
+        changes.agent_tap = { old: storedTap(s), new: tap };
+        s.set("agent_tap", tap);
+      }
       s.set("revision", s.getInt("revision") + 1);
       app.save(s);
-      audit(app, s.id, b.action, ctx, {
-        session_guide_off: { old, new: d.session_guide_off },
-      });
+      audit(app, s.id, b.action, ctx, changes);
       return exported(s, app);
     });
   }

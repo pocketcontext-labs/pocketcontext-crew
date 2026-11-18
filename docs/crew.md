@@ -334,7 +334,7 @@ All run on `POST /api/crew/write` (reader) and `POST /api/crew/agent-write`
 | `upload_link.create` | none | `task` or `note`, `expires_in_minutes` (1–1440, default 15), `max_files` (1–20, default 10) | link record plus `token`, `path` (`#/upload/<token>`) and `url` (with a domain); reader route only |
 | `upload_link.revoke` | link id, its revision | `{}` | link record |
 | `storage.update` | settings id, its revision | `storage_limit_bytes` (1 MiB to 1 TiB) | settings record |
-| `settings.update` | settings id, its revision | `session_guide_off` (boolean; the reader's "Don't show this again" for the Start a session guide) | settings record |
+| `settings.update` | settings id, its revision | any of `session_guide_off` (boolean; the reader's "Don't show this again" for the Start a session guide), `language` (`""` follows the browser, or `en`, `de`, `it`) and `agent_tap` (what tapping an agent on Home runs: `{all, agents}`, `all` `open_agent` or `show_tasks`, `agents` an existing agent id to `open_agent`, `show_tasks` or `copy_prompt`, at most 200; replaces the whole value, `null` clears it) | settings record |
 
 `attachment.add` saves each file independently: a file that fails (see codes
 below) is reported in `results` while the others are saved; HTTP 200 when at
@@ -355,7 +355,7 @@ history (`changes`: `attachment`, `name`, `size`, `media_type`, `image`,
 restore append `attachment.archive` / `attachment.restore` (`attachment`,
 `name`). `upload_link.create` / `upload_link.revoke` append to the item too;
 `storage.update` appends to the settings record (`storage_limit_bytes: {old,
-new}`), and `settings.update` likewise (`session_guide_off: {old, new}`).
+new}`), and `settings.update` likewise (`{old, new}` for each field it changed).
 
 Attachment writes (other than a review withdrawal) do not change the task's or note's own revision, so an open
 edit form never conflicts with an upload. Read the attachments collection (or

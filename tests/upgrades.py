@@ -266,6 +266,9 @@ def rehearse(target, previous, root):
             # 0.26.0: the session guide's "Don't show this again" is a setting, off by default.
             assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801800000_crew_session_guide_setting.js'").fetchone() == (1,)
             assert current.execute('SELECT session_guide_off FROM crew_settings').fetchall() == [(0,)]
+            # 0.36.0: the reader's language and agent tap choice are settings, empty by default.
+            assert current.execute("SELECT count(*) FROM _migrations WHERE file='1801900000_crew_reader_preferences.js'").fetchone() == (1,)
+            assert current.execute("SELECT language, coalesce(agent_tap, 'null') FROM crew_settings").fetchall() in ([('', 'null')], [('', '')]), current.execute('SELECT language, agent_tap FROM crew_settings').fetchall()
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()
