@@ -586,9 +586,31 @@ try {
   assert.equal(await page.locator('.crew-topbar > span').isVisible(),width>680,`top bar at ${width}`);
  }
  // Phone board (0.33.0): one column at a time under a sticky switcher with fixed
- // previous/next (disabled in place at the ends), "x of y", dots and a picker
- // with live counts; the cards start right below it in the first screenful.
+ // previous/next (disabled in place at the ends), "x of y" and a picker with
+ // live counts; the cards start right below it in the first screenful.
+ // 0.35.0: Tasks and Notes share one switcher that looks identical apart from
+ // the name, count and position: fixed row, plain centred label (no pill), the
+ // same arrows and hairline, no dots. switcherLook measures everything that
+ // must match; the text and enabled state are returned apart.
  await page.setViewportSize({width:390,height:844});
+ const switcherLook=()=>page.locator('.crew-column-switcher').evaluate(sw=>{
+  const box=e=>e.getBoundingClientRect(),cs=e=>getComputedStyle(e);
+  const [prev,name,next]=sw.children,title=name.querySelector('.crew-switch-title');
+  const r=box(sw),bar=box(document.querySelector('header.crew-mtopbar'));
+  const rel=e=>{const b=box(e);return [b.x-r.x,b.y-r.y,b.width,b.height].map(Math.round).join();};
+  const mid=e=>{const b=box(e);return b.y+b.height/2;};
+  const tinted=[name,...name.querySelectorAll('*')].filter(e=>{const c=cs(e).backgroundColor;return c!=='transparent'&&c!=='rgba(0, 0, 0, 0)';}).length;
+  const font=e=>[cs(e).fontSize,cs(e).fontWeight,cs(e).color].join(' ');
+  return {look:{
+   children:sw.children.length,row:[Math.round(r.x),Math.round(r.width),Math.round(r.height),Math.round(r.y-bar.bottom)].join(),
+   padding:cs(sw).padding,divider:[cs(sw).borderBottomWidth,cs(sw).borderBottomStyle,cs(sw).borderBottomColor].join(' '),bg:cs(sw).backgroundColor,
+   prev:rel(prev),next:rel(next),name:rel(name),namePadding:cs(name).padding,nameRadius:cs(name).borderRadius,
+   tinted,dots:sw.querySelectorAll('.crew-switch-dots, i').length,
+   centred:Math.abs(mid(name)-mid(prev))<=0.5&&Math.abs(mid(title)-mid(name))<=1&&Math.abs((box(title).x+box(title).width/2)-(box(name).x+box(name).width/2))<=1,
+   fonts:[font(title.children[0]),font(title.children[1]),font(title.children[2])].join(' | '),
+  },text:name.innerText,ends:[prev.disabled,next.disabled]};
+ });
+ const switcherLooks=[];
  await go('Tasks');await onPage('Tasks');
  const switcherName=page.getByRole('button',{name:/^Column /});
  const prevColumn=page.getByRole('button',{name:'Previous column'}),nextColumn=page.getByRole('button',{name:'Next column'});
@@ -613,6 +635,7 @@ try {
    assert.ok(card.y>=sw.y+sw.height&&card.y<=sw.y+sw.height+24&&card.y+Math.min(card.height,80)<=844,`${picks[i][0]}: cards start right below the switcher in the first screenful`);
   }
   assert.deepEqual(await stepBoxes(),firstBoxes,'previous and next never move');
+  if(i!==2){const l=await switcherLook();assert.deepEqual(l.ends,[i===0,i===3],'Tasks '+(i+1)+' of 4: arrows disabled only at the ends');switcherLooks.push(['Tasks '+(i+1)+' of 4',l]);}
   if(i===0) await snapView('crew-board-390');
   if(i<3) await nextColumn.click();
  }
@@ -655,7 +678,6 @@ try {
  const bucketSwitcher=page.locator('.crew-bucket-switcher');
  const bucketName=page.getByRole('button',{name:/^Bucket .*Choose a bucket$/});
  const prevBucket=page.getByRole('button',{name:'Previous bucket'}),nextBucket=page.getByRole('button',{name:'Next bucket'});
- assert.equal(await bucketSwitcher.locator('.crew-switch-dots').count(),0,'no dots on the bucket switcher');
  assert.equal(await bucketSwitcher.evaluate(e=>getComputedStyle(e).position),'sticky','the bucket switcher is sticky');
  assert.equal(await page.locator('.crew-bucket-card').count(),0,'no bucket cards on the phone first screen');
  assert.equal(await prevBucket.isDisabled(),true,'Previous is disabled on All');
@@ -676,14 +698,23 @@ try {
  assert.equal(await page.locator('.crew-note-row').first().locator('time').count(),1,'note rows show a relative date');
  await snapView('crew-notes-390');
  {const boxes=async()=>[await prevBucket.boundingBox(),await nextBucket.boundingBox()].map(b=>[b.x,b.y,b.width,b.height].map(Math.round).join());
-  const first=await boxes();
-  for(let i=1;i<bucketPicks.length;i++){
-   await nextBucket.click();
-   assert.match(await bucketName.innerText(),new RegExp('·\\s*'+bucketPicks[i][1]+'\\s*\\('+(i+1)+' of '+bucketPicks.length+'\\)'),'step '+i+' names its bucket and count');
-   assert.equal(await page.locator('.crew-note-row').count(),bucketPicks[i][1],bucketPicks[i][0]+' shows its notes');
-   assert.deepEqual(await boxes(),first,'previous and next never move');
+  const first=await boxes(),n=bucketPicks.length,keep=new Set([0,Math.floor(n/2),n-1]);
+  for(let i=0;i<n;i++){
+   if(i){await nextBucket.click();
+    assert.match(await bucketName.innerText(),new RegExp('·\\s*'+bucketPicks[i][1]+'\\s*\\('+(i+1)+' of '+n+'\\)'),'step '+i+' names its bucket and count');
+    assert.equal(await page.locator('.crew-note-row').count(),bucketPicks[i][1],bucketPicks[i][0]+' shows its notes');
+    assert.deepEqual(await boxes(),first,'previous and next never move');}
+   if(keep.has(i)){const l=await switcherLook();assert.deepEqual(l.ends,[i===0,i===n-1],'Notes '+(i+1)+' of '+n+': arrows disabled only at the ends');switcherLooks.push(['Notes '+(i+1)+' of '+n,l]);}
   }
   assert.equal(await nextBucket.isDisabled(),true,'Next is disabled on the last bucket');}
+ // Tasks and Notes: one switcher, identical at first, middle and last.
+ {const [[,base]]=switcherLooks;
+  assert.ok(switcherLooks.length===6&&switcherLooks.some(([k])=>k.startsWith('Notes')),'measured both switchers at three positions');
+  assert.equal(base.look.children,3,'previous, name, next and nothing else');
+  assert.equal(base.look.dots,0,'no dots');assert.equal(base.look.tinted,0,'no tinted pill behind the label');
+  assert.equal(base.look.centred,true,'the label is centred between the arrows');
+  assert.match(base.look.prev,/,44,44$/,'44 px arrows');assert.match(base.look.divider,/^1px solid /,'a hairline below the row');
+  for(const [where,l] of switcherLooks) assert.deepEqual(l.look,base.look,where+' looks like Tasks 1 of 4 ('+l.text.replace(/\s+/g,' ')+')');}
  await bucketName.click();await bucketPicker.getByRole('button',{name:/^NETWORK/}).click();
  await page.waitForFunction(()=>/^#\/notes\?bucket=[a-z0-9]{15}$/.test(location.hash));
  await page.getByRole('button',{name:'Page options',exact:true}).click();

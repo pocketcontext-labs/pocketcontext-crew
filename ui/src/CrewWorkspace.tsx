@@ -2753,7 +2753,6 @@ export default function CrewWorkspace() {
             <>
               <ColumnSwitcher
                 className="crew-bucket-switcher"
-                dots={false}
                 item="bucket"
                 pickerLabel="Buckets"
                 noun={["note", "notes"]}

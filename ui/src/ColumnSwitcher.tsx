@@ -4,16 +4,17 @@ import { icons } from "./MobileChrome";
 export type SwitcherColumn = { status: string; label: string; count: number };
 
 /**
- * The phone's fixed switcher: `‹  To do · 6  (1 of 4)  ›`, on the board (one
- * dot per column) and on Notes (buckets, no dots). Previous and next stay in
- * place and turn disabled at the ends; the name opens a picker listing every
- * option with its live count. There is no swipe.
+ * The phone's one fixed switcher: `‹  To do · 6  (1 of 4)  ›` on the board and
+ * `‹  All · 402  (1 of 10)  ›` on Notes, identical apart from the name, live
+ * count and position. The row has a fixed height with the plain label centred
+ * between previous and next, which stay in place and turn disabled at the
+ * ends; the name opens a picker listing every option with its live count.
+ * There is no swipe and there are no dots.
  */
 export default function ColumnSwitcher({
   columns,
   current,
   onSelect,
-  dots = true,
   item = "column",
   pickerLabel = "Columns",
   noun = ["task", "tasks"],
@@ -22,8 +23,6 @@ export default function ColumnSwitcher({
   columns: SwitcherColumn[];
   current: string;
   onSelect: (status: string) => void;
-  /** One dot per option; off when there are too many to tell apart. */
-  dots?: boolean;
   /** What one option is called in labels: "column", "bucket". */
   item?: string;
   pickerLabel?: string;
@@ -64,10 +63,7 @@ export default function ColumnSwitcher({
     if (next) onSelect(next.status);
   };
   return (
-    <div
-      className={`crew-column-switcher${dots ? "" : " is-dotless"} ${className}`.trim()}
-      ref={root}
-    >
+    <div className={`crew-column-switcher ${className}`.trim()} ref={root}>
       <button
         type="button"
         className="crew-switch-step"
@@ -95,16 +91,6 @@ export default function ColumnSwitcher({
             ({index + 1} of {columns.length})
           </span>
         </span>
-        {dots && (
-          <span className="crew-switch-dots" aria-hidden="true">
-            {columns.map((c, i) => (
-              <i
-                key={c.status}
-                className={i === index ? "is-current" : undefined}
-              />
-            ))}
-          </span>
-        )}
       </button>
       <button
         type="button"

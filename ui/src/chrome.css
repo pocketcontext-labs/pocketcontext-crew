@@ -516,19 +516,28 @@
   font-size: 13px;
 }
 
-/* The board's column switcher, sticky under the top bar. */
+/* The one phone switcher (Tasks columns, Notes buckets), sticky under the top
+   bar: a fixed-height row, plain label centred between fixed 44 px arrows, a
+   hairline below. No dots, no tinted pill. */
 .crew-column-switcher {
   position: sticky;
   top: var(--crew-mbar-h);
   z-index: 20;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 44px;
+  grid-template-rows: 44px;
   align-items: center;
   gap: 6px;
-  margin: 0 -16px 12px;
-  padding: 4px 12px 8px;
+  height: 56px;
+  /* Flush under the top bar on both pages (the main area's top padding is 8). */
+  margin: -8px -16px 12px;
+  padding: 0 12px;
   border-bottom: 1px solid #e1e5dc;
   background: #fafaf7;
+}
+.crew-filter-chips + .crew-column-switcher {
+  margin-top: 0;
 }
 .crew-phone .crew-switch-step {
   display: grid;
@@ -542,25 +551,35 @@
   box-shadow: 0 1px 3px #24311d12;
   touch-action: manipulation;
 }
+.crew-app .crew-switch-step:hover:not(:disabled) {
+  background: #fffefb;
+}
 .crew-phone .crew-switch-step:disabled {
   opacity: 0.4;
   box-shadow: none;
   background: transparent;
 }
-.crew-phone .crew-switch-step:active:not(:disabled) {
+.crew-app .crew-switch-step:active:not(:disabled) {
   background: #dfe8d8;
 }
 .crew-phone .crew-switch-name {
-  display: grid;
-  justify-items: center;
-  gap: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 44px;
   min-width: 0;
-  padding: 4px 6px;
+  padding: 0 6px;
   border: 0;
   border-radius: 10px;
   background: transparent;
+  line-height: 1;
+  touch-action: manipulation;
 }
-.crew-phone .crew-switch-name:active {
+.crew-app .crew-switch-name:hover {
+  background: transparent;
+}
+.crew-app .crew-switch-name:active {
   background: #edf2e9;
 }
 .crew-switch-title {
@@ -569,12 +588,14 @@
   gap: 6px;
   max-width: 100%;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .crew-switch-title strong {
   min-width: 0;
   overflow: hidden;
   font-size: 18px;
   font-weight: 600;
+  line-height: 1.2;
   text-overflow: ellipsis;
 }
 .crew-switch-count {
@@ -585,19 +606,6 @@
 .crew-switch-of {
   color: #7b8676;
   font-size: 13px;
-}
-.crew-switch-dots {
-  display: flex;
-  gap: 6px;
-}
-.crew-switch-dots i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #cdd6c6;
-}
-.crew-switch-dots i.is-current {
-  background: #2c4b36;
 }
 .crew-switch-picker {
   position: absolute;
@@ -694,20 +702,8 @@
   margin: 0 0 10px;
 }
 
-/* Notes on a phone: the bucket switcher (no dots), then compact rows. The
+/* Notes on a phone: the shared switcher (above), then compact rows. The
    filter sheet keeps wrapped bucket chips, each with its ⋯ (Edit bucket). */
-.crew-column-switcher.crew-bucket-switcher {
-  margin-top: -8px;
-}
-.crew-phone .crew-column-switcher.is-dotless .crew-switch-name {
-  min-height: 44px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: #edf2e9;
-}
-.crew-phone .crew-column-switcher.is-dotless .crew-switch-name:active {
-  background: #dfe8d8;
-}
 .crew-bucket-chips {
   display: flex;
   gap: 8px;

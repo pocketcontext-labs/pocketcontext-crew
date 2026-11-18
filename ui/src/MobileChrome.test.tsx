@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import ColumnSwitcher from "./ColumnSwitcher";
 import CrewWorkspace from "./CrewWorkspace";
 import { attachmentsApi } from "./attachmentsApi";
 import { crewApi, type Row } from "./crewApi";
@@ -309,6 +310,85 @@ describe("phone Home", () => {
   });
 });
 
+/** The switcher's markup with every text and count stripped. */
+function switcherShape() {
+  const root = document.querySelector(".crew-column-switcher");
+  const walk = (el: Element): unknown => [
+    el.tagName,
+    [...el.classList].filter((c) => c !== "crew-bucket-switcher").join(" "),
+    [...el.children].map(walk),
+  ];
+  return root && walk(root);
+}
+const SWITCHER_SHAPE = [
+  "DIV",
+  "crew-column-switcher",
+  [
+    ["BUTTON", "crew-switch-step", [["svg", "crew-micon-svg", expect.anything()]]],
+    [
+      "BUTTON",
+      "crew-switch-name",
+      [
+        [
+          "SPAN",
+          "crew-switch-title",
+          [
+            ["STRONG", "", []],
+            ["SPAN", "crew-switch-count", []],
+            ["SPAN", "crew-switch-of", []],
+          ],
+        ],
+      ],
+    ],
+    ["BUTTON", "crew-switch-step", [["svg", "crew-micon-svg", expect.anything()]]],
+  ],
+];
+
+describe("ColumnSwitcher", () => {
+  const options = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      status: `s${i}`,
+      label: `Option ${i}`,
+      count: i * 3,
+    }));
+
+  it("renders one markup for columns and buckets, with no dots", () => {
+    for (const [n, item] of [
+      [4, "column"],
+      [10, "bucket"],
+    ] as const) {
+      for (const at of [0, Math.floor(n / 2), n - 1]) {
+        const onSelect = vi.fn();
+        const { unmount } = render(
+          <ColumnSwitcher
+            columns={options(n)}
+            current={`s${at}`}
+            onSelect={onSelect}
+            item={item}
+          />,
+        );
+        expect(switcherShape()).toEqual(SWITCHER_SHAPE);
+        expect(document.querySelector(".crew-switch-dots, i")).toBeNull();
+        const name = screen.getByRole("button", { name: /^(Column|Bucket) / });
+        expect(name).toHaveTextContent(
+          `Option ${at}· ${at * 3}(${at + 1} of ${n})`,
+        );
+        const previous = screen.getByRole("button", { name: `Previous ${item}` });
+        const next = screen.getByRole("button", { name: `Next ${item}` });
+        expect((previous as HTMLButtonElement).disabled).toBe(at === 0);
+        expect((next as HTMLButtonElement).disabled).toBe(at === n - 1);
+        if (at < n - 1) {
+          fireEvent.click(next);
+          expect(onSelect).toHaveBeenLastCalledWith(`s${at + 1}`);
+        }
+        fireEvent.click(name);
+        expect(screen.getAllByRole("button", { current: true })).toHaveLength(1);
+        unmount();
+      }
+    }
+  });
+});
+
 describe("phone board", () => {
   it("shows one column at a time with fixed previous and next", async () => {
     render(<CrewWorkspace />);
@@ -318,6 +398,7 @@ describe("phone board", () => {
     const name = () => screen.getByRole("button", { name: /^Column / });
     expect(previous).toBeDisabled();
     expect(name()).toHaveTextContent("To do· 2(1 of 4)");
+    expect(switcherShape()).toEqual(SWITCHER_SHAPE);
     expect(screen.getByText("Plan the talk")).toBeTruthy();
     expect(screen.queryByText("Fix the login")).toBeNull();
     fireEvent.click(next);
@@ -409,7 +490,11 @@ describe("phone Notes", () => {
     expect(previous).toBeDisabled();
     expect(name()).toHaveTextContent("All· 3(1 of 3)");
     expect(name()).toHaveAccessibleName("Bucket All, 3 notes, 1 of 3. Choose a bucket");
-    expect(document.querySelector(".crew-bucket-switcher .crew-switch-dots")).toBeNull();
+    // The same component and markup as the board's switcher, no dots.
+    expect(switcherShape()).toEqual(SWITCHER_SHAPE);
+    expect(document.querySelector(".crew-bucket-switcher")).toBe(
+      document.querySelector(".crew-column-switcher"),
+    );
     // No bucket cards with permanent Edit buttons.
     expect(
       screen.queryByRole("button", { name: "Edit bucket NETWORK" }),
