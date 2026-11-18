@@ -33,6 +33,40 @@ const headerOneRow=async where=>{
  assert.ok(r.right<=r.width,`${where}: close stays on screen`);
  assert.ok(r.nowrap&&r.labels,`${where}: an ellipsized title and icon-only named buttons`);
 };
+// Navigation that works at any width: desktop sidebar links, or on phones the
+// bottom tabs (Home, Tasks, Notes, Approvals) and the More sheet for the rest.
+const go=async name=>{
+ const nav=page.getByRole('navigation',{name:'Workspace'});
+ const link=nav.getByRole('link',{name:new RegExp('^'+name+'(,|$|\\s|\\d)')}).first();
+ if(await link.isVisible()){await link.click();return;}
+ await nav.getByRole('button',{name:'More',exact:true}).click();
+ await page.getByRole('dialog',{name:'More'}).getByRole('link',{name,exact:true}).click();
+ await page.getByRole('dialog',{name:'More'}).waitFor({state:'hidden'});
+};
+// The page shown: its one h1 (the sidebar page heading, or the phone top bar title).
+const onPage=name=>page.getByRole('heading',{level:1,name,exact:true}).waitFor();
+// The phone top bar (0.33.0) is one row: mark, title and icon buttons share one
+// vertical centre, the title ellipsizes and nothing leaves the screen.
+const topBarOneRow=async where=>{
+ const r=await page.locator('header.crew-mtopbar').evaluate(h=>{
+  const box=h.getBoundingClientRect();const mid=e=>{const b=e.getBoundingClientRect();return b.top+b.height/2;};
+  const items=[h.querySelector('.crew-mlogo'),h.querySelector('h1'),...h.querySelectorAll('.crew-mactions button')].filter(e=>e&&e.getClientRects().length&&!e.closest('.crew-global-field,.crew-search-popup,dialog'));
+  return {height:box.height,mids:items.map(mid),right:Math.max(...items.map(e=>e.getBoundingClientRect().right)),left:Math.min(...items.map(e=>e.getBoundingClientRect().left)),width:innerWidth,nowrap:getComputedStyle(h.querySelector('h1')).whiteSpace==='nowrap',sticky:getComputedStyle(h).position};
+ });
+ assert.ok(Math.max(...r.mids)-Math.min(...r.mids)<=1.5,`${where}: top bar items share one row `+JSON.stringify(r.mids));
+ assert.ok(r.height<=64,`${where}: top bar is one slim row (${r.height})`);
+ assert.ok(r.left>=0&&r.right<=r.width,`${where}: top bar fits the screen`);
+ assert.ok(r.nowrap&&r.sticky==='sticky',`${where}: an ellipsized title in a sticky bar`);
+};
+// The phone bottom tabs: fixed to the bottom edge, five equal targets on one row.
+const tabBarCheck=async where=>{
+ const r=await page.getByRole('navigation',{name:'Workspace'}).evaluate(n=>{const b=n.getBoundingClientRect();const items=[...n.children].filter(c=>c.matches('a,button')).map(c=>c.getBoundingClientRect());return {fixed:getComputedStyle(n).position,bottom:b.bottom,height:innerHeight,widths:items.map(i=>Math.round(i.width)),tops:items.map(i=>Math.round(i.top)),tall:Math.min(...items.map(i=>i.height)),labels:[...n.children].filter(c=>c.matches('a,button')).map(c=>c.textContent.replace(/\d+/g,'').trim())};});
+ assert.equal(r.fixed,'fixed',`${where}: tabs are fixed`);
+ assert.ok(Math.abs(r.bottom-r.height)<=1,`${where}: tabs sit on the bottom edge`);
+ assert.deepEqual(r.labels,['Home','Tasks','Notes','Approvals','More'],`${where}: tab labels`);
+ assert.ok(Math.max(...r.widths)-Math.min(...r.widths)<=1&&new Set(r.tops).size===1,`${where}: equal tabs on one row `+JSON.stringify(r));
+ assert.ok(r.tall>=44,`${where}: tab targets at least 44 px`);
+};
 try {
  await page.goto(base);
  await page.getByLabel('Password',{exact:true}).fill(process.env.CREW_TEST_PASSWORD);
@@ -57,13 +91,13 @@ try {
  }
  await cdp.detach();
  await snap('crew-home-new');
- await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await go('Tasks');
  await page.waitForURL('**/#/tasks');
  await page.getByRole('heading',{name:'Tasks',exact:true}).waitFor();
  await page.getByRole('button',{name:'Set up starter crew'}).click();
  await page.getByText('Your five starter agents and their buckets are ready.').waitFor();
- await page.getByRole('navigation').getByRole('link',{name:'Notes',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Notes'}).waitFor();
+ await go('Notes');
+ await onPage('Notes');
  assert.equal(await page.locator('.crew-bucket-card').count(),5);
  await page.getByRole('button',{name:'New note'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch voice');
@@ -111,14 +145,14 @@ try {
  await dialog().getByRole('button',{name:'Archive note'}).click();await saved();
  assert.equal(await page.getByRole('button',{name:/Synthetic launch voice/}).count(),0);
  await page.getByRole('link',{name:'Archive',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Archive'}).waitFor();
+ await onPage('Archive');
  await page.getByRole('tab',{name:/^Notes \(/}).click();
  await page.waitForURL('**/#/archive?tab=notes');
  await page.getByRole('searchbox',{name:'Search archived notes by title'}).fill('launch voice');
  await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByText(/^Archived (just now|\d+ min ago).* · /).waitFor();
  await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByRole('button',{name:'Restore Synthetic launch voice'}).click();
  await page.getByText('Restored. Prior approvals were not reactivated.').waitFor();
- await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await go('Tasks');
  await page.getByRole('button',{name:'New task'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch post');
  await dialog().getByLabel('Description',{exact:true}).fill('Introduce our product in our voice.');
@@ -149,7 +183,7 @@ try {
  await page.locator('.crew-human').filter({hasText:'Human'}).waitFor();
  await snap('crew-board-desktop');
  await page.getByRole('link',{name:/^Approvals/}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Approvals'}).waitFor();
+ await onPage('Approvals');
  const reviewCard=page.getByRole('button',{name:'Review draft: Synthetic launch post'});
  assert.equal(await reviewCard.locator('a, button, input, select, textarea').count(),0,'the Approvals card holds no other controls');
  await reviewCard.focus();await page.keyboard.press('Shift+Tab');await page.keyboard.press('Tab');
@@ -230,8 +264,8 @@ try {
  // The reload above opened the task link, whose page underneath is Tasks.
  assert.equal(new URL(page.url()).hash,'#/tasks','closing returns to the page underneath');
 }
- await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
+ await go('Tasks');
+ await onPage('Tasks');
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/In progress/})}).locator('.crew-task-card').count(),1);
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
  const taskDialogHeight=()=>dialog().evaluate(d=>Math.round(d.getBoundingClientRect().height));
@@ -267,7 +301,7 @@ try {
  await dialog().getByRole('button',{name:'Save task'}).click();await saved();
  assert.equal(await page.locator('.crew-column').filter({has:page.getByRole('heading',{name:/Done/})}).locator('.crew-task-card').count(),1);
  // Related is one component: link a task from a note's Read view; the task lists the note under Linked from.
- await page.getByRole('navigation').getByRole('link',{name:'Notes',exact:true}).click();
+ await go('Notes');
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  {const related=dialog().getByRole('group',{name:'Related'});
  await related.getByText('No related items',{exact:true}).waitFor();
@@ -279,7 +313,7 @@ try {
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  await dialog().getByRole('group',{name:'Related'}).getByRole('list',{name:'Links'}).getByRole('link',{name:'Synthetic launch post'}).waitFor();
  await close();await dialog().waitFor({state:'hidden'});
- await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await go('Tasks');
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
  await dialog().getByRole('group',{name:'Related'}).getByRole('list',{name:'Linked from'}).getByRole('link',{name:'Synthetic launch voice'}).waitFor();
  await close();await dialog().waitFor({state:'hidden'});
@@ -328,34 +362,48 @@ try {
  await page.goBack();
  await page.waitForURL('**/#/search?q=synthetic');
  await allResults.getByRole('button',{name:/Synthetic launch voice/}).waitFor();
- // Phones: an icon beside Refresh opens the field over the logo row.
+ // Phones (0.33.0): a slim one-row top bar (mark, title, search, page menu)
+ // and bottom tabs; the search icon opens the field over the bar.
  await page.setViewportSize({width:390,height:844});
  const searchToggle=page.getByRole('button',{name:'Search',exact:true});
  assert.equal(await searchToggle.isVisible(),true,'search icon at 390');
  assert.equal(await searchBox.isVisible(),false,'field closed at 390');
- assert.equal(await page.getByRole('navigation').getByRole('link').count(),7,'seven phone menu items');
- const [toggleBox,refreshBox]=[await searchToggle.boundingBox(),await page.getByRole('button',{name:'Refresh',exact:true}).boundingBox()];
- assert.ok(toggleBox.x+toggleBox.width<=refreshBox.x&&Math.abs(toggleBox.y-refreshBox.y)<2,'search icon sits beside Refresh');
+ await tabBarCheck('search 390');
+ for(const width of [320,375,390]){await page.setViewportSize({width,height:844});await topBarOneRow('search '+width);}
+ assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).count(),0,'Refresh lives in the page menu on phones');
+ const menuButton=page.getByRole('button',{name:'Page options',exact:true});
+ const [toggleBox,menuBox]=[await searchToggle.boundingBox(),await menuButton.boundingBox()];
+ assert.ok(toggleBox.x+toggleBox.width<=menuBox.x&&Math.abs(toggleBox.y-menuBox.y)<2,'search icon sits beside the page menu');
  await snap('crew-search-page-390');
  assert.equal(await overflow(),false,'search page overflow at 390');
- // A tap on Refresh shows a pressed state, a spinning (or, reduced, still) icon, then "Updated.".
- const refreshButton=page.getByRole('button',{name:'Refresh',exact:true});
+ // The top bar icons answer a tap with a pressed state.
+ const restBackground=await menuButton.evaluate(e=>getComputedStyle(e).backgroundColor);
+ await page.mouse.move(menuBox.x+menuBox.width/2,menuBox.y+menuBox.height/2);
+ await page.mouse.down();
+ await page.waitForTimeout(150);
+ const pressedLook=await menuButton.evaluate(e=>[getComputedStyle(e).backgroundColor,getComputedStyle(e).transform]);
+ await page.mouse.up();
+ assert.notEqual(pressedLook[0],restBackground,'the page menu shows a pressed background');
+ assert.notEqual(pressedLook[1],'none','the page menu shrinks while pressed');
+ // The page menu holds the intro, the help and Refresh (spinning, or still with reduced motion), then "Updated." under the bar.
+ const pageMenu=page.getByRole('dialog',{name:'Search'});
+ await pageMenu.waitFor();
+ await pageMenu.getByText('Every task, note, agent and bucket that matches your words.').waitFor();
+ await pageMenu.getByRole('link',{name:'Learn more in the Guide'}).waitFor();
+ {const b=await pageMenu.boundingBox();assert.ok(b.x>=0&&b.x+b.width<=390&&b.y+b.height<=844+1,'the page menu fits the phone: '+JSON.stringify(b));}
+ await snapView('crew-page-menu-390');
+ const refreshButton=pageMenu.getByRole('button',{name:'Refresh',exact:true});
  const spinFor=async(motion)=>{await page.emulateMedia({reducedMotion:motion});return refreshButton.evaluate(e=>{e.classList.add('is-refreshing');const name=getComputedStyle(e.querySelector('.crew-refresh-icon')).animationName;e.classList.remove('is-refreshing');return name;});};
  assert.equal(await spinFor('no-preference'),'crew-refresh-spin','refresh icon spins');
  assert.equal(await spinFor('reduce'),'none','reduced motion keeps the icon still');
  await page.emulateMedia({reducedMotion:'no-preference'});
- const restBackground=await refreshButton.evaluate(e=>getComputedStyle(e).backgroundColor);
- await page.mouse.move(refreshBox.x+refreshBox.width/2,refreshBox.y+refreshBox.height/2);
- await page.mouse.down();
- await page.waitForTimeout(150);
- const pressedLook=await refreshButton.evaluate(e=>[getComputedStyle(e).backgroundColor,getComputedStyle(e).transform]);
- await page.mouse.up();
- assert.notEqual(pressedLook[0],restBackground,'Refresh shows a pressed background');
- assert.notEqual(pressedLook[1],'none','Refresh shrinks while pressed');
+ await refreshButton.click();
+ await pageMenu.waitFor({state:'hidden'});
  const updated=page.getByRole('status').filter({hasText:'Updated.'});
  await updated.waitFor();
  const updatedBox=await updated.boundingBox();
- assert.ok(updatedBox.y>=refreshBox.y+refreshBox.height&&updatedBox.x>=0&&updatedBox.x+updatedBox.width<=390,'Updated sits under the header buttons at 390');
+ const barBox=await page.locator('header.crew-mtopbar').boundingBox();
+ assert.ok(updatedBox.y>=barBox.y+barBox.height-1&&updatedBox.x>=0&&updatedBox.x+updatedBox.width<=390,'Updated sits under the top bar at 390');
  await snapView('crew-refresh-updated-390');
  await updated.waitFor({state:'hidden'});
  await searchToggle.click();
@@ -438,33 +486,49 @@ try {
  for(const width of [1440,390,320]){
   await page.setViewportSize({width,height:900});
   for(const name of ['Home','Tasks','Notes','Approvals','Agents','Archive']){
-   await page.getByRole('navigation').getByRole('link',{name:new RegExp('^'+name)}).click();
-   await page.locator('nav a[aria-current=page]').filter({hasText:name}).waitFor();
+   await go(name);
+   await onPage(name);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
-   if(name==='Tasks') {
+   if(width<=680){await topBarOneRow(name+' '+width);await tabBarCheck(name+' '+width);
+    // Intro text and page help live in the page menu, not on the screen.
+    assert.equal(await page.locator('.crew-heading').count(),0,`no page heading block at ${width}`);
+    // Page content never hides under the tabs: the footer clears them at the end of the page.
+    await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
+    const [footer,tabs]=await Promise.all([page.locator('.crew-main > footer.crew-server-version').boundingBox(),page.getByRole('navigation',{name:'Workspace'}).boundingBox()]);
+    if(footer) assert.ok(footer.y+footer.height<=tabs.y+1,`${name}: content ends above the tabs at ${width}`);
+    await page.evaluate(()=>window.scrollTo(0,0));
+   }
+   if(name==='Tasks'&&width>680) {
     const searchWidth=await page.getByRole('searchbox',{name:'Search tasks',exact:true}).evaluate(e=>e.getBoundingClientRect().width);
     assert.ok(searchWidth>=200,`task search stays usable at ${width}: ${searchWidth}`);
     assert.equal(await page.locator('.crew-toolbar > select').evaluateAll(selects=>selects.every(e=>getComputedStyle(e).flexShrink==='0')),true,'filters wrap rather than shrink their labels');
    }
   }
-  await page.getByRole('navigation').getByRole('link',{name:'Home',exact:true}).click();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();await snap('crew-home-'+width);
+  await go('Home');await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();await snap('crew-home-'+width);
   // A status tile filters to exactly its tasks and focuses that column.
   // The one-shot column query is consumed; the status filter remains. Back returns Home.
   await page.getByRole('link',{name:/^\d+ Done, show on the Tasks board$/}).click();
   await page.waitForURL(u=>u.hash==='#/tasks?status=done');
   await page.waitForFunction(()=>{const c=document.activeElement;if(!c?.matches('.crew-column')||!c.textContent.startsWith('Done'))return false;const r=c.getBoundingClientRect();return r.top>=0&&r.top<innerHeight&&r.left>=0&&r.right<=innerWidth;});
-  assert.equal(await page.locator('.crew-column').count(),4,`all columns at ${width}`);
+  // A phone shows only the asked-for column, named in the switcher.
+  assert.equal(await page.locator('.crew-column').count(),width>680?4:1,`columns at ${width}`);
+  if(width<=680) assert.match(await page.getByRole('button',{name:/^Column /}).innerText(),/^Done/,'the switcher shows the asked-for column');
   await page.waitForTimeout(250);await snapView('crew-board-column-'+width);
   await page.locator('.crew-column-highlight').waitFor({state:'detached'});
   await page.goBack();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>location.hash),'#/');
   if(width<1440){
-   // Help opens on tap, stays on screen, and the Guide is reachable from Home.
-   await page.getByRole('button',{name:'What is Home?',exact:true}).click();
+   // Phones: Home's intro and help are in the page menu; section help still opens on tap and stays on screen; the Guide is reachable from Home.
+   await page.getByRole('button',{name:'Page options',exact:true}).click();
+   const homeMenu=page.getByRole('dialog',{name:'Home'});
+   await homeMenu.getByText(/^Your starting point\./).waitFor();
+   await homeMenu.getByRole('button',{name:'Done',exact:true}).click();await homeMenu.waitFor({state:'hidden'});
+   const sectionHelp=page.getByRole('button',{name:/^What /}).first();
+   await sectionHelp.click();
    const pop=page.locator('.crew-help-popover');await pop.waitFor();
    const box=await pop.boundingBox();
    assert.ok(box.x>=0&&box.x+box.width<=width,`help popover fits at ${width}`);
-   const tap=await page.getByRole('button',{name:'What is Home?',exact:true}).boundingBox();
+   const tap=await sectionHelp.boundingBox();
    assert.ok(tap.width>=32&&tap.height>=32,'help tap target');
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`help overflow at ${width}`);
    await snapView('crew-help-popover-'+width);
@@ -474,17 +538,122 @@ try {
    await page.getByRole('heading',{name:'How Crew works',exact:true}).waitFor();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Guide overflow at ${width}`);
    await snap('crew-guide-'+width);
-   await page.getByRole('navigation').getByRole('link',{name:'Home',exact:true}).click();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
+   await go('Home');await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
   }
-  await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();await snap('crew-board-'+width);
+  await go('Tasks');await onPage('Tasks');await snap('crew-board-'+width);
   assert.equal(await page.locator('button:visible').filter({hasText:/^Sign out$/}).count(),1,`one Sign out at ${width}`);
-  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isVisible(),true,`Refresh at ${width}`);
+  assert.equal(await page.getByRole('button',{name:width>680?'Refresh':'Page options',exact:true}).isVisible(),true,`Refresh or the page menu at ${width}`);
   assert.equal(await page.locator('.crew-topbar > span').isVisible(),width>680,`top bar at ${width}`);
  }
+ // Phone board (0.33.0): one column at a time under a sticky switcher with fixed
+ // previous/next (disabled in place at the ends), "x of y", dots and a picker
+ // with live counts; the cards start right below it in the first screenful.
+ await page.setViewportSize({width:390,height:844});
+ await go('Tasks');await onPage('Tasks');
+ const switcherName=page.getByRole('button',{name:/^Column /});
+ const prevColumn=page.getByRole('button',{name:'Previous column'}),nextColumn=page.getByRole('button',{name:'Next column'});
+ await switcherName.click();
+ const picker=page.getByRole('group',{name:'Columns'});
+ const picks=await picker.getByRole('button').evaluateAll(bs=>bs.map(b=>[b.children[0].textContent,Number(b.children[1].textContent)]));
+ assert.deepEqual(picks.map(p=>p[0]),['To do','In progress','Needs review','Done'],'the picker lists every column');
+ {const b=await picker.boundingBox();assert.ok(b.x>=0&&b.x+b.width<=390,'the column picker fits');}
+ await snapView('crew-board-column-picker-390');
+ await picker.getByRole('button',{name:/^To do/}).click();await picker.waitFor({state:'hidden'});
+ assert.equal(await prevColumn.isDisabled(),true,'Previous is disabled on the first column');
+ const stepBoxes=async()=>[await prevColumn.boundingBox(),await nextColumn.boundingBox()].map(b=>[b.x,b.y,b.width,b.height].map(Math.round).join());
+ const firstBoxes=await stepBoxes();
+ for(let i=0;i<4;i++){
+  const label=await switcherName.innerText();
+  assert.match(label,new RegExp('^'+picks[i][0]+'\\s*·\\s*'+picks[i][1]+'\\s*\\('+(i+1)+' of 4\\)'),'the switcher names the column, its count and x of y: '+label);
+  assert.equal(await page.locator('.crew-column').count(),1,'one column on a phone');
+  const shown=await page.locator('.crew-task-card').count();
+  if(!await page.getByRole('button',{name:/^Show older/}).count()) assert.equal(shown,picks[i][1],`${picks[i][0]} shows its live count of cards`);
+  if(shown){
+   const [card,sw]=[await page.locator('.crew-task-card').first().boundingBox(),await page.locator('.crew-column-switcher').boundingBox()];
+   assert.ok(card.y>=sw.y+sw.height&&card.y<=sw.y+sw.height+24&&card.y+Math.min(card.height,80)<=844,`${picks[i][0]}: cards start right below the switcher in the first screenful`);
+  }
+  assert.deepEqual(await stepBoxes(),firstBoxes,'previous and next never move');
+  if(i===0) await snapView('crew-board-390');
+  if(i<3) await nextColumn.click();
+ }
+ assert.equal(await nextColumn.isDisabled(),true,'Next is disabled on the last column');
+ assert.equal(await prevColumn.isVisible(),true,'disabled ends stay in place');
+ assert.equal(await page.locator('.crew-column-switcher').evaluate(e=>getComputedStyle(e).position),'sticky','the switcher is sticky');
+ {const [bar,sw]=[await page.locator('header.crew-mtopbar').boundingBox(),await page.locator('.crew-column-switcher').boundingBox()];assert.ok(sw.y>=bar.y+bar.height-1&&sw.y-(bar.y+bar.height)<=10,'the switcher sits directly under the top bar');
+  assert.equal(await page.locator('.crew-column-switcher').evaluate(e=>parseFloat(getComputedStyle(e).top)),Math.round(bar.height),'it sticks at the bar\'s bottom edge');}
+ await picker.waitFor({state:'detached'});
+ await switcherName.click();await picker.getByRole('button',{name:/^To do/}).click();
+ // Search, scope, sort, agents and filters live in a sheet with Done; active filters show as removable chips.
+ assert.equal(await page.getByRole('searchbox',{name:'Search tasks'}).count(),0,'no task search on the phone board');
+ const filterIcon=page.getByRole('button',{name:/^Filters/});
+ await filterIcon.click();
+ const filterSheet=page.getByRole('dialog',{name:'Filters'});
+ for(const name of ['Filter by assignment','Sort tasks','Filter by hold','Filter by label','Filter by status']) await filterSheet.getByRole('combobox',{name}).waitFor();
+ await filterSheet.getByRole('searchbox',{name:'Search tasks'}).waitFor();
+ {const b=await filterSheet.boundingBox();assert.ok(b.x>=0&&b.x+b.width<=390&&b.y+b.height<=845,'the filter sheet fits: '+JSON.stringify(b));
+  assert.equal(await filterSheet.evaluate(d=>d.scrollWidth<=d.clientWidth+1),true,'no sideways scroll in the filter sheet');
+  assert.equal(await filterSheet.getByRole('searchbox',{name:'Search tasks'}).evaluate(e=>getComputedStyle(e).fontSize),'16px','16px sheet search');}
+ await snapView('crew-board-filters-390');
+ await filterSheet.getByRole('group',{name:'Filter by agent'}).getByRole('button',{name:/^Network, /}).click();
+ await page.waitForFunction(()=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(location.hash));
+ await filterSheet.getByRole('button',{name:'Done',exact:true}).click();await filterSheet.waitFor({state:'hidden'});
+ const activeChips=page.getByRole('group',{name:'Active filters'});
+ await activeChips.getByText('Agent: Network').waitFor();
+ assert.equal(await page.getByRole('button',{name:'Filters, 1 on',exact:true}).isVisible(),true,'the filter icon counts the active filter');
+ {const [bar,ch,sw]=[await page.locator('header.crew-mtopbar').boundingBox(),await activeChips.boundingBox(),await page.locator('.crew-column-switcher').boundingBox()];assert.ok(ch.y>=bar.y+bar.height-1&&ch.y+ch.height<=sw.y+1,'chips sit between the top bar and the switcher');}
+ await topBarOneRow('filtered board 390');
+ await snapView('crew-board-chips-390');
+ await activeChips.getByRole('button',{name:'Remove filter Agent: Network'}).click();
+ await page.waitForFunction(()=>location.hash==='#/tasks');
+ await activeChips.waitFor({state:'detached'});
+ // Notes: sticky bucket chips with live counts, then note rows in the first screenful; Edit bucket is in the selected chip's ⋯.
+ await go('Notes');await onPage('Notes');
+ const bucketChips=page.getByRole('group',{name:'Filter by bucket'});
+ const allChip=bucketChips.getByRole('button',{name:/^All buckets, \d+ notes?$/});
+ assert.equal(await allChip.getAttribute('aria-pressed'),'true');
+ assert.equal(await bucketChips.evaluate(e=>getComputedStyle(e).position),'sticky','the bucket chips are sticky');
+ assert.equal(await page.locator('.crew-bucket-card').count(),0,'no bucket cards on the phone first screen');
+ {const [bar,ch,row]=[await page.locator('header.crew-mtopbar').boundingBox(),await bucketChips.boundingBox(),await page.locator('.crew-note-row').first().boundingBox()];
+  assert.ok(Math.abs(ch.y-(bar.y+bar.height))<=1,'chips sit directly under the top bar');
+  assert.ok(row.y>=ch.y+ch.height&&row.y<=ch.y+ch.height+24&&row.y+row.height<=844,'the first note is in the first screenful');}
+ assert.equal(await page.locator('.crew-note-row').first().locator('time').count(),1,'note rows show a relative date');
+ await snapView('crew-notes-390');
+ await bucketChips.getByRole('button',{name:/^NETWORK, /}).click();
+ await page.waitForFunction(()=>/^#\/notes\?bucket=[a-z0-9]{15}$/.test(location.hash));
+ await bucketChips.getByRole('button',{name:'Bucket NETWORK options'}).click();
+ const bucketMenu=page.getByRole('menu');await bucketMenu.waitFor();
+ {const b=await bucketMenu.boundingBox();assert.ok(b.x>=0&&b.x+b.width<=390,'the bucket menu fits');}
+ await bucketMenu.getByRole('menuitem',{name:'Edit bucket'}).click();
+ await dialog().getByLabel('Name',{exact:true}).waitFor();
+ await close();await dialog().waitFor({state:'hidden'});
+ await allChip.click();
+ await page.getByRole('button',{name:/^Filter and sort/}).click();
+ const noteSheet=page.getByRole('dialog',{name:'Filter and sort'});
+ await noteSheet.getByRole('searchbox',{name:'Search notes'}).waitFor();
+ await noteSheet.getByRole('combobox',{name:'Filter by responsible agent'}).waitFor();
+ assert.ok(await noteSheet.getByRole('button',{name:/^Bucket .* options$/}).count()>=5,'every bucket chip in the sheet has its ⋯');
+ await noteSheet.getByText('Name',{exact:true}).click();
+ await page.waitForFunction(()=>location.hash==='#/notes?sort=title');
+ await snapView('crew-notes-sheet-390');
+ await noteSheet.getByText('Last updated',{exact:true}).click();
+ await page.waitForFunction(()=>location.hash==='#/notes');
+ await noteSheet.getByRole('button',{name:'Done',exact:true}).click();await noteSheet.waitFor({state:'hidden'});
+ // More reaches every other page.
+ await page.getByRole('navigation',{name:'Workspace'}).getByRole('button',{name:'More',exact:true}).click();
+ {const more=page.getByRole('dialog',{name:'More'});for(const name of ['Shared','Agents','Archive','Connect an agent','Guide']) await more.getByRole('link',{name,exact:true}).waitFor();
+  await snapView('crew-more-390');await more.getByRole('button',{name:'Done',exact:true}).click();await more.waitFor({state:'hidden'});}
+ // 1024 keeps the desktop board and Notes.
+ await page.setViewportSize({width:1024,height:800});
+ await page.locator('.crew-bucket-card').first().waitFor();
+ assert.equal(await page.locator('.crew-bucket-chips-bar').count(),0,'no phone chips at 1024');
+ await go('Tasks');await onPage('Tasks');
+ assert.equal(await page.locator('.crew-column').count(),4,'four columns at 1024');
+ assert.equal(await page.locator('.crew-column-switcher, .crew-tabbar, .crew-mtopbar').count(),0,'no phone chrome at 1024');
+ await page.getByRole('navigation',{name:'Workspace'}).getByRole('link',{name:'Agents',exact:true}).waitFor();
  // Phone sheets: reading first, edit second, Save pinned once something changed.
  await page.setViewportSize({width:390,height:844});
- await page.getByRole('navigation').getByRole('link',{name:'Notes',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Notes'}).waitFor();
+ await go('Notes');
+ await onPage('Notes');
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  await dialog().getByRole('heading',{name:'Synthetic launch voice'}).waitFor();
  const sheet=await dialog().boundingBox();
@@ -551,8 +720,8 @@ try {
  await page.locator('#guide-bucket.current').waitFor({state:'detached'});
  await page.getByRole('heading',{name:'How Crew works',exact:true}).waitFor();
  await page.waitForFunction(()=>window.scrollY<5);
- await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
+ await go('Tasks');
+ await onPage('Tasks');
  await page.getByRole('button',{name:/New task/}).click();
  await page.getByRole('dialog').waitFor();
  await page.mouse.click(5,5);
@@ -567,23 +736,23 @@ try {
  await page.mouse.click(5,5);
  await page.getByRole('dialog').waitFor({state:'hidden'});
  const currentPage=()=>page.locator('nav a[aria-current=page]').innerText();
- await page.getByRole('navigation').getByRole('link',{name:'Agents',exact:true}).click();
+ await go('Agents');
  await page.waitForURL('**/#/agents');
  await page.reload();
  await page.locator('nav a[aria-current=page]').waitFor();
  assert.match(await currentPage(),/Agents/,'reload keeps the page');
  assert.match(await page.title(),/^Agents/);
- await page.getByRole('navigation').getByRole('link',{name:'Archive',exact:true}).click();
+ await go('Archive');
  await page.waitForURL('**/#/archive');
  await page.goBack();
  await page.waitForURL('**/#/agents');
  assert.match(await currentPage(),/Agents/,'Back returns to the page');
- await page.getByRole('navigation').getByRole('link',{name:'Notes',exact:true}).click();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Notes'}).waitFor();
+ await go('Notes');
+ await onPage('Notes');
  await page.getByRole('button',{name:/Synthetic launch voice/}).click();
  assert.equal(await dialog().locator('.crew-prose').innerText(),'Write plainly for independent founders.');await close();
  await page.setViewportSize({width:1280,height:800});
- await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await go('Tasks');
  await page.getByRole('button',{name:'New task'}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic long description');
  await dialog().getByLabel('Description',{exact:true}).fill(Array.from({length:40},(_,i)=>`Synthetic line ${i+1}`).join('\n'));
@@ -682,21 +851,22 @@ try {
  await snap('crew-board-filters-1024');
  await page.getByRole('heading',{name:'Tasks',exact:true}).click();
  await filtersPanel.waitFor({state:'hidden'});
+ // Phones: Sort sits in the filter sheet beside the filters, and is not counted as a filter.
  await page.setViewportSize({width:390,height:844});
- await filtersButton.click();
- assert.equal(await filtersPanel.evaluate(p=>{const r=p.getBoundingClientRect();return r.left>=0&&r.right<=window.innerWidth;}),true,'Filters panel fits at phone width');
+ await page.getByRole('button',{name:/^Filters/}).click();
+ const phoneFilters=page.getByRole('dialog',{name:'Filters'});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'board filters fit at phone width');
- await snap('crew-board-filters-390');
- await page.keyboard.press('Escape');
- // Sort stays a labelled toolbar control at phone width, outside Filters.
- const sortTasks=page.getByRole('combobox',{name:'Sort tasks'});
- assert.equal(await sortTasks.isVisible(),true,'Sort is visible at phone width');
+ const sortTasks=phoneFilters.getByRole('combobox',{name:'Sort tasks'});
+ assert.equal(await sortTasks.isVisible(),true,'Sort is in the phone filter sheet');
  await sortTasks.selectOption('held');
  await page.waitForFunction(()=>location.hash==='#/tasks?sort=held');
- assert.equal(await filtersButton.innerText(),'Filters','sort is not counted as a filter');
+ await phoneFilters.getByRole('button',{name:'Done',exact:true}).click();await phoneFilters.waitFor({state:'hidden'});
+ assert.equal(await page.getByRole('button',{name:'Filters',exact:true}).isVisible(),true,'sort is not counted as a filter');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'sort fits at phone width');
- await sortTasks.selectOption('updated');
+ await page.getByRole('button',{name:'Filters',exact:true}).click();
+ await phoneFilters.getByRole('combobox',{name:'Sort tasks'}).selectOption('updated');
  await page.waitForFunction(()=>location.hash==='#/tasks');
+ await phoneFilters.getByRole('button',{name:'Done',exact:true}).click();await phoneFilters.waitFor({state:'hidden'});
  await page.setViewportSize({width:1280,height:800});
  // Won't do puts a card in the Done column; releases are plain labels (0.23.0): no release field, filter, header or token.
  await page.getByRole('button',{name:/Synthetic long description/}).click();
@@ -753,11 +923,11 @@ try {
  await assignment.selectOption({label:'Network (1)'});
  await page.waitForFunction(()=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(location.hash));
  const agentQuery=await page.evaluate(()=>location.hash.split('?')[1]);
- await page.getByRole('navigation').getByRole('link',{name:'Agents',exact:true}).click();
+ await go('Agents');
  await page.waitForURL('**/#/agents');
  await page.evaluate(q=>{location.hash='#/team?'+q;},agentQuery);
  await page.waitForFunction(q=>location.hash==='#/tasks?'+q,agentQuery);
- await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
+ await onPage('Tasks');
  await cards(1);
  // The redirect replaced the old address: Back goes straight to the previous page.
  await page.goBack();
@@ -768,14 +938,14 @@ try {
  await page.evaluate(()=>history.replaceState(null,'','#/memory?sort=title'));
  await page.reload();
  await page.waitForFunction(()=>location.hash==='#/notes?sort=title');
- await page.locator('nav a[aria-current=page]').filter({hasText:'Notes'}).waitFor();
+ await onPage('Notes');
  await page.waitForFunction(()=>document.querySelector('select[aria-label="Sort notes"]')?.value==='title');
  await page.waitForFunction(()=>document.querySelectorAll('.crew-note-card').length>0);
  await snap('crew-notes-1280');
  await page.evaluate(q=>history.replaceState(null,'','#/team?'+q),agentQuery);
  await page.reload();
  await page.waitForFunction(q=>location.hash==='#/tasks?'+q,agentQuery);
- await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
+ await onPage('Tasks');
  await cards(1);
  // A task opened from the filtered board closes back to it; its link opens over the board.
  await page.getByRole('button',{name:/Synthetic launch post/}).click();
@@ -788,7 +958,7 @@ try {
  await page.evaluate(p=>history.replaceState(null,'',p),taskPath);
  await page.reload();
  await dialog().waitFor();
- await page.locator('nav a[aria-current=page]').filter({hasText:'Tasks'}).waitFor();
+ await onPage('Tasks');
  await page.waitForFunction(()=>document.querySelector('.crew-heading h1')?.textContent==='Tasks'&&document.querySelectorAll('.crew-column .crew-task-card').length===2);
  assert.equal(page.url().endsWith(taskPath),true,'the task link keeps its address');
  await snapView('crew-task-over-board-1280');
@@ -796,7 +966,7 @@ try {
  await page.waitForFunction(()=>location.hash==='#/tasks');
  await cards(2);
  // A long agent brief opens at full height (capped, with a scrollbar), and its card clamps to whole lines.
- await page.getByRole('navigation').getByRole('link',{name:'Agents',exact:true}).click();
+ await go('Agents');
  await page.waitForURL('**/#/agents');
  await page.locator('.crew-agent-card').filter({hasText:'Network'}).click();
  const longBrief=Array.from({length:45},(_,i)=>`Synthetic brief line ${i+1}`).join('\n');
@@ -1004,7 +1174,7 @@ try {
  }
  await page.setViewportSize({width:1280,height:800});
  // Search boxes draw one focus ring, on the box, never a second one on the field inside.
- await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
+ await go('Tasks');
  await page.waitForURL('**/#/tasks');
  for(const [box,field] of [['.crew-global-field','.crew-global-field input'],['.crew-search','.crew-search input']]){
   await page.locator(field).first().focus();
@@ -1381,7 +1551,8 @@ try {
  {const extra=[];for(const name of ['Attend','Build','Design','Implement','Learn','Network-two','Sell'])extra.push(await boardWrite('agent.create',{name:`Synthetic ${name}`,kind:'external'}));
  await page.setViewportSize({width:390,height:844});
  await page.goto(base+'/#/tasks');await page.reload();
- const row=page.getByRole('group',{name:'Filter by agent'});
+ await page.getByRole('button',{name:/^Filters/}).click();
+ const row=page.getByRole('dialog',{name:'Filters'}).getByRole('group',{name:'Filter by agent'});
  await row.getByRole('button',{name:/^Synthetic Sell, /}).waitFor();
  const chips=await row.locator('.crew-agent-chip').evaluateAll(list=>list.map(c=>{const r=c.getBoundingClientRect();return {name:c.getAttribute('aria-label'),left:r.left,right:r.right,height:r.height};}));
  assert.ok(chips.length>=9,`All plus at least 8 agents (${chips.length})`);
@@ -1391,6 +1562,7 @@ try {
  assert.equal(await row.evaluate(e=>e.scrollWidth<=e.clientWidth),true,'the agent row has no horizontal overflow');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'the Tasks page has no horizontal overflow at 390');
  await snapView('crew-board-agent-row-390');
+ await page.getByRole('dialog',{name:'Filters'}).getByRole('button',{name:'Done',exact:true}).click();
  await page.setViewportSize({width:1440,height:1000});
  for(const agent of extra)await boardWrite('agent.update',{archived:true},agent.id,agent.revision);}
  await page.goto(base+'/#/tasks?label=synthetic-board');

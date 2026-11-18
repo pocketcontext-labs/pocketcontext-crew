@@ -1,0 +1,827 @@
+/* Phone chrome (0.33.0): a slim one-row top bar, fixed bottom tabs, bottom
+   sheets, the board's column switcher and the Notes chips. Rendered only on
+   phones (usePhone, max-width 680px), so these rules need no media query. */
+.crew-phone {
+  --crew-mbar-h: calc(56px + env(safe-area-inset-top));
+  --crew-tabbar-h: calc(62px + env(safe-area-inset-bottom));
+}
+.crew-phone .crew-main {
+  padding-bottom: calc(var(--crew-tabbar-h) + 8px);
+}
+.crew-phone .crew-content {
+  padding: 8px 16px 24px;
+}
+
+/* Top bar: mark, title, then round icon buttons. */
+.crew-mtopbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--crew-mbar-h);
+  padding: env(safe-area-inset-top) 12px 0 16px;
+  background: #fafaf7;
+}
+.crew-mlogo {
+  display: inline-flex;
+  flex: none;
+}
+.crew-mlogo img {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+.crew-mtopbar h1 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #263b32;
+}
+.crew-mactions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+.crew-phone .crew-micon,
+.crew-phone .crew-mtopbar .crew-search-toggle {
+  position: relative;
+  inset: auto;
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid #e3e8dd;
+  border-radius: 50%;
+  background: #fffefb;
+  color: #2d4538;
+  box-shadow: 0 1px 3px #24311d12;
+  touch-action: manipulation;
+  transition:
+    transform 80ms ease,
+    background-color 80ms ease;
+}
+.crew-phone .crew-micon:active:not(:disabled),
+.crew-phone .crew-mtopbar .crew-search-toggle:active {
+  background: #dfe8d8;
+  transform: scale(0.92);
+}
+.crew-phone .crew-micon.is-active {
+  border-color: #9db590;
+  background: #edf2e9;
+}
+.crew-phone .crew-madd {
+  border-color: #2c4b36;
+  background: #2c4b36;
+  color: #fff;
+}
+.crew-phone .crew-madd:hover {
+  background: #3b6244;
+}
+.crew-phone .crew-madd:active:not(:disabled) {
+  background: #1f3828;
+}
+.crew-micon-svg {
+  display: block;
+}
+.crew-micon-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 2px solid #fafaf7;
+  border-radius: 9px;
+  background: #2c4b36;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+/* The global search's toggle sits in the bar; its glyph becomes a drawn lens. */
+.crew-phone .crew-mtopbar .crew-global-search {
+  position: static;
+  display: flex;
+  align-items: center;
+}
+.crew-phone .crew-mtopbar .crew-search-toggle > span {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  margin: -3px 0 0 -3px;
+  border: 1.8px solid currentColor;
+  border-radius: 50%;
+  font-size: 0;
+}
+.crew-phone .crew-mtopbar .crew-search-toggle > span::after {
+  content: "";
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 6px;
+  height: 1.8px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+.crew-phone .crew-mtopbar .crew-global-search.expanded .crew-global-field {
+  top: calc(env(safe-area-inset-top) + 9px);
+  left: 12px;
+  right: 12px;
+}
+.crew-phone .crew-mtopbar .crew-search-popup {
+  top: calc(env(safe-area-inset-top) + 58px);
+  left: 12px;
+  right: 12px;
+}
+.crew-phone .crew-refresh-status {
+  top: calc(var(--crew-mbar-h) + 6px);
+}
+.crew-phone .crew-toast {
+  bottom: calc(var(--crew-tabbar-h) + 12px);
+}
+
+/* Bottom tabs: fixed, equal width, never moving; safe area below. */
+.crew-tabbar {
+  position: fixed;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 6px max(6px, env(safe-area-inset-right))
+    calc(6px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+  border-top: 1px solid #e1e5dc;
+  background: #f6f7f2;
+}
+.crew-tabbar > a,
+.crew-phone .crew-tabbar > button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 50px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #6c7a66;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.crew-tabbar > a:active,
+.crew-phone .crew-tabbar > button:active {
+  background: #e8eee3;
+}
+.crew-tab-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 28px;
+  border-radius: 14px;
+}
+.crew-tabbar > [aria-current="page"],
+.crew-phone .crew-tabbar > .is-current {
+  color: #1f3a2a;
+  font-weight: 700;
+}
+.crew-tabbar > [aria-current="page"] .crew-tab-icon,
+.crew-tabbar > .is-current .crew-tab-icon {
+  background: #e1eadb;
+}
+.crew-tab-badge {
+  position: absolute;
+  top: -5px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 2px solid #f6f7f2;
+  border-radius: 9px;
+  background: #2c4b36;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+.crew-tabbar > a:focus-visible,
+.crew-phone .crew-tabbar > button:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: -2px;
+}
+
+/* Bottom sheet: a modal dialog anchored to the bottom edge. */
+.crew-sheet {
+  position: fixed;
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  max-height: 88dvh;
+  margin: 0;
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-radius: 20px 20px 0 0;
+  background: #fafaf7;
+  color: #263b32;
+  box-shadow: 0 -10px 30px #0e201e30;
+  font:
+    14px/1.5 Inter,
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+.crew-sheet:focus {
+  outline: none;
+}
+.crew-sheet::backdrop {
+  background: rgb(28 40 30 / 0.36);
+}
+.crew-sheet * {
+  box-sizing: border-box;
+}
+.crew-sheet-grip {
+  display: block;
+  width: 40px;
+  height: 5px;
+  margin: 8px auto 2px;
+  border-radius: 3px;
+  background: #cfd8c8;
+}
+.crew-sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px 10px;
+  background: #fafaf7;
+}
+.crew-sheet-head h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crew-app .crew-sheet-done {
+  flex: none;
+  padding: 7px 18px;
+  border-color: #2c4b36;
+  border-radius: 999px;
+  background: #2c4b36;
+  color: #fff;
+  font-weight: 600;
+}
+.crew-app .crew-sheet-done:hover {
+  background: #3b6244;
+}
+.crew-sheet-body {
+  display: grid;
+  gap: 18px;
+  padding: 2px 16px 22px;
+}
+.crew-sheet input,
+.crew-sheet select {
+  font-size: 16px;
+}
+.crew-sheet-section {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.crew-sheet-section > h3,
+.crew-sheet-section > legend {
+  margin: 0 0 8px;
+  padding: 0;
+  color: #6a7c62;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+.crew-sheet-field select,
+.crew-phone .crew-sheet .crew-sort,
+.crew-phone .crew-sheet .crew-sort select {
+  flex: none;
+  width: 100%;
+  max-width: none;
+}
+.crew-sheet .crew-sort > span {
+  display: none;
+}
+.crew-sheet .crew-search {
+  flex: none;
+  min-width: 0;
+  max-width: none;
+  border-radius: 12px;
+}
+.crew-phone .crew-sheet .crew-search input {
+  flex: 1;
+  font-size: 16px;
+  border: 0;
+  padding: 11px 2px;
+  background: transparent;
+}
+.crew-sheet .crew-search input:focus {
+  box-shadow: none;
+}
+.crew-sheet .crew-search:focus-within {
+  border-color: #487d55;
+  box-shadow: 0 0 0 1px #487d55;
+}
+.crew-sheet .crew-agent-row {
+  margin: 0;
+  padding: 0;
+}
+.crew-sheet .crew-agent-row .crew-agent-chip {
+  font-size: 14px;
+  min-height: 36px;
+}
+.crew-sheet-filters {
+  display: grid;
+  gap: 12px;
+}
+.crew-sheet-filters .crew-field select {
+  width: 100%;
+}
+.crew-sheet-radios {
+  display: grid;
+}
+.crew-sheet-radios label {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 20px;
+  align-items: center;
+  padding: 12px 8px;
+  border-bottom: 1px solid #e3e8dd;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.crew-sheet-radios label:last-child {
+  border-bottom: 0;
+}
+.crew-sheet-radios input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.crew-sheet-radios label:has(input:focus-visible) {
+  outline: 2px solid #487d55;
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+.crew-sheet-check {
+  color: #2c4b36;
+  font-weight: 700;
+}
+/* The page menu (⋯): actions, Refresh, then the page's intro and help. */
+.crew-sheet-actions {
+  display: grid;
+  gap: 8px;
+}
+.crew-sheet-actions > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+}
+.crew-sheet-actions > button.is-refreshing:disabled {
+  opacity: 1;
+  cursor: progress;
+  color: #487d55;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .crew-sheet-refresh.is-refreshing .crew-refresh-icon {
+    animation: crew-refresh-spin 0.8s linear infinite;
+  }
+}
+.crew-sheet-refresh .crew-refresh-icon {
+  display: inline-grid;
+}
+.crew-sheet-about {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #e3e8dd;
+  border-radius: 12px;
+  background: #f2f4ee;
+  color: #4d5c4a;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.crew-sheet-about p {
+  margin: 0;
+}
+.crew-sheet-about .crew-sheet-intro {
+  color: #263b32;
+  font-size: 14.5px;
+}
+.crew-sheet-about a {
+  color: #2c5b3a;
+  font-weight: 600;
+}
+/* More: every other page and Sign out. */
+.crew-more-links {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.crew-more-links a {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid #e3e8dd;
+  border-radius: 12px;
+  background: #fffefb;
+  color: #263b32;
+  font-size: 16px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.crew-more-links a[aria-current="page"] {
+  border-color: #9db590;
+  background: #e7efe2;
+  font-weight: 700;
+}
+.crew-more-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: #6a7767;
+  font-size: 13px;
+}
+
+/* The board's column switcher, sticky under the top bar. */
+.crew-column-switcher {
+  position: sticky;
+  top: var(--crew-mbar-h);
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 6px;
+  margin: 0 -16px 12px;
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid #e1e5dc;
+  background: #fafaf7;
+}
+.crew-phone .crew-switch-step {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #e3e8dd;
+  border-radius: 50%;
+  background: #fffefb;
+  box-shadow: 0 1px 3px #24311d12;
+  touch-action: manipulation;
+}
+.crew-phone .crew-switch-step:disabled {
+  opacity: 0.4;
+  box-shadow: none;
+  background: transparent;
+}
+.crew-phone .crew-switch-step:active:not(:disabled) {
+  background: #dfe8d8;
+}
+.crew-phone .crew-switch-name {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+}
+.crew-phone .crew-switch-name:active {
+  background: #edf2e9;
+}
+.crew-switch-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.crew-switch-title strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+.crew-switch-count {
+  color: #4f6b46;
+  font-size: 14px;
+  font-weight: 600;
+}
+.crew-switch-of {
+  color: #7b8676;
+  font-size: 13px;
+}
+.crew-switch-dots {
+  display: flex;
+  gap: 6px;
+}
+.crew-switch-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cdd6c6;
+}
+.crew-switch-dots i.is-current {
+  background: #2c4b36;
+}
+.crew-switch-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 16px;
+  right: 16px;
+  z-index: 1;
+  display: grid;
+  padding: 6px 0;
+  overflow: hidden;
+  border: 1px solid #dce2d8;
+  border-radius: 16px;
+  background: #fffefb;
+  box-shadow: 0 14px 34px #0e201e30;
+}
+.crew-phone .crew-switch-picker > button {
+  display: grid;
+  grid-template-columns: 1fr auto 24px;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 500;
+  text-align: left;
+}
+.crew-phone .crew-switch-picker > button[aria-current="true"] {
+  background: #e7efe2;
+}
+.crew-switch-pick-count {
+  color: #607a52;
+  font-weight: 600;
+}
+.crew-switch-check {
+  color: #2c4b36;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* Board on a phone: one column, no column chrome, compact cards. */
+.crew-phone .crew-board-phone {
+  display: block;
+}
+.crew-phone .crew-board-phone .crew-column {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.crew-phone .crew-board-phone .crew-column-head {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.crew-phone .crew-board-phone .crew-task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+}
+.crew-phone .crew-board-phone .crew-task-card > h3 {
+  order: -1;
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.crew-phone
+  .crew-board-phone
+  .crew-task-card
+  > p:not(.crew-assignment-warning) {
+  display: none;
+}
+.crew-phone .crew-board-phone .crew-task-card > .crew-tags,
+.crew-phone .crew-board-phone .crew-task-card > footer {
+  margin: 0;
+}
+.crew-phone .crew-filter-chips {
+  margin: 0 0 10px;
+}
+
+/* Notes on a phone: sticky bucket chips, then compact rows. */
+.crew-bucket-chips {
+  display: flex;
+  gap: 8px;
+}
+.crew-bucket-chips-bar {
+  position: sticky;
+  top: var(--crew-mbar-h);
+  z-index: 20;
+  margin: -8px -16px 12px;
+  padding: 6px 16px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid #e1e5dc;
+  background: #fafaf7;
+  scrollbar-width: none;
+}
+.crew-bucket-chips-bar::-webkit-scrollbar {
+  display: none;
+}
+.crew-bucket-chips.is-wrapped {
+  flex-wrap: wrap;
+}
+.crew-bucket-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  border: 1px solid #dfe4d6;
+  border-radius: 999px;
+  background: #fffefb;
+  color: #24412f;
+}
+.crew-bucket-chip.is-selected,
+.crew-bucket-chip:has(> button[aria-pressed="true"]) {
+  border-color: #2c4b36;
+  background: #2c4b36;
+  color: #fff;
+}
+.crew-app .crew-bucket-chip button,
+.crew-sheet .crew-bucket-chip button {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+.crew-bucket-chip-count {
+  font-weight: 500;
+  opacity: 0.75;
+}
+.crew-app .crew-bucket-chip .crew-bucket-chip-more {
+  padding: 6px 12px 6px 2px;
+  letter-spacing: 1px;
+}
+.crew-bucket-chip-popup {
+  position: fixed;
+  z-index: 70;
+  min-width: 150px;
+  padding: 4px;
+  border: 1px solid #dce2d8;
+  border-radius: 12px;
+  background: #fffefb;
+  box-shadow: 0 12px 30px #0e201e30;
+}
+.crew-app .crew-bucket-chip-popup button,
+.crew-sheet .crew-bucket-chip-popup button {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #24412f;
+  font-size: 15px;
+  text-align: left;
+}
+.crew-note-rows {
+  display: grid;
+  gap: 10px;
+}
+.crew-phone .crew-note-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #e0e5d9;
+  border-radius: 14px;
+  background: #fffefb;
+  box-shadow: 0 2px 3px #24311d04;
+  text-align: left;
+}
+.crew-note-row h3 {
+  display: -webkit-box;
+  margin: 0 0 2px;
+  overflow: hidden;
+  color: #1f3328;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.crew-note-row-meta {
+  color: #7b8676;
+  font-size: 13px;
+}
+.crew-note-row-meta > span:first-child {
+  color: #2c4b36;
+  font-weight: 600;
+}
+.crew-note-row-snippet {
+  overflow: hidden;
+  color: #55634f;
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 360px) {
+  .crew-mtopbar {
+    gap: 6px;
+    padding-left: 12px;
+    padding-right: 10px;
+  }
+  .crew-mactions {
+    gap: 4px;
+  }
+  .crew-phone .crew-micon,
+  .crew-phone .crew-mtopbar .crew-search-toggle {
+    width: 34px;
+    height: 34px;
+  }
+  .crew-mtopbar h1 {
+    font-size: 18px;
+  }
+  .crew-switch-title strong {
+    font-size: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-phone .crew-micon,
+  .crew-phone .crew-mtopbar .crew-search-toggle {
+    transition: none;
+  }
+  .crew-phone .crew-micon:active:not(:disabled),
+  .crew-phone .crew-mtopbar .crew-search-toggle:active {
+    transform: none;
+  }
+}

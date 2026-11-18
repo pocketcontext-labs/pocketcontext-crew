@@ -166,6 +166,10 @@ import ClaimBanner from "./ClaimBanner";
 import HoldReasonField from "./HoldReasonField";
 import PlainRefs from "./PlainRefs";
 import { RelativeTime, useNow, type Instant } from "./relativeTime";
+import { usePhone } from "./usePhone";
+import { MobileTabBar, MobileTopBar, Sheet, type PageAction } from "./MobileChrome";
+import ColumnSwitcher from "./ColumnSwitcher";
+import { BucketChips, NoteRows, NotesFilterSheet } from "./NotesMobile";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
   ["board", "Tasks", "▦"],
@@ -1004,6 +1008,8 @@ function Modal({
   );
 }
 export default function CrewWorkspace() {
+  // Phones get the slim top bar, bottom tabs and one board column at a time.
+  const phone = usePhone();
   const [view, setView] = useState<View>(() => {
       redirectLegacyAddress();
       return viewFromHash(location.hash);
@@ -1110,6 +1116,16 @@ export default function CrewWorkspace() {
       connectSectionFromHash(location.hash),
     ),
     [highlightColumn, setHighlightColumn] = useState(""),
+    // The one board column a phone shows; a Home tile's column picks it.
+    [phoneColumn, setPhoneColumn] = useState(
+      () => boardColumnFromHash(location.hash) ?? "todo",
+    ),
+    // The phone's on-demand Tasks and Notes filter sheets, and the Notes
+    // sheet's search and responsible agent (not kept in the address).
+    [boardSheet, setBoardSheet] = useState(false),
+    [notesSheet, setNotesSheet] = useState(false),
+    [noteSearch, setNoteSearch] = useState(""),
+    [noteAgent, setNoteAgent] = useState(""),
     columnRefs = useRef<Record<string, HTMLElement | null>>({}),
     [ready, setReady] = useState(false),
     generation = useRef(0),
@@ -1442,6 +1458,9 @@ export default function CrewWorkspace() {
   // a refresh or Back does not repeat this.
   useEffect(() => {
     if (!pendingColumn || !ready) return;
+    // A phone shows one column: show the asked-for one first, then focus it.
+    setPhoneColumn(pendingColumn);
+    if (phone && phoneColumn !== pendingColumn) return;
     setPendingColumn(null);
     const column = columnRefs.current[pendingColumn];
     if (view !== "board" || !column) return;
@@ -1454,7 +1473,7 @@ export default function CrewWorkspace() {
     });
     column.focus({ preventScroll: true });
     setHighlightColumn(pendingColumn);
-  }, [pendingColumn, ready, view]);
+  }, [pendingColumn, ready, view, phone, phoneColumn]);
   useEffect(() => {
     if (!highlightColumn) return;
     const timer = setTimeout(() => setHighlightColumn(""), 1200);
@@ -1688,6 +1707,9 @@ export default function CrewWorkspace() {
       stats.latest = String(note.updated || "");
     bucketStats.set(id, stats);
   }
+  const bucketCounts = new Map(
+    [...bucketStats].map(([id, stats]) => [id, stats.count]),
+  );
   const sortedBuckets = [...data.buckets].sort((a, b) => {
     const [sa, sb] = [bucketStats.get(a.id), bucketStats.get(b.id)];
     const order =
@@ -1698,8 +1720,21 @@ export default function CrewWorkspace() {
           : 0;
     return order || byName(val(a, "name"), val(b, "name"));
   });
+  // The phone sheet's search and responsible agent narrow the list too.
+  const noteText = phone ? noteSearch.trim().toLowerCase() : "";
+  const noteAgentShown = phone && data.agents.some((x) => x.id === noteAgent) ? noteAgent : "";
   const shownNotes = data.notes
     .filter((x) => !bucket || val(x, "bucket") === bucket)
+    .filter(
+      (x) =>
+        !noteAgentShown ||
+        val(data.buckets.find((b) => b.id === val(x, "bucket")), "responsible_agent") === noteAgentShown,
+    )
+    .filter(
+      (x) =>
+        !noteText ||
+        `${val(x, "title")} ${val(x, "body")}`.toLowerCase().includes(noteText),
+    )
     .sort((a, b) => {
       const sort = viewState.noteSort;
       const order =
@@ -1736,6 +1771,9 @@ export default function CrewWorkspace() {
         : null;
     return { status, label, tasks, done, shown: done ? done.tasks : tasks };
   });
+  const shownColumn = boardColumns.some((c) => c.status === phoneColumn)
+    ? phoneColumn
+    : "todo";
   // The list under the open record dialog, as the page shows it (0.31.0):
   // the board's cards, the Notes page's notes or bucket cards, the agents,
   // pending reviews or past decisions, or the Search page's results. A dialog
@@ -1746,7 +1784,11 @@ export default function CrewWorkspace() {
     const as = (kind: Kind) => (row: Row) => ({ kind, row });
     switch (`${view}:${dialog.kind}`) {
       case "board:task":
-        return boardColumns.flatMap((c) => c.shown).map(as("task"));
+        // A phone shows one column, so its dialog steps through that column.
+        return boardColumns
+          .filter((c) => !phone || c.status === shownColumn)
+          .flatMap((c) => c.shown)
+          .map(as("task"));
       case "memory:note":
         return shownNotes.map(as("note"));
       case "memory:bucket":
@@ -1857,10 +1899,252 @@ export default function CrewWorkspace() {
     shared:
       "Frozen copies of notes, shared by a secret link with no sign-in. Agents draft them; only you publish, update, expire, revoke or archive them. Editing a source note never changes a published page.",
   };
+  // The board's controls: one toolbar row on a desktop, the filter sheet on a phone.
+  const boardSearchField = (
+    <label className="crew-search">
+      <span aria-hidden="true">⌕</span>
+      <input
+        type="search"
+        aria-label="Search tasks"
+        placeholder="Search tasks, or label:bug…"
+        title="Search titles, descriptions and labels. label:, agent: and status: filter; Enter turns them into filter chips."
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          const { text, changes } = commitBoardSearch(query, agentNames);
+          if (!Object.keys(changes).length) return;
+          e.preventDefault();
+          setQuery(text);
+          updateBoard(changes);
+        }}
+      />
+    </label>
+  );
+  const assignmentSelect = (
+    <select
+      aria-label="Filter by assignment"
+      value={assignmentFilter}
+      onChange={(e) => setAssignmentFilter(e.target.value)}
+    >
+      <option value="all">All tasks</option>
+      <option value="unassigned">
+        Unassigned ({unassignedCount})
+      </option>
+      <option value="invalid">
+        Invalid assignments ({invalidCount})
+      </option>
+      {agentOptions.length > 0 && (
+        <optgroup label="By agent">
+          {agentOptions.map(({ agent, count }) => (
+            <option key={agent.id} value={agent.id}>
+              {val(agent, "name")}
+              {agentKindSuffix[agentKind(agent)]} ({count})
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
+  );
+  const sortControl = (
+    <label className="crew-sort" title="Sort tasks">
+      <span>Sort</span>
+      <select
+        aria-label="Sort tasks"
+        value={viewState.taskSort}
+        onChange={(e) =>
+          updateBoard({ taskSort: e.target.value as ViewState["taskSort"] })
+        }
+      >
+        <option value="updated">Last updated</option>
+        <option value="held">Oldest hold first</option>
+      </select>
+    </label>
+  );
+  const filterFields = (
+    <>
+      <label className="crew-field">
+        <span>Readiness</span>
+        <select
+          aria-label="Filter by hold"
+          value={holdFilter}
+          onChange={(e) => setHoldFilter(e.target.value as HoldFilter)}
+        >
+          {holdFilters.map((key) => (
+            <option key={key} value={key}>
+              {holdFilterLabels[key]}
+              {key === "on_hold"
+                ? ` (${onHoldCount})`
+                : key === "ready"
+                  ? ` (${openTasks.length - onHoldCount})`
+                  : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="crew-filters-check">
+        <input
+          type="checkbox"
+          checked={!!viewState.heldOver}
+          onChange={(e) =>
+            updateBoard(
+              e.target.checked
+                ? { hold: "on_hold", heldOver: "3d" }
+                : { heldOver: "" },
+            )
+          }
+        />
+        On hold over 3 days ({longHolds(data.tasks).length})
+      </label>
+      <label className="crew-field">
+        <span>Label</span>
+        <select
+          aria-label="Filter by label"
+          value={viewState.label.toLowerCase()}
+          onChange={(e) => updateBoard({ label: e.target.value })}
+        >
+          <option value="">All labels</option>
+          {viewState.label &&
+            !labelsAvailable.some(
+              (x) => x.label.toLowerCase() === viewState.label.toLowerCase(),
+            ) && (
+              <option value={viewState.label.toLowerCase()}>
+                {viewState.label} (0)
+              </option>
+            )}
+          {labelsAvailable.map(({ label, count }) => (
+            <option key={label.toLowerCase()} value={label.toLowerCase()}>
+              {label} ({count})
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="crew-field">
+        <span>Status</span>
+        <select
+          aria-label="Filter by status"
+          value={viewState.status}
+          onChange={(e) => updateBoard({ status: e.target.value })}
+        >
+          <option value="">All statuses</option>
+          {statuses.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
+  );
+  const agentRow = (
+    // One click per agent, like the Notes bucket cards; the same
+    // assignment filter as the select and the card footers.
+    <div className="crew-agent-row" role="group" aria-label="Filter by agent">
+      <button
+        type="button"
+        className="crew-agent-chip"
+        aria-pressed={assignmentFilter === "all"}
+        aria-label={`All agents, ${openTasks.length} open`}
+        onClick={() => setAssignmentFilter("all")}
+      >
+        All
+        <span className="crew-agent-chip-count" aria-hidden="true">
+          {openTasks.length}
+        </span>
+      </button>
+      {agentOptions.map(({ agent }) => {
+        const agentName = val(agent, "name");
+        const count = openTasks.filter((x) => val(x, "assigned_agent") === agent.id).length;
+        const selected = assignmentFilter === agent.id;
+        return (
+          <button
+            type="button"
+            key={agent.id}
+            className="crew-agent-chip"
+            aria-pressed={selected}
+            aria-label={`${agentName}, ${count} open`}
+            title={selected ? "Show all agents" : `Filter by agent ${agentName}`}
+            onClick={() => setAssignmentFilter(selected ? "all" : agent.id)}
+          >
+            <span className="crew-avatar" aria-hidden="true">
+              {agentInitials(agentName, data.agents)}
+            </span>
+            {agentName}
+            <span className="crew-agent-chip-count" aria-hidden="true">
+              {count}
+            </span>
+          </button>
+        );
+      })}
+      {unassignedCount > 0 && (
+        <button
+          type="button"
+          className="crew-agent-chip"
+          aria-pressed={assignmentFilter === "unassigned"}
+          aria-label={`Unassigned, ${unassignedCount} open`}
+          onClick={() =>
+            setAssignmentFilter(assignmentFilter === "unassigned" ? "all" : "unassigned")
+          }
+        >
+          Unassigned
+          <span className="crew-agent-chip-count" aria-hidden="true">
+            {unassignedCount}
+          </span>
+        </button>
+      )}
+    </div>
+  );
   const titleHelp = viewHelp[view];
+  // Phones: the page's filter icon counts every active filter, search included.
+  const assignmentLabel =
+    assignmentFilter === "unassigned"
+      ? "Unassigned"
+      : assignmentFilter === "invalid"
+        ? "Invalid assignments"
+        : `Agent: ${name(assignmentFilter)}`;
+  const boardFilterCount =
+    chips.length + (assignmentFilter !== "all" ? 1 : 0) + (boardSearched ? 1 : 0);
+  const noteFilterCount =
+    (bucket ? 1 : 0) + (noteText ? 1 : 0) + (noteAgentShown ? 1 : 0);
+  const phoneAdd: PageAction | undefined =
+    view === "board" || view === "home"
+      ? { label: "New task", onClick: () => setDialog({ kind: "task" }) }
+      : view === "memory"
+        ? {
+            label: "New note",
+            disabled: !data.buckets.length,
+            onClick: () => setDialog({ kind: "note" }),
+          }
+        : view === "agents"
+          ? { label: "New agent", onClick: () => setDialog({ kind: "agent" }) }
+          : undefined;
+  const phoneActions: PageAction[] =
+    view === "memory"
+      ? [{ label: "New bucket", onClick: () => setDialog({ kind: "bucket" }) }]
+      : view === "board" && (boardFiltered || boardSearched)
+        ? [{ label: "Clear all filters", onClick: clearBoard }]
+        : [];
+  const globalSearch = (
+    <GlobalSearch
+      agents={data.agents}
+      buckets={data.buckets}
+      pageText={view === "search" ? searchText : null}
+      disabled={dialog !== null}
+      onOpenHit={(hit) => void openHit(hit)}
+      onOpenAgent={(row) => openItem("agent", row)}
+      onOpenBucket={(row) => openItem("bucket", row)}
+    />
+  );
   return (
     <HelpModeContext.Provider value={helpMode(connection)}>
-    <div className="crew-app">
+    <div className={phone ? "crew-app crew-phone" : "crew-app"}>
+      {phone ? (
+        <MobileTabBar
+          view={view}
+          pending={pending.length}
+          onSignOut={() => api.logout()}
+        />
+      ) : (
       <aside className="crew-sidebar">
         <a
           className="crew-logo"
@@ -1905,19 +2189,44 @@ export default function CrewWorkspace() {
           <button onClick={() => api.logout()}>Sign out</button>
         </div>
       </aside>
+      )}
       <main className="crew-main">
+        {phone ? (
+          <MobileTopBar
+            title={pages.find((x) => x[0] === view)?.[1] ?? ""}
+            search={globalSearch}
+            filter={
+              view === "board"
+                ? {
+                    label: "Filters",
+                    count: boardFilterCount,
+                    open: boardSheet,
+                    onOpen: () => setBoardSheet(true),
+                  }
+                : view === "memory"
+                  ? {
+                      label: "Filter and sort",
+                      count: noteFilterCount,
+                      open: notesSheet,
+                      onOpen: () => setNotesSheet(true),
+                    }
+                  : undefined
+            }
+            add={phoneAdd}
+            description={descriptions[view]}
+            help={titleHelp}
+            actions={phoneActions}
+            refresh={{
+              busy: refreshing,
+              disabled: busy || loading || refreshing,
+              run: () => void refreshNow(),
+            }}
+          />
+        ) : (
         <header className="crew-topbar">
           <span>POCKETCONTEXT / CREW</span>
           <div>
-            <GlobalSearch
-              agents={data.agents}
-              buckets={data.buckets}
-              pageText={view === "search" ? searchText : null}
-              disabled={dialog !== null}
-              onOpenHit={(hit) => void openHit(hit)}
-              onOpenAgent={(row) => openItem("agent", row)}
-              onOpenBucket={(row) => openItem("bucket", row)}
-            />
+            {globalSearch}
             <button
               className={`crew-refresh${refreshing ? " is-refreshing" : ""}`}
               aria-label="Refresh"
@@ -1932,6 +2241,7 @@ export default function CrewWorkspace() {
             </button>
           </div>
         </header>
+        )}
         {refreshStatus && (
           <p
             className={`crew-refresh-status${refreshStatus.ok ? "" : " is-error"}`}
@@ -1941,6 +2251,7 @@ export default function CrewWorkspace() {
           </p>
         )}
         <section className="crew-content">
+          {!phone && (
           <div className="crew-heading">
             <div>
               <p className="crew-eyebrow">{eyebrows[view]}</p>
@@ -1981,6 +2292,7 @@ export default function CrewWorkspace() {
               </button>
             )}
           </div>
+          )}
           {error && (
             <div className="crew-alert" role="alert">
               {error}{" "}
@@ -2020,63 +2332,11 @@ export default function CrewWorkspace() {
                 </button>
               </div>
             )}
-          {view === "board" && (
+          {view === "board" && !phone && (
             <div className="crew-toolbar">
-              <label className="crew-search">
-                <span aria-hidden="true">⌕</span>
-                <input
-                  type="search"
-                  aria-label="Search tasks"
-                  placeholder="Search tasks, or label:bug…"
-                  title="Search titles, descriptions and labels. label:, agent: and status: filter; Enter turns them into filter chips."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    const { text, changes } = commitBoardSearch(query, agentNames);
-                    if (!Object.keys(changes).length) return;
-                    e.preventDefault();
-                    setQuery(text);
-                    updateBoard(changes);
-                  }}
-                />
-              </label>
-              <select
-                aria-label="Filter by assignment"
-                value={assignmentFilter}
-                onChange={(e) => setAssignmentFilter(e.target.value)}
-              >
-                <option value="all">All tasks</option>
-                <option value="unassigned">
-                  Unassigned ({unassignedCount})
-                </option>
-                <option value="invalid">
-                  Invalid assignments ({invalidCount})
-                </option>
-                {agentOptions.length > 0 && (
-                  <optgroup label="By agent">
-                    {agentOptions.map(({ agent, count }) => (
-                      <option key={agent.id} value={agent.id}>
-                        {val(agent, "name")}
-                        {agentKindSuffix[agentKind(agent)]} ({count})
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-              <label className="crew-sort" title="Sort tasks">
-                <span>Sort</span>
-                <select
-                  aria-label="Sort tasks"
-                  value={viewState.taskSort}
-                  onChange={(e) =>
-                    updateBoard({ taskSort: e.target.value as ViewState["taskSort"] })
-                  }
-                >
-                  <option value="updated">Last updated</option>
-                  <option value="held">Oldest hold first</option>
-                </select>
-              </label>
+              {boardSearchField}
+              {assignmentSelect}
+              {sortControl}
               <div
                 className="crew-filters"
                 ref={filtersRef}
@@ -2104,77 +2364,7 @@ export default function CrewWorkspace() {
                     role="group"
                     aria-label="Task filters"
                   >
-                    <label className="crew-field">
-                      <span>Readiness</span>
-                      <select
-                        aria-label="Filter by hold"
-                        value={holdFilter}
-                        onChange={(e) => setHoldFilter(e.target.value as HoldFilter)}
-                      >
-                        {holdFilters.map((key) => (
-                          <option key={key} value={key}>
-                            {holdFilterLabels[key]}
-                            {key === "on_hold"
-                              ? ` (${onHoldCount})`
-                              : key === "ready"
-                                ? ` (${openTasks.length - onHoldCount})`
-                                : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="crew-filters-check">
-                      <input
-                        type="checkbox"
-                        checked={!!viewState.heldOver}
-                        onChange={(e) =>
-                          updateBoard(
-                            e.target.checked
-                              ? { hold: "on_hold", heldOver: "3d" }
-                              : { heldOver: "" },
-                          )
-                        }
-                      />
-                      On hold over 3 days ({longHolds(data.tasks).length})
-                    </label>
-                    <label className="crew-field">
-                      <span>Label</span>
-                      <select
-                        aria-label="Filter by label"
-                        value={viewState.label.toLowerCase()}
-                        onChange={(e) => updateBoard({ label: e.target.value })}
-                      >
-                        <option value="">All labels</option>
-                        {viewState.label &&
-                          !labelsAvailable.some(
-                            (x) => x.label.toLowerCase() === viewState.label.toLowerCase(),
-                          ) && (
-                            <option value={viewState.label.toLowerCase()}>
-                              {viewState.label} (0)
-                            </option>
-                          )}
-                        {labelsAvailable.map(({ label, count }) => (
-                          <option key={label.toLowerCase()} value={label.toLowerCase()}>
-                            {label} ({count})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="crew-field">
-                      <span>Status</span>
-                      <select
-                        aria-label="Filter by status"
-                        value={viewState.status}
-                        onChange={(e) => updateBoard({ status: e.target.value })}
-                      >
-                        <option value="">All statuses</option>
-                        {statuses.map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    {filterFields}
                     <button
                       type="button"
                       className="crew-filters-done"
@@ -2190,66 +2380,56 @@ export default function CrewWorkspace() {
               </div>
             </div>
           )}
-          {view === "board" && data.agents.length > 0 && (
-            // One click per agent, like the Notes bucket cards; the same
-            // assignment filter as the select and the card footers.
-            <div className="crew-agent-row" role="group" aria-label="Filter by agent">
-              <button
-                type="button"
-                className="crew-agent-chip"
-                aria-pressed={assignmentFilter === "all"}
-                aria-label={`All agents, ${openTasks.length} open`}
-                onClick={() => setAssignmentFilter("all")}
-              >
-                All
-                <span className="crew-agent-chip-count" aria-hidden="true">
-                  {openTasks.length}
-                </span>
-              </button>
-              {agentOptions.map(({ agent }) => {
-                const agentName = val(agent, "name");
-                const count = openTasks.filter((x) => val(x, "assigned_agent") === agent.id).length;
-                const selected = assignmentFilter === agent.id;
-                return (
-                  <button
-                    type="button"
-                    key={agent.id}
-                    className="crew-agent-chip"
-                    aria-pressed={selected}
-                    aria-label={`${agentName}, ${count} open`}
-                    title={selected ? "Show all agents" : `Filter by agent ${agentName}`}
-                    onClick={() => setAssignmentFilter(selected ? "all" : agent.id)}
-                  >
-                    <span className="crew-avatar" aria-hidden="true">
-                      {agentInitials(agentName, data.agents)}
-                    </span>
-                    {agentName}
-                    <span className="crew-agent-chip-count" aria-hidden="true">
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-              {unassignedCount > 0 && (
-                <button
-                  type="button"
-                  className="crew-agent-chip"
-                  aria-pressed={assignmentFilter === "unassigned"}
-                  aria-label={`Unassigned, ${unassignedCount} open`}
-                  onClick={() =>
-                    setAssignmentFilter(assignmentFilter === "unassigned" ? "all" : "unassigned")
-                  }
-                >
-                  Unassigned
-                  <span className="crew-agent-chip-count" aria-hidden="true">
-                    {unassignedCount}
-                  </span>
-                </button>
+          {view === "board" && !phone && data.agents.length > 0 && agentRow}
+          {view === "board" && phone && boardSheet && (
+            <Sheet title="Filters" className="crew-filter-sheet" onClose={() => setBoardSheet(false)}>
+              {boardSearchField}
+              <div className="crew-sheet-section crew-sheet-field">
+                <h3>Scope</h3>
+                {assignmentSelect}
+              </div>
+              <div className="crew-sheet-section crew-sheet-field">
+                <h3>Sort</h3>
+                {sortControl}
+              </div>
+              {data.agents.length > 0 && (
+                <div className="crew-sheet-section">
+                  <h3>Agents</h3>
+                  {agentRow}
+                </div>
               )}
-            </div>
+              <div className="crew-sheet-section crew-sheet-filters">
+                <h3>More filters</h3>
+                {filterFields}
+              </div>
+            </Sheet>
           )}
           {view === "board" && (boardFiltered || boardSearched) && (
             <div className="crew-filter-chips" role="group" aria-label="Active filters">
+              {phone && boardSearched && (
+                <span className="crew-chip crew-filter-chip">
+                  “{query}”
+                  <button
+                    type="button"
+                    aria-label="Remove filter search"
+                    onClick={() => setQuery("")}
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              {phone && assignmentFilter !== "all" && (
+                <span className="crew-chip crew-filter-chip">
+                  {assignmentLabel}
+                  <button
+                    type="button"
+                    aria-label={`Remove filter ${assignmentLabel}`}
+                    onClick={() => setAssignmentFilter("all")}
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
               {chips.map((chip) => (
                 <span className="crew-chip crew-filter-chip" key={chip.key}>
                   {chip.label}
@@ -2269,6 +2449,20 @@ export default function CrewWorkspace() {
                 Clear all
               </button>
             </div>
+          )}
+          {view === "board" && phone && (
+            <ColumnSwitcher
+              columns={boardColumns.map(({ status, label, tasks }) => ({
+                status,
+                label,
+                count: tasks.length,
+              }))}
+              current={shownColumn}
+              onSelect={(status) => {
+                setPhoneColumn(status);
+                if (window.scrollY > 0) window.scrollTo(0, 0);
+              }}
+            />
           )}
           {view === "home" && (
             <Home
@@ -2320,8 +2514,10 @@ export default function CrewWorkspace() {
             />
           )}
           {view === "board" && (
-            <div className="crew-board">
-              {boardColumns.map(({ status, label, tasks, done, shown }) => {
+            <div className={phone ? "crew-board crew-board-phone" : "crew-board"}>
+              {boardColumns
+                .filter((c) => !phone || c.status === shownColumn)
+                .map(({ status, label, tasks, done, shown }) => {
                 const card = (x: Row) => (
                   <div
                     role="button"
@@ -2475,7 +2671,86 @@ export default function CrewWorkspace() {
               })}
             </div>
           )}
-          {view === "memory" && (
+          {view === "memory" && phone && (
+            <>
+              <BucketChips
+                className="crew-bucket-chips-bar"
+                buckets={sortedBuckets}
+                counts={bucketCounts}
+                total={data.notes.length}
+                selected={bucket}
+                onSelect={setBucket}
+                onEdit={(row) => openItem("bucket", row)}
+              />
+              <NoteRows
+                notes={shownNotes}
+                bucketName={(id) => name(id, "buckets")}
+                snippet={(note) => plainPreview(val(note, "body")).slice(0, 180)}
+                onOpen={(note) => openItem("note", note)}
+              />
+              {!shownNotes.length && (
+                <Empty
+                  title={
+                    bucket || noteText || noteAgentShown
+                      ? "No matching notes"
+                      : "No notes yet"
+                  }
+                  action={
+                    bucket || noteText || noteAgentShown ? (
+                      <button
+                        onClick={() => {
+                          setBucket("");
+                          setNoteSearch("");
+                          setNoteAgent("");
+                        }}
+                      >
+                        Show all notes
+                      </button>
+                    ) : data.buckets.length ? (
+                      <button
+                        className="crew-primary"
+                        onClick={() => setDialog({ kind: "note" })}
+                      >
+                        Add your first note
+                      </button>
+                    ) : (
+                      <button onClick={() => setDialog({ kind: "bucket" })}>
+                        New bucket
+                      </button>
+                    )
+                  }
+                >
+                  {data.buckets.length
+                    ? "Notes hold decisions, preferences and findings your agents should remember."
+                    : "Notes live in buckets. Create a bucket first, then add notes to it."}
+                </Empty>
+              )}
+              {notesSheet && (
+                <NotesFilterSheet
+                  onClose={() => setNotesSheet(false)}
+                  search={noteSearch}
+                  onSearch={setNoteSearch}
+                  sort={viewState.noteSort}
+                  onSort={(noteSort) =>
+                    setViewState((state) => ({ ...state, noteSort }))
+                  }
+                  agents={data.agents}
+                  agent={noteAgentShown}
+                  onAgent={setNoteAgent}
+                  buckets={sortedBuckets}
+                  counts={bucketCounts}
+                  total={data.notes.length}
+                  selected={bucket}
+                  onSelect={setBucket}
+                  onEdit={(row) => {
+                    setNotesSheet(false);
+                    openItem("bucket", row);
+                  }}
+                />
+              )}
+            </>
+          )}
+          {view === "memory" && !phone && (
             <>
               <div className="crew-section-title crew-section-title-first">
                 <h2>Buckets</h2>

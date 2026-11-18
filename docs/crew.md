@@ -113,6 +113,20 @@ time; with reduced motion it stays tinted without spinning), then shows "Updated
 for a moment, or "Couldn't refresh…" when the load fails. The phone Search icon has
 the same pressed state. The background refresh every 30 seconds stays silent.
 
+On a phone (680 px wide or less, since 0.33.0) the reader has a slim one-row top
+bar: the Crew mark, the page title, then Search, the page's filter icon (with a count
+of active filters), + (New task, New note or New agent) and ⋯, the page menu, which
+holds the page's intro, its help, Refresh and other secondary actions (New bucket,
+Clear all filters). Fixed bottom tabs open Home, Tasks, Notes and Approvals (with the
+pending count); More opens Shared, Agents, Archive, Connect an agent, Guide and Sign
+out. The Tasks board shows one column at a time under a sticky switcher
+(`‹ To do · 6 (1 of 4) ›`, previous and next disabled in place at the ends; the name
+opens a picker with every column's count); its search, scope, sort, agent chips and
+filters are in the filter sheet, and active filters show as removable chips under the
+top bar. Notes shows sticky bucket chips with counts (the selected chip's ⋯ has Edit
+bucket), then the notes as rows; search, sort, bucket and responsible agent are in
+its filter sheet. Desktop layouts are unchanged.
+
 Every dialog has one floating header row (since 0.30.0), one row from 320 px up:
 round back and forward buttons, the title (ellipsized), the list capsule described
 below, More, and a round close button (`[‹ ›] title [∧ x of y ∨] [⋯] [✕]`). Each icon
