@@ -166,10 +166,10 @@ describe("phone chrome", () => {
       tabs()
         .getAllByRole("link")
         .map((x) => x.textContent),
-    ).toEqual(["Home", "Tasks", "Notes", "1Approvals"]);
-    expect(
-      tabs().getByRole("link", { name: "Approvals, 1 pending" }),
-    ).toBeTruthy();
+    ).toEqual(["Home", "Tasks", "Notes", "Approvals"]);
+    // Pending drafts show as a dot; the count is in the tab's name.
+    const approvals = tabs().getByRole("link", { name: "Approvals, 1 pending" });
+    expect(approvals.querySelector(".crew-tab-dot")).toBeTruthy();
     expect(tabs().getByRole("link", { name: "Tasks" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -223,6 +223,89 @@ describe("phone chrome", () => {
     );
     expect(screen.getByRole("button", { name: "New agent" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Filters" })).toBeNull();
+  });
+});
+
+describe("phone Home", () => {
+  beforeEach(() => {
+    history.replaceState(null, "", "/#/");
+    localStorage.clear();
+  });
+  afterEach(() => localStorage.clear());
+
+  it("opens a create menu from + instead of a new task", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("region", { name: "Agents" });
+    const plus = screen.getByRole("button", { name: "Create" });
+    expect(plus).toHaveAttribute("aria-haspopup", "dialog");
+    fireEvent.click(plus);
+    const menu = within(screen.getByRole("dialog", { name: "Create" }));
+    expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Task",
+      "Note",
+      "Bucket",
+      "Agent",
+      "Shared page",
+    ]);
+    expect(screen.queryByRole("dialog", { name: /New task/ })).toBeNull();
+    fireEvent.click(menu.getByRole("button", { name: "Bucket" }));
+    expect(screen.queryByRole("dialog", { name: "Create" })).toBeNull();
+    expect(await screen.findByRole("dialog")).toHaveTextContent(/bucket/i);
+  });
+
+  it("creates a Shared page draft from the create menu and opens it to write", async () => {
+    render(<CrewWorkspace />);
+    await screen.findByRole("region", { name: "Agents" });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Create" })).getByRole("button", {
+        name: "Shared page",
+      }),
+    );
+    const form = within(screen.getByRole("dialog", { name: "New shared page" }));
+    fireEvent.click(form.getByRole("button", { name: "Create draft" }));
+    expect(form.getByRole("alert")).toHaveTextContent("Give the page a title.");
+    vi.mocked(crewApi.write).mockResolvedValueOnce({
+      id: "artifact0000001",
+      revision: 1,
+    });
+    fireEvent.change(form.getByLabelText("Title"), {
+      target: { value: "Synthetic launch page" },
+    });
+    fireEvent.click(form.getByRole("button", { name: "Create draft" }));
+    await waitFor(() =>
+      expect(crewApi.write).toHaveBeenCalledWith(
+        "artifact.create",
+        { title: "Synthetic launch page", body: "" },
+        undefined,
+        "New shared page",
+      ),
+    );
+    await waitFor(() => expect(location.hash).toBe("#/shared/artifact0000001"));
+  });
+
+  it("has a dismissible 44 px How it works row, then How it works in the page menu", async () => {
+    render(<CrewWorkspace />);
+    const link = await screen.findByRole("link", {
+      name: "New to Crew? Read how it works",
+    });
+    expect(link).toHaveAttribute("href", "#/guide");
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss How it works" }));
+    expect(screen.queryByRole("link", { name: /Read how it works/ })).toBeNull();
+    expect(localStorage.getItem("pocketcontext.crew.how_it_works_hidden")).toBe("1");
+    fireEvent.click(screen.getByRole("button", { name: "Page options" }));
+    fireEvent.click(sheet("Home").getByRole("button", { name: "How it works" }));
+    await waitFor(() => expect(location.hash).toBe("#/guide"));
+  });
+
+  it("keeps + a direct create on Tasks and Notes", async () => {
+    history.replaceState(null, "", "/#/tasks");
+    render(<CrewWorkspace />);
+    await screen.findByText("Write the launch post");
+    expect(screen.getByRole("button", { name: "New task" })).not.toHaveAttribute(
+      "aria-haspopup",
+    );
+    expect(screen.queryByRole("button", { name: "Create" })).toBeNull();
   });
 });
 

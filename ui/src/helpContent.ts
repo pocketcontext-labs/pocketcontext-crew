@@ -102,8 +102,9 @@ const glossaryEntries = {
   "needs-you": {
     name: "Needs you",
     question: "What goes under Needs you?",
-    what: "Items that can't move without you: drafts waiting for approval, tasks stopped by the handoff limit and tasks whose assigned agent is unavailable.",
-    action: "Open an item to decide on it or fix it.",
+    what: "How many drafts wait for your approval and how many open tasks are on hold, then the items that can't move without you: drafts waiting for approval, tasks stopped by the handoff limit and tasks whose assigned agent is unavailable.",
+    action:
+      "Tap a count to open those items, or open an item to decide on it or fix it.",
   },
   todo: {
     name: "To do",

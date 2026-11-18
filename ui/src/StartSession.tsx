@@ -73,22 +73,16 @@ export function AgentChip({ agent, agents }: { agent: Row; agents: Row[] }) {
  * ? help icon opens it at any time. Nothing is added to the page's flow, so
  * agent cards keep their height.
  */
-export default function StartSession({
-  agent,
-  agents,
-  showAgent = false,
-  compact = false,
-  onStart: notify,
-}: {
-  agent: Row;
-  /** Every agent, for unique avatar initials. */
-  agents?: Row[];
-  /** Show the agent chip beside the button (Home; the Agents card already names it). */
-  showAgent?: boolean;
-  /** A card footer: the short label "Copy coding prompt" keeps the ? on the same row. */
-  compact?: boolean;
-  onStart: (start: SessionStart) => void;
-}) {
+/**
+ * The copy-prompt behaviour of Start a session, for any control: `start` copies
+ * the prompt (opening the guide on a first use), `openGuide` opens the guide,
+ * and `guide` is the dialog to render. The session is read on mount, so the
+ * copy runs inside the click (phones refuse a clipboard write after an await).
+ */
+export function useSessionStart(
+  agent: Row,
+  notify: (start: SessionStart) => void,
+) {
   const name = val(agent, "name");
   const cached = useRef<AgentSession | undefined>(undefined);
   const [loading, setLoading] = useState(false);
@@ -165,6 +159,54 @@ export default function StartSession({
     if (guideLoaded && !guideOff) setGuide(true);
     void copy();
   };
+  return {
+    start,
+    openGuide: () => setGuide(true),
+    loading,
+    copied: copied > 0,
+    guide: guide ? (
+      <SessionGuide
+        name={name}
+        prompt={prompt}
+        off={guideOff}
+        setOff={(off) => void setGuideOff(off).catch(() => undefined)}
+        copy={() => void copy()}
+        close={() => setGuide(false)}
+      />
+    ) : null,
+  };
+}
+
+/**
+ * Start a session (0.24.0; clearer in 0.25.0): one click copies the external
+ * agent's session prompt for the owner to paste into a new coding-agent
+ * session; Crew starts nothing itself. The result is a toast owned by the
+ * workspace.
+ *
+ * Since 0.26.0 the first click also opens a small dialog (three steps and the
+ * prompt) until the owner ticks "Don't show this again", a server setting; the
+ * ? help icon opens it at any time. Nothing is added to the page's flow, so
+ * agent cards keep their height. Since 0.34.0 Home reaches the same actions
+ * from an agent's ⋯ menu (useSessionStart).
+ */
+export default function StartSession({
+  agent,
+  agents,
+  showAgent = false,
+  compact = false,
+  onStart,
+}: {
+  agent: Row;
+  /** Every agent, for unique avatar initials. */
+  agents?: Row[];
+  /** Show the agent chip beside the button. */
+  showAgent?: boolean;
+  /** A card footer: the short label "Copy coding prompt" keeps the ? on the same row. */
+  compact?: boolean;
+  onStart: (start: SessionStart) => void;
+}) {
+  const name = val(agent, "name");
+  const session = useSessionStart(agent, onStart);
   return (
     <div className="crew-session">
       <div className="crew-session-row">
@@ -172,16 +214,16 @@ export default function StartSession({
         <button
           type="button"
           className="crew-session-copy"
-          disabled={loading}
+          disabled={session.loading}
           aria-label={`Copy prompt for a coding agent as ${name}`}
-          onClick={start}
+          onClick={session.start}
         >
           <span className="crew-session-copy-icon" aria-hidden="true">
-            {copied ? "✓" : "⧉"}
+            {session.copied ? "✓" : "⧉"}
           </span>
-          {loading
+          {session.loading
             ? "Preparing…"
-            : copied
+            : session.copied
               ? "Copied"
               : compact
                 ? "Copy coding prompt"
@@ -194,22 +236,13 @@ export default function StartSession({
             aria-label={`How to start a session as ${name}`}
             title="How it works"
             aria-haspopup="dialog"
-            onClick={() => setGuide(true)}
+            onClick={session.openGuide}
           >
             <span aria-hidden="true">?</span>
           </button>
         </div>
       </div>
-      {guide && (
-        <SessionGuide
-          name={name}
-          prompt={prompt}
-          off={guideOff}
-          setOff={(off) => void setGuideOff(off).catch(() => undefined)}
-          copy={() => void copy()}
-          close={() => setGuide(false)}
-        />
-      )}
+      {session.guide}
     </div>
   );
 }

@@ -58,12 +58,15 @@ const topBarOneRow=async where=>{
  assert.ok(r.left>=0&&r.right<=r.width,`${where}: top bar fits the screen`);
  assert.ok(r.nowrap&&r.sticky==='sticky',`${where}: an ellipsized title in a sticky bar`);
 };
-// The phone bottom tabs: fixed to the bottom edge, five equal targets on one row.
+// The phone bottom tabs (0.34.0): a fixed floating pill inset from the edges (frosted, rounded), five equal targets on one row, a dot for pending drafts.
 const tabBarCheck=async where=>{
  // Right after a resize the desktop nav (also named Workspace) can still be mounted: wait for the phone tab bar.
- const r=await page.locator('nav.crew-tabbar').evaluate(n=>{const b=n.getBoundingClientRect();const items=[...n.children].filter(c=>c.matches('a,button')).map(c=>c.getBoundingClientRect());return {fixed:getComputedStyle(n).position,bottom:b.bottom,height:innerHeight,widths:items.map(i=>Math.round(i.width)),tops:items.map(i=>Math.round(i.top)),tall:Math.min(...items.map(i=>i.height)),labels:[...n.children].filter(c=>c.matches('a,button')).map(c=>c.textContent.replace(/\d+/g,'').trim())};});
+ const r=await page.locator('nav.crew-tabbar').evaluate(n=>{const b=n.getBoundingClientRect();const items=[...n.children].filter(c=>c.matches('a,button')).map(c=>c.getBoundingClientRect());const cs=getComputedStyle(n);return {fixed:cs.position,bottom:b.bottom,left:b.left,right:b.right,width:innerWidth,radius:parseFloat(cs.borderTopLeftRadius),blur:(cs.backdropFilter||cs.webkitBackdropFilter||'').includes('blur'),shadow:cs.boxShadow!=='none',numerals:n.querySelectorAll('.crew-tab-badge').length,height:innerHeight,widths:items.map(i=>Math.round(i.width)),tops:items.map(i=>Math.round(i.top)),tall:Math.min(...items.map(i=>i.height)),labels:[...n.children].filter(c=>c.matches('a,button')).map(c=>c.textContent.trim())};});
  assert.equal(r.fixed,'fixed',`${where}: tabs are fixed`);
- assert.ok(Math.abs(r.bottom-r.height)<=1,`${where}: tabs sit on the bottom edge`);
+ assert.ok(r.height-r.bottom>=6&&r.height-r.bottom<=40,`${where}: the tab pill floats above the bottom edge (${r.height-r.bottom})`);
+ assert.ok(r.left>=8&&r.width-r.right>=8,`${where}: the tab pill is inset from the sides`);
+ assert.ok(r.radius>=24&&r.blur&&r.shadow,`${where}: a rounded frosted pill with a shadow`);
+ assert.equal(r.numerals,0,`${where}: no numeric tab badge`);
  assert.deepEqual(r.labels,['Home','Tasks','Notes','Approvals','More'],`${where}: tab labels`);
  assert.ok(Math.max(...r.widths)-Math.min(...r.widths)<=1&&new Set(r.tops).size===1,`${where}: equal tabs on one row `+JSON.stringify(r));
  assert.ok(r.tall>=44,`${where}: tab targets at least 44 px`);
@@ -506,18 +509,38 @@ try {
    }
   }
   await go('Home');await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();await snap('crew-home-'+width);
-  // A status tile filters to exactly its tasks and focuses that column.
-  // The one-shot column query is consumed; the status filter remains. Back returns Home.
-  await page.getByRole('link',{name:/^\d+ Done, show on the Tasks board$/}).click();
-  await page.waitForURL(u=>u.hash==='#/tasks?status=done');
-  await page.waitForFunction(()=>{const c=document.activeElement;if(!c?.matches('.crew-column')||!c.textContent.startsWith('Done'))return false;const r=c.getBoundingClientRect();return r.top>=0&&r.top<innerHeight&&r.left>=0&&r.right<=innerWidth;});
-  // A phone shows only the asked-for column, named in the switcher.
-  assert.equal(await page.locator('.crew-column').count(),width>680?4:1,`columns at ${width}`);
-  if(width<=680) assert.match(await page.getByRole('button',{name:/^Column /}).innerText(),/^Done/,'the switcher shows the asked-for column');
-  await page.waitForTimeout(250);await snapView('crew-board-column-'+width);
-  await page.locator('.crew-column-highlight').waitFor({state:'detached'});
+  // Home (0.34.0): Needs you tiles open their items; Back returns Home.
+  await page.getByRole('link',{name:/^\d+ approvals? waiting, open Approvals$/}).click();
+  await page.waitForURL(u=>u.hash==='#/approvals');
+  await page.goBack();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
+  await page.getByRole('link',{name:/^\d+ tasks? on hold, show on the Tasks board$/}).click();
+  await page.waitForURL(u=>u.hash==='#/tasks?hold=on_hold');
+  await page.getByRole('button',{name:'Remove filter On hold',exact:true}).first().waitFor();
   await page.goBack();await page.getByRole('heading',{name:'Needs you',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>location.hash),'#/');
+  // Agents: every active agent A–Z with a status and a ⋯ of at least 44 px; no loose Copy prompt or Agent tag.
+  {
+   const agents=page.getByRole('region',{name:'Agents',exact:true});
+   const names=await agents.locator('.crew-home-agent strong').allInnerTexts();
+   assert.ok(names.length>=5,`Home lists the agents at ${width}: ${names}`);
+   assert.deepEqual(names,[...names].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'})),`agents A–Z at ${width}`);
+   assert.equal(await agents.locator('.crew-home-agent small').evaluateAll(s=>s.every(e=>e.textContent.trim().length>0)),true,'each agent has a status');
+   assert.equal(await page.locator('.crew-home .crew-session-copy, .crew-home .crew-agent-chip small').count(),0,'no loose Copy prompt or Agent tag on Home');
+   const more=await agents.getByRole('button',{name:/^More for /}).first().boundingBox();
+   assert.ok(more.width>=44&&more.height>=44,`agent ⋯ tap target at ${width}`);
+  }
+  // + opens the create menu (on phones the top bar's Create, on wide screens ＋ New): five rows of at least 44 px inside the screen.
+  await page.getByRole('button',{name:width>680?'＋ New':'Create',exact:true}).click();
+  {
+   const menu=page.getByRole('dialog',{name:'Create',exact:true});await menu.waitFor();
+   assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Task','Note','Bucket','Agent','Shared page'],`create menu at ${width}`);
+   const rows=await menu.getByRole('button').evaluateAll(b=>b.map(e=>e.getBoundingClientRect().height));
+   assert.ok(Math.min(...rows)>=44,`create menu rows at least 44 px at ${width}: ${rows}`);
+   const box=await menu.boundingBox();
+   assert.ok(box.x>=0&&box.x+box.width<=width&&box.height<600,`create menu is a compact menu inside the screen at ${width}`);
+   await snapView('crew-home-create-'+width);
+   await page.keyboard.press('Escape');await menu.waitFor({state:'hidden'});
+  }
   if(width<1440){
    // Phones: Home's intro and help are in the page menu; section help still opens on tap and stays on screen; the Guide is reachable from Home.
    await page.getByRole('button',{name:'Page options',exact:true}).click();
@@ -534,7 +557,14 @@ try {
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`help overflow at ${width}`);
    await snapView('crew-help-popover-'+width);
    await page.keyboard.press('Escape');await pop.waitFor({state:'hidden'});
-   await page.getByRole('link',{name:'Read how it works'}).click();
+   // The How it works row: the row and its ✕ are at least 44 px tall.
+   {
+    const row=await page.locator('.crew-home-guide').boundingBox();
+    const close=await page.getByRole('button',{name:'Dismiss How it works',exact:true}).boundingBox();
+    assert.ok(row.height>=44&&row.width>=width-40,`How it works is a full-width row at ${width}`);
+    assert.ok(close.width>=44&&close.height>=44,`How it works ✕ tap target at ${width}`);
+   }
+   await page.getByRole('link',{name:'New to Crew? Read how it works',exact:true}).click();
    await page.waitForURL('**/#/guide');
    await page.getByRole('heading',{name:'How Crew works',exact:true}).waitFor();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Guide overflow at ${width}`);
@@ -1172,17 +1202,21 @@ try {
   await box.waitFor({state:'hidden'});
   assert.ok(writeActions.filter(a=>a==='session.update').length===3,'three session.update writes: '+writeActions.join(','));
  }
- // Home offers the same one-click start for manual agents only (0.24.0), on a phone too.
+ // Home (0.34.0): a coding agent's ⋯ copies its prompt and opens the guide; bots' ⋯ have neither. On a phone too.
  for(const width of [1280,390]){
   await page.setViewportSize({width,height:844});
   await page.getByRole(width<700?'banner':'navigation').waitFor().catch(()=>{});
   await page.goto(base+'/#/');
-  const row=page.getByRole('region',{name:'Start a session'});
-  const homeStart=row.getByRole('button',{name:'Copy prompt for a coding agent as synthetic-repo'});
-  assert.equal(await homeStart.innerText(),'⧉Copy prompt for a coding agent');
-  await row.getByText('Agent',{exact:true}).waitFor();
-  assert.equal(await row.getByRole('button',{name:/^Copy prompt for a coding agent as /}).count(),1,'only manual agents appear on Home');
-  await row.getByRole('button',{name:'How to start a session as synthetic-repo'}).click();
+  const agents=page.getByRole('region',{name:'Agents',exact:true});
+  await agents.waitFor();
+  assert.equal(await page.locator('.crew-home .crew-session-copy').count(),0,'no loose Copy prompt on Home');
+  const openMenu=async name=>{await agents.getByRole('button',{name:'More for '+name,exact:true}).click();const m=page.getByRole('dialog',{name,exact:true});await m.waitFor();return m;};
+  const botMenu=await openMenu('Network');
+  assert.deepEqual(await botMenu.getByRole('button').allInnerTexts(),['Open agent','Show tasks'],'a bot has no session actions');
+  await page.keyboard.press('Escape');await botMenu.waitFor({state:'hidden'});
+  let menu=await openMenu('synthetic-repo');
+  assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Copy prompt for a coding agent','How coding sessions work']);
+  await menu.getByRole('button',{name:'How coding sessions work',exact:true}).click();
   const homeGuide=page.getByRole('dialog',{name:'Start a coding session as synthetic-repo'});
   await homeGuide.waitFor();
   if(width===390){
@@ -1194,7 +1228,9 @@ try {
   await page.keyboard.press('Escape');
   await homeGuide.waitFor({state:'hidden'});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Home overflow at ${width}`);
-  await homeStart.click();
+  menu=await openMenu('synthetic-repo');
+  if(width===390) await snapView('crew-home-agent-menu-390');
+  await menu.getByRole('button',{name:'Copy prompt for a coding agent',exact:true}).click();
   await page.locator('.crew-toast').getByText('Copied the session prompt for synthetic-repo.').waitFor();
   await page.locator('.crew-toast').getByRole('button',{name:'Dismiss'}).click();
  }
@@ -1663,15 +1699,15 @@ try {
  await close();await dialog().waitFor({state:'hidden'});
  await page.setViewportSize({width:1440,height:1000});
  await page.goto(base+'/#/tasks?label=synthetic-board');await claimCard.waitFor();}
- // Every Home tile opens exactly the number it counted, including old Done and stale holds.
- for(const name of ['To do','In progress','Needs review','Done','on hold over 3 days']){
+ // Home's Tasks on hold tile opens exactly the number it counted (every open hold, old ones included).
+ {
   await page.goto(base+'/#/');
-  const tile=page.getByRole('link',{name:new RegExp('^\\d+ '+name+', show')});
+  const tile=page.getByRole('link',{name:/^\d+ tasks? on hold, show on the Tasks board$/});
   await tile.waitFor();const count=Number(await tile.locator('b').innerText());
   await tile.click();await page.getByRole('heading',{name:'Tasks',exact:true}).waitFor();
   await cards(count);
-  await page.getByRole('button',{name:name==='on hold over 3 days'?'Remove filter On hold · over 3 days':'Remove filter Status '+name,exact:true}).waitFor();
-  assert.equal(await page.locator('.crew-filter-count').innerText(),`${count} ${count===1?'task':'tasks'}`,`${name} tile count matches the board`);
+  await page.getByRole('button',{name:'Remove filter On hold',exact:true}).waitFor();
+  assert.equal(await page.locator('.crew-filter-count').innerText(),`${count} ${count===1?'task':'tasks'}`,'Tasks on hold tile count matches the board');
  }
  // Review evidence and structured alternatives: only the frozen images, exact decisions.
  const reviewTask=await boardWrite('task.create',{title:'Synthetic review alternatives',draft:'Hook\nProblem\nSolution\n![First](attachment:new-1)\n![Second](attachment:new-2)',files:shotsBase64.map((content_base64,i)=>({name:`review-${i+1}.png`,content_base64}))});

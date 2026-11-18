@@ -247,7 +247,10 @@ function ArtifactCard({
   // link) says so; a discarded one keeps "Update of".
   const mergedInto = val(row, "merged_into");
   const targetLive = !!target && artifactState(target) === "published";
-  const [editing, setEditing] = useState(false);
+  // A new empty draft (Home's + → Shared page) opens ready to write.
+  const [editing, setEditing] = useState(
+    () => focused && state === "draft" && !val(row, "body"),
+  );
   const [choosing, setChoosing] = useState(false);
   const [expiring, setExpiring] = useState(false);
   const [expiryChoice, setExpiryChoice] = useState("none");

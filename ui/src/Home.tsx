@@ -1,16 +1,20 @@
 import { useState, type ReactNode } from "react";
+import { icons, PopoverMenu, type MenuItem } from "./MobileChrome";
 import { ConnectionPending, skillCommand } from "./Connect";
 import Help from "./Help";
 import { RelativeTime } from "./relativeTime";
-import { boardStatuses, val, type ConnectionState, type Row } from "./crewApi";
+import { val, type ConnectionState, type Row } from "./crewApi";
 import { isClosed } from "./closedTasks";
-import { longHolds, statusMatches } from "./boardFilters";
 import { agentKind } from "./projectAgents";
-import StartSession, { type SessionStart } from "./StartSession";
+import {
+  agentInitials,
+  useSessionStart,
+  type SessionStart,
+} from "./StartSession";
 export { longHolds } from "./boardFilters";
 import {
-  boardStatusHash,
-  boardOnHoldHash,
+  boardAgentHash,
+  boardHeldHash,
   viewHashes,
   type ItemKind,
 } from "./itemLink";
@@ -18,6 +22,7 @@ import {
 type Data = Record<string, Row[]>;
 const connectedKey = "pocketcontext.crew.agent_connected";
 const hiddenKey = "pocketcontext.crew.get_started_hidden";
+const guideRowKey = "pocketcontext.crew.how_it_works_hidden";
 // Per-browser conveniences: progress itself comes from the workspace data.
 function stored(key: string) {
   try {
@@ -64,9 +69,7 @@ export default function Home({
   /** One click on a Start a session button: the workspace shows the toast. */
   onStartSession: (start: SessionStart) => void;
 }) {
-  // Agents the owner starts by hand (0.24.0); bots and people never appear,
-  // and data.agents holds only active agents.
-  const manual = data.agents.filter((agent) => agentKind(agent) === "external");
+  const [guideRow, setGuideRow] = useState(() => !stored(guideRowKey));
   const [connected, setConnected] = useState(() => stored(connectedKey));
   const [hidden, setHidden] = useState(() => stored(hiddenKey));
   if (!ready) return <p role="status">Loading your workspace…</p>;
@@ -175,20 +178,44 @@ export default function Home({
   const stuck = data.tasks.filter(
     (x) => !isClosed(x) && (x.handoff_limited === true || invalidAssignment(x)),
   );
+  const open = data.tasks.filter((x) => !isClosed(x) && !x.archived);
+  const held = open.filter((x) => val(x, "readiness") !== "ready").length;
+  // Every active agent A–Z (data.agents holds only active ones); none featured.
+  const agents = [...data.agents].sort((a, b) =>
+    val(a, "name").localeCompare(val(b, "name"), undefined, {
+      sensitivity: "base",
+    }),
+  );
   const recent = [
     ...data.tasks.map((row) => ({ kind: "task" as const, row })),
     ...data.notes.map((row) => ({ kind: "note" as const, row })),
   ]
     .sort((a, b) => val(b.row, "updated").localeCompare(val(a.row, "updated")))
     .slice(0, 5);
-  const nothingNeeded = !pending.length && !stuck.length;
-  const heldLong = longHolds(data.tasks).length;
 
   return (
     <div className="crew-home">
-      <p className="crew-home-guide">
-        New to Crew? <a href={viewHashes.guide}>Read how it works</a>
-      </p>
+      {guideRow && (
+        <div className="crew-home-guide">
+          <a href={viewHashes.guide}>
+            <span>
+              <span className="crew-home-guide-lead">New to Crew?</span> Read
+              how it works
+            </span>
+          </a>
+          <button
+            type="button"
+            aria-label="Dismiss How it works"
+            title="Dismiss"
+            onClick={() => {
+              remember(guideRowKey);
+              setGuideRow(false);
+            }}
+          >
+            {icons.close}
+          </button>
+        </div>
+      )}
       {current >= 0 && !hidden && (
         <section className="crew-home-start" aria-label="Get started">
           <header>
@@ -226,76 +253,68 @@ export default function Home({
           </ol>
         </section>
       )}
-      {manual.length > 0 && (
-        <section className="crew-home-sessions" aria-label="Start a session">
-          {manual.map((agent) => (
-            <StartSession
-              key={agent.id}
-              agent={agent}
-              agents={data.agents}
-              showAgent
-              onStart={onStartSession}
-            />
-          ))}
-        </section>
-      )}
-      <section aria-label="Needs you">
+      <section className="crew-home-section" aria-label="Needs you">
         <div className="crew-title-row">
           <h2>Needs you</h2>
           <Help topic="needs-you" />
         </div>
-        {nothingNeeded && <p>Nothing needs you right now.</p>}
-        <div className="crew-home-list">
-          {pending.map((review) => (
-            <button key={review.id} onClick={() => openReview(review)}>
-              <strong>{taskTitle(review)}</strong>
-              <small>Draft waiting for your approval</small>
-            </button>
-          ))}
-          {stuck.map((task) => (
-            <button key={task.id} onClick={() => openItem("task", task)}>
-              <strong>{val(task, "title")}</strong>
-              <small>
-                {task.handoff_limited === true
-                  ? "Stopped after too many agent handoffs"
-                  : "Assigned agent is unavailable"}
-              </small>
-            </button>
-          ))}
-        </div>
-      </section>
-      <section aria-label="Your crew right now">
-        <h2>Your crew right now</h2>
-        <div className="crew-home-counts">
-          {boardStatuses.map(([status, label]) => {
-            const count = data.tasks.filter((x) =>
-              statusMatches(status, x),
-            ).length;
-            return (
-              <a
-                key={status}
-                href={boardStatusHash(status)}
-                aria-label={`${count} ${label}, show on the Tasks board`}
-              >
-                <b>{count}</b>
-                {label}
-              </a>
-            );
-          })}
+        <div className="crew-home-tiles">
           <a
-            className="crew-home-hold"
-            href={boardOnHoldHash}
-            aria-label={`${heldLong} on hold over 3 days, show tasks on hold`}
-            title="Open tasks held for more than 3 days"
+            href={viewHashes.reviews}
+            aria-label={`${pending.length} ${pending.length === 1 ? "approval" : "approvals"} waiting, open Approvals`}
           >
-            <b>{heldLong}</b>
-            On hold over 3 days
+            <b>{pending.length}</b>
+            Approvals waiting
+          </a>
+          <a
+            href={boardHeldHash}
+            aria-label={`${held} ${held === 1 ? "task" : "tasks"} on hold, show on the Tasks board`}
+          >
+            <b>{held}</b>
+            Tasks on hold
           </a>
         </div>
+        {(pending.length > 0 || stuck.length > 0) && (
+          <div className="crew-home-list">
+            {pending.map((review) => (
+              <button key={review.id} onClick={() => openReview(review)}>
+                <strong>{taskTitle(review)}</strong>
+                <small>Draft waiting for your approval</small>
+              </button>
+            ))}
+            {stuck.map((task) => (
+              <button key={task.id} onClick={() => openItem("task", task)}>
+                <strong>{val(task, "title")}</strong>
+                <small>
+                  {task.handoff_limited === true
+                    ? "Stopped after too many agent handoffs"
+                    : "Assigned agent is unavailable"}
+                </small>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
+      {agents.length > 0 && (
+        <section className="crew-home-section" aria-label="Agents">
+          <h2>Agents</h2>
+          <ul className="crew-home-agents">
+            {agents.map((agent) => (
+              <AgentRow
+                key={agent.id}
+                agent={agent}
+                agents={data.agents}
+                status={agentStatus(agent, open)}
+                openItem={openItem}
+                onStartSession={onStartSession}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
       {recent.length > 0 && (
-        <section aria-label="Recently updated">
-          <h2>Recently updated</h2>
+        <section className="crew-home-section" aria-label="Recent">
+          <h2>Recent</h2>
           <div className="crew-home-list">
             {recent.map(({ kind, row }) => (
               <button key={row.id} onClick={() => openItem(kind, row)}>
@@ -315,5 +334,136 @@ export default function Home({
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * One agent's open work in a few words: up to two of in review, in progress,
+ * on hold and to do (in that order), or "No open tasks".
+ */
+export function agentStatus(agent: Row, open: Row[]) {
+  const mine = open.filter((x) => val(x, "assigned_agent") === agent.id);
+  const count = (match: (task: Row) => boolean) => mine.filter(match).length;
+  const parts = (
+    [
+      [count((x) => val(x, "status") === "needs_review"), "in review"],
+      [count((x) => val(x, "status") === "in_progress"), "in progress"],
+      [
+        count(
+          (x) => val(x, "status") === "todo" && val(x, "readiness") !== "ready",
+        ),
+        "on hold",
+      ],
+      [
+        count(
+          (x) => val(x, "status") === "todo" && val(x, "readiness") === "ready",
+        ),
+        "to do",
+      ],
+    ] as [number, string][]
+  )
+    .filter(([n]) => n > 0)
+    .slice(0, 2)
+    .map(([n, label]) => `${n} ${label}`);
+  return parts.length ? parts.join(" · ") : "No open tasks";
+}
+
+type AgentRowProps = {
+  agent: Row;
+  agents: Row[];
+  status: string;
+  openItem: (kind: ItemKind, row: Row) => void;
+  onStartSession: (start: SessionStart) => void;
+};
+
+/** A manually started (coding) agent: its ⋯ also copies the session prompt. */
+function CodingAgentRow(props: AgentRowProps) {
+  const session = useSessionStart(props.agent, props.onStartSession);
+  return (
+    <AgentRowView
+      {...props}
+      extra={[
+        {
+          label: session.loading
+            ? "Preparing the prompt…"
+            : "Copy prompt for a coding agent",
+          disabled: session.loading,
+          onSelect: session.start,
+        },
+        { label: "How coding sessions work", onSelect: session.openGuide },
+      ]}
+    >
+      {session.guide}
+    </AgentRowView>
+  );
+}
+
+function AgentRow(props: AgentRowProps) {
+  return agentKind(props.agent) === "external" ? (
+    <CodingAgentRow {...props} />
+  ) : (
+    <AgentRowView {...props} extra={[]} />
+  );
+}
+
+/**
+ * An agent on Home (0.34.0): initials, name and status open the agent; its ⋯
+ * opens the agent, shows its tasks and, for coding agents, copies the prompt.
+ */
+function AgentRowView({
+  agent,
+  agents,
+  status,
+  openItem,
+  extra,
+  children,
+}: AgentRowProps & { extra: MenuItem[]; children?: ReactNode }) {
+  const name = val(agent, "name");
+  const [menu, setMenu] = useState<HTMLElement | null>(null);
+  return (
+    <li>
+      <button
+        type="button"
+        className="crew-home-agent"
+        onClick={() => openItem("agent", agent)}
+      >
+        <span className="crew-avatar" aria-hidden="true">
+          {agentInitials(name, agents)}
+        </span>
+        <span className="crew-home-agent-text">
+          <strong>{name}</strong>
+          <small>{status}</small>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="crew-home-agent-more"
+        aria-label={`More for ${name}`}
+        title="More"
+        aria-haspopup="dialog"
+        aria-expanded={!!menu}
+        onClick={(e) => setMenu(e.currentTarget)}
+      >
+        {icons.more}
+      </button>
+      {menu && (
+        <PopoverMenu
+          label={name}
+          anchor={menu}
+          onClose={() => setMenu(null)}
+          items={[
+            { label: "Open agent", onSelect: () => openItem("agent", agent) },
+            {
+              label: "Show tasks",
+              onSelect: () => {
+                location.hash = boardAgentHash(agent.id);
+              },
+            },
+            ...extra,
+          ]}
+        />
+      )}
+      {children}
+    </li>
   );
 }

@@ -3,10 +3,11 @@
    phones (usePhone, max-width 680px), so these rules need no media query. */
 .crew-phone {
   --crew-mbar-h: calc(56px + env(safe-area-inset-top));
-  --crew-tabbar-h: calc(62px + env(safe-area-inset-bottom));
+  /* The floating tab pill (0.34.0): 64 px tall, 8 px above the safe area. */
+  --crew-tabbar-h: calc(72px + env(safe-area-inset-bottom));
 }
 .crew-phone .crew-main {
-  padding-bottom: calc(var(--crew-tabbar-h) + 8px);
+  padding-bottom: calc(var(--crew-tabbar-h) + 16px);
 }
 .crew-phone .crew-content {
   padding: 8px 16px 24px;
@@ -154,19 +155,35 @@
   bottom: calc(var(--crew-tabbar-h) + 12px);
 }
 
-/* Bottom tabs: fixed, equal width, never moving; safe area below. */
+/* Bottom tabs (0.34.0): a floating frosted pill inset from the edges, the
+   page scrolling under it; equal tabs that never move; safe area below. */
 .crew-tabbar {
   position: fixed;
   z-index: 40;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(8px + env(safe-area-inset-bottom));
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding: 6px max(6px, env(safe-area-inset-right))
-    calc(6px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
-  border-top: 1px solid #e1e5dc;
-  background: #f6f7f2;
+  gap: 2px;
+  height: 64px;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid rgb(255 255 255 / 0.7);
+  border-radius: 32px;
+  background: rgb(255 255 255 / 0.72);
+  box-shadow:
+    0 8px 28px rgb(28 40 30 / 0.16),
+    0 1px 3px rgb(28 40 30 / 0.08);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(20px) saturate(1.8);
+}
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  .crew-tabbar {
+    background: rgb(255 255 255 / 0.95);
+  }
 }
 .crew-tabbar > a,
 .crew-phone .crew-tabbar > button {
@@ -174,57 +191,59 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
   min-height: 50px;
   padding: 2px 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 26px;
   background: transparent;
-  color: #6c7a66;
+  color: #2d4538;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
   text-decoration: none;
   touch-action: manipulation;
+  transition: background-color 120ms ease;
+}
+/* The generic button hover would paint More; only a press shows. */
+.crew-phone .crew-tabbar > button:not(.is-current):hover {
+  background: transparent;
 }
 .crew-tabbar > a:active,
 .crew-phone .crew-tabbar > button:active {
-  background: #e8eee3;
+  background: rgb(214 224 208 / 0.7);
 }
 .crew-tab-icon {
   position: relative;
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 28px;
-  border-radius: 14px;
+  width: 28px;
+  height: 26px;
 }
+/* The active tab: a soft grey-green highlight behind icon and label. */
 .crew-tabbar > [aria-current="page"],
 .crew-phone .crew-tabbar > .is-current {
+  background: rgb(222 230 217 / 0.9);
   color: #1f3a2a;
   font-weight: 700;
 }
-.crew-tabbar > [aria-current="page"] .crew-tab-icon,
-.crew-tabbar > .is-current .crew-tab-icon {
-  background: #e1eadb;
-}
-.crew-tab-badge {
+/* Pending items: a small dot, not a number (the count is in the name). */
+.crew-tab-dot {
   position: absolute;
-  top: -5px;
-  right: 2px;
-  display: grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border: 2px solid #f6f7f2;
-  border-radius: 9px;
-  background: #2c4b36;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
+  top: -1px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #2f8a4a;
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-tabbar > a,
+  .crew-phone .crew-tabbar > button {
+    transition: none;
+  }
 }
 .crew-tabbar > a:focus-visible,
 .crew-phone .crew-tabbar > button:focus-visible {

@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.34.0](docs/releases/0.34.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.34.0) · A sectioned Home (Needs you tiles, every agent A–Z with a ⋯ menu, Recent) with a dismissible How it works row, a create menu on Home's +, and a floating frosted tab bar on phones.
 - **[0.33.1](docs/releases/0.33.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.33.1) · Phone Notes switch buckets with the same fixed ‹ › switcher as the Tasks board (All first, then buckets A–Z with counts), replacing the bucket chip row.
 - **[0.33.0](docs/releases/0.33.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.33.0) · Phone-first reader: slim top bar and bottom tabs, a one-column Tasks board with a column switcher, Notes with bucket chips, relative dates everywhere, wrapping fields with linked hold reasons, a compact claim banner and a way back from shared pages in the home-screen app.
 - **[0.32.1](docs/releases/0.32.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.32.1) · The header Refresh button answers a tap: a pressed state, a spinning icon while it loads, then "Updated." (or an error).

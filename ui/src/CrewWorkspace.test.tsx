@@ -263,7 +263,12 @@ it("guides a new owner one step at a time", async () => {
   expect(screen.getByText("0 of 4 done")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Set up starter crew" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "I've connected it" })).toBeNull();
-  expect(screen.getByText("Nothing needs you right now.")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "0 approvals waiting, open Approvals" }),
+  ).toHaveAttribute("href", "#/approvals");
+  expect(
+    screen.getByRole("link", { name: "0 tasks on hold, show on the Tasks board" }),
+  ).toHaveAttribute("href", "#/tasks?hold=on_hold");
 });
 it("advances past a manually confirmed connection and remembers it", async () => {
   fixtures.tasks = [];
@@ -291,7 +296,7 @@ it("hides Get started once finished or dismissed", async () => {
   fixtures.reviews = [{ ...review, status: "approved" }];
   history.replaceState(null, "", "/");
   render(<CrewWorkspace />);
-  await screen.findByRole("heading", { name: "Your crew right now" });
+  await screen.findByRole("heading", { name: "Agents" });
   expect(screen.queryByRole("heading", { name: "Get started" })).toBeNull();
 });
 it("manages connected apps inside Crew and confirms before disconnecting", async () => {
@@ -1343,7 +1348,7 @@ it.each([
 ])("ignores the malformed item link %s", async (hash) => {
   history.replaceState(null, "", `/${hash}`);
   render(<CrewWorkspace />);
-  await screen.findByRole("heading", { name: "Your crew right now" });
+  await screen.findByRole("region", { name: "Needs you" });
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
@@ -2710,22 +2715,49 @@ describe("board agent filter", () => {
     expect(location.hash).toBe("#/tasks?agent=invalid");
   });
 
-  it("Home's status tiles open the whole board on their column", async () => {
+  it("Home's Tasks on hold tile opens the whole board on hold", async () => {
     await openBoard(`#/tasks?agent=${agent.id}`);
     await openPage("Home");
     const tile = screen.getByRole("link", {
-      name: "3 To do, show on the Tasks board",
+      name: "4 tasks on hold, show on the Tasks board",
     });
-    expect(tile).toHaveAttribute("href", "#/tasks?status=todo&column=todo");
-    expect(tile).toHaveTextContent("3To do");
+    expect(tile).toHaveAttribute("href", "#/tasks?hold=on_hold");
+    expect(tile).toHaveTextContent("4Tasks on hold");
     fireEvent.click(tile);
     await waitFor(() => expect(filter()).toHaveValue("all"));
-    expect(cardTitles()).toHaveLength(3);
+    expect(cardTitles()).toHaveLength(4);
     expect(document.querySelectorAll(".crew-column")).toHaveLength(4);
+  });
+
+  it("lists every active agent A–Z on Home with its open work and a ⋯ menu", async () => {
+    await openBoard();
+    await openPage("Home");
+    const agents = within(screen.getByRole("region", { name: "Agents" }));
+    const rows = agents.getAllByRole("listitem");
+    expect(rows.map((row) => row.querySelector("strong")?.textContent)).toEqual([
+      "Design",
+      "Network",
+    ]);
+    expect(rows.map((row) => row.querySelector("small")?.textContent)).toEqual([
+      "1 in progress",
+      "1 on hold",
+    ]);
+    // No Agent tag and no loose Copy prompt on Home.
+    expect(agents.queryByText("Agent")).toBeNull();
+    expect(agents.queryByRole("button", { name: /Copy prompt/ })).toBeNull();
+    fireEvent.click(agents.getByRole("button", { name: "More for Network" }));
+    const menu = within(screen.getByRole("dialog", { name: "Network" }));
+    expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Open agent",
+      "Show tasks",
+    ]);
+    fireEvent.click(menu.getByRole("button", { name: "Show tasks" }));
+    await waitFor(() => expect(filter()).toHaveValue(agent.id));
+    expect(cardTitles()).toEqual(["Network draft", "Network shipped"]);
   });
 });
 
-describe("Home tiles focus a board column", () => {
+describe("A column link focuses a board column", () => {
   const scroll = vi.fn();
   const column = (name: string) =>
     screen.getByRole("region", { name: new RegExp(`^${name}`) });
@@ -2743,34 +2775,11 @@ describe("Home tiles focus a board column", () => {
     delete (window as Partial<Window>).matchMedia;
   });
 
-  it("links each tile to its column, named for where it goes", async () => {
-    history.replaceState(null, "", "/#/");
-    render(<CrewWorkspace />);
-    await screen.findByRole("heading", { name: "Your crew right now" });
-    const tiles = [
-      ["1 To do", "todo"],
-      ["0 In progress", "in_progress"],
-      ["0 Needs review", "needs_review"],
-      ["1 Done", "done"],
-    ];
-    for (const [name, status] of tiles)
-      await waitFor(() =>
-        expect(
-          screen.getByRole("link", { name: `${name}, show on the Tasks board` }),
-        ).toHaveAttribute("href", `#/tasks?status=${status}&column=${status}`),
-      );
-  });
-
   it("scrolls to, focuses and briefly highlights the column, then drops it from the address", async () => {
     history.replaceState(null, "", "/#/");
     render(<CrewWorkspace />);
-    await screen.findByRole("heading", { name: "Your crew right now" });
-    await waitFor(() =>
-      expect(
-        screen.getByRole("link", { name: /^1 Done, show on/ }),
-      ).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByRole("link", { name: /^1 Done, show on/ }));
+    await screen.findByRole("region", { name: "Needs you" });
+    location.hash = "#/tasks?status=done&column=done";
     await waitFor(() => expect(column("Done")).toHaveFocus());
     const done = column("Done");
     expect(done).toHaveAttribute("tabindex", "-1");
@@ -3042,7 +3051,7 @@ describe("On hold", () => {
     );
     expect(cardTitles()).toEqual(["Held draft"]);
   });
-  it("counts tasks on hold over 3 days on Home and opens the board filtered to them", async () => {
+  it("opens the board filtered to tasks on hold over 3 days, and Home counts every hold", async () => {
     const old = new Date(Date.now() - 4 * 86_400_000).toISOString();
     const recent = new Date(Date.now() - 86_400_000).toISOString();
     fixtures.tasks = [
@@ -3056,11 +3065,13 @@ describe("On hold", () => {
     ];
     history.replaceState(null, "", "/#/");
     render(<CrewWorkspace />);
-    const tile = await screen.findByRole("link", {
-      name: "1 on hold over 3 days, show tasks on hold",
-    });
-    expect(tile).toHaveAttribute("href", "#/tasks?hold=on_hold&held_over=3d");
-    fireEvent.click(tile);
+    // Home counts every open task on hold, however long.
+    expect(
+      await screen.findByRole("link", {
+        name: "2 tasks on hold, show on the Tasks board",
+      }),
+    ).toHaveAttribute("href", "#/tasks?hold=on_hold");
+    location.hash = "#/tasks?hold=on_hold&held_over=3d";
     const chip = await screen.findByRole("button", {
       name: "Remove filter On hold · over 3 days",
     });
@@ -3431,7 +3442,7 @@ describe("project agents and coding sessions", () => {
       timeout: 3000,
     });
   });
-  it("offers Start a session on Home for active manually started agents only", async () => {
+  it("copies a coding agent's prompt from its ⋯ on Home, and only for active manual agents", async () => {
     const session$ = vi.spyOn(crewApi, "session").mockResolvedValue(session);
     const writeText = mockClipboard(async () => undefined);
     serveArchived({
@@ -3439,30 +3450,48 @@ describe("project agents and coding sessions", () => {
     });
     history.replaceState(null, "", "/#/");
     render(<CrewWorkspace />);
-    const row = within(await screen.findByRole("region", { name: "Start a session" }));
-    const buttons = row.getAllByRole("button");
-    expect(buttons.map((b) => b.textContent)).toEqual([
-      "⧉Copy prompt for a coding agent",
-      "?",
-    ]);
-    // The agent shows as one: avatar, name and an Agent tag.
-    expect(row.getByText("Agent")).toBeInTheDocument();
-    expect(row.getByText("synthetic-repo")).toBeInTheDocument();
-    // No counts beside them.
-    expect(row.queryByText(/\d/)).toBeNull();
+    const agents = within(await screen.findByRole("region", { name: "Agents" }));
+    expect(agents.queryByText("old-repo")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Start a session" })).toBeNull();
+    // Copy prompt and its help live only in the coding agent's ⋯.
+    expect(agents.queryByRole("button", { name: /Copy prompt|How to start/ })).toBeNull();
     await waitFor(() => expect(session$).toHaveBeenCalledWith(project.id));
-    fireEvent.click(buttons[0]);
+    fireEvent.click(agents.getByRole("button", { name: "More for synthetic-repo" }));
+    const menu = within(screen.getByRole("dialog", { name: "synthetic-repo" }));
+    expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Open agent",
+      "Show tasks",
+      "Copy prompt for a coding agent",
+      "How coding sessions work",
+    ]);
+    fireEvent.click(menu.getByRole("button", { name: "Copy prompt for a coding agent" }));
     expect(writeText).toHaveBeenCalledWith(session.prompt);
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Copied the session prompt for synthetic-repo.",
     );
+    expect(screen.queryByRole("dialog", { name: "synthetic-repo" })).toBeNull();
+    // A bot's ⋯ has no session actions.
+    fireEvent.click(agents.getByRole("button", { name: "More for Network" }));
+    expect(
+      within(screen.getByRole("dialog", { name: "Network" }))
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Open agent", "Show tasks"]);
   });
-  it("shows no Start a session row on Home without manual agents", async () => {
-    fixtures.agents = fixtures.agents.filter((a) => a.kind !== "external");
+  it("opens the session guide from a coding agent's ⋯ on Home", async () => {
+    vi.spyOn(crewApi, "session").mockResolvedValue(session);
     history.replaceState(null, "", "/#/");
     render(<CrewWorkspace />);
-    await screen.findByRole("region", { name: "Needs you" });
-    expect(screen.queryByRole("region", { name: "Start a session" })).toBeNull();
+    const agents = within(await screen.findByRole("region", { name: "Agents" }));
+    fireEvent.click(agents.getByRole("button", { name: "More for synthetic-repo" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "synthetic-repo" })).getByRole("button", {
+        name: "How coding sessions work",
+      }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Start a coding session as synthetic-repo" }),
+    ).toBeInTheDocument();
   });
   it("edits session instructions by hand, restores history and copies a rewrite prompt", async () => {
     vi.spyOn(crewApi, "session").mockResolvedValue(session);
@@ -3831,16 +3860,14 @@ describe("release labels and Won't do on the board", () => {
     expect(cardTitles()).toHaveLength(5);
   });
 
-  it("counts Done only on its Home tile, and Won't do never breaks the counts", async () => {
+  it("leaves Done and Won't do tasks out of Home's on-hold count", async () => {
     history.replaceState(null, "", "/#/");
     render(<CrewWorkspace />);
-    const tile = await screen.findByRole("link", {
-      name: "4 Done, show on the Tasks board",
-    });
-    expect(tile).toHaveAttribute("href", "#/tasks?status=done&column=done");
-    expect(screen.queryByRole("link", { name: /Won't do, show/ })).toBeNull();
+    // Only "Planned" is open; the closed tasks are never on hold.
     expect(
-      screen.getByRole("link", { name: "1 To do, show on the Tasks board" }),
+      await screen.findByRole("link", {
+        name: "1 task on hold, show on the Tasks board",
+      }),
     ).toBeInTheDocument();
   });
 

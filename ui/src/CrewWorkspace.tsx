@@ -167,7 +167,16 @@ import HoldReasonField from "./HoldReasonField";
 import PlainRefs from "./PlainRefs";
 import { RelativeTime, useNow, type Instant } from "./relativeTime";
 import { usePhone } from "./usePhone";
-import { MobileTabBar, MobileTopBar, Sheet, type PageAction } from "./MobileChrome";
+import {
+  icons,
+  MobileTabBar,
+  MobileTopBar,
+  PopoverMenu,
+  Sheet,
+  type MenuItem as PopoverItem,
+  type PageAction,
+} from "./MobileChrome";
+import NewSharedPage from "./NewSharedPage";
 import ColumnSwitcher from "./ColumnSwitcher";
 import { NoteRows, NotesFilterSheet } from "./NotesMobile";
 const nav: [View, string, string][] = [
@@ -1124,6 +1133,9 @@ export default function CrewWorkspace() {
     // sheet's search and responsible agent (not kept in the address).
     [boardSheet, setBoardSheet] = useState(false),
     [notesSheet, setNotesSheet] = useState(false),
+    // Home's create menu (anchored to the + that opened it) and its Shared page form.
+    [createAnchor, setCreateAnchor] = useState<HTMLElement | null>(null),
+    [newShared, setNewShared] = useState(false),
     [noteSearch, setNoteSearch] = useState(""),
     [noteAgent, setNoteAgent] = useState(""),
     columnRefs = useRef<Record<string, HTMLElement | null>>({}),
@@ -2107,8 +2119,27 @@ export default function CrewWorkspace() {
     chips.length + (assignmentFilter !== "all" ? 1 : 0) + (boardSearched ? 1 : 0);
   const noteFilterCount =
     (bucket ? 1 : 0) + (noteText ? 1 : 0) + (noteAgentShown ? 1 : 0);
+  // Home's + (0.34.0) opens a menu of everything the owner can create.
+  const createItems: PopoverItem[] = [
+    { label: "Task", icon: icons.tasks, onSelect: () => setDialog({ kind: "task" }) },
+    {
+      label: "Note",
+      icon: icons.notes,
+      disabled: !data.buckets.length,
+      onSelect: () => setDialog({ kind: "note" }),
+    },
+    { label: "Bucket", icon: icons.bucket, onSelect: () => setDialog({ kind: "bucket" }) },
+    { label: "Agent", icon: icons.agent, onSelect: () => setDialog({ kind: "agent" }) },
+    { label: "Shared page", icon: icons.shared, onSelect: () => setNewShared(true) },
+  ];
   const phoneAdd: PageAction | undefined =
-    view === "board" || view === "home"
+    view === "home"
+      ? {
+          label: "Create",
+          menu: { open: !!createAnchor },
+          onClick: (anchor) => setCreateAnchor(anchor ?? null),
+        }
+      : view === "board"
       ? { label: "New task", onClick: () => setDialog({ kind: "task" }) }
       : view === "memory"
         ? {
@@ -2134,7 +2165,16 @@ export default function CrewWorkspace() {
         ]
       : view === "board" && (boardFiltered || boardSearched)
         ? [{ label: "Clear all filters", onClick: clearBoard }]
-        : [];
+        : view === "home"
+          ? [
+              {
+                label: "How it works",
+                onClick: () => {
+                  location.hash = viewHashes.guide;
+                },
+              },
+            ]
+          : [];
   const globalSearch = (
     <GlobalSearch
       agents={data.agents}
@@ -2272,6 +2312,16 @@ export default function CrewWorkspace() {
               </div>
               <p>{descriptions[view]}</p>
             </div>
+            {view === "home" && (
+              <button
+                className="crew-primary"
+                aria-haspopup="dialog"
+                aria-expanded={!!createAnchor}
+                onClick={(e) => setCreateAnchor(e.currentTarget)}
+              >
+                ＋ New
+              </button>
+            )}
             {view === "board" && (
               <button
                 className="crew-primary"
@@ -2490,6 +2540,23 @@ export default function CrewWorkspace() {
               connection={connection}
               copyEndpoint={copyEndpoint}
               onStartSession={setSessionStart}
+            />
+          )}
+          {createAnchor && (
+            <PopoverMenu
+              label="Create"
+              anchor={createAnchor}
+              items={createItems}
+              onClose={() => setCreateAnchor(null)}
+            />
+          )}
+          {newShared && (
+            <NewSharedPage
+              onClose={() => setNewShared(false)}
+              onCreated={(id) => {
+                setNewShared(false);
+                sharedArtifact(id);
+              }}
             />
           )}
           {view === "guide" && <Guide />}

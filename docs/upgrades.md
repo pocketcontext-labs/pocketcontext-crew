@@ -1,5 +1,15 @@
 # Crew upgrades and rollback
 
+## Crew 0.33.1 to 0.34.0
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.34.0. Reader change only: Home
+shows Needs you tiles, every agent A–Z (a coding agent's Copy prompt is in its ⋯) and
+Recent, with a dismissible How it works row; Home's + opens a create menu (Task,
+Note, Bucket, Agent, Shared page); the phone tab bar is a floating pill with a dot
+for pending drafts. Rollback to 0.33.1 needs no restore. From 0.33.0 or earlier,
+follow the 0.33.0 to 0.33.1 notes first.
+
 ## Crew 0.33.0 to 0.33.1
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

@@ -115,17 +115,36 @@ the same pressed state. The background refresh every 30 seconds stays silent.
 
 On a phone (680 px wide or less, since 0.33.0) the reader has a slim one-row top
 bar: the Crew mark, the page title, then Search, the page's filter icon (with a count
-of active filters), + (New task, New note or New agent) and ⋯, the page menu, which
-holds the page's intro, its help, Refresh and other secondary actions (New bucket,
-Clear all filters). Fixed bottom tabs open Home, Tasks, Notes and Approvals (with the
-pending count); More opens Shared, Agents, Archive, Connect an agent, Guide and Sign
-out. The Tasks board shows one column at a time under a sticky switcher
+of active filters), + (New task, New note or New agent; on Home a create menu) and ⋯,
+the page menu, which holds the page's intro, its help, Refresh and other secondary
+actions (New bucket, Clear all filters, How it works on Home). The bottom tabs (since
+0.34.0 a floating, frosted pill inset from the screen edges, with the page scrolling
+under it; the current tab has a soft grey-green highlight) open Home, Tasks, Notes and
+Approvals (a small dot while drafts wait; the count is in the tab's accessible name);
+More opens Shared, Agents, Archive, Connect an agent, Guide and Sign out. The Tasks board shows one column at a time under a sticky switcher
 (`‹ To do · 6 (1 of 4) ›`, previous and next disabled in place at the ends; the name
 opens a picker with every column's count); its search, scope, sort, agent chips and
 filters are in the filter sheet, and active filters show as removable chips under the
 top bar. Notes shows sticky bucket chips with counts (the selected chip's ⋯ has Edit
 bucket), then the notes as rows; search, sort, bucket and responsible agent are in
 its filter sheet. Desktop layouts are unchanged.
+
+**Home (0.34.0)** is the same sectioned page on every width. A first-run row, "New to
+Crew? Read how it works", at least 44 px tall, opens the Guide; its ✕ (44 px) hides
+it in that browser, and How it works stays in the phone page ⋯. Get started follows
+for a new workspace. **Needs you** has two tiles with live counts: approvals waiting
+(pending reviews; opens Approvals) and tasks on hold (open tasks on hold; opens
+`#/tasks?hold=on_hold`), then the drafts waiting and any task stopped by the handoff
+limit or assigned to an unavailable agent. **Agents** lists every active agent A–Z
+(none featured): initials, name and a short status from its open tasks (up to two of
+"N in review", "N in progress", "N on hold", "N to do", or "No open tasks"); the row
+opens the agent and its ⋯ has Open agent, Show tasks (the board filtered to it) and,
+for a manually started agent, Copy prompt for a coding agent and How coding sessions
+work. **Recent** shows the five latest tasks and notes with relative dates. Home's +
+(the phone top bar, or **＋ New** on wider screens) opens a menu anchored to it with
+Task, Note (once a bucket exists), Bucket, Agent and Shared page; Shared page asks for
+a title, creates a draft (`artifact.create`) and opens it on Shared ready to write.
+On Tasks and Notes, + still creates that page's item directly.
 
 Every dialog has one floating header row (since 0.30.0), one row from 320 px up:
 round back and forward buttons, the title (ellipsized), the list capsule described
@@ -914,10 +933,9 @@ until Save or Cancel.
 
 **Start a session (one click since 0.24.0; clearer since 0.25.0).** Each manually
 started agent has a copy button under its card on the Agents page (**Copy coding
-prompt** since 0.27.0, so its **?** stays on the same row) and **Copy prompt for a
-coding agent** on Home, where an agent chip (avatar, name, Agent tag, first line of
-the brief on hover) names the agent (active manual agents only; bots, people and
-inactive agents never appear, and there are no counts). After a copy the button
+prompt** since 0.27.0, so its **?** stays on the same row); on Home (since 0.34.0)
+**Copy prompt for a coding agent** and **How coding sessions work** are in that
+agent's ⋯ menu (active manual agents only). After a copy the button
 shows **Copied** for 2 seconds. The reader reads the
 session when the button renders, so the click copies `prompt` straight away (a
 phone refuses a clipboard write that waits for the network). A toast confirms
@@ -1026,8 +1044,9 @@ Since 0.20.0, `held_since` records the start of the current hold on an open task
 The server manages it across explicit and automatic holds; edits, comments and
 attachment changes during that hold do not reset it. Going Ready or terminal clears
 it. Existing held tasks use their pre-upgrade update time as an approximate start.
-Home and the board share the same over-three-days rule, exclude terminal tasks
-from hold views, and keep the age filter in the address (`held_over=3d`).
+The board excludes terminal tasks from hold views and keeps the over-three-days age
+filter in the address (`held_over=3d`); Home's Tasks on hold tile counts every open
+task on hold.
 
 The board also supports a case-insensitive single label filter (`label=…`), combined
 with assignment, hold and status filters. Click a label chip to filter.

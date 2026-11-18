@@ -11,6 +11,7 @@ import { HelpModeContext } from "./Help";
 import { guideHash, helpContent, textFor, type HelpTopic } from "./helpContent";
 import { viewHashes, type View } from "./itemLink";
 import "./chrome.css";
+import "./home.css";
 
 /* Line icons for the phone chrome; they take the text colour. */
 const Svg = ({ children }: { children: ReactNode }) => (
@@ -61,6 +62,29 @@ export const icons = {
       <circle cx="5.5" cy="12" r="1.1" fill="currentColor" />
       <circle cx="12" cy="12" r="1.1" fill="currentColor" />
       <circle cx="18.5" cy="12" r="1.1" fill="currentColor" />
+    </Svg>
+  ),
+  bucket: (
+    <Svg>
+      <rect x="4.5" y="6" width="15" height="13.5" rx="1.5" />
+      <path d="M7 3.5h10" />
+    </Svg>
+  ),
+  agent: (
+    <Svg>
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M5.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5" />
+    </Svg>
+  ),
+  shared: (
+    <Svg>
+      <rect x="9" y="4" width="11" height="11" rx="2" />
+      <path d="M15 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+    </Svg>
+  ),
+  close: (
+    <Svg>
+      <path d="m6.5 6.5 11 11M17.5 6.5l-11 11" />
     </Svg>
   ),
   filter: (
@@ -162,9 +186,133 @@ export function Sheet({
 
 export type PageAction = {
   label: string;
-  onClick: () => void;
+  /** The control that was pressed, to anchor a menu to it. */
+  onClick: (anchor?: HTMLElement) => void;
   disabled?: boolean;
+  /** The action opens a menu (Home's +). */
+  menu?: { open: boolean };
 };
+
+export type MenuItem = {
+  label: string;
+  icon?: ReactNode;
+  disabled?: boolean;
+  onSelect: () => void;
+};
+
+/**
+ * A small menu anchored under (or, without room, above) the control that
+ * opened it (0.34.0: Home's + and an agent's ⋯). A modal dialog: Escape, a
+ * tap outside and choosing an item close it, and focus returns to the anchor.
+ * Items run inside the click, so a clipboard write still counts as a gesture.
+ */
+export function PopoverMenu({
+  label,
+  anchor,
+  items,
+  onClose,
+}: {
+  label: string;
+  anchor: HTMLElement;
+  items: MenuItem[];
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [place, setPlace] = useState<{ top: number; right: number } | null>(
+    null,
+  );
+  useLayoutEffect(() => {
+    const dialog = ref.current;
+    if (dialog && typeof dialog.showModal === "function" && !dialog.open)
+      dialog.showModal();
+    const box = anchor.getBoundingClientRect();
+    const height = dialog?.offsetHeight ?? 0;
+    const width = dialog?.offsetWidth ?? 0;
+    const below = box.bottom + 6;
+    const top =
+      below + height > window.innerHeight - 8 && box.top - 6 - height >= 8
+        ? box.top - 6 - height
+        : below;
+    setPlace({
+      top: Math.max(8, top),
+      // Right-aligned with the anchor, but never past either screen edge.
+      right: Math.max(
+        12,
+        Math.min(window.innerWidth - box.right, window.innerWidth - width - 12),
+      ),
+    });
+    dialog
+      ?.querySelector<HTMLButtonElement>("button:not(:disabled)")
+      ?.focus({ preventScroll: true });
+    return () => {
+      if (dialog?.open && typeof dialog.close === "function") dialog.close();
+      anchor.focus?.({ preventScroll: true });
+    };
+  }, [anchor]);
+  return (
+    <dialog
+      ref={ref}
+      className="crew-popover-menu"
+      aria-label={label}
+      open={
+        typeof HTMLDialogElement.prototype.showModal !== "function"
+          ? true
+          : undefined
+      }
+      style={
+        place
+          ? { top: place.top, right: place.right }
+          : { visibility: "hidden" }
+      }
+      onCancel={(e) => {
+        if (e.target !== e.currentTarget) return;
+        e.preventDefault();
+        onClose();
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+        e.preventDefault();
+        const buttons = Array.from(
+          ref.current?.querySelectorAll<HTMLButtonElement>(
+            "button:not(:disabled)",
+          ) ?? [],
+        );
+        const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        const next =
+          e.key === "ArrowDown"
+            ? (at + 1) % buttons.length
+            : (at - 1 + buttons.length) % buttons.length;
+        buttons[next]?.focus();
+      }}
+    >
+      <ul role="presentation">
+        {items.map((item) => (
+          <li key={item.label} role="presentation">
+            <button
+              type="button"
+              disabled={item.disabled}
+              onClick={() => {
+                onClose();
+                item.onSelect();
+              }}
+            >
+              {item.icon && (
+                <span className="crew-popover-icon" aria-hidden="true">
+                  {item.icon}
+                </span>
+              )}
+              {item.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </dialog>
+  );
+}
 
 /**
  * The phone's one-row top bar: the mark, the page title, then search, the
@@ -234,7 +382,9 @@ export function MobileTopBar({
             aria-label={add.label}
             title={add.label}
             disabled={add.disabled}
-            onClick={add.onClick}
+            aria-haspopup={add.menu ? "dialog" : undefined}
+            aria-expanded={add.menu ? add.menu.open : undefined}
+            onClick={(e) => add.onClick(e.currentTarget)}
           >
             {icons.plus}
           </button>
@@ -318,8 +468,9 @@ const moreLinks: [View, string][] = [
 ];
 
 /**
- * The phone's fixed bottom tabs: Home, Tasks, Notes, Approvals (with the
- * pending count) and More, whose sheet reaches every other page and Sign out.
+ * The phone's bottom tabs: Home, Tasks, Notes, Approvals (a dot while drafts
+ * wait; the count is in its name) and More, whose sheet reaches every other
+ * page and Sign out. Since 0.34.0 a floating frosted pill the page scrolls under.
  */
 export function MobileTabBar({
   view,
@@ -348,9 +499,7 @@ export function MobileTabBar({
           <span className="crew-tab-icon">
             {icons[icon]}
             {key === "reviews" && pending > 0 && (
-              <b className="crew-tab-badge" aria-hidden="true">
-                {pending}
-              </b>
+              <b className="crew-tab-dot" aria-hidden="true" />
             )}
           </span>
           {label}

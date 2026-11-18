@@ -69,6 +69,35 @@ describe("Shared", () => {
     );
   });
 
+  it("opens a new empty draft focused from Home's + ready to write", async () => {
+    read.mockImplementation(
+      only([
+        {
+          id: "art000000000002",
+          revision: 1,
+          title: "Fresh page",
+          body: "",
+          status: "draft",
+        },
+        {
+          id: "art000000000003",
+          revision: 1,
+          title: "Empty but not focused",
+          body: "",
+          status: "draft",
+        },
+      ]),
+    );
+    artifactLinks.mockResolvedValue([]);
+    render(
+      <Shared notes={[]} tasks={[]} focus="art000000000002" Prose={Prose} />,
+    );
+    expect(await screen.findByLabelText("Artifact page")).toHaveValue("");
+    // Only the focused new draft opens its editor.
+    expect(screen.getAllByLabelText("Artifact page")).toHaveLength(1);
+    expect(screen.getByLabelText("Artifact title")).toHaveValue("Fresh page");
+  });
+
   it("shows the link, pending changes, Update content and Revoke for a published artifact", async () => {
     read.mockImplementation(
       only([

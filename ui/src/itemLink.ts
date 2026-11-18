@@ -261,8 +261,13 @@ const statusFilters = [...boardColumns, "wont_do"];
 export const boardColumnHash = (status: string) =>
   `${viewHashes.board}?column=${encodeURIComponent(status)}`;
 
-/** The Tasks board showing only open tasks on hold. */
+/** The Tasks board showing only open tasks held for more than 3 days. */
 export const boardOnHoldHash = `${viewHashes.board}?hold=on_hold&held_over=3d`;
+/** The Tasks board showing every open task on hold (Home's Needs you tile). */
+export const boardHeldHash = `${viewHashes.board}?hold=on_hold`;
+/** The Tasks board filtered to one agent's tasks. */
+export const boardAgentHash = (agent: string) =>
+  `${viewHashes.board}?agent=${encodeURIComponent(agent)}`;
 export const boardStatusHash = (status: string) =>
   `${viewHashes.board}?status=${encodeURIComponent(status)}&column=${encodeURIComponent(status)}`;
 
