@@ -1,5 +1,18 @@
 # Crew upgrades and rollback
 
+## Crew 0.32.1 to 0.33.0
+
+No data migration, protocol, managed block, skill or capabilities change. Replace
+the binary or image and upgrade paired clients to 0.33.0. Reader change: a compact
+phone chrome (top bar and bottom tabs), a one-column phone Tasks board with a column
+switcher, phone Notes with bucket chips, relative dates, wrapping one-line fields,
+linked hold reasons, a compact claim banner and an in-app preview for shared pages
+in the home-screen app. Server change: published pages (`/a/<token>`) may be framed
+by Crew's own origin (`frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`
+instead of `'none'`/`DENY`); a proxy that rewrites those headers must keep them.
+Rollback to 0.32.1 needs no restore. From 0.31.0 or earlier, follow the 0.31.0 to
+0.32.0 notes first.
+
 ## Crew 0.32.0 to 0.32.1
 
 No data migration, protocol, managed block, skill or capabilities change. Replace

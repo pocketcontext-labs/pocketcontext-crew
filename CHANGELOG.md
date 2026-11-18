@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.33.0](docs/releases/0.33.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.33.0) · Phone-first reader: slim top bar and bottom tabs, a one-column Tasks board with a column switcher, Notes with bucket chips, relative dates everywhere, wrapping fields with linked hold reasons, a compact claim banner and a way back from shared pages in the home-screen app.
 - **[0.32.1](docs/releases/0.32.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.32.1) · The header Refresh button answers a tap: a pressed state, a spinning icon while it loads, then "Updated." (or an error).
 - **[0.32.0](docs/releases/0.32.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.32.0) · Review options are pick any with feedback on each option, a compact decision footer with Reject in More, and fixed previous/next buttons with "x of y" instead of swiping between items.
 - **[0.31.0](docs/releases/0.31.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.31.0) · Swipe (or use Left/Right) between the items of the list a task, note, bucket, agent or review was opened from, without closing the dialog; review decisions stay pinned.
