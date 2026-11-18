@@ -4460,23 +4460,44 @@ describe("stepping through the list a dialog was opened from (0.32.0)", () => {
     fireEvent.keyDown(dialog, { key: "j" });
     expect(dialog).toHaveAttribute("data-swipe", "bounce-next");
   });
-  it("hides the list capsule on a dialog with no list behind it", async () => {
+  it("gives a link to another kind its collection's own list", async () => {
     fixtures.reviews = [review, second];
     history.replaceState(null, "", "/#/");
     render(<CrewWorkspace />);
-    await screen.findByRole("heading", { name: /Launch post|Home/ });
+    await screen.findByRole("region", { name: "Needs you" });
     location.hash = "#/approvals";
     await screen.findAllByRole("button", { name: "Review draft: Launch post" });
-    // A task opened from a link over Approvals has no task list behind it.
+    // A task opened from a link over Approvals steps through the board.
     location.hash = "#/tasks/task00000000001";
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).queryByRole("button", { name: /^Next task/ })).toBeNull();
-    expect(dialog.querySelector(".crew-list-position")).toBeNull();
+    expect(position(dialog)).toBe("1 of 1");
+    expect(within(dialog).getByRole("button", { name: "Next task (J)" })).toBeDisabled();
     // History back/forward stay, and so do More and close.
     expect(within(dialog).getByRole("button", { name: "Back" })).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: "More actions" })).toBeTruthy();
+  });
+  it("keeps the capsule's slot, hidden, for an item its list is hiding", async () => {
+    const other: Row = { ...task, id: "task00000000002", title: "Other work", labels: ["Elsewhere"] };
+    fixtures.tasks = [task, other];
+    history.replaceState(null, "", "/#/tasks?label=Network");
+    render(<CrewWorkspace />);
+    await screen.findByRole("heading", { name: "Launch post" });
+    // A link to a task the board's filter hides: no steps, but the slot stays.
+    location.hash = "#/tasks/task00000000002";
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByDisplayValue("Other work");
+    const slot = dialog.querySelector(".crew-list-nav")!;
+    expect(slot).toHaveClass("crew-list-nav-hidden");
+    expect(slot).toHaveAttribute("aria-hidden", "true");
+    expect(slot.querySelector(".crew-list-position")?.textContent).toBe("");
+    expect(within(dialog).queryByRole("button", { name: /^Next task/ })).toBeNull();
+    // It sits where the capsule does: after the title, before More and close.
+    const head = dialog.querySelector("header.crew-dialog-head")!;
+    expect(Array.from(head.children).map((x) => x.className.split(" ")[0] || x.tagName)).toEqual([
+      "crew-trail-nav", "H2", "crew-list-nav", "crew-head-pill", "crew-head-button",
+    ]);
     fireEvent.keyDown(dialog, { key: "j" });
-    expect(location.hash).toBe("#/tasks/task00000000001");
+    expect(location.hash).toBe("#/tasks/task00000000002");
   });
   it("steps through notes in their sort, and agents with their links", async () => {
     fixtures.notes = [
@@ -4500,5 +4521,121 @@ describe("stepping through the list a dialog was opened from (0.32.0)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Next agent (J)" }));
     await waitFor(() => expect(within(dialog).getByDisplayValue("Build")).toBeTruthy());
     expect(location.hash).toBe("#/agents/agent0000000002");
+  });
+});
+describe("previous/next from Home sections and natural lists (0.35.0)", () => {
+  const position = (dialog: HTMLElement) =>
+    dialog.querySelector(".crew-list-position")?.textContent;
+  const planTask: Row = { ...task, id: "task00000000002", title: "Plan launch", status: "todo", updated: "2026-11-10 10:00:00.000Z" };
+  it("steps through approvals waiting from Needs you, then closes to Home", async () => {
+    fixtures.tasks = [task, planTask];
+    fixtures.reviews = [
+      review,
+      { ...review, id: "review000000002", task: planTask.id, draft: "The plan draft" },
+      { ...review, id: "review000000003", status: "approved", draft: "Old" },
+    ];
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    const needs = within(await screen.findByRole("region", { name: "Needs you" }));
+    fireEvent.click(needs.getByRole("button", { name: /^Launch post Draft waiting/ }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("The submitted draft");
+    expect(location.hash).toBe("#/approvals/review000000001");
+    expect(position(dialog)).toBe("1 of 2");
+    expect(within(dialog).getByRole("button", { name: "Previous review (K)" })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next review (J)" }));
+    await within(dialog).findByText("The plan draft");
+    expect(location.hash).toBe("#/approvals/review000000002");
+    expect(position(dialog)).toBe("2 of 2");
+    expect(within(dialog).getByRole("button", { name: "Next review (J)" })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(location.hash).toBe("#/"));
+    expect(screen.getByRole("region", { name: "Needs you" })).toBeTruthy();
+  });
+  it("steps through the Needs you tasks only, not the board", async () => {
+    fixtures.reviews = [];
+    fixtures.tasks = [
+      { ...task, status: "todo", handoff_limited: true, updated: "2026-11-12 10:00:00.000Z" },
+      planTask,
+      { ...task, id: "task00000000003", title: "Stuck too", status: "in_progress", handoff_limited: true, updated: "2026-11-11 10:00:00.000Z" },
+    ];
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    const needs = within(await screen.findByRole("region", { name: "Needs you" }));
+    fireEvent.click(needs.getByRole("button", { name: /^Launch post/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(position(dialog)).toBe("1 of 2");
+    fireEvent.keyDown(dialog, { key: "j" });
+    await waitFor(() => expect(location.hash).toBe("#/tasks/task00000000003"));
+    expect(position(dialog)).toBe("2 of 2");
+    expect(within(dialog).getByRole("button", { name: "Next task (J)" })).toBeDisabled();
+  });
+  it("steps across kinds through Recent, and Back keeps that list", async () => {
+    fixtures.reviews = [];
+    fixtures.tasks = [{ ...task, status: "todo", updated: "2026-11-12 10:00:00.000Z" }, planTask];
+    fixtures.notes = [{ id: "note00000000001", revision: 1, bucket: bucket.id, title: "Voice notes", body: "b", updated: "2026-11-11 10:00:00.000Z" }];
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    const recent = within(await screen.findByRole("region", { name: "Recent" }));
+    fireEvent.click(recent.getByRole("button", { name: /^Launch post/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(position(dialog)).toBe("1 of 3");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next item (J)" }));
+    await waitFor(() => expect(location.hash).toBe("#/notes/note00000000001"));
+    expect(position(dialog)).toBe("2 of 3");
+    expect(history.state).toMatchObject({ crewList: 2, crewSource: "home:recent" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next item (J)" }));
+    await waitFor(() => expect(location.hash).toBe("#/tasks/task00000000002"));
+    expect(within(dialog).getByRole("button", { name: "Next item (J)" })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(location.hash).toBe("#/notes/note00000000001"));
+    await waitFor(() => expect(position(dialog)).toBe("2 of 3"));
+    expect(within(dialog).getByRole("button", { name: "Next item (J)" })).toBeEnabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
+    await waitFor(() => expect(location.hash).toBe("#/"));
+  });
+  it("steps through Home's agents A–Z, from the row and from its menu", async () => {
+    fixtures.reviews = [];
+    fixtures.agents = [agent, { ...agent, id: "agent0000000002", name: "Build" }];
+    history.replaceState(null, "", "/#/");
+    render(<CrewWorkspace />);
+    const agents = await screen.findByRole("region", { name: "Agents" });
+    const rows = agents.querySelectorAll<HTMLButtonElement>(".crew-home-agent");
+    expect(rows[0]).toHaveTextContent("Build");
+    fireEvent.click(rows[0]);
+    const dialog = await screen.findByRole("dialog");
+    expect(location.hash).toBe("#/agents/agent0000000002");
+    expect(position(dialog)).toBe("1 of 2");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next agent (J)" }));
+    await waitFor(() => expect(location.hash).toBe("#/agents/agent0000000001"));
+    expect(within(dialog).getByDisplayValue("Network")).toBeTruthy();
+    expect(position(dialog)).toBe("2 of 2");
+  });
+  it("keeps a Home section's list after a reload of the item's address", async () => {
+    fixtures.reviews = [];
+    fixtures.tasks = [{ ...task, status: "todo", updated: "2026-11-12 10:00:00.000Z" }, planTask];
+    history.replaceState({ crewList: 1, crewSource: "home:recent" }, "", "/#/tasks/task00000000001");
+    render(<CrewWorkspace />);
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(position(dialog)).toBe("1 of 2"));
+    expect(within(dialog).getByRole("button", { name: "Next item (J)" })).toBeEnabled();
+  });
+  it("opens a direct link in its collection's natural list", async () => {
+    fixtures.reviews = [];
+    fixtures.notes = [
+      { id: "note00000000001", revision: 1, bucket: bucket.id, title: "Older", body: "a", updated: "2026-11-10 10:00:00.000Z" },
+      { id: "note00000000002", revision: 1, bucket: bucket.id, title: "Newer", body: "b", updated: "2026-11-11 10:00:00.000Z" },
+    ];
+    fixtures.buckets = [bucket, { ...bucket, id: "bucket000000002", name: "BUILD" }];
+    history.replaceState(null, "", "/#/notes/note00000000001");
+    render(<CrewWorkspace />);
+    let dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(position(dialog)).toBe("2 of 2"));
+    // A link to a bucket from the note's dialog: all buckets.
+    location.hash = "#/buckets/bucket000000002";
+    await waitFor(() => expect(screen.getByRole("button", { name: "Next bucket (J)" })).toBeTruthy());
+    dialog = screen.getByRole("dialog");
+    expect(position(dialog)).toMatch(/^\d of 2$/);
   });
 });

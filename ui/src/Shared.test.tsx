@@ -426,6 +426,66 @@ describe("Shared", () => {
     history.replaceState(null, "", "#/");
   });
 
+  it("steps a focused artifact through the Shared list as shown (0.35.0)", async () => {
+    const art = (n: number, extra = {}) => ({
+      id: `art00000000000${n}`,
+      revision: 1,
+      title: `Page ${n}`,
+      body: "Body",
+      status: "draft",
+      ...extra,
+    });
+    read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
+      Promise.resolve(
+        f?.archived
+          ? [art(4, { archived: true, state: "archived" })]
+          : [art(1), art(2), art(3)],
+      ),
+    );
+    artifactLinks.mockResolvedValue([]);
+    history.replaceState(null, "", "/#/shared/art000000000002");
+    const view = render(
+      <Shared notes={[]} tasks={[]} focus="art000000000002" Prose={Prose} />,
+    );
+    const group = await screen.findByRole("group", {
+      name: "shared page 2 of 3",
+    });
+    expect(group.closest("li")).toHaveAttribute("id", "artifact-art000000000002");
+    // Only the focused artifact has the capsule; every title opens its own.
+    expect(screen.getAllByRole("group", { name: /^shared page/ })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Page 1" })).toHaveAttribute(
+      "href",
+      "#/shared/art000000000001",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Next shared page (J)" }),
+    );
+    expect(location.hash).toBe("#/shared/art000000000003");
+    // K steps back.
+    fireEvent.keyDown(document.body, { key: "k" });
+    expect(location.hash).toBe("#/shared/art000000000001");
+    // The last shown artifact: next is disabled in place, no wrapping.
+    view.rerender(
+      <Shared notes={[]} tasks={[]} focus="art000000000003" Prose={Prose} />,
+    );
+    await screen.findByRole("group", { name: "shared page 3 of 3" });
+    expect(
+      screen.getByRole("button", { name: "Next shared page (J)" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Previous shared page (K)" }),
+    ).toBeEnabled();
+    history.replaceState(null, "", "/#/shared/art000000000003");
+    fireEvent.keyDown(document.body, { key: "j" });
+    expect(location.hash).toBe("#/shared/art000000000003");
+    // A focused artifact the filters hide is shown at its place in the list.
+    view.rerender(
+      <Shared notes={[]} tasks={[]} focus="art000000000004" Prose={Prose} />,
+    );
+    await screen.findByRole("group", { name: "shared page 4 of 4" });
+    history.replaceState(null, "", "#/");
+  });
+
   it("turns expiry choices into times", () => {
     const now = Date.UTC(2026, 10, 12, 12);
     expect(expiryFrom("none", "", now)).toBe("");

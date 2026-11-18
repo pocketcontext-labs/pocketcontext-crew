@@ -262,7 +262,8 @@ export function NavCluster({
  * `[∧ 3 of 12 ∨]`. Vertical chevrons, so it never looks like the horizontal
  * back/forward history cluster. Disabled in place at the ends (no wrapping);
  * the position has a fixed width for the list, so the buttons never shift.
- * Rendered only when a list is behind the dialog.
+ * A record dialog with no list to step (0.35.0: an item its list is hiding)
+ * keeps the capsule's slot, hidden, so More and close never shift.
  */
 export function ListNavCluster({
   noun,
@@ -270,6 +271,7 @@ export function ListNavCluster({
   count,
   previous,
   next,
+  hidden = false,
 }: {
   noun: string;
   /** Zero-based place in the list. */
@@ -277,8 +279,18 @@ export function ListNavCluster({
   count: number;
   previous?: () => void;
   next?: () => void;
+  /** Keeps the slot only: invisible, unfocusable and out of the accessibility tree. */
+  hidden?: boolean;
 }) {
   const digits = String(Math.max(count, 1)).length;
+  if (hidden)
+    return (
+      <div className="crew-list-nav crew-list-nav-hidden" aria-hidden="true">
+        <HeadButton icon="up" label="" disabled />
+        <span className="crew-list-position" style={{ width: `${digits * 2 + 3}ch` }} />
+        <HeadButton icon="down" label="" disabled />
+      </div>
+    );
   return (
     <div className="crew-list-nav" role="group" aria-label={`${noun} ${index + 1} of ${count}`}>
       <HeadButton
@@ -316,7 +328,7 @@ export default function DialogHeader({
   title: string;
   /** The back/forward cluster; a disabled one when the dialog has no trail. */
   nav?: ReactNode;
-  /** Previous/next and "x of y" in the source list, after the title (ListNavCluster); absent without a list. */
+  /** Previous/next and "x of y" in the source list, after the title (ListNavCluster); a hidden slot when the list hides the item; absent on non-record dialogs. */
   listNav?: ReactNode;
   /** Icon buttons in the pill, before More. */
   actions?: ReactNode;

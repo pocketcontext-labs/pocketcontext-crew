@@ -177,6 +177,12 @@ import {
   type PageAction,
 } from "./MobileChrome";
 import NewSharedPage from "./NewSharedPage";
+import {
+  currentListSource,
+  homeList,
+  listSourceNoun,
+  type ListSource,
+} from "./listSource";
 import ColumnSwitcher from "./ColumnSwitcher";
 import { NoteRows, NotesFilterSheet } from "./NotesMobile";
 const nav: [View, string, string][] = [
@@ -845,8 +851,8 @@ function TrailNav() {
 /**
  * The list a record dialog was opened from (0.31.0; buttons and "x of y"
  * since 0.32.0): the header's previous/next and J/K step through it.
- * Inactive when no list is behind the dialog; previous/next are false at the
- * ends. index is zero-based.
+ * Inactive when the list does not hold the item (its slot stays, hidden);
+ * previous/next are false at the ends. index is zero-based.
  */
 type ListNav = {
   noun: string;
@@ -996,13 +1002,14 @@ function Modal({
         title={title}
         nav={nav}
         listNav={
-          listNav?.active && (
+          listNav && (
             <ListNavCluster
               noun={listNav.noun}
               index={listNav.index}
               count={listNav.count}
               previous={listNav.previous ? () => step(-1) : undefined}
               next={listNav.next ? () => step(1) : undefined}
+              hidden={!listNav.active}
             />
           )
         }
@@ -1098,6 +1105,8 @@ export default function CrewWorkspace() {
       /** A file (`?file=`) or comment (`?comment=`) the address points at. */
       file?: string;
       comment?: string;
+      /** The Home section it was opened from, whose list previous/next walk. */
+      source?: ListSource;
     } | null>(null),
     // An external agent's full session instructions, read by Start a session.
     [instructions, setInstructions] = useState<{
@@ -1413,7 +1422,7 @@ export default function CrewWorkspace() {
           ? tab
             ? { ...open, tab, tabAsk: (open.tabAsk || 0) + 1, comment }
             : open
-          : { kind, row, tab, file, comment },
+          : { kind, row, tab, file, comment, source: currentListSource() },
       );
     };
     const row = [...(data[collection] ?? []), ...(archived[collection] ?? [])].find(
@@ -1446,7 +1455,7 @@ export default function CrewWorkspace() {
       setDialog((current) =>
         current?.kind === "review" && current.row?.id === id
           ? current
-          : { kind: "review", row },
+          : { kind: "review", row, source: currentListSource() },
       );
     const row = data.reviews.find((x) => x.id === id);
     if (row) return open(row);
@@ -1493,14 +1502,15 @@ export default function CrewWorkspace() {
     return () => clearTimeout(timer);
   }, [highlightColumn]);
   const dismissSessionStart = useCallback(() => setSessionStart(null), []);
-  const openItem = (kind: ItemKind, row: Row) => {
-    pushFromList(itemPath(kind, row));
-    setDialog({ kind, row });
+  // A source names the list when the page alone does not (a Home section).
+  const openItem = (kind: ItemKind, row: Row, source?: ListSource) => {
+    pushFromList(itemPath(kind, row), source);
+    setDialog({ kind, row, source });
   };
   // Clicking an Approvals card puts its shareable link in the address.
-  const openReviewCard = (row: Row) => {
-    pushFromList(reviewHash(row.id));
-    setDialog({ kind: "review", row });
+  const openReviewCard = (row: Row, source?: ListSource) => {
+    pushFromList(reviewHash(row.id), source);
+    setDialog({ kind: "review", row, source });
   };
   // Share as artifact from a note's header or menu opens the new draft.
   const sharedArtifact = (id: string) => {
@@ -1789,34 +1799,40 @@ export default function CrewWorkspace() {
     : "todo";
   // The list under the open record dialog, as the page shows it (0.31.0):
   // the board's cards, the Notes page's notes or bucket cards, the agents,
-  // pending reviews or past decisions, or the Search page's results. A dialog
-  // with no list behind it (opened from Home, a link to another kind, or an
-  // item the list is hiding) does not step.
-  const dialogList = ((): { kind: Kind; row: Row }[] | null => {
-    if (!dialog?.row) return null;
-    const as = (kind: Kind) => (row: Row) => ({ kind, row });
-    switch (`${view}:${dialog.kind}`) {
+  // pending reviews or past decisions, or the Search page's results. Since
+  // 0.35.0 every record dialog has a list: the Home section it was opened
+  // from (its source), else the page's list for its kind, else the kind's
+  // natural list (a link to another kind, a review over Search). An item its
+  // list is hiding does not step; the capsule keeps its slot, hidden.
+  const as = (kind: Kind) => (row: Row) => ({ kind, row });
+  // A phone shows one board column: the shown one, or the task's own.
+  const taskColumns = (id: string) => {
+    if (!phone) return boardColumns;
+    const shown = boardColumns.find((c) => c.status === shownColumn);
+    if (shown?.shown.some((x) => x.id === id)) return [shown];
+    return boardColumns.filter((c) => c.shown.some((x) => x.id === id));
+  };
+  // Pending reviews, or past decisions, as the Approvals page lists them.
+  const reviewList = (row: Row) => {
+    const status = val(data.reviews.find((x) => x.id === row.id) ?? row, "status");
+    return data.reviews
+      .filter((x) => (val(x, "status") === "pending") === (status === "pending"))
+      .map(as("review"));
+  };
+  const pageList = (kind: Kind, row: Row): { kind: Kind; row: Row }[] | null => {
+    switch (`${view}:${kind}`) {
       case "board:task":
-        // A phone shows one column, so its dialog steps through that column.
-        return boardColumns
-          .filter((c) => !phone || c.status === shownColumn)
-          .flatMap((c) => c.shown)
-          .map(as("task"));
+        return taskColumns(row.id).flatMap((c) => c.shown).map(as("task"));
       case "memory:note":
         return shownNotes.map(as("note"));
       case "memory:bucket":
         return sortedBuckets.map(as("bucket"));
       case "agents:agent":
         return data.agents.map(as("agent"));
-      case "reviews:review": {
-        const id = dialog.row.id;
-        const status = val(data.reviews.find((x) => x.id === id) ?? dialog.row, "status");
-        return data.reviews
-          .filter((x) => (val(x, "status") === "pending") === (status === "pending"))
-          .map(as("review"));
-      }
+      case "reviews:review":
+        return reviewList(row);
     }
-    if (view !== "search" || dialog.kind === "review") return null;
+    if (view !== "search" || kind === "review") return null;
     // Records not loaded here are skipped, as an inaccessible item is.
     const rows: Record<SearchEntry["kind"], Row[]> = {
       task: [...data.tasks, ...archived.tasks],
@@ -1828,6 +1844,35 @@ export default function CrewWorkspace() {
       const row = rows[kind].find((x) => x.id === id);
       return row ? [{ kind, row }] : [];
     });
+  };
+  // A record with no list on this page: its collection's own list.
+  const naturalList = (kind: Kind, row: Row): { kind: Kind; row: Row }[] => {
+    switch (kind) {
+      case "task":
+        return taskColumns(row.id).flatMap((c) => c.shown).map(as("task"));
+      case "note":
+        return [...data.notes]
+          .sort((a, b) => byNewest(a.updated, b.updated))
+          .map(as("note"));
+      case "bucket":
+        return sortedBuckets.map(as("bucket"));
+      case "agent":
+        return data.agents.map(as("agent"));
+      case "review":
+        return reviewList(row);
+    }
+  };
+  const dialogList = ((): { kind: Kind; row: Row }[] | null => {
+    if (!dialog?.row) return null;
+    if (dialog.source)
+      return homeList(dialog.source, {
+        tasks: data.tasks,
+        notes: data.notes,
+        agents: data.agents,
+        pending,
+        invalidAssignment,
+      });
+    return pageList(dialog.kind, dialog.row) ?? naturalList(dialog.kind, dialog.row);
   })();
   const dialogIndex =
     dialogList?.findIndex(
@@ -1836,18 +1881,21 @@ export default function CrewWorkspace() {
   // Moves the open dialog to the item `step` away in its list, without
   // wrapping. Unsaved changes ask first (staying adds no history); a move
   // pushes one history entry with the new item's link (0.32.0), so Back and
-  // Forward retrace the items moved through.
+  // Forward retrace the items moved through. The list's source stays.
   const stepDialog = (step: Step): StepResult => {
     const target = dialogIndex >= 0 ? dialogList?.[dialogIndex + step] : undefined;
     if (!target) return "end";
     if (busy || !discardOk()) return "stayed";
     const { kind, row } = target;
     stepTrail(kind === "review" ? reviewHash(row.id) : itemPath(kind, row));
-    setDialog({ kind, row });
+    setDialog({ kind, row, source: dialog?.source });
     return "moved";
   };
-  const listNoun =
-    view === "search" ? "result" : dialog?.kind === "review" ? "review" : dialog?.kind ?? "item";
+  const listNoun = dialog?.source
+    ? listSourceNoun(dialog.source)
+    : view === "search" && dialog?.kind !== "review"
+      ? "result"
+      : dialog?.kind ?? "item";
   const seed = () =>
     perform(async () => {
       for (const [n, purpose] of [
@@ -2535,7 +2583,7 @@ export default function CrewWorkspace() {
               seed={() => void seed()}
               newTask={() => setDialog({ kind: "task" })}
               openItem={openItem}
-              openReview={(row) => setDialog({ kind: "review", row })}
+              openReview={(row) => openReviewCard(row, "home:approvals")}
               invalidAssignment={invalidAssignment}
               connection={connection}
               copyEndpoint={copyEndpoint}

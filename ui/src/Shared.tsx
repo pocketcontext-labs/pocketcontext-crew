@@ -2,8 +2,10 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type ComponentType,
+  type ReactNode,
 } from "react";
 import { crewApi, val, list, type ArtifactLink, type Row } from "./crewApi";
 import {
@@ -15,6 +17,8 @@ import {
 } from "./itemLink";
 import AutoTextarea from "./AutoTextarea";
 import PagePreview, { isStandaloneDisplay } from "./PagePreview";
+import { ListNavCluster } from "./DialogHeader";
+import { listKeyStep, type Step } from "./swipe";
 import { parseInstant, RelativeTime, type Instant } from "./relativeTime";
 import "./shared.css";
 
@@ -130,6 +134,36 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
       .getElementById(`artifact-${focus}`)
       ?.scrollIntoView?.({ block: "start" });
   }, [focus, rows]);
+  // A focused artifact (#/shared/<id>) is the Shared page's detail view: it
+  // steps through the list as shown (0.35.0), J/K too, outside fields.
+  const shownIds = rows
+    ? rows
+        .filter(
+          (r) => r.id === focus || filters.includes(filterOf(artifactState(r))),
+        )
+        .map((r) => r.id)
+    : [];
+  const focusIndex = focus ? shownIds.indexOf(focus) : -1;
+  const stepTo = (step: Step) => {
+    const id = focusIndex >= 0 ? shownIds[focusIndex + step] : undefined;
+    // A plain history entry per step, like a list step in a dialog.
+    if (id) location.hash = `#/shared/${id}`;
+  };
+  const stepRef = useRef(stepTo);
+  stepRef.current = stepTo;
+  useEffect(() => {
+    if (focusIndex < 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      // Another dialog or popover over the page owns its keys.
+      if (document.querySelector("dialog[open], .crew-page-preview")) return;
+      const step = listKeyStep(e, document.body);
+      if (!step) return;
+      e.preventDefault();
+      stepRef.current(step);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [focusIndex]);
   const toggle = (filter: SharedFilter) => {
     const next = filters.includes(filter)
       ? filters.filter((f) => f !== filter)
@@ -202,6 +236,21 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
             link={links[row.id]}
             target={byId[val(row, "merged_into") || val(row, "replaces")]}
             focused={row.id === focus}
+            listNav={
+              row.id === focus && focusIndex >= 0 ? (
+                <ListNavCluster
+                  noun="shared page"
+                  index={focusIndex}
+                  count={shownIds.length}
+                  previous={focusIndex > 0 ? () => stepTo(-1) : undefined}
+                  next={
+                    focusIndex < shownIds.length - 1
+                      ? () => stepTo(1)
+                      : undefined
+                  }
+                />
+              ) : undefined
+            }
             notes={notes}
             tasks={tasks}
             Prose={Prose}
@@ -226,6 +275,7 @@ function ArtifactCard({
   link,
   target,
   focused,
+  listNav,
   notes,
   tasks,
   Prose,
@@ -235,6 +285,8 @@ function ArtifactCard({
   link?: ArtifactLink;
   target?: Row;
   focused: boolean;
+  /** Previous/next through the Shared list, on the focused artifact. */
+  listNav?: ReactNode;
   notes: Row[];
   tasks: Row[];
   Prose: ComponentType<{ children: string }>;
@@ -305,13 +357,20 @@ function ArtifactCard({
       className={`crew-artifact${focused ? " crew-artifact-focused" : ""}`}
     >
       <header>
-        <h3>{val(row, "title")}</h3>
+        {/* The title opens the artifact by itself (#/shared/<id>), with
+            previous/next through the list. */}
+        <h3>
+          <a className="crew-artifact-title" href={`#/shared/${row.id}`}>
+            {val(row, "title")}
+          </a>
+        </h3>
         <span className={`crew-artifact-status crew-artifact-${state}`}>
           {stateLabels[state]}
         </span>
         {pending && (
           <span className="crew-artifact-pending">Changes not live</span>
         )}
+        {listNav}
       </header>
       {mergedInto && (
         <>

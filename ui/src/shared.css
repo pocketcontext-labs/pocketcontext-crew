@@ -30,6 +30,54 @@
   color: var(--text);
   overflow-wrap: anywhere;
 }
+.crew-artifact-title {
+  color: inherit;
+  text-decoration: none;
+}
+.crew-artifact-title:hover {
+  text-decoration: underline;
+}
+/* Previous/next through the Shared list on the focused artifact (0.35.0):
+   the dialog header's capsule, at the end of the card header. */
+.crew-artifact .crew-list-nav {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+  padding: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ffffff 80%, transparent);
+  border: 1px solid var(--border);
+}
+.crew-artifact .crew-list-nav button.crew-head-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #233a28;
+  cursor: pointer;
+}
+/* Hover only where a pointer hovers: a tap on iOS must not leave it painted. */
+@media (hover: hover) {
+  .crew-artifact .crew-list-nav button.crew-head-button:hover:not(:disabled) {
+    background: #e9eee4;
+  }
+}
+.crew-artifact .crew-list-nav button.crew-head-button:active:not(:disabled) {
+  background: #e9eee4;
+}
+.crew-artifact .crew-list-nav button.crew-head-button:disabled {
+  color: #9aa79b;
+  background: transparent;
+  cursor: default;
+}
+.crew-artifact .crew-list-position {
+  font-size: 13px;
+}
 .crew-artifact-status,
 .crew-artifact-pending {
   font-size: 12px;

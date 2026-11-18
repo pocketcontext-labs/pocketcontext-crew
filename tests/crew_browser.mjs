@@ -1957,6 +1957,72 @@ try {
  assert.equal(await dialog().getByRole('button',{name:'Previous task (K)'}).isEnabled(),true);
  await close();await dialog().waitFor({state:'hidden'});
  await page.waitForFunction(()=>location.hash==='#/tasks');
+ // Every detail dialog steps (0.35.0): from Home's Needs you, Recent and
+ // Agents through exactly that section; More and close never move, also on an
+ // item its list hides (the capsule's slot stays, hidden).
+ {const onlyLabel=await boardWrite('task.create',{title:'Listnav filtered only',labels:['listnav-only']});
+ const hiddenTask=await boardWrite('task.create',{title:'Listnav hidden by the filter'});
+ const fixed=()=>header.evaluate(h=>['.crew-head-pill .crew-more-menu','.crew-head-close'].map(s=>Math.round(h.querySelector(s).getBoundingClientRect().x)));
+ const stepTo=async(button,expect)=>{const h=hash();await button.click();await page.waitForFunction(x=>location.hash!==x,h);
+  await page.waitForFunction(([e])=>document.querySelector('dialog[open] .crew-list-position')?.textContent===e,[expect]);};
+ for(const width of [390,1440]){
+  await page.setViewportSize({width,height:width===390?844:1000});
+  await page.goto(base+'/#/');await page.reload();
+  const needs=page.getByRole('region',{name:'Needs you'});
+  const waiting=needs.locator('.crew-home-list button',{hasText:'Draft waiting for your approval'});
+  await waiting.first().waitFor();
+  const pendingCount=await waiting.count();
+  assert.ok(pendingCount>=2,'two approvals wait on Home');
+  await waiting.first().click();
+  await dialog().locator('.crew-draft-snapshot').waitFor();
+  await headerOneRow(`home approvals ${width}`);
+  assert.equal(await position(),`1 of ${pendingCount}`,'Needs you steps through approvals waiting');
+  assert.equal(hash().startsWith('#/approvals/'),true,'a review opened from Home has its link');
+  const at=await fixed();
+  const homeNext=dialog().getByRole('button',{name:'Next review (J)'});
+  assert.equal(await dialog().getByRole('button',{name:'Previous review (K)'}).isDisabled(),true,'the first approval has no previous');
+  for(let i=2;i<=pendingCount;i++){await stepTo(homeNext,`${i} of ${pendingCount}`);assert.deepEqual(await fixed(),at,'More and close stay put between items');}
+  assert.equal(await homeNext.isDisabled(),true,'the last approval waiting has no next');
+  await snapView(`listnav-home-approvals-${width}`);
+  await close();await page.waitForFunction(()=>location.hash==='#/');
+  assert.equal(await page.locator('dialog[open]').count(),0,'closing returns to Home');
+  // Recent mixes tasks and notes: one list across kinds.
+  const recent=page.getByRole('region',{name:'Recent'}).locator('.crew-home-list button');
+  const recentCount=await recent.count();
+  assert.ok(recentCount>=2,'Recent lists items');
+  await recent.first().click();
+  await page.waitForFunction(([e])=>document.querySelector('dialog[open] .crew-list-position')?.textContent===e,[`1 of ${recentCount}`]);
+  await headerOneRow(`home recent ${width}`);
+  const recentAt=await fixed();
+  await stepTo(dialog().getByRole('button',{name:'Next item (J)'}),`2 of ${recentCount}`);
+  assert.deepEqual(await fixed(),recentAt,'More and close stay put across kinds');
+  await snapView(`listnav-home-recent-${width}`);
+  await close();await page.waitForFunction(()=>location.hash==='#/');
+  // Agents A–Z.
+  const agentRows=page.getByRole('region',{name:'Agents'}).locator('.crew-home-agent');
+  const agentCount=await agentRows.count();
+  await agentRows.first().click();
+  await page.waitForFunction(([e])=>document.querySelector('dialog[open] .crew-list-position')?.textContent===e,[`1 of ${agentCount}`]);
+  await stepTo(dialog().getByRole('button',{name:'Next agent (J)'}),`2 of ${agentCount}`);
+  await headerOneRow(`home agents ${width}`);
+  await close();await page.waitForFunction(()=>location.hash==='#/');
+  // A task the board's filter hides, opened by its link: no steps, the slot stays.
+  await page.goto(base+'/#/tasks?label=listnav-only');await page.reload();
+  await page.getByRole('heading',{name:'Listnav filtered only'}).first().waitFor();
+  await page.getByRole('heading',{name:'Listnav filtered only'}).first().click();
+  await page.waitForFunction(()=>document.querySelector('dialog[open] .crew-list-position')?.textContent==='1 of 1');
+  const shownAt=await fixed();
+  await page.evaluate(id=>{location.hash='#/tasks/'+id;},hiddenTask.id);
+  await page.waitForFunction(()=>[...document.querySelectorAll('dialog[open] input, dialog[open] textarea')].some(e=>e.value==='Listnav hidden by the filter'));
+  await page.waitForFunction(()=>document.querySelector('dialog[open] .crew-list-nav')?.classList.contains('crew-list-nav-hidden'));
+  assert.equal(await dialog().getByRole('button',{name:/^Next task/}).count(),0,'a hidden item has no previous/next');
+  assert.deepEqual(await fixed(),shownAt,'More and close keep their place when the capsule is hidden');
+  await headerOneRow(`hidden slot ${width}`);
+  await snapView(`listnav-hidden-slot-${width}`);
+  await close();await dialog().waitFor({state:'hidden'});
+ }
+ await boardWrite('task.update',{archived:true},onlyLabel.id,onlyLabel.revision);
+ await boardWrite('task.update',{archived:true},hiddenTask.id,hiddenTask.revision);}
  await page.emulateMedia({reducedMotion:null});
  await page.goto(base+'/#/tasks');await page.reload();
  // Leave nothing pending for later sections: Reject from the More menu.
@@ -2150,6 +2216,34 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  assert.equal(await page.evaluate(()=>location.hash),'#/shared?show=drafts,live,archived');
  await page.reload();await archivedCard.first().getByRole('button',{name:'Restore'}).waitFor();
  await snap('crew-shared-archived');
+ // A focused artifact steps through the Shared list as shown (0.35.0).
+ {const hash=()=>new URL(page.url()).hash;
+ await boardWrite('artifact.create',{title:'Listnav page one',body:'One.'});
+ await boardWrite('artifact.create',{title:'Listnav page two',body:'Two.'});
+ for(const width of [390,1440]){
+  await page.setViewportSize({width,height:width===390?844:1000});
+  await page.goto(base+'/#/shared');await page.reload();
+  const titles=page.locator('.crew-artifact h3 a');
+  await page.getByRole('link',{name:'Listnav page two'}).waitFor();
+  const count=await titles.count();
+  assert.ok(count>=2,'the Shared list has artifacts to step through');
+  await titles.first().click();
+  const group=page.getByRole('group',{name:/^shared page \d+ of \d+$/});
+  await group.waitFor();
+  assert.equal(await group.getAttribute('aria-label'),`shared page 1 of ${count}`);
+  assert.match(hash(),/^#\/shared\/[a-z0-9]{15}$/,'the title opens the artifact by its link');
+  assert.equal(await group.getByRole('button',{name:'Previous shared page (K)'}).isDisabled(),true);
+  const groupAt=(await group.boundingBox()).x;
+  for(let i=2;i<=count;i++){const h=hash();await group.getByRole('button',{name:'Next shared page (J)'}).click();
+   await page.waitForFunction(x=>location.hash!==x,h);
+   await page.waitForFunction(([e])=>document.querySelector('.crew-artifact-focused .crew-list-nav')?.getAttribute('aria-label')===e,[`shared page ${i} of ${count}`]);
+   assert.equal(Math.round((await group.boundingBox()).x),Math.round(groupAt),'the capsule keeps its place at the card end');}
+  assert.equal(await group.getByRole('button',{name:'Next shared page (J)'}).isDisabled(),true,'the last artifact has no next');
+  {const h=hash();await page.keyboard.press('k');await page.waitForFunction(x=>location.hash!==x,h);}
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Shared fits at '+width);
+  await page.locator('.crew-artifact-focused').scrollIntoViewIfNeeded();
+  await snapView(`listnav-shared-${width}`);
+ }}
  await visitor.close();
  await page.locator('button:visible').filter({hasText:/^Sign out$/}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();

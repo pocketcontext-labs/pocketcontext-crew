@@ -4295,6 +4295,10 @@ a.crew-logo:hover .product-brand span {
     0 1px 2px #1a2c2014,
     0 6px 18px -8px #1a2c2033;
 }
+/* A record whose list hides it keeps the capsule's slot (0.35.0). */
+.crew-dialog-head .crew-list-nav.crew-list-nav-hidden {
+  visibility: hidden;
+}
 .crew-list-position {
   flex: none;
   font-size: 14px;

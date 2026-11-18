@@ -61,22 +61,43 @@ export function listDepth(): number {
     : 0;
 }
 
-/** Opens an item from a list page: one entry over the list, a new trail. */
-export function pushFromList(hash: string) {
+/**
+ * Opens an item from a list page: one entry over the list, a new trail. A
+ * source names the list when the page alone does not (a Home section, see
+ * listSource.ts); list steps keep it, links followed from the item drop it.
+ */
+export function pushFromList(hash: string, source?: string) {
   if (location.hash === hash) return;
   history.pushState(
-    { crewList: 1 },
+    source ? { crewList: 1, crewSource: source } : { crewList: 1 },
     "",
     location.pathname + location.search + hash,
   );
   resetTrail();
 }
 
-/** The next entry's state: one trail step further, one more above the list. */
-function nextState() {
+/** This entry's list source, as pushFromList stored it ("" for none). */
+function storedSource(): string {
+  const state: unknown = history.state;
+  const value =
+    state && typeof state === "object"
+      ? (state as { crewSource?: unknown }).crewSource
+      : undefined;
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * The next entry's state: one trail step further, one more above the list;
+ * a list step keeps the list's source.
+ */
+function nextState(keepSource = false) {
   const next = trailPosition() + 1;
   const depth = listDepth();
-  return { next, state: depth ? { crewTrail: next, crewList: depth + 1 } : { crewTrail: next } };
+  const source = keepSource ? storedSource() : "";
+  const state: Record<string, unknown> = { crewTrail: next };
+  if (depth) state.crewList = depth + 1;
+  if (source) state.crewSource = source;
+  return { next, state };
 }
 
 /**
@@ -86,7 +107,7 @@ function nextState() {
  */
 export function stepTrail(hash: string) {
   if (location.hash === hash) return;
-  const { next, state } = nextState();
+  const { next, state } = nextState(true);
   history.pushState(state, "", location.pathname + location.search + hash);
   writeMax(next);
   notify();

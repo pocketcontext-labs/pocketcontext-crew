@@ -5,6 +5,12 @@ import Help from "./Help";
 import { RelativeTime } from "./relativeTime";
 import { val, type ConnectionState, type Row } from "./crewApi";
 import { isClosed } from "./closedTasks";
+import {
+  homeAgents,
+  homeRecent,
+  homeStuckTasks,
+  type ListSource,
+} from "./listSource";
 import { agentKind } from "./projectAgents";
 import {
   agentInitials,
@@ -61,7 +67,9 @@ export default function Home({
   busy: boolean;
   seed: () => void;
   newTask: () => void;
-  openItem: (kind: ItemKind, row: Row) => void;
+  /** Opens an item; the source is the Home section it was opened from. */
+  openItem: (kind: ItemKind, row: Row, source?: ListSource) => void;
+  /** Opens a pending review from Needs you (its list: approvals waiting). */
   openReview: (review: Row) => void;
   invalidAssignment: (task: Row) => boolean;
   connection: ConnectionState;
@@ -175,23 +183,14 @@ export default function Home({
       allTasks.find((x) => x.id === val(review, "task")),
       "title",
     ) || "Untitled draft";
-  const stuck = data.tasks.filter(
-    (x) => !isClosed(x) && (x.handoff_limited === true || invalidAssignment(x)),
-  );
+  // Each section's list is also what its items' previous/next walk
+  // (listSource.ts), so both use the same helpers.
+  const stuck = homeStuckTasks(data.tasks, invalidAssignment);
   const open = data.tasks.filter((x) => !isClosed(x) && !x.archived);
   const held = open.filter((x) => val(x, "readiness") !== "ready").length;
   // Every active agent A–Z (data.agents holds only active ones); none featured.
-  const agents = [...data.agents].sort((a, b) =>
-    val(a, "name").localeCompare(val(b, "name"), undefined, {
-      sensitivity: "base",
-    }),
-  );
-  const recent = [
-    ...data.tasks.map((row) => ({ kind: "task" as const, row })),
-    ...data.notes.map((row) => ({ kind: "note" as const, row })),
-  ]
-    .sort((a, b) => val(b.row, "updated").localeCompare(val(a.row, "updated")))
-    .slice(0, 5);
+  const agents = homeAgents(data.agents);
+  const recent = homeRecent(data.tasks, data.notes);
 
   return (
     <div className="crew-home">
@@ -283,7 +282,10 @@ export default function Home({
               </button>
             ))}
             {stuck.map((task) => (
-              <button key={task.id} onClick={() => openItem("task", task)}>
+              <button
+                key={task.id}
+                onClick={() => openItem("task", task, "home:tasks")}
+              >
                 <strong>{val(task, "title")}</strong>
                 <small>
                   {task.handoff_limited === true
@@ -317,7 +319,10 @@ export default function Home({
           <h2>Recent</h2>
           <div className="crew-home-list">
             {recent.map(({ kind, row }) => (
-              <button key={row.id} onClick={() => openItem(kind, row)}>
+              <button
+                key={row.id}
+                onClick={() => openItem(kind, row, "home:recent")}
+              >
                 <strong>{val(row, "title")}</strong>
                 <small>
                   {kind === "task" ? "Task" : "Note"}
@@ -372,7 +377,7 @@ type AgentRowProps = {
   agent: Row;
   agents: Row[];
   status: string;
-  openItem: (kind: ItemKind, row: Row) => void;
+  openItem: (kind: ItemKind, row: Row, source?: ListSource) => void;
   onStartSession: (start: SessionStart) => void;
 };
 
@@ -425,7 +430,7 @@ function AgentRowView({
       <button
         type="button"
         className="crew-home-agent"
-        onClick={() => openItem("agent", agent)}
+        onClick={() => openItem("agent", agent, "home:agents")}
       >
         <span className="crew-avatar" aria-hidden="true">
           {agentInitials(name, agents)}
@@ -452,7 +457,10 @@ function AgentRowView({
           anchor={menu}
           onClose={() => setMenu(null)}
           items={[
-            { label: "Open agent", onSelect: () => openItem("agent", agent) },
+            {
+              label: "Open agent",
+              onSelect: () => openItem("agent", agent, "home:agents"),
+            },
             {
               label: "Show tasks",
               onSelect: () => {
