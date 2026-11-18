@@ -386,7 +386,7 @@ describe("Shared", () => {
     render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
     const merged = (await screen.findByText("Merged revision")).closest("li")!;
     const discarded = screen.getByText("Discarded revision").closest("li")!;
-    expect(merged).toHaveTextContent(/Merged into Live original on \S/);
+    expect(merged).toHaveTextContent(/Merged into Live original \S/);
     expect(merged).not.toHaveTextContent("Update of:");
     expect(merged).toHaveTextContent(
       "Its content is live in that link. Restore brings back this draft only; the link does not change.",

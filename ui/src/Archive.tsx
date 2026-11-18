@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { list, val, type Row } from "./crewApi";
+import { RelativeTime } from "./relativeTime";
 
 /**
  * The Archive page (0.25.0): one category at a time with counts, title search,
@@ -65,19 +66,16 @@ const title = (row: Row) => val(row, "title") || val(row, "name");
 /** Archived time, newest first; a hidden note (not itself archived) uses its bucket's. */
 const archivedTime = (row: Row) => Date.parse(val(row, "archived_at")) || 0;
 
-function archivedLine(row: Row, now: number) {
+function ArchivedLine({ row }: { row: Row }) {
   const at = archivedTime(row);
   const by = val(row, "archived_by");
-  if (!at) return by ? `Archived by ${by}` : `Revision ${row.revision}`;
-  const date = new Date(at);
-  const days = Math.floor((now - at) / 86400000);
-  const when =
-    days < 1
-      ? `today at ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-      : days < 7
-        ? `${days} ${days === 1 ? "day" : "days"} ago`
-        : date.toLocaleDateString();
-  return `Archived ${when}${by ? ` by ${by}` : ""}`;
+  if (!at) return <>{by ? `Archived by ${by}` : `Revision ${row.revision}`}</>;
+  return (
+    <>
+      <RelativeTime value={at} prefix="Archived " />
+      {by ? ` by ${by}` : ""}
+    </>
+  );
 }
 
 export type RestoreItem = { collection: ArchiveCollection; row: Row };
@@ -100,7 +98,6 @@ export default function Archive({
   const [shown, setShown] = useState(archivePageSize);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
-  const now = Date.now();
   // The address follows the tab, search, filter and sort without a history
   // entry per keystroke; the page reads it back on load and on hashchange.
   useEffect(() => {
@@ -377,7 +374,7 @@ export default function Archive({
               <div>
                 <strong>{title(x)}</strong>
                 <small>
-                  {archivedLine(x, now)}
+                  <ArchivedLine row={x} />
                   {state.tab === "notes"
                     ? ` · ${bucketName(val(x, "bucket"))}`
                     : ""}

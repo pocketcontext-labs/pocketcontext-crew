@@ -31,10 +31,14 @@ export function doneColumn(
   };
 }
 
-/** "Approved in session by <name>, <date>" for an in-session approval, else "". */
-export function approvalLine(task: Row | undefined): string {
-  if (val(task, "review_mode") !== "in_session") return "";
+/**
+ * An in-session approval as parts, else null: the caller renders
+ * "Approved in session by <name>, <RelativeTime value={at} />".
+ */
+export function approvalLine(
+  task: Row | undefined,
+): { text: string; at: string } | null {
+  if (val(task, "review_mode") !== "in_session") return null;
   const by = val(task, "approved_by") || "owner";
-  const at = Date.parse(val(task, "approved_at").replace(" ", "T"));
-  return `Approved in session by ${by}${Number.isFinite(at) ? `, ${new Date(at).toLocaleString()}` : ""}`;
+  return { text: `Approved in session by ${by}`, at: val(task, "approved_at") };
 }

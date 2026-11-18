@@ -35,7 +35,7 @@ describe("closed task helpers", () => {
     expect(all.tasks.map((t) => t.id)).toEqual(["c", "plain", "a", "old"]);
   });
   it("describes an in-session approval only", () => {
-    expect(approvalLine(row("a", { review_mode: "crew" }))).toBe("");
+    expect(approvalLine(row("a", { review_mode: "crew" }))).toBeNull();
     const line = approvalLine(
       row("a", {
         review_mode: "in_session",
@@ -43,9 +43,13 @@ describe("closed task helpers", () => {
         approved_at: "2026-11-12 10:00:00.000Z",
       }),
     );
-    expect(line).toMatch(/^Approved in session by Synthetic Owner, \S/);
-    expect(approvalLine(row("a", { review_mode: "in_session" }))).toBe(
-      "Approved in session by owner",
-    );
+    expect(line).toEqual({
+      text: "Approved in session by Synthetic Owner",
+      at: "2026-11-12 10:00:00.000Z",
+    });
+    expect(approvalLine(row("a", { review_mode: "in_session" }))).toEqual({
+      text: "Approved in session by owner",
+      at: "",
+    });
   });
 });

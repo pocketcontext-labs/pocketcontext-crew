@@ -8,18 +8,23 @@ import {
 } from "./crewApi";
 import { copyText } from "./projectAgents";
 import PlainRefs from "./PlainRefs";
+import { parseInstant, RelativeTime } from "./relativeTime";
 
-const when = (raw: unknown) => {
-  const date = new Date(String(raw || ""));
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString();
-};
-
-/** "Revision N · edited by X, date", or the built-in default at revision 0. */
-export function sessionRevisionLine(session: AgentSession) {
-  if (!session.revision) return "Built-in default · not edited yet";
+/** "Revision N · edited by X, <relative date>", or the built-in default at revision 0. */
+function SessionRevisionLine({ session }: { session: AgentSession }) {
+  if (!session.revision) return <>Built-in default · not edited yet</>;
   const by = session.edited_by || "unknown";
-  const date = when(session.edited_at);
-  return `Revision ${session.revision} · edited by ${by}${date ? `, ${date}` : ""}${session.is_default ? " · built-in default" : ""}`;
+  return (
+    <>
+      Revision {session.revision} · edited by {by}
+      {parseInstant(session.edited_at) && (
+        <>
+          , <RelativeTime value={session.edited_at} />
+        </>
+      )}
+      {session.is_default ? " · built-in default" : ""}
+    </>
+  );
 }
 
 const conflictMessage =
@@ -142,7 +147,7 @@ export default function SessionInstructions({
         hand, or ask an agent to rewrite them.
       </p>
       <p className="crew-footnote crew-session-revision">
-        {sessionRevisionLine(session)}
+        <SessionRevisionLine session={session} />
       </p>
       <div className="crew-session-toolbar">
         <div className="crew-session-rewrite">
@@ -295,7 +300,7 @@ export default function SessionInstructions({
                       <summary>
                         Revision {x.revision} ·{" "}
                         {val(x, "edited_by") || val(x, "reported_agent") || "unknown"}{" "}
-                        · {when(x.created)}
+                        · <RelativeTime value={val(x, "created")} />
                         {x.is_default === true ? " · built-in default" : ""}
                         {x.revision === session.revision ? " · current" : ""}
                       </summary>

@@ -67,8 +67,8 @@ export function formatDuration(ms: number): string {
 
 /**
  * Relative text for an instant. Past: "just now", "N min ago", "N h ago",
- * "yesterday", "N days ago" (to 7 days), then a short date. Future: "in a
- * moment", "in N min", "in N h", "tomorrow", "in N days", then a short date.
+ * "yesterday", "N days ago" (to 7 days), then a short date. Future: "just
+ * now" (under a minute, for clock skew), "in N min", "in N h", "tomorrow", "in N days", then a short date.
  */
 export function formatRelative(raw: Instant, now: Date = new Date()): string {
   const date = parseInstant(raw);
@@ -76,7 +76,9 @@ export function formatRelative(raw: Instant, now: Date = new Date()): string {
   const diff = now.getTime() - date.getTime();
   const abs = Math.abs(diff);
   const past = diff >= 0;
-  if (abs < MINUTE) return past ? "just now" : "in a moment";
+  // Under a minute either way is "just now": a record saved this moment can
+  // carry a server time a few seconds ahead of the browser's clock.
+  if (abs < MINUTE) return "just now";
   if (abs < HOUR) {
     const n = Math.floor(abs / MINUTE);
     return past ? `${n} min ago` : `in ${n} min`;

@@ -90,6 +90,11 @@ afterEach(async () => {
   resetTrail();
 });
 /** Opens the board's Filters panel (if closed) and returns it. */
+/** Matches the innermost element whose whole text (dates included) matches. */
+const fullText = (re: RegExp) => (_: string, el: Element | null) => {
+  const text = (e: Element) => (e.textContent ?? "").replace(/\s+/g, " ").trim();
+  return !!el && re.test(text(el)) && !Array.from(el.children).some((c) => re.test(text(c)));
+};
 function openFilters() {
   const button = screen.getByRole("button", { name: /^Filters/ });
   if (button.getAttribute("aria-expanded") !== "true") fireEvent.click(button);
@@ -470,7 +475,7 @@ describe("review links (#/approvals/<id>)", () => {
     history.replaceState(null, "", "/#/approvals/review000000002");
     render(<CrewWorkspace />);
     const dialog = within(await screen.findByRole("dialog"));
-    expect(dialog.getByText(/^Approved .* by you\.$/)).toBeTruthy();
+    expect(dialog.getByText(fullText(/^Approved .* by you\.$/))).toBeTruthy();
     expect(dialog.getByText("Ship it")).toBeTruthy();
     for (const name of ["Approve draft", "Request changes", "Reject"])
       expect(dialog.queryByRole("button", { name })).toBeNull();
@@ -487,7 +492,7 @@ describe("review links (#/approvals/<id>)", () => {
     history.replaceState(null, "", "/#/approvals/review000000002");
     render(<CrewWorkspace />);
     const dialog = within(await screen.findByRole("dialog"));
-    expect(dialog.getByText(/^Approved .* by you\.$/)).toBeTruthy();
+    expect(dialog.getByText(fullText(/^Approved .* by you\.$/))).toBeTruthy();
   });
   it("falls back to the Approvals page with a notice for an unknown review", async () => {
     history.replaceState(null, "", "/#/approvals/review000000009");
@@ -3511,7 +3516,7 @@ describe("project agents and coding sessions", () => {
     expect(field).toHaveValue(session.body);
     fireEvent.change(field, { target: { value: edited.body } });
     fireEvent.click(dialog.getByRole("button", { name: "Save" }));
-    await dialog.findByText(/^Revision 1 · edited by owner, /);
+    await dialog.findByText(fullText(/^Revision 1 · edited by owner, \S/));
     expect(update).toHaveBeenLastCalledWith(
       project.id,
       0,
@@ -3522,11 +3527,11 @@ describe("project agents and coding sessions", () => {
     expect(dialog.getByRole("button", { name: "Restore default" })).toBeEnabled();
     // History lists revisions; the current one has no Restore.
     fireEvent.click(dialog.getByRole("button", { name: "History" }));
-    await dialog.findByText(/^Revision 1 · owner · .* · current$/);
+    await dialog.findByText(fullText(/^Revision 1 · owner · \S.* · current$/));
     expect(dialog.queryByRole("button", { name: "Restore revision 1" })).toBeNull();
     // Restore default writes a new revision against the current one.
     fireEvent.click(dialog.getByRole("button", { name: "Restore default" }));
-    await dialog.findByText(/^Revision 2 · edited by owner, .* · built-in default$/);
+    await dialog.findByText(fullText(/^Revision 2 · edited by owner, \S.* · built-in default$/));
     expect(update).toHaveBeenLastCalledWith(
       project.id,
       1,
@@ -4222,6 +4227,30 @@ describe("links in rendered text (0.29.0)", () => {
     expect(item).toHaveClass("crew-comment-target");
     expect(dialog.getByRole("tab", { name: /Comments/ })).toHaveAttribute("aria-selected", "true");
     await waitFor(() => expect(scroll).toHaveBeenCalled());
+  });
+  it("shows relative dates in Activity and comments, with the exact time on hover", async () => {
+    fixtures.tasks = [linkedTask];
+    const ago = (h: number) => new Date(Date.now() - h * 3600000).toISOString();
+    fixtures.events = [
+      { id: "event0000000003", revision: 1, parent: task.id, action: "task.update", body: "Hold reason updated", created: ago(19.2), reported_agent: "Assess" },
+      { id: "event0000000002", revision: 1, parent: task.id, action: "task.comment", body: "Drafts only", created: ago(30), reported_agent: "Assess" },
+      { id: "event0000000001", revision: 1, parent: task.id, action: "task.create", body: "Launch plan", created: ago(50), reported_agent: "Assess" },
+    ];
+    history.replaceState(null, "", "/#/tasks/launch-post-task00000000001?tab=activity");
+    render(<CrewWorkspace />);
+    const dialog = within(await screen.findByRole("dialog"));
+    const updated = (await dialog.findByText("Hold reason updated")).closest("li")!;
+    expect(updated).toHaveTextContent(/^Updated · 19 h ago · Assess/);
+    const time = updated.querySelector("time")!;
+    expect(time).toHaveAttribute("datetime", fixtures.events[0].created);
+    expect(time.getAttribute("title")).toMatch(/\d{4}.*\d:\d{2}/);
+    expect(dialog.getByText("Drafts only").closest("li")).toHaveTextContent(/· yesterday · Assess/);
+    expect(dialog.getByText("Launch plan").closest("li")).toHaveTextContent(/· 2 days ago · Assess/);
+    fireEvent.click(dialog.getByRole("tab", { name: /^Comments/ }));
+    const comment = (await dialog.findByText("Drafts only")).closest("li")!;
+    expect(comment).toHaveTextContent(/^Assess · yesterday/);
+    expect(comment.querySelector("time[title][datetime]")).not.toBeNull();
+    expect(comment).not.toHaveTextContent(/\d{4}/);
   });
 });
 describe("stepping through the list a dialog was opened from (0.32.0)", () => {

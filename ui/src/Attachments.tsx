@@ -39,6 +39,7 @@ import Lightbox, { type FileNav, type LightboxItem } from "./Lightbox";
 import type { ArrivedBy } from "./ViewerBar";
 import type { Row } from "./crewApi";
 import { connectSectionHash } from "./itemLink";
+import { RelativeTime } from "./relativeTime";
 import "./upload.css";
 
 /** Shown after a file change (or a draft edit) withdrew a pending approval. */
@@ -836,12 +837,8 @@ function UploadLinkButton({ parent }: { parent: ParentRef }) {
           <p>
             Open this link on your phone or another device to add up to{" "}
             {link.max_files} {link.max_files === 1 ? "file" : "files"} to this{" "}
-            {parent.kind}. It works once and expires at{" "}
-            {new Date(link.expires_at).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-            . It is shown only now.
+            {parent.kind}. It works once and expires{" "}
+            <RelativeTime value={link.expires_at} />. It is shown only now.
           </p>
           <code>{address}</code>
           <button

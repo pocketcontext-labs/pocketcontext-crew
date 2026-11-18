@@ -122,7 +122,7 @@ describe("upload page", () => {
     expect(
       screen.getByText(/Up to 3 files, 1000 B each, 2\.4 KB in total/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/expires/)).toBeInTheDocument();
+    expect(screen.getByText(/^expires in 1[45] min$/).tagName).toBe("TIME");
     expect(sendButton()).toBeDisabled();
     choose([file("a.png"), file("notes.txt", 5, "text/plain")]);
     const list = screen.getByRole("list", { name: "Files to send" });

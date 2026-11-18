@@ -50,6 +50,8 @@ describe("relative dates", () => {
       "in 10 min",
     );
     expect(formatRelative(new Date(now.getTime() + 2 * H), now)).toBe("in 2 h");
+    // A fresh server time a few seconds ahead of the browser is still "just now".
+    expect(formatRelative(new Date(now.getTime() + 3_000), now)).toBe("just now");
     expect(formatDuration(105 * MIN)).toBe("1 h 45 m");
     expect(formatDuration(30_000)).toBe("1 min");
     expect(formatDuration(3 * D)).toBe("3 days");

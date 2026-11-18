@@ -355,6 +355,10 @@ describe("Files section", () => {
     expect(
       dialog.getByText(/up to 10 files to this task\. It works once/),
     ).toBeInTheDocument();
+    // The expiry reads relative ("in 14 min"), the exact time on hover.
+    const expiry = dialog.getByText(/^in 1[45] min$/);
+    expect(expiry.tagName).toBe("TIME");
+    expect(expiry).toHaveAttribute("title");
     expect(attachmentsApi.createUploadLink).toHaveBeenCalledWith({
       kind: "task",
       id: taskId,

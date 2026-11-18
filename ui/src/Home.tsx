@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ConnectionPending, skillCommand } from "./Connect";
 import Help from "./Help";
+import { RelativeTime } from "./relativeTime";
 import { boardStatuses, val, type ConnectionState, type Row } from "./crewApi";
 import { isClosed } from "./closedTasks";
 import { longHolds, statusMatches } from "./boardFilters";
@@ -301,8 +302,12 @@ export default function Home({
                 <strong>{val(row, "title")}</strong>
                 <small>
                   {kind === "task" ? "Task" : "Note"}
-                  {val(row, "updated") &&
-                    ` · ${new Date(val(row, "updated")).toLocaleString()}`}
+                  {val(row, "updated") && (
+                    <>
+                      {" · "}
+                      <RelativeTime value={val(row, "updated")} />
+                    </>
+                  )}
                 </small>
               </button>
             ))}

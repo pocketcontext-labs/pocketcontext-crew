@@ -13,6 +13,7 @@ import { itemPath } from "./itemLink";
 import { isBot } from "./projectAgents";
 import { AutoTextField } from "./AutoTextarea";
 import { isClosed } from "./closedTasks";
+import { RelativeTime } from "./relativeTime";
 import { strandedSince, strandedWakes } from "./wakes";
 type WakeRule = {
   reason: string;
@@ -1487,10 +1488,11 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                             : "The dispatcher"}
                       </span>
                       <small>
-                        Overdue since{" "}
-                        <time dateTime={since}>
-                          {since ? new Date(since).toLocaleString() : "unknown"}
-                        </time>
+                        <RelativeTime
+                          value={since}
+                          prefix="Overdue, due "
+                          fallback="Overdue since an unknown time"
+                        />
                       </small>
                     </li>
                   );
@@ -1843,11 +1845,7 @@ function EventTimeline({
           .map((x) => (
             <li key={x.label}>
               <span>{x.label}</span>
-              {x.time && (
-                <time dateTime={x.time}>
-                  {new Date(x.time).toLocaleString()}
-                </time>
-              )}
+              {x.time && <RelativeTime value={x.time} />}
             </li>
           ))}
       </ol>
@@ -1877,8 +1875,12 @@ function EventTimeline({
             leaseExpired && !quiet ? "crew-assignment-warning" : "crew-footnote"
           }
         >
-          {leaseExpired ? "Execution lease expired" : "Execution lease expires"}{" "}
-          · {new Date(val(ex, "lease_until")).toLocaleString()}
+          <RelativeTime
+            value={val(ex, "lease_until")}
+            prefix={
+              leaseExpired ? "Execution lease expired " : "Execution lease expires "
+            }
+          />
           {leaseExpired
             ? quiet
               ? `. ${pastNote}`

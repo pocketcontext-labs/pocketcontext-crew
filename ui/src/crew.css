@@ -1935,6 +1935,18 @@ a.crew-logo:hover .product-brand span {
 .crew-timeline li > p {
   white-space: pre-wrap;
 }
+/* Activity: "Updated · 19 h ago · Assess" on one line. */
+.crew-timeline small.crew-timeline-meta {
+  display: inline;
+  font-size: 12px;
+}
+/* A relative date (RelativeTime): the exact time is in its title. */
+.crew-time {
+  border-radius: 4px;
+}
+.crew-time:hover {
+  background: rgba(112, 130, 93, 0.14);
+}
 .crew-comment-body {
   margin-top: 6px;
 }

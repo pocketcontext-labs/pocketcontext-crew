@@ -170,11 +170,12 @@ describe("FileSettings", () => {
     });
     const link = within(active).getByRole("link", { name: "Crash on save" });
     expect(link).toHaveAttribute("href", task.path);
-    expect(
-      within(active).getByText(
-        /Active · created .* · expires .* · 0\/10 files/,
-      ),
-    ).toBeInTheDocument();
+    // Dates read relative, with the exact time on hover.
+    const line = within(active).getByText(/0\/10 files/).closest("small");
+    expect(line).toHaveTextContent(
+      /^Active · created 1 h ago · expires in (9|10) min · 0\/10 files$/,
+    );
+    expect(line?.querySelector("time")).toHaveAttribute("title");
     const recent = screen.getByRole("list", {
       name: "Recent upload links",
       hidden: true,

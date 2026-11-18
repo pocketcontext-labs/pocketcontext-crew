@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { pb } from "./api";
 import { formatBytes } from "./attachmentsApi";
 import { crewApi, val, type Row } from "./crewApi";
+import { parseInstant, RelativeTime } from "./relativeTime";
 import { itemPath } from "./itemLink";
 import "./upload.css";
 
@@ -31,17 +32,6 @@ export function storageLimitFromGb(text: string): number | string {
 const gbText = (bytes: number) =>
   String(Math.round((bytes / GIB) * 1000) / 1000);
 
-const when = (iso: unknown) => {
-  const date = new Date(String(iso || ""));
-  return Number.isNaN(date.getTime())
-    ? ""
-    : date.toLocaleString([], {
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-};
 
 const stateLabels: Record<string, string> = {
   active: "Active",
@@ -172,8 +162,17 @@ export default function FileSettings({
             {title || (kind === "note" ? "A note" : "A task")}
           </a>
           <small>
-            {stateLabels[state] ?? state} · created {when(link.created)} ·{" "}
-            {state === "active" ? "expires" : "until"} {when(link.expires_at)} ·{" "}
+            {stateLabels[state] ?? state} ·{" "}
+            <RelativeTime value={val(link, "created")} prefix="created " /> ·{" "}
+            <RelativeTime
+              value={val(link, "expires_at")}
+              prefix={
+                (parseInstant(val(link, "expires_at"))?.getTime() ?? 0) > Date.now()
+                  ? "expires "
+                  : "expired "
+              }
+            />{" "}
+            ·{" "}
             {Number(link.files_added) || 0}/{Number(link.max_files) || 0} files
           </small>
         </div>

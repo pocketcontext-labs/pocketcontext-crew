@@ -8,6 +8,7 @@ import {
 import FileSettings, { fileSettingsId } from "./FileSettings";
 import Help from "./Help";
 import { viewHashes, type ConnectSection } from "./itemLink";
+import { RelativeTime } from "./relativeTime";
 import WebhookStatus from "./WebhookStatus";
 
 export const skillCommand = "./pocketcontext-crew skill";
@@ -76,7 +77,7 @@ function ConnectedApps() {
             <div>
               <strong>{app.name}</strong>
               <small>
-                Connected {new Date(app.created * 1000).toLocaleDateString()}
+                <RelativeTime value={app.created * 1000} prefix="Connected " />
               </small>
             </div>
             <button disabled={busy === app.id} onClick={() => void revoke(app)}>

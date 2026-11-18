@@ -115,7 +115,7 @@ try {
  await page.getByRole('tab',{name:/^Notes \(/}).click();
  await page.waitForURL('**/#/archive?tab=notes');
  await page.getByRole('searchbox',{name:'Search archived notes by title'}).fill('launch voice');
- await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByText(/^Archived today at .+ · /).waitFor();
+ await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByText(/^Archived (just now|\d+ min ago).* · /).waitFor();
  await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByRole('button',{name:'Restore Synthetic launch voice'}).click();
  await page.getByText('Restored. Prior approvals were not reactivated.').waitFor();
  await page.getByRole('navigation').getByRole('link',{name:'Tasks',exact:true}).click();
@@ -252,6 +252,8 @@ try {
  await dialog().getByRole('list',{name:'Comments'}).getByText('Owner completed the external action manually.',{exact:true}).waitFor();
  await dialog().getByRole('tab',{name:'Activity'}).click();
  await dialog().locator('.crew-timeline strong').filter({hasText:/^Comment$/}).first().waitFor();
+ // Relative dates (0.33.0): "Comment · just now · …", the exact local time in the title and the instant in datetime, at 390 px and desktop.
+ {const entry=dialog().locator('.crew-timeline li').filter({has:page.locator('strong',{hasText:/^Comment$/})}).first();const time=entry.locator('time.crew-time');assert.match(await entry.locator('small').innerText(),/^\s*· (just now|1 min ago) · /,'Activity reads relative');assert.match(await time.getAttribute('title'),/\d{4}.*\d:\d{2}/,'the exact time is the title');assert.ok(!Number.isNaN(Date.parse(await time.getAttribute('datetime'))),'datetime is an instant');assert.equal(await dialog().locator('.crew-timeline small').filter({hasText:/\d{1,2}:\d{2}|\d{4}/}).count(),0,'no absolute timestamp in Activity');const size=page.viewportSize();for(const width of [390,1024]){await page.setViewportSize({width,height:844});await snapView('crew-activity-dates-'+width);}await page.setViewportSize(size);}
  assert.equal(await dialog().getByText('task.comment',{exact:true}).count(),0,'Activity uses plain labels');
  await dialog().getByRole('tablist',{name:'Record views'}).getByRole('tab',{name:'Edit',exact:true}).click();
  // Status has the standard help, which explains why Needs review can't be picked; focus shows the hint.

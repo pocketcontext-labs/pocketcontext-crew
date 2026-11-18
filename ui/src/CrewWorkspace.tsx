@@ -165,7 +165,7 @@ import AutoTextarea, { AutoTextField } from "./AutoTextarea";
 import ClaimBanner from "./ClaimBanner";
 import HoldReasonField from "./HoldReasonField";
 import PlainRefs from "./PlainRefs";
-import { useNow } from "./relativeTime";
+import { RelativeTime, useNow, type Instant } from "./relativeTime";
 const nav: [View, string, string][] = [
   ["home", "Home", "⌂"],
   ["board", "Tasks", "▦"],
@@ -284,8 +284,10 @@ function holdMatches(filter: HoldFilter, task: Row) {
 }
 /** Readiness as the reader names it: the API keeps `waiting` for On hold. */
 const onHold = (task: Row) => val(task, "readiness") !== "ready";
-const when = (raw: unknown) =>
-  raw ? new Date(String(raw)).toLocaleString() : "Just now";
+/** A record date as relative text with the exact time on hover (RelativeTime). */
+const when = (raw: unknown) => (
+  <RelativeTime value={raw as Instant} fallback="just now" />
+);
 /** Readable card text: Markdown markers would otherwise show, and could be cut in half. */
 const plainPreview = (markdown: string) =>
   markdown
@@ -3495,6 +3497,7 @@ function Editor({
       staged.stage(named);
     }
   };
+  const approval = approvalLine(row);
   return (
     <AttachmentsProvider
       attachments={item.attachments}
@@ -3809,9 +3812,10 @@ function Editor({
                     }}
                   />
                 </div>
-                {row && approvalLine(row) && (
+                {approval && (
                   <p className="crew-approval-line" role="note">
-                    {approvalLine(row)}
+                    {approval.text}
+                    {approval.at && <>, <RelativeTime value={approval.at} /></>}
                   </p>
                 )}
                 <div className="crew-form-grid">
@@ -4096,15 +4100,15 @@ function Editor({
               return (
                 <li key={x.id}>
                   <strong>{summary.title}</strong>
+                  <small className="crew-timeline-meta">
+                    {" · "}{when(x.created)} · {summary.by}
+                  </small>
                   {val(x, "action") === "review.decide" && (() => {
                     const changes = typeof x.changes === "string" ? (() => { try { return JSON.parse(x.changes); } catch { return {}; } })() : (x.changes || {});
                     const choices = objects(changes.option_decisions);
                     const summary = decisionSummary({ id: x.id, revision: x.revision, options: changes.options, option_decisions: choices }, String(changes.decision || changes.status || ""));
                     return summary ? <p>{summary}</p> : null;
                   })()}
-                  <small>
-                    {when(x.created)} · {summary.by}
-                  </small>
                   {summary.by.startsWith(
                     "via upload link",
                   ) ? null : val(x, "action") === "task.comment" &&

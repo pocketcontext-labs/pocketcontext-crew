@@ -14,6 +14,7 @@ import {
   type DragEvent,
 } from "react";
 import Brand from "./Brand";
+import { RelativeTime } from "./relativeTime";
 import { formatBytes, looksLikeImage, screenshotName } from "./attachmentsApi";
 import "./upload.css";
 
@@ -148,24 +149,6 @@ type Phase =
 
 export const goneMessage =
   "This link has expired or was already used. Ask for a new one.";
-
-function timeText(iso: string) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const sameDay = date.toDateString() === new Date().toDateString();
-  return date.toLocaleString(
-    [],
-    sameDay
-      ? { hour: "2-digit", minute: "2-digit" }
-      : {
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        },
-  );
-}
 
 const fileCount = (n: number) => `${n} ${n === 1 ? "file" : "files"}`;
 
@@ -453,8 +436,8 @@ export default function UploadPage({ token }: { token: string }) {
               Add screenshots to: <span>{info.title}</span>
             </h1>
             <p className="upload-meta">
-              {kind === "note" ? "Note" : "Task"} · expires{" "}
-              {timeText(info.expires_at)}
+              {kind === "note" ? "Note" : "Task"} ·{" "}
+              <RelativeTime value={info.expires_at} prefix="expires " />
               <br />
               Up to {fileCount(info.max_files)},{" "}
               {formatBytes(info.max_file_bytes)} each,{" "}

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type ComponentType } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useState,
+  type ComponentType,
+} from "react";
 import { crewApi, val, list, type ArtifactLink, type Row } from "./crewApi";
 import {
   itemPath,
@@ -8,6 +14,7 @@ import {
   type SharedFilter,
 } from "./itemLink";
 import PagePreview, { isStandaloneDisplay } from "./PagePreview";
+import { parseInstant, RelativeTime, type Instant } from "./relativeTime";
 import "./shared.css";
 
 /**
@@ -61,17 +68,13 @@ export function artifactUrl(link: ArtifactLink | undefined): string {
   return link.link || `${location.origin}${link.link_path}`;
 }
 
-function when(value: unknown, withTime = true): string {
-  const text = typeof value === "string" ? value : "";
-  const time = Date.parse(text.includes("T") ? text : text.replace(" ", "T"));
-  if (!text || !Number.isFinite(time)) return "";
-  return new Date(time).toLocaleString(
-    undefined,
-    withTime
-      ? { dateStyle: "medium", timeStyle: "short" }
-      : { dateStyle: "medium" },
+/** A date part of the meta line: prefix plus relative time (exact on hover). */
+const at = (prefix: string, value: unknown) =>
+  parseInstant(value as Instant) ? (
+    <RelativeTime value={value as Instant} prefix={prefix} />
+  ) : (
+    prefix.trim()
   );
-}
 
 /** A date as YYYY-MM-DD in the owner's time zone (for date inputs). */
 function localDate(d: Date): string {
@@ -315,7 +318,14 @@ function ArtifactCard({
             ) : (
               "an unavailable artifact"
             )}
-            {val(row, "merged_at") ? ` on ${when(row.merged_at, false)}` : ""}
+            {val(row, "merged_at") ? (
+              <>
+                {" "}
+                <RelativeTime value={val(row, "merged_at")} />
+              </>
+            ) : (
+              ""
+            )}
           </p>
           <p className="crew-artifact-note">
             {targetLive ? "Its content is live in that link. " : ""}Restore
@@ -337,23 +347,23 @@ function ArtifactCard({
       <p className="crew-artifact-meta">
         {[
           state === "published" && val(row, "published_at")
-            ? `Published ${when(row.published_at)}`
+            ? at("Published ", row.published_at)
             : "",
           Number(row.published_revision) > 1
             ? `revision ${row.published_revision}`
             : "",
           state === "published"
             ? expires
-              ? `expires ${when(expires)}`
+              ? at("expires ", expires)
               : "no expiry"
             : "",
-          state === "expired" ? `Expired ${when(expires)}` : "",
-          state === "revoked" ? `Revoked ${when(row.revoked_at)}` : "",
-          state === "archived" ? `Archived ${when(row.archived_at)}` : "",
+          state === "expired" ? at("Expired ", expires) : "",
+          state === "revoked" ? at("Revoked ", row.revoked_at) : "",
+          state === "archived" ? at("Archived ", row.archived_at) : "",
           everPublished ? `${views} ${views === 1 ? "view" : "views"}` : "",
           everPublished
             ? row.last_viewed_at
-              ? `last opened ${when(row.last_viewed_at)}`
+              ? at("last opened ", row.last_viewed_at)
               : "never opened"
             : "",
           val(row, "created_by_agent")
@@ -361,7 +371,12 @@ function ArtifactCard({
             : "",
         ]
           .filter(Boolean)
-          .join(" · ")}
+          .map((part, i) => (
+            <Fragment key={i}>
+              {i > 0 && " · "}
+              {part}
+            </Fragment>
+          ))}
       </p>
       {url && (
         <div className="crew-artifact-link">

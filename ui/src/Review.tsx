@@ -329,7 +329,7 @@ export function ReviewDecision({
   attachments: Attachment[];
   loaded: boolean;
   Prose: ProseComponent;
-  when: (time: unknown) => string;
+  when: (time: unknown) => ReactNode;
   save: (
     action: string,
     fields: Record<string, unknown>,
