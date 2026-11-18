@@ -10,6 +10,7 @@ import {
   uploadTokenFromHash,
 } from "./itemLink";
 import UploadPage from "./UploadPage";
+import { useLanguage } from "./i18n";
 
 const currentSigninHash = () =>
   isSigninHash(location.hash) ? location.hash : "";
@@ -41,6 +42,8 @@ function SigninStatus({ onRetry }: { onRetry?: () => void }) {
  * token is never stored. Every other address goes through Reader.
  */
 export default function App() {
+  // The whole reader re-renders in a newly chosen language (0.36.0).
+  useLanguage();
   const [upload, setUpload] = useState(() =>
     uploadTokenFromHash(location.hash),
   );
