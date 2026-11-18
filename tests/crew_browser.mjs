@@ -60,7 +60,8 @@ const topBarOneRow=async where=>{
 };
 // The phone bottom tabs: fixed to the bottom edge, five equal targets on one row.
 const tabBarCheck=async where=>{
- const r=await page.getByRole('navigation',{name:'Workspace'}).evaluate(n=>{const b=n.getBoundingClientRect();const items=[...n.children].filter(c=>c.matches('a,button')).map(c=>c.getBoundingClientRect());return {fixed:getComputedStyle(n).position,bottom:b.bottom,height:innerHeight,widths:items.map(i=>Math.round(i.width)),tops:items.map(i=>Math.round(i.top)),tall:Math.min(...items.map(i=>i.height)),labels:[...n.children].filter(c=>c.matches('a,button')).map(c=>c.textContent.replace(/\d+/g,'').trim())};});
+ // Right after a resize the desktop nav (also named Workspace) can still be mounted: wait for the phone tab bar.
+ const r=await page.locator('nav.crew-tabbar').evaluate(n=>{const b=n.getBoundingClientRect();const items=[...n.children].filter(c=>c.matches('a,button')).map(c=>c.getBoundingClientRect());return {fixed:getComputedStyle(n).position,bottom:b.bottom,height:innerHeight,widths:items.map(i=>Math.round(i.width)),tops:items.map(i=>Math.round(i.top)),tall:Math.min(...items.map(i=>i.height)),labels:[...n.children].filter(c=>c.matches('a,button')).map(c=>c.textContent.replace(/\d+/g,'').trim())};});
  assert.equal(r.fixed,'fixed',`${where}: tabs are fixed`);
  assert.ok(Math.abs(r.bottom-r.height)<=1,`${where}: tabs sit on the bottom edge`);
  assert.deepEqual(r.labels,['Home','Tasks','Notes','Approvals','More'],`${where}: tab labels`);
