@@ -1,5 +1,20 @@
 # Crew upgrades and rollback
 
+## Crew 0.37.2 to 0.38.0
+
+Review markup blocks, per-block feedback and markup warnings. No data migration
+(per-block feedback lives in the existing `option_decisions` JSON), protocol or
+managed block change.
+
+1. Replace the binary or image (`CREW_REPLACE_VERSION=0.37.2` for the installer)
+   and upgrade paired clients with the server to 0.38.0.
+2. Run `skill` once so agents get the review markup instructions, and refresh MCP
+   tool schemas (`option_decisions[].feedback`, `warnings`).
+
+Rollback to 0.37.2 needs no restore: per-block feedback recorded on 0.38.0 stays in
+the data, and 0.37.2 shows option notes without it. From 0.37.1 or earlier, also
+read the notes below.
+
 ## Crew 0.37.1 to 0.37.2
 
 Reader fix only: Shared shows its statuses as a chip row on a desktop. No data
