@@ -348,6 +348,11 @@ the bot hand-off limit stays on hold when a work client decides; the owner's
 decision resets the limit as any reader write does. Withdrawing, approving and
 rejecting keep the task's readiness, so a held task stays held and does not wake.
 
+Since 0.38.0 a `review_outcome` wake also carries `review_id`. The payload stays
+reference-only: the agent reads that review through Crew for the decision note,
+`option_decisions[].feedback` (per-block feedback, `[{target, note}]`) and the
+derived `feedback_text` lines (`[linkedin] …`).
+
 Work-client task writes (`task.update`, `task.claim`, `task.comment`,
 `review.request`, `review.withdraw`, `review.decide`) need execution proof only
 while a live execution holds the task: `dispatching` or `running` with an unexpired
