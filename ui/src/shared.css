@@ -195,25 +195,104 @@
     padding: 14px;
   }
 }
-.crew-shared-filters {
+/* One status at a time (0.37.1): the Tasks and Notes phone switcher, on every
+   width. On a phone chrome.css places it (sticky, flush under the top bar);
+   the control styles below repeat its phone look so a desktop window gets the
+   same row. Nothing looks selected from hover, focus or a tap: only the
+   label and the picker's aria-current row say which status is shown. */
+.crew-shared-switcher .crew-switch-step {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #e3e8dd;
+  border-radius: 50%;
+  background: #fffefb;
+  box-shadow: 0 1px 3px #24311d12;
+  color: #233a28;
+  touch-action: manipulation;
+}
+.crew-shared-switcher .crew-switch-step:disabled {
+  opacity: 0.4;
+  box-shadow: none;
+  background: transparent;
+  cursor: default;
+}
+.crew-shared-switcher .crew-switch-name {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 44px;
+  min-width: 0;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  line-height: 1;
+  touch-action: manipulation;
+}
+.crew-shared-switcher .crew-switch-picker > button {
+  display: grid;
+  grid-template-columns: 1fr auto 24px;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 14px;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 500;
+  text-align: left;
 }
-.crew-shared-filters button {
-  border-radius: 999px;
-  padding: 5px 12px;
-  font-size: 14px;
+.crew-app .crew-shared-switcher .crew-switch-picker > button:hover {
+  background: transparent;
 }
-.crew-shared-filters button span {
+.crew-app
+  .crew-shared-switcher
+  .crew-switch-picker
+  > button[aria-current="true"] {
+  background: #e7efe2;
+}
+/* Hover only where a pointer hovers, never like the current row. */
+@media (hover: hover) {
+  .crew-app
+    .crew-shared-switcher
+    .crew-switch-picker
+    > button:not([aria-current="true"]):hover {
+    background: #f4f6f1;
+  }
+  .crew-app .crew-shared-switcher .crew-switch-step:hover:not(:disabled) {
+    background: #f4f6f1;
+  }
+}
+.crew-switch-pick-name {
+  display: grid;
+  gap: 2px;
+}
+.crew-switch-pick-name small {
   color: var(--quiet);
-  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 400;
 }
-.crew-shared-filters button[aria-pressed="true"] {
-  color: var(--accent);
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
+/* A desktop window: in the page flow where the chips were, kept compact. */
+.crew-app:not(.crew-phone) .crew-shared-switcher {
+  position: relative;
+  top: auto;
+  max-width: 420px;
+  height: 56px;
+  margin: 0 0 16px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+}
+.crew-app:not(.crew-phone) .crew-shared-switcher .crew-switch-picker {
+  left: 0;
+  right: 0;
 }
 .crew-shared-none {
   color: var(--quiet);

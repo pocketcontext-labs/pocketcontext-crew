@@ -111,28 +111,24 @@ export function sharedFocusFromHash(hash: string): string {
 }
 
 /**
- * Shared page filters: Drafts, Live, Revoked/expired ("ended") and Archived.
- * The default (Drafts and Live) keeps the plain #/shared address; any other
- * choice lives in ?show=, in this order.
+ * Shared page statuses, one at a time like a Tasks column (0.37.1): Drafts,
+ * Live, Revoked (revoked or expired, "ended") and Archived. The choice lives in
+ * ?show=; without it the page picks its default from the loaded counts. An
+ * older address listing several (0.22.0 to 0.37.0) opens the first in order.
  */
 export const sharedFilters = ["drafts", "live", "ended", "archived"] as const;
 export type SharedFilter = (typeof sharedFilters)[number];
-export const defaultSharedFilters: SharedFilter[] = ["drafts", "live"];
 
-export function sharedFiltersFromHash(hash: string): SharedFilter[] {
+/** The status a Shared page address chooses, or null for the default. */
+export function sharedFilterFromHash(hash: string): SharedFilter | null {
   const match = /^#\/shared\?(.*)$/.exec(hash);
-  if (!match) return [...defaultSharedFilters];
-  const show = new URLSearchParams(match[1]).get("show");
-  if (show === null) return [...defaultSharedFilters];
-  const wanted = show.split(",");
-  return sharedFilters.filter((f) => wanted.includes(f));
+  if (!match) return null;
+  const wanted = (new URLSearchParams(match[1]).get("show") ?? "").split(",");
+  return sharedFilters.find((f) => wanted.includes(f)) ?? null;
 }
 
-export function sharedHash(filters: SharedFilter[]): string {
-  const ordered = sharedFilters.filter((f) => filters.includes(f));
-  if (ordered.join(",") === defaultSharedFilters.join(","))
-    return viewHashes.shared;
-  return `${viewHashes.shared}?show=${ordered.join(",")}`;
+export function sharedHash(filter: SharedFilter): string {
+  return `${viewHashes.shared}?show=${filter}`;
 }
 
 export const noteSorts = ["updated", "created", "title", "bucket"] as const;

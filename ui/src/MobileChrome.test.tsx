@@ -429,10 +429,11 @@ describe("ColumnSwitcher", () => {
       count: i * 3,
     }));
 
-  it("renders one markup for columns and buckets, with no dots", () => {
+  it("renders one markup for columns, buckets and statuses, with no dots", () => {
     for (const [n, item] of [
       [4, "column"],
       [10, "bucket"],
+      [4, "status"],
     ] as const) {
       for (const at of [0, Math.floor(n / 2), n - 1]) {
         const onSelect = vi.fn();
@@ -446,7 +447,9 @@ describe("ColumnSwitcher", () => {
         );
         expect(switcherShape()).toEqual(SWITCHER_SHAPE);
         expect(document.querySelector(".crew-switch-dots, i")).toBeNull();
-        const name = screen.getByRole("button", { name: /^(Column|Bucket) / });
+        const name = screen.getByRole("button", {
+          name: /^(Column|Bucket|Status) /,
+        });
         expect(name).toHaveTextContent(
           `Option ${at}· ${at * 3}(${at + 1} of ${n})`,
         );
@@ -463,6 +466,29 @@ describe("ColumnSwitcher", () => {
         unmount();
       }
     }
+  });
+
+  it("shows an option's hint in the picker and on the name, for Shared", () => {
+    render(
+      <ColumnSwitcher
+        columns={[
+          { status: "live", label: "Live", count: 3 },
+          { status: "ended", label: "Revoked", count: 1, hint: "Revoked or expired" },
+        ]}
+        current="ended"
+        onSelect={() => {}}
+        item="status"
+        noun={["shared page", "shared pages"]}
+      />,
+    );
+    const name = screen.getByRole("button", {
+      name: "Status Revoked, 1 shared page, 2 of 2. Choose a status",
+    });
+    expect(name).toHaveAttribute("title", "Revoked or expired");
+    fireEvent.click(name);
+    expect(
+      screen.getAllByRole("button", { current: true }).map((b) => b.textContent),
+    ).toEqual(["RevokedRevoked or expired1✓"]);
   });
 });
 

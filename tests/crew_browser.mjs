@@ -2433,7 +2433,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  await page.addInitScript(()=>{if(sessionStorage.getItem('crew-standalone')!=='1')return;const mm=window.matchMedia.bind(window);window.matchMedia=q=>q==='(display-mode: standalone)'?{matches:true,media:q,onchange:null,addEventListener(){},removeEventListener(){},addListener(){},removeListener(){},dispatchEvent(){return false;}}:mm(q);});
  await page.evaluate(()=>sessionStorage.setItem('crew-standalone','1'));
  for(const width of [390,1024]){await page.setViewportSize({width,height:844});await page.reload();await artifactCard.getByText('0 views').waitFor();
-  const archivedChip=page.getByRole('group',{name:'Show artifacts'}).getByRole('button',{name:/^Archived/});await archivedChip.click();const hash=await page.evaluate(()=>location.hash);
+  const statusName=page.getByRole('button',{name:/^Status /});await statusName.click();await page.getByRole('group',{name:'Show artifacts'}).getByRole('button',{name:/^Archived/}).click();await page.waitForFunction(()=>/^Status Archived,/.test(document.querySelector('.crew-shared-switcher .crew-switch-name')?.getAttribute('aria-label')||''));const hash=await page.evaluate(()=>location.hash);
   const openLink=artifactCard.getByRole('link',{name:/^Open .* in a new tab$/});await openLink.scrollIntoViewIfNeeded();await page.evaluate(()=>window.scrollBy(0,40));const scrollY=await page.evaluate(()=>scrollY);
   const tabs=page.context().pages().length;await openLink.click();
   const sheet=page.getByRole('dialog',{name:'Shared page: Synthetic partner pricing'});await sheet.waitFor();
@@ -2446,9 +2446,9 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await snapView('crew-page-preview-menu-'+width);await page.keyboard.press('Escape');
   await snapView('crew-page-preview-'+width);
   await sheet.getByRole('button',{name:'Back to Shared'}).click();await sheet.waitFor({state:'hidden'});
-  assert.equal(await page.evaluate(()=>location.hash),hash,'the filter stays in the address');assert.equal(await archivedChip.getAttribute('aria-pressed'),'true','the filter stays on');
+  assert.equal(await page.evaluate(()=>location.hash),hash,'the filter stays in the address');assert.match(await statusName.getAttribute('aria-label'),/^Status Archived,/,'the status stays chosen');
   assert.equal(await page.evaluate(()=>scrollY),scrollY,'the scroll position stays');
-  await archivedChip.click();}
+  await page.getByRole('button',{name:'Previous status'}).click();await page.getByRole('button',{name:'Previous status'}).click();}
  await page.evaluate(()=>sessionStorage.removeItem('crew-standalone'));await page.setViewportSize(size);await page.reload();await artifactCard.getByText('0 views').waitFor();}
  const visitor=await browser.newContext({viewport:{width:390,height:844}});
  const visitorPage=await visitor.newPage();
@@ -2490,7 +2490,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  await artifactCard.getByText(/expires /).waitFor();
  // An update draft from a bot: "Update of", then Replace keeps the link.
  await boardWrite('artifact.create',{title:'Synthetic partner pricing, revised',body:'Plans start at 15.',replaces:artifactId});
- await page.goto(base+'/#/shared');await page.reload();
+ await page.goto(base+'/#/shared?show=drafts');await page.reload();
  const updateCard=page.locator('.crew-artifact').filter({hasText:'Update of:'});
  await updateCard.getByText('Update of:').waitFor();
  await updateCard.getByRole('button',{name:'Publish',exact:true}).click();
@@ -2506,25 +2506,59 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  const gone=await visitorPage.reload();
  assert.equal(gone.status(),404,'a revoked link answers 404');
  assert.equal((await gone.text()).trim(),'This link is no longer available.');
- // Archive a revoked link: hidden by default, shown under the Archived filter kept in the address.
+ // Archive a revoked link: hidden by default, shown under the Archived status kept in the address (0.37.1: one status at a time in the shared switcher).
  await artifactCard.getByRole('button',{name:'Archive'}).click();
  await artifactCard.getByText('Archived',{exact:true}).waitFor();
  await page.goto(base+'/#/shared');await page.reload();
  const archivedCard=page.locator('.crew-artifact').filter({hasText:'Synthetic partner pricing, revised'});
- await page.getByRole('button',{name:/^Drafts/}).waitFor();
- assert.equal(await archivedCard.count(),0,'archived artifacts are hidden by default');
- await page.getByRole('button',{name:/^Archived/}).click();
- await archivedCard.first().waitFor();
- assert.equal(await page.evaluate(()=>location.hash),'#/shared?show=drafts,live,archived');
+ {const statusName=page.locator('.crew-shared-switcher .crew-switch-name');
+ await statusName.waitFor();await page.waitForLoadState('networkidle');
+ // The default: Live, else the first status with artifacts (Drafts, Live, Revoked, Archived), else Live.
+ {await statusName.click();const counts=await page.getByRole('group',{name:'Show artifacts'}).locator('.crew-switch-pick-count').evaluateAll(c=>c.map(x=>Number(x.textContent)));await page.keyboard.press('Escape');
+  const names=['Drafts','Live','Revoked','Archived'];const expected=counts[1]?'Live':names[counts.findIndex(n=>n>0)]??'Live';
+  assert.match(await statusName.getAttribute('aria-label'),new RegExp(`^Status ${expected},`),'the default status from '+counts);
+  assert.equal(await page.evaluate(()=>location.hash),'#/shared','the default keeps the plain address');
+  if(expected!=='Archived') assert.equal(await archivedCard.count(),0,'archived artifacts are hidden by default');}
+ assert.equal(await page.locator('.crew-shared-filters, .crew-shared [aria-pressed]').count(),0,'no toggle chips');
+ for(const width of [390,1440]){
+  await page.setViewportSize({width,height:width===390?844:1000});await page.goto(base+'/#/shared?show=drafts');await page.reload();
+  const sw=page.locator('.crew-shared-switcher');await sw.waitFor();
+  const box=await sw.boundingBox();
+  assert.ok(box.height<=57,'the switcher is one row at '+width+': '+box.height);
+  const title=await page.locator('.crew-shared-switcher .crew-switch-title').boundingBox();
+  assert.ok(title.height<=24,'the label stays on one line at '+width+': '+title.height);
+  if(width===390) assert.ok(box.width>=389,'flush across the phone: '+box.width);
+  else assert.ok(box.width<=420,'compact on a desktop: '+box.width);
+  assert.match(await statusName.getAttribute('aria-label'),/^Status Drafts, .*, 1 of 4\. Choose a status$/);
+  const previous=page.getByRole('button',{name:'Previous status'}),next=page.getByRole('button',{name:'Next status'});
+  assert.equal(await previous.isDisabled(),true,'previous is disabled at the first status');
+  const at=[await previous.boundingBox(),await next.boundingBox()];
+  for(let i=2;i<=4;i++){await next.click();await page.waitForFunction(n=>document.querySelector('.crew-shared-switcher .crew-switch-name')?.getAttribute('aria-label')?.includes(`, ${n} of 4.`),i);
+   assert.deepEqual([await previous.boundingBox(),await next.boundingBox()],at,'the arrows stay in place');}
+  assert.equal(await next.isDisabled(),true,'next is disabled at the last status');
+  assert.equal(await page.evaluate(()=>location.hash),'#/shared?show=archived');
+  await archivedCard.first().waitFor();
+  // The shown count matches the list.
+  const shownCount=Number((await page.locator('.crew-shared-switcher .crew-switch-count').innerText()).replace(/\D/g,''));
+  assert.equal(await page.locator('.crew-shared-list > li').count(),shownCount,'the count matches the list');
+  // The picker lists each status once with a check on the current one.
+  await statusName.click();const picker=page.getByRole('group',{name:'Show artifacts'});
+  assert.deepEqual(await picker.locator('button > span:first-child').evaluateAll(b=>b.map(x=>x.firstChild.textContent)),['Drafts','Live','Revoked','Archived']);
+  assert.equal(await picker.locator('button[aria-current="true"]').count(),1);
+  await snapView('crew-shared-switcher-'+width);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Shared fits at '+width);
+  await snap('crew-shared-status-'+width);}
+ await page.setViewportSize({width:1440,height:1000});
  await page.reload();await archivedCard.first().getByRole('button',{name:'Restore'}).waitFor();
- await snap('crew-shared-archived');
+ await snap('crew-shared-archived');}
  // A focused artifact steps through the Shared list as shown (0.35.0).
  {const hash=()=>new URL(page.url()).hash;
  await boardWrite('artifact.create',{title:'Listnav page one',body:'One.'});
  await boardWrite('artifact.create',{title:'Listnav page two',body:'Two.'});
  for(const width of [390,1440]){
   await page.setViewportSize({width,height:width===390?844:1000});
-  await page.goto(base+'/#/shared');await page.reload();
+  await page.goto(base+'/#/shared?show=drafts');await page.reload();
   const titles=page.locator('.crew-artifact h3 a');
   await page.getByRole('link',{name:'Listnav page two'}).waitFor();
   // Shared reads active and archived artifacts separately: let both land so the

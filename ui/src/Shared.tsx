@@ -11,14 +11,15 @@ import { crewApi, val, list, type ArtifactLink, type Row } from "./crewApi";
 import {
   itemPath,
   sharedFilters,
-  sharedFiltersFromHash,
+  sharedFilterFromHash,
   sharedHash,
   type SharedFilter,
 } from "./itemLink";
+import ColumnSwitcher from "./ColumnSwitcher";
 import AutoTextarea from "./AutoTextarea";
 import PagePreview, { isStandaloneDisplay } from "./PagePreview";
 import { ListNavCluster } from "./DialogHeader";
-import { t, tn } from "./i18n";
+import { t, tc, tn } from "./i18n";
 import { listKeyStep, type Step } from "./swipe";
 import { parseInstant, RelativeTime, type Instant } from "./relativeTime";
 import "./shared.css";
@@ -36,13 +37,27 @@ export const PUBLISH_RISK =
 const publishRisk = () =>
   t("Anyone with this link can view it until you revoke it or it expires.");
 
-// English labels, translated where they render (catalog: pages.ts).
-const filterLabels: Record<SharedFilter, string> = {
-  drafts: "Drafts",
-  live: "Live",
-  ended: "Revoked/expired",
-  archived: "Archived",
-};
+/** A status's label in the reader's language. */
+function filterLabel(f: SharedFilter): string {
+  if (f === "drafts") return t("Drafts");
+  if (f === "live") return t("Live");
+  // Plural like the others ("Revocate" in Italian, not the badge's "Revocata").
+  if (f === "ended") return tc("shared", "Revoked");
+  return t("Archived");
+}
+
+/**
+ * The status shown without a choice in the address: a focused artifact's own
+ * status, else Live, else the first status with artifacts, else Live.
+ */
+export function defaultSharedFilter(
+  counts: Record<SharedFilter, number>,
+  focused?: SharedFilter,
+): SharedFilter {
+  if (focused) return focused;
+  if (counts.live) return "live";
+  return sharedFilters.find((f) => counts[f] > 0) ?? "live";
+}
 
 type State = "draft" | "published" | "expired" | "revoked" | "archived";
 
@@ -112,8 +127,10 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [links, setLinks] = useState<Record<string, ArtifactLink>>({});
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState<SharedFilter[]>(() =>
-    sharedFiltersFromHash(location.hash),
+  // The owner's choice (address or switcher); null until one is made, then
+  // the default comes from the loaded counts, so no wrong list flashes.
+  const [chosen, setChosen] = useState<SharedFilter | null>(() =>
+    sharedFilterFromHash(location.hash),
   );
   const load = useCallback(async () => {
     try {
@@ -139,15 +156,26 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
       .getElementById(`artifact-${focus}`)
       ?.scrollIntoView?.({ block: "start" });
   }, [focus, rows]);
+  const counts = Object.fromEntries(
+    sharedFilters.map((f) => [
+      f,
+      (rows ?? []).filter((r) => filterOf(artifactState(r)) === f).length,
+    ]),
+  ) as Record<SharedFilter, number>;
+  const focusedRow = focus ? rows?.find((r) => r.id === focus) : undefined;
+  const filter =
+    chosen ??
+    defaultSharedFilter(
+      counts,
+      focusedRow ? filterOf(artifactState(focusedRow)) : undefined,
+    );
+  // A focused artifact (#/shared/<id>) shows whatever its state.
+  const shown = (rows ?? []).filter(
+    (r) => r.id === focus || filterOf(artifactState(r)) === filter,
+  );
   // A focused artifact (#/shared/<id>) is the Shared page's detail view: it
   // steps through the list as shown (0.35.0), J/K too, outside fields.
-  const shownIds = rows
-    ? rows
-        .filter(
-          (r) => r.id === focus || filters.includes(filterOf(artifactState(r))),
-        )
-        .map((r) => r.id)
-    : [];
+  const shownIds = shown.map((r) => r.id);
   const focusIndex = focus ? shownIds.indexOf(focus) : -1;
   const stepTo = (step: Step) => {
     const id = focusIndex >= 0 ? shownIds[focusIndex + step] : undefined;
@@ -169,11 +197,8 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [focusIndex]);
-  const toggle = (filter: SharedFilter) => {
-    const next = filters.includes(filter)
-      ? filters.filter((f) => f !== filter)
-      : [...filters, filter];
-    setFilters(next);
+  const select = (next: SharedFilter) => {
+    setChosen(next);
     // Keeps the choice in the address without firing hashchange.
     if (!focus)
       history.replaceState(
@@ -186,40 +211,28 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
   if (!rows)
     return <p className="crew-shared-loading">{t("Loading artifacts…")}</p>;
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
-  const counts = Object.fromEntries(
-    sharedFilters.map((f) => [
-      f,
-      rows.filter((r) => filterOf(artifactState(r)) === f).length,
-    ]),
-  ) as Record<SharedFilter, number>;
-  // A focused artifact (#/shared/<id>) shows whatever its state.
-  const shown = rows.filter(
-    (r) => r.id === focus || filters.includes(filterOf(artifactState(r))),
-  );
   return (
     <section className="crew-shared" aria-label={t("Shared artifacts")}>
+      {rows.length > 0 && (
+        <ColumnSwitcher
+          className="crew-shared-switcher"
+          item="status"
+          pickerLabel="Show artifacts"
+          noun={["shared page", "shared pages"]}
+          columns={sharedFilters.map((f) => ({
+            status: f,
+            label: filterLabel(f),
+            count: counts[f],
+            hint: f === "ended" ? t("Revoked or expired") : undefined,
+          }))}
+          current={filter}
+          onSelect={(f) => select(f as SharedFilter)}
+        />
+      )}
       {error && (
         <p role="alert" className="crew-alert">
           {error}
         </p>
-      )}
-      {rows.length > 0 && (
-        <div
-          className="crew-shared-filters"
-          role="group"
-          aria-label={t("Show artifacts")}
-        >
-          {sharedFilters.map((f) => (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={filters.includes(f)}
-              onClick={() => toggle(f)}
-            >
-              {t(filterLabels[f])} <span>{counts[f]}</span>
-            </button>
-          ))}
-        </div>
       )}
       {!rows.length && (
         <div className="crew-empty">
@@ -233,7 +246,7 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
         </div>
       )}
       {rows.length > 0 && !shown.length && (
-        <p className="crew-shared-none">{t("No artifacts match these filters.")}</p>
+        <p className="crew-shared-none">{t("No artifacts with this status.")}</p>
       )}
       <ol className="crew-shared-list">
         {shown.map((row) => (

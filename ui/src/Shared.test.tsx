@@ -214,10 +214,9 @@ describe("Shared", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back to Shared" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     // The page under the sheet never unmounted: filters and scroll stay.
-    expect(screen.getByRole("button", { name: /^Live/ })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      screen.getByRole("button", { name: /^Status Live, 1 shared page, 2 of 4/ }),
+    ).toBeInTheDocument();
     expect(location.hash).toBe("#/shared?show=live");
     expect(document.documentElement.scrollTop).toBe(240);
     expect(read).toHaveBeenCalledTimes(2); // no reload
@@ -249,8 +248,134 @@ describe("Shared", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("filters by state, hides archived by default and keeps the choice in the address", async () => {
+  it("shows one status at a time, Live by default, with fixed arrows and the choice in the address", async () => {
     history.replaceState(null, "", "#/shared");
+    const art = (n: number, state: string, extra = {}) => ({
+      id: `art00000000001${n}`,
+      revision: 1,
+      title: `Page ${n}`,
+      status: state === "published" ? "published" : "draft",
+      state,
+      published_revision: state === "published" ? 1 : 0,
+      ...extra,
+    });
+    read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
+      Promise.resolve(
+        f?.archived
+          ? [art(4, "archived", { archived: true })]
+          : [art(1, "draft"), art(2, "published"), art(3, "published")],
+      ),
+    );
+    artifactLinks.mockResolvedValue([]);
+    render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
+    // Live, though Drafts comes first; the count matches the list.
+    const name = await screen.findByRole("button", {
+      name: "Status Live, 2 shared pages, 2 of 4. Choose a status",
+    });
+    expect(name).toHaveTextContent("Live· 2(2 of 4)");
+    expect(screen.getByText("Page 2")).toBeInTheDocument();
+    expect(screen.getByText("Page 3")).toBeInTheDocument();
+    expect(screen.queryByText("Page 1")).toBeNull();
+    expect(screen.queryByText("Page 4")).toBeNull();
+    // No toggle chips any more: nothing is aria-pressed.
+    expect(document.querySelector("[aria-pressed]")).toBeNull();
+    expect(location.hash).toBe("#/shared");
+    // Previous goes to Drafts (one status replaces the other) and disables.
+    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
+    expect(screen.getByText("Page 1")).toBeInTheDocument();
+    expect(screen.queryByText("Page 2")).toBeNull();
+    expect(location.hash).toBe("#/shared?show=drafts");
+    expect(screen.getByRole("button", { name: "Previous status" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next status" })).toBeEnabled();
+    // The picker lists every status with its count and a check on the current.
+    fireEvent.click(screen.getByRole("button", { name: /^Status Drafts/ }));
+    const picker = screen.getByRole("group", { name: "Show artifacts" });
+    const options = Array.from(picker.querySelectorAll("button"));
+    expect(options.map((b) => b.textContent)).toEqual([
+      "Drafts1✓",
+      "Live2",
+      "RevokedRevoked or expired0",
+      "Archived1",
+    ]);
+    expect(options[0]).toHaveAttribute("aria-current", "true");
+    fireEvent.click(options[3]);
+    expect(screen.getByText("Page 4")).toBeInTheDocument();
+    expect(screen.queryByText("Page 1")).toBeNull();
+    expect(location.hash).toBe("#/shared?show=archived");
+    expect(screen.getByRole("button", { name: "Next status" })).toBeDisabled();
+    // An empty status says so.
+    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
+    expect(screen.getByText("No artifacts with this status.")).toBeInTheDocument();
+    history.replaceState(null, "", "#/");
+  });
+
+  it("falls back to the first status with artifacts when Live is empty", async () => {
+    history.replaceState(null, "", "#/shared");
+    read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
+      Promise.resolve(
+        f?.archived
+          ? [
+              {
+                id: "art000000000021",
+                revision: 1,
+                title: "Old page",
+                status: "draft",
+                state: "archived",
+                archived: true,
+              },
+            ]
+          : [],
+      ),
+    );
+    artifactLinks.mockResolvedValue([]);
+    render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
+    expect(await screen.findByText("Old page")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Status Archived, 1 shared page, 4 of 4/ }),
+    ).toBeInTheDocument();
+    expect(location.hash).toBe("#/shared");
+    history.replaceState(null, "", "#/");
+  });
+
+  it("opens an older address with several statuses on the first in order", async () => {
+    history.replaceState(null, "", "#/shared?show=archived,ended");
+    read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
+      Promise.resolve(
+        f?.archived
+          ? [
+              {
+                id: "art000000000031",
+                revision: 1,
+                title: "Old page",
+                status: "draft",
+                state: "archived",
+                archived: true,
+              },
+            ]
+          : [
+              {
+                id: "art000000000032",
+                revision: 1,
+                title: "Live page",
+                status: "published",
+                state: "published",
+                published_revision: 1,
+              },
+            ],
+      ),
+    );
+    artifactLinks.mockResolvedValue([]);
+    render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
+    expect(
+      await screen.findByRole("button", { name: /^Status Revoked, 0 shared pages, 3 of 4/ }),
+    ).toHaveAttribute("title", "Revoked or expired");
+    expect(screen.queryByText("Old page")).toBeNull();
+    expect(screen.queryByText("Live page")).toBeNull();
+    history.replaceState(null, "", "#/");
+  });
+
+  it("restores archived and archives revoked or expired artifacts", async () => {
+    history.replaceState(null, "", "#/shared?show=archived");
     read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
       Promise.resolve(
         f?.archived
@@ -266,13 +391,6 @@ describe("Shared", () => {
             ]
           : [
               {
-                id: "art000000000003",
-                revision: 1,
-                title: "Draft one",
-                status: "draft",
-                state: "draft",
-              },
-              {
                 id: "art000000000004",
                 revision: 3,
                 title: "Gone",
@@ -287,12 +405,8 @@ describe("Shared", () => {
     artifactLinks.mockResolvedValue([]);
     write.mockResolvedValue({});
     render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
-    expect(await screen.findByText("Draft one")).toBeInTheDocument();
-    expect(screen.queryByText("Gone")).not.toBeInTheDocument();
-    expect(screen.queryByText("Old draft")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^Archived/ }));
     expect(await screen.findByText("Old draft")).toBeInTheDocument();
-    expect(location.hash).toBe("#/shared?show=drafts,live,archived");
+    expect(screen.queryByText("Gone")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     await waitFor(() =>
       expect(write).toHaveBeenCalledWith(
@@ -301,8 +415,9 @@ describe("Shared", () => {
         expect.objectContaining({ id: "art000000000009" }),
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: /^Revoked\/expired/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
     expect(await screen.findByText("Gone")).toBeInTheDocument();
+    expect(location.hash).toBe("#/shared?show=ended");
     expect(screen.queryByRole("link", { name: /in a new tab/ })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Publish again with a new link" }),
@@ -319,6 +434,7 @@ describe("Shared", () => {
   });
 
   it("asks replace or new for an update draft and discards drafts after confirming", async () => {
+    history.replaceState(null, "", "#/shared?show=drafts");
     read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
       Promise.resolve(
         f?.archived
@@ -372,7 +488,7 @@ describe("Shared", () => {
   });
 
   it("says Merged into for an archived update draft whose content went live, and Update of for a discarded one", async () => {
-    history.replaceState(null, "", "#/shared?show=live,archived");
+    history.replaceState(null, "", "#/shared?show=archived");
     read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
       Promise.resolve(
         f?.archived
@@ -478,11 +594,22 @@ describe("Shared", () => {
     history.replaceState(null, "", "/#/shared/art000000000003");
     fireEvent.keyDown(document.body, { key: "j" });
     expect(location.hash).toBe("#/shared/art000000000003");
-    // A focused artifact the filters hide is shown at its place in the list.
+    // Without a chosen status the focused artifact's own status is shown.
     view.rerender(
       <Shared notes={[]} tasks={[]} focus="art000000000004" Prose={Prose} />,
     );
+    await screen.findByRole("group", { name: "shared page 1 of 1" });
+    expect(
+      screen.getByRole("button", { name: /^Status Archived, 1 shared page/ }),
+    ).toBeInTheDocument();
+    // A chosen status that hides it shows it at its place in the list.
+    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
     await screen.findByRole("group", { name: "shared page 4 of 4" });
+    expect(
+      screen.getByRole("button", { name: /^Status Drafts, 3 shared pages/ }),
+    ).toBeInTheDocument();
     history.replaceState(null, "", "#/");
   });
 

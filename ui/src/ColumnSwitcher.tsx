@@ -2,7 +2,13 @@ import { useEffect, useId, useRef, useState } from "react";
 import { t, tn } from "./i18n";
 import { icons } from "./MobileChrome";
 
-export type SwitcherColumn = { status: string; label: string; count: number };
+export type SwitcherColumn = {
+  status: string;
+  label: string;
+  count: number;
+  /** A longer description, shown under the name in the picker and on hover. */
+  hint?: string;
+};
 
 /**
  * The phone's one fixed switcher: `‹  To do · 6  (1 of 4)  ›` on the board and
@@ -10,7 +16,8 @@ export type SwitcherColumn = { status: string; label: string; count: number };
  * count and position. The row has a fixed height with the plain label centred
  * between previous and next, which stay in place and turn disabled at the
  * ends; the name opens a picker listing every option with its live count.
- * There is no swipe and there are no dots.
+ * There is no swipe and there are no dots. The Shared page uses it on every
+ * width for its statuses (`‹  Live · 3  (2 of 4)  ›`).
  */
 export default function ColumnSwitcher({
   columns,
@@ -24,7 +31,7 @@ export default function ColumnSwitcher({
   columns: SwitcherColumn[];
   current: string;
   onSelect: (status: string) => void;
-  /** What one option is called in labels: "column", "bucket". */
+  /** What one option is called in labels: "column", "bucket", "status". */
   item?: string;
   pickerLabel?: string;
   noun?: [string, string];
@@ -60,16 +67,29 @@ export default function ColumnSwitcher({
   if (!column) return null;
   // Whole sentences per kind of option, so each language orders them.
   const bucket = item === "bucket";
-  const previous = bucket ? t("Previous bucket") : t("Previous column");
-  const next = bucket ? t("Next bucket") : t("Next column");
+  const status = item === "status";
+  const previous = bucket
+    ? t("Previous bucket")
+    : status
+      ? t("Previous status")
+      : t("Previous column");
+  const next = bucket
+    ? t("Next bucket")
+    : status
+      ? t("Next status")
+      : t("Next column");
   const count =
     noun[0] === "note"
       ? tn(column.count, "{n} note", "{n} notes")
-      : tn(column.count, "{n} task", "{n} tasks");
+      : noun[0] === "shared page"
+        ? tn(column.count, "{n} shared page", "{n} shared pages")
+        : tn(column.count, "{n} task", "{n} tasks");
   const where = { name: column.label, count, i: index + 1, total: columns.length };
   const nameLabel = bucket
     ? t("Bucket {name}, {count}, {i} of {total}. Choose a bucket", where)
-    : t("Column {name}, {count}, {i} of {total}. Choose a column", where);
+    : status
+      ? t("Status {name}, {count}, {i} of {total}. Choose a status", where)
+      : t("Column {name}, {count}, {i} of {total}. Choose a column", where);
   const go = (to: number) => {
     const next = columns[to];
     if (next) onSelect(next.status);
@@ -94,6 +114,7 @@ export default function ColumnSwitcher({
         aria-expanded={open}
         aria-controls={open ? `${id}-picker` : undefined}
         aria-label={nameLabel}
+        title={column.hint}
         onClick={() => setOpen((value) => !value)}
       >
         <span className="crew-switch-title">
@@ -132,7 +153,14 @@ export default function ColumnSwitcher({
                 toggle.current?.focus();
               }}
             >
-              <span>{c.label}</span>
+              {c.hint ? (
+                <span className="crew-switch-pick-name">
+                  {c.label}
+                  <small>{c.hint}</small>
+                </span>
+              ) : (
+                <span>{c.label}</span>
+              )}
               <span className="crew-switch-pick-count">{c.count}</span>
               <span className="crew-switch-check" aria-hidden="true">
                 {c.status === column.status ? "✓" : ""}
