@@ -1,0 +1,218 @@
+{
+  "description": "Shared review markup fixtures (Crew 0.38.0). Server (pb_hooks) and reader (ui) tests both load this file and must agree on valid/errors/blocks. Lines are 1-based; errors name the opener line (for duplicate_channel the second opener, for nesting the inner opener). blocks lists interpreted blocks in order for valid bodies; target is the channel, copy-<n> (1-based among copy blocks) or empty for note; limit is the effective limit (defaults linkedin 3000, x 280, else null unless set).",
+  "cases": [
+    {
+      "name": "plain body, no directives",
+      "body": "Just one text.\n\nSecond paragraph.",
+      "valid": true,
+      "errors": [],
+      "blocks": []
+    },
+    {
+      "name": "prose with colons",
+      "body": "re:Crew at 10:30, note:here and a :: pair.\n\nA lone ::word leaf line\n\nhttps://example.com:8080/x",
+      "valid": true,
+      "errors": [],
+      "blocks": []
+    },
+    {
+      "name": "linkedin and x variants with note",
+      "body": ":::variant{channel=linkedin}\n\nLinkedIn text.\n\n:::\n\n:::variant{channel=x limit=280}\n\nX text https://example.com\n\n:::\n\n:::note\n\nWhy this works.\n\n:::",
+      "valid": true,
+      "errors": [],
+      "blocks": [
+        {
+          "kind": "variant",
+          "target": "linkedin",
+          "limit": 3000
+        },
+        {
+          "kind": "variant",
+          "target": "x",
+          "limit": 280
+        },
+        {
+          "kind": "note",
+          "target": ""
+        }
+      ]
+    },
+    {
+      "name": "copy blocks numbered",
+      "body": ":::copy{label=\"WhatsApp reply\"}\n\nHi!\n\n:::\n\n:::copy{label=\"Email subject\"}\n\nHello\n\n:::",
+      "valid": true,
+      "errors": [],
+      "blocks": [
+        {
+          "kind": "copy",
+          "target": "copy-1",
+          "label": "WhatsApp reply"
+        },
+        {
+          "kind": "copy",
+          "target": "copy-2",
+          "label": "Email subject"
+        }
+      ]
+    },
+    {
+      "name": "email without limit",
+      "body": ":::variant{channel=email}\n\nBody\n\n:::",
+      "valid": true,
+      "errors": [],
+      "blocks": [
+        {
+          "kind": "variant",
+          "target": "email",
+          "limit": null
+        }
+      ]
+    },
+    {
+      "name": "unknown directive",
+      "body": ":::poll\n\nA or B\n\n:::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_unknown_directive",
+          "line": 1
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "unknown channel",
+      "body": ":::variant{channel=myspace}\n\nText\n\n:::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_invalid_attribute",
+          "line": 1
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "missing channel",
+      "body": ":::variant\n\nText\n\n:::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_invalid_attribute",
+          "line": 1
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "limit out of range",
+      "body": ":::variant{channel=x limit=0}\n\nText\n\n:::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_invalid_attribute",
+          "line": 1
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "extra attribute onclick",
+      "body": ":::variant{channel=x onclick=alert(1)}\n\nText\n\n:::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_invalid_attribute",
+          "line": 1
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "copy label too long",
+      "body": ":::copy{label=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}\n\nText\n\n:::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_invalid_attribute",
+          "line": 1
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "copy without label",
+      "body": ":::copy\n\nText\n\n:::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_invalid_attribute",
+          "line": 1
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "note with attribute",
+      "body": ":::note{tone=x}\n\nText\n\n:::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_invalid_attribute",
+          "line": 1
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "nesting",
+      "body": ":::::variant{channel=linkedin}\n\n:::note\n\nInner\n\n:::\n\n:::::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_nesting",
+          "line": 3
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "duplicate channel",
+      "body": ":::variant{channel=x}\n\nOne\n\n:::\n\n:::variant{channel=x}\n\nTwo\n\n:::",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_duplicate_channel",
+          "line": 7
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "unclosed",
+      "body": ":::variant{channel=x}\n\nText without closer",
+      "valid": false,
+      "errors": [
+        {
+          "code": "review_markup_unclosed",
+          "line": 1
+        }
+      ],
+      "blocks": []
+    },
+    {
+      "name": "html stays inert",
+      "body": "<img src=x onerror=alert(1)> <script>alert(1)</script>",
+      "valid": true,
+      "errors": [],
+      "blocks": []
+    },
+    {
+      "name": "triple colon as plain text inside code fence",
+      "body": "```\n:::variant{channel=x}\n```",
+      "valid": true,
+      "errors": [],
+      "blocks": []
+    }
+  ]
+}
