@@ -7,6 +7,8 @@ RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
     npm install --global pnpm@10.33.2 && pnpm install --frozen-lockfile
 COPY ui/ ./
+# Shared review markup fixtures the reader tests load from ../tests.
+COPY tests/fixtures/ /tests/fixtures/
 RUN pnpm typecheck && pnpm test && pnpm build
 
 FROM golang:1.27.3-trixie@sha256:d9fa6e7ba43678ee1e5d1617007db9a134612032a74e2d86b44a9f582f1564cc AS build

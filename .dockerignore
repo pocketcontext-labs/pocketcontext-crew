@@ -21,6 +21,9 @@
 !ui/**
 !docker/
 !docker/**
+!tests/
+!tests/fixtures/
+!tests/fixtures/**
 ui/node_modules/
 ui/dist/
 ui/test-results/
