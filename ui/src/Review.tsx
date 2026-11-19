@@ -28,7 +28,15 @@ import {
   type OptionDecision,
   type ReviewOption,
 } from "./reviews";
-import { Icon, useDialogMenu, type MenuItem } from "./DialogHeader";
+import { IconButton, MoreMenu, useDialogMenu, type MenuItem } from "./DialogHeader";
+import {
+  BlockCard,
+  BlockOptionContext,
+  CopyButton,
+  ReviewMarkupContext,
+  copyAllText,
+} from "./ReviewBlocks";
+import { copyBlocks, parseReviewMarkup } from "./reviewMarkup";
 import { reviewHash } from "./itemLink";
 import { copyText } from "./projectAgents";
 import { markdownPlainText } from "./markdownText";
@@ -63,66 +71,7 @@ function reviewStatusText(status: string): string {
   }
 }
 
-/**
- * Copy (0.37.1): copies Markdown as plain text that pastes cleanly into a
- * chat app, inside the tap (phones refuse a clipboard write after an await).
- * The label turns to "Copied" for 2 s, or "Not copied" on failure; every
- * label sits in the same grid cell, so the button never changes width.
- */
-export function CopyButton({
-  text,
-  label,
-  className = "",
-  iconOnly = false,
-}: {
-  /** An icon button (option cards): a check when copied, a cross on failure. */
-  iconOnly?: boolean;
-  /** The Markdown to copy. */
-  text: string;
-  /** The accessible name, such as "Copy Draft A". */
-  label: string;
-  className?: string;
-}) {
-  const [state, setState] = useState<"" | "copied" | "failed">("");
-  useEffect(() => {
-    if (!state) return;
-    const timer = window.setTimeout(() => setState(""), 2000);
-    return () => window.clearTimeout(timer);
-  }, [state]);
-  const labels = { "": t("Copy"), copied: t("Copied"), failed: t("Not copied") };
-  return (
-    <>
-      <button
-        type="button"
-        className={`crew-copy-button ${className}`.trim()}
-        data-state={state || undefined}
-        aria-label={label}
-        title={label}
-        onClick={() =>
-          void copyText(markdownPlainText(text)).then((ok) =>
-            setState(ok ? "copied" : "failed"),
-          )
-        }
-      >
-        <Icon
-          name={state === "copied" ? "check" : state === "failed" ? "close" : "copy"}
-        />
-        {!iconOnly && (
-          <span className="crew-copy-labels" aria-hidden="true">
-            {(["", "copied", "failed"] as const).map((key) => (
-              <span key={key} data-shown={key === state || undefined}>
-                {labels[key]}
-              </span>
-            ))}
-          </span>
-        )}
-      </button>
-      <span className="crew-visually-hidden" aria-live="polite">
-        {state ? labels[state] : ""}
-      </span>
-    </>
-  );
-}
+export { CopyButton };
 
 type ProseComponent = ComponentType<{ children: string }>;
 export function ReviewContent({
@@ -142,6 +91,7 @@ export function ReviewContent({
   const missing = missingReviewEvidence(row, files, loaded);
   return (
     <AttachmentsProvider attachments={files} stepThroughAll>
+      <ReviewMarkupContext.Provider value={true}>
       <div className="crew-review-content">
         {missing.length > 0 && (
           <div className="crew-alert" role="alert">
@@ -176,6 +126,7 @@ export function ReviewContent({
           </section>
         )}
       </div>
+      </ReviewMarkupContext.Provider>
     </AttachmentsProvider>
   );
 }
@@ -199,8 +150,17 @@ function ReviewFileTiles({ files }: { files: Attachment[] }) {
   );
 }
 
-/** One option's state while deciding: checked, its feedback, field open. */
-export type OptionPick = { selected: boolean; note: string; open?: boolean };
+/**
+ * One option's state while deciding: checked, its whole-option feedback and
+ * whether that field is open, and (0.38.0) feedback per block, by target.
+ */
+export type OptionPick = {
+  selected: boolean;
+  note: string;
+  open?: boolean;
+  feedback?: Record<string, string>;
+  openBlocks?: Record<string, boolean>;
+};
 export type OptionPicks = Record<string, OptionPick>;
 
 const pickOf = (picks: OptionPicks | undefined, key: string): OptionPick =>
@@ -209,8 +169,21 @@ const pickOf = (picks: OptionPicks | undefined, key: string): OptionPick =>
 /** A decided option, as the read-only dialog shows it. */
 const decidedPick = (choices: OptionDecision[], key: string): OptionPick => {
   const choice = choices.find((x) => x.key === key);
-  return { selected: choice?.decision === "approved", note: choice?.note || "" };
+  const feedback: Record<string, string> = {};
+  for (const entry of choice?.feedback ?? [])
+    if (entry && typeof entry.target === "string") feedback[entry.target] = String(entry.note ?? "");
+  return {
+    selected: choice?.decision === "approved",
+    note: choice?.note || "",
+    feedback,
+  };
 };
+
+/** The per-block feedback a decision sends: non-empty notes only. */
+export const pickFeedback = (pick: OptionPick | undefined) =>
+  Object.entries(pick?.feedback ?? {})
+    .filter(([, note]) => note.trim())
+    .map(([target, note]) => ({ target, note }));
 
 function FeedbackButton({
   label,
@@ -226,29 +199,82 @@ function FeedbackButton({
   onClick?: (keyboard: boolean) => void;
 }) {
   return (
-    <button
-      type="button"
+    <IconButton
+      icon="note"
       className="crew-pick-comment"
       data-note={hasNote || undefined}
-      aria-label={t("Feedback on {label}", { label })}
+      label={t("Feedback on {label}", { label })}
       aria-expanded={onClick ? expanded : undefined}
-      title={t("Feedback on {label}", { label })}
       disabled={!onClick}
       onPointerDown={onPointerDown}
       onClick={onClick && ((e) => onClick(e.detail === 0))}
-    >
-      <Icon name="note" />
-    </button>
+    />
+  );
+}
+
+/**
+ * An option card's More (0.38.0): Copy all variants and, while deciding,
+ * Feedback on the whole option. "Copied" shows beside the button for 2 s
+ * without moving anything.
+ */
+function OptionMore({
+  option,
+  onWholeFeedback,
+}: {
+  option: ReviewOption;
+  onWholeFeedback?: () => void;
+}) {
+  const [copied, setCopied] = useState<"" | "copied" | "failed">("");
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(""), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  const items: MenuItem[] = [
+    {
+      label: t("Copy all variants"),
+      icon: "copy",
+      onSelect: () =>
+        void copyText(copyAllText(option.body)).then((ok) =>
+          setCopied(ok ? "copied" : "failed"),
+        ),
+    },
+  ];
+  if (onWholeFeedback)
+    items.push({
+      label: t("Feedback on the whole option"),
+      icon: "note",
+      onSelect: onWholeFeedback,
+    });
+  return (
+    <div className="crew-pick-more">
+      <MoreMenu
+        iconButton
+        items={items}
+        label={t("More actions for {label}", { label: option.label })}
+      />
+      <span
+        className="crew-pick-toast"
+        data-state={copied || undefined}
+        role="status"
+        aria-live="polite"
+      >
+        {copied === "copied" ? t("Copied") : copied === "failed" ? t("Not copied") : ""}
+      </span>
+    </div>
   );
 }
 
 /**
  * The options of a review (0.32.0, as in the approved mockup): pick any
  * number with checkboxes, and give each option its own feedback in a
- * one-line field under it. Selecting an option or tapping its feedback icon
- * (also on an unselected option) opens the field. Options whose body is one
- * image are tiles, with a badge when they have feedback. Read-only (decided
- * reviews and history) shows the recorded selection and feedback.
+ * one-line field under it. Since 0.38.0 a text option's header is checkbox,
+ * label and More; its body is blocks (`:::variant` and `:::copy`, or one
+ * unnamed block for a body without them), each with Copy and its own
+ * feedback button at the right edge, so the controls sit at the same place on
+ * every option. Options whose body is one image are tiles, with a badge when
+ * they have feedback. Read-only (decided reviews and history) shows the
+ * recorded selection and feedback, each under its block.
  */
 export function ReviewChoices({
   row,
@@ -264,58 +290,80 @@ export function ReviewChoices({
   const options = reviewOptions(row);
   const choices = optionDecisions(row);
   const prefix = useId();
-  // Whether the option's field had focus when its feedback icon was pressed
-  // (the press itself moves focus away).
+  // Whether the field had focus when its feedback icon was pressed (the
+  // press itself moves focus away).
   const hadFocus = useRef(false);
   if (!options.length) return null;
   const editable = !!onChange;
   const pickFor = (key: string) =>
     editable ? pickOf(picks, key) : decidedPick(choices, key);
-  const shown = (pick: OptionPick) =>
-    editable ? (pick.open ?? (pick.selected || !!pick.note)) : !!pick.note;
+  // target "" is the whole option; anything else a block.
+  const noteOf = (pick: OptionPick, target: string) =>
+    target ? (pick.feedback?.[target] ?? "") : pick.note;
+  const shownFor = (pick: OptionPick, target: string) =>
+    target
+      ? editable
+        ? (pick.openBlocks?.[target] ?? !!noteOf(pick, target))
+        : !!noteOf(pick, target)
+      : editable
+        ? (pick.open ?? (pick.selected || !!pick.note))
+        : !!pick.note;
+  const shown = (pick: OptionPick) => shownFor(pick, "");
+  const withNote = (pick: OptionPick, target: string, note: string): OptionPick =>
+    target ? { ...pick, feedback: { ...pick.feedback, [target]: note } } : { ...pick, note };
+  const withOpen = (pick: OptionPick, target: string, open: boolean): OptionPick =>
+    target ? { ...pick, openBlocks: { ...pick.openBlocks, [target]: open } } : { ...pick, open };
+  const fieldId = (option: ReviewOption, target: string) =>
+    target ? `${prefix}-${option.key}--${target}` : `${prefix}-${option.key}`;
   const text = options.filter((o) => !isImageOption(o));
   const images = options.filter(isImageOption);
-  const field = (option: ReviewOption, pick: OptionPick) =>
+  const field = (option: ReviewOption, pick: OptionPick, target = "", label = option.label) =>
     editable ? (
       <AutoTextarea
-        id={`${prefix}-${option.key}`}
+        id={fieldId(option, target)}
         className="crew-pick-note"
-        aria-label={t("Feedback on {label}", { label: option.label })}
-        placeholder={t("Feedback on {label}…", { label: option.label })}
+        aria-label={t("Feedback on {label}", { label })}
+        placeholder={t("Feedback on {label}…", { label })}
         maxLength={20000}
-        value={pick.note}
-        onValue={(note) => onChange(option.key, { ...pick, note })}
+        value={noteOf(pick, target)}
+        onValue={(note) => onChange(option.key, withNote(pick, target, note))}
       />
+    ) : target ? (
+      <p className="crew-pick-feedback crew-block-feedback">
+        <strong>{t("Feedback on {label}:", { label })}</strong>{" "}
+        {noteOf(pick, target)}
+      </p>
     ) : (
       <p className="crew-pick-feedback">
         <strong>{t("Feedback:")}</strong> {pick.note}
       </p>
     );
-  const fieldOf = (option: ReviewOption) =>
-    document.getElementById(`${prefix}-${option.key}`) as HTMLTextAreaElement | null;
-  const pressFeedback = (option: ReviewOption) => {
-    const field = fieldOf(option);
+  const fieldOf = (option: ReviewOption, target = "") =>
+    document.getElementById(fieldId(option, target)) as HTMLTextAreaElement | null;
+  const pressFeedback = (option: ReviewOption, target = "") => {
+    const field = fieldOf(option, target);
     hadFocus.current = !!field && document.activeElement === field;
   };
-  // The icon opens the option's field and focuses it (0.37.1). The focus
-  // happens inside the tap, after a synchronous render, because iOS opens
-  // the keyboard only for a focus made by the gesture itself. Pressing it
-  // again on the focused empty field (or from the keyboard on an open empty
-  // one) closes the field.
+  // The icon opens its field and focuses it (0.37.1). The focus happens
+  // inside the tap, after a synchronous render, because iOS opens the
+  // keyboard only for a focus made by the gesture itself. Pressing it again
+  // on the focused empty field (or from the keyboard on an open empty one)
+  // closes the field.
   const toggleFeedback = (
     option: ReviewOption,
     pick: OptionPick,
     keyboard: boolean,
+    target = "",
   ) => {
     if (!onChange) return;
     const focused = hadFocus.current;
     hadFocus.current = false;
-    if (shown(pick) && !pick.note && (focused || keyboard)) {
-      onChange(option.key, { ...pick, open: false });
+    if (shownFor(pick, target) && !noteOf(pick, target) && (focused || keyboard)) {
+      onChange(option.key, withOpen(pick, target, false));
       return;
     }
-    flushSync(() => onChange(option.key, { ...pick, open: true }));
-    const field = fieldOf(option);
+    flushSync(() => onChange(option.key, withOpen(pick, target, true)));
+    const field = fieldOf(option, target);
     if (!field) return;
     field.focus({ preventScroll: true });
     // Above the sticky footer and, on a phone, the keyboard.
@@ -344,6 +392,30 @@ export function ReviewChoices({
       <span className="crew-pick-label">{option.label}</span>
     </label>
     );
+  /** What the option's blocks get: its label and their feedback controls. */
+  const blockOption = (option: ReviewOption, pick: OptionPick) => ({
+    label: option.label,
+    feedback: (target: string, name: string) => {
+      const label = name ? `${option.label} · ${name}` : option.label;
+      return {
+        button: (
+          <FeedbackButton
+            label={label}
+            hasNote={!!noteOf(pick, target)}
+            expanded={shownFor(pick, target)}
+            onPointerDown={() => pressFeedback(option, target)}
+            onClick={
+              editable
+                ? (keyboard) => toggleFeedback(option, pick, keyboard, target)
+                : undefined
+            }
+          />
+        ),
+        // The whole option's field stays under the card.
+        field: target && shownFor(pick, target) ? field(option, pick, target, label) : null,
+      };
+    },
+  });
   const textHeading = images.length
     ? editable
       ? t("Text · pick any")
@@ -359,6 +431,7 @@ export function ReviewChoices({
           <h3 className="crew-pick-heading">{textHeading}</h3>
           {text.map((option) => {
             const pick = pickFor(option.key);
+            const blocks = copyBlocks(parseReviewMarkup(option.body));
             return (
               <section
                 key={option.key}
@@ -368,26 +441,27 @@ export function ReviewChoices({
               >
                 <div className="crew-pick-head">
                   {check(option, pick)}
-                  <CopyButton
-                    className="crew-pick-copy"
-                    iconOnly
-                    text={option.body}
-                    label={t("Copy {label}", { label: option.label })}
+                  <OptionMore
+                    option={option}
+                    onWholeFeedback={
+                      editable ? () => toggleFeedback(option, pick, false) : undefined
+                    }
                   />
-                  {editable && (
-                    <FeedbackButton
-                      label={option.label}
-                      hasNote={!!pick.note}
-                      expanded={shown(pick)}
-                      onPointerDown={() => pressFeedback(option)}
-                      onClick={(keyboard) =>
-                        toggleFeedback(option, pick, keyboard)
-                      }
-                    />
-                  )}
                 </div>
                 <div className="crew-pick-body">
-                  <Prose>{option.body}</Prose>
+                  <BlockOptionContext.Provider value={blockOption(option, pick)}>
+                    {blocks.length ? (
+                      <Prose>{option.body}</Prose>
+                    ) : (
+                      <BlockCard
+                        name=""
+                        target=""
+                        copy={copyAllText(option.body)}
+                      >
+                        <Prose>{option.body}</Prose>
+                      </BlockCard>
+                    )}
+                  </BlockOptionContext.Provider>
                 </div>
                 {shown(pick) && field(option, pick)}
               </section>
@@ -521,6 +595,10 @@ export function ReviewDecision({
           ? "approved"
           : "rejected",
       note: picks[o.key]?.note || "",
+      // Per-block feedback (0.38.0), sent only when there is some.
+      ...(pickFeedback(picks[o.key]).length
+        ? { feedback: pickFeedback(picks[o.key]) }
+        : {}),
     }));
     void save(
       "review.decide",

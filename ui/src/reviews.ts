@@ -1,12 +1,14 @@
 import { val, type Row } from "./crewApi";
 import type { Attachment } from "./attachmentsApi";
-import { t } from "./i18n";
+import { t, tn } from "./i18n";
 
 export type ReviewOption = { key: string; label: string; body: string };
 export type OptionDecision = {
   key: string;
   decision: "approved" | "rejected";
   note?: string;
+  /** Feedback per block (0.38.0): target is a channel or copy-<n>. */
+  feedback?: { target: string; note: string }[];
 };
 export function objects(value: unknown): Record<string, unknown>[] {
   if (typeof value === "string") {
@@ -76,7 +78,16 @@ export function decisionSummary(row: Row, status = val(row, "status")): string {
     .flatMap((decision) => {
       const labels = choices
         .filter((x) => x.decision === decision)
-        .map((x) => options.find((o) => o.key === x.key)?.label || x.key);
+        .map((x) => {
+          const label = options.find((o) => o.key === x.key)?.label || x.key;
+          // Blocks with feedback (0.38.0): "Draft A (2 comments)".
+          const n = Array.isArray(x.feedback)
+            ? x.feedback.filter((f) => f && String(f.note ?? "").trim()).length
+            : 0;
+          return n
+            ? tn(n, "{label} (1 comment)", "{label} ({n} comments)", { label })
+            : label;
+        });
       return labels.length
         ? [
             t("{word}: {options}", {

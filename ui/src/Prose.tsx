@@ -1,5 +1,6 @@
 import {
   Children,
+  useMemo,
   useState,
   type ComponentProps,
   type ReactNode,
@@ -23,6 +24,8 @@ import {
 } from "./references";
 import PagePreview, { isStandaloneDisplay, publicPagePath } from "./PagePreview";
 import { followLink } from "./trail";
+import { parseReviewMarkup, remarkCrewMarkup } from "./reviewMarkup";
+import { MarkupBlocksContext, MarkupSection } from "./ReviewBlocks";
 import { t } from "./i18n";
 
 /** A long title shortened for running text; the tooltip names the record. */
@@ -188,17 +191,40 @@ const proseComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
   // Same-item attachments only; external images never load.
   img: ({ src, alt }) => <ProseImage src={src} alt={alt} />,
   a: ({ children, href }) => <ProseAnchor href={href}>{children}</ProseAnchor>,
+  // Review markup blocks (0.38.0) arrive as sections marked by the plugin;
+  // any other section (GFM footnotes) stays one. No attribute of the markup
+  // reaches the DOM.
+  section: ({ node: _node, children, ...props }) => {
+    const index = (props as Record<string, unknown>)["data-crew-block"];
+    return typeof index === "string" ? (
+      <MarkupSection index={Number(index)}>{children}</MarkupSection>
+    ) : (
+      <section {...props}>{children}</section>
+    );
+  },
 };
 export default function Prose({ children }: { children: string }) {
+  // Review markup (0.38.0): a body without valid blocks renders exactly as
+  // before, without the directive syntax at all.
+  const blocks = useMemo(() => parseReviewMarkup(children).blocks, [children]);
+  const plugins = useMemo(
+    () =>
+      blocks.length
+        ? [remarkGfm, [remarkCrewMarkup, { blocks }] as const, remarkCrewRefs]
+        : proseRemarkPlugins,
+    [blocks],
+  );
   return (
     <div className="crew-prose">
-      <ReactMarkdown
-        remarkPlugins={proseRemarkPlugins}
-        urlTransform={urlTransform}
-        components={proseComponents}
-      >
-        {children}
-      </ReactMarkdown>
+      <MarkupBlocksContext.Provider value={blocks}>
+        <ReactMarkdown
+          remarkPlugins={plugins as typeof proseRemarkPlugins}
+          urlTransform={urlTransform}
+          components={proseComponents}
+        >
+          {children}
+        </ReactMarkdown>
+      </MarkupBlocksContext.Provider>
     </div>
   );
 }

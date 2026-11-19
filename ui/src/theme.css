@@ -14,4 +14,34 @@
   --hover: #25332c06;
   --button-text: #f7faf7;
   --danger: #a13930;
+  /* Icon buttons and checkboxes on review cards (0.38.0): #2f3a2f is 11.5:1
+     on the card (#fbfcf8) and 10.4:1 on the button fill; the checkbox border
+     is 6.9:1. */
+  --icon-ink: #2f3a2f;
+  --icon-fill: #eff0ec;
+  --icon-line: #d0d2ce;
+  --icon-hover: #e2e6dd;
+  --icon-on: #dfe8d8;
+  --check-border: #505c48;
+  --check-fill: #2f4a35;
+  --block-bg: #ffffff;
+  --block-line: #d3d9cf;
+  --block-note: #f2f4ef;
+  --count: #56665a;
+}
+/* The reader is light only today (color-scheme: light). These are the same
+   tokens for a dark theme, at the same contrast (ink 12:1 on the dark card),
+   for when one is switched on with data-theme="dark". */
+:root[data-theme="dark"] {
+  --icon-ink: #e6ece2;
+  --icon-fill: #283029;
+  --icon-line: #4a554b;
+  --icon-hover: #323c33;
+  --icon-on: #3a4a3c;
+  --check-border: #b3c2a9;
+  --check-fill: #9cc79f;
+  --block-bg: #1d231e;
+  --block-line: #3d473e;
+  --block-note: #252c26;
+  --count: #b5c2b2;
 }

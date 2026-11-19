@@ -113,9 +113,44 @@ Save durable findings as notes. Tasks track work and drafts. Request human revie
 with review.request; record a decision only as the Authorization rules allow.
 Attach every image or file the draft is about first and reference it with
 `attachment:ID`; local file paths cannot be reviewed. For alternatives, send
-`options: [{key, label, body}]` (one option per draft/platform) with review.request.
-When delegated a decision, use `option_decisions: [{key, decision, note}]` to
-record each choice explicitly; an approval needs at least one approved option.
+`options: [{key, label, body}]` (one option per draft; one variant per platform
+inside it) with review.request. Options are the decision unit: one option per idea
+or draft. Inside an option body (and the draft), wrap every paste-ready text in
+`:::variant{channel=C}` (C is linkedin, x, email, whatsapp, slack or generic; one
+per channel; optional `limit=N`, defaults linkedin 3000 and x 280) or
+`:::copy{label="…"}` (label up to 80 characters), each closed by a `:::` line.
+Put the exact text only (no "LinkedIn:" headings or quotes); explanations for the
+reviewer go in `:::note`. Leave a blank line after the opener and before the
+closer. No other directives, no nesting, no HTML or JSX. Crew shows each block
+with its own Copy, character count and feedback button. Example:
+
+```
+:::variant{channel=linkedin}
+
+<exact LinkedIn text>
+
+:::
+
+:::note
+
+<why this works; never copied>
+
+:::
+```
+
+review.request returns `warnings: [{code, option, field, line, opener, message}]` for
+invalid markup (unknown directive, invalid attribute, nesting, duplicate channel,
+unclosed); for now it only warns, so withdraw and fix it. A later release will
+refuse it with 400 `review_markup_invalid`. The same blocks work in notes, comments
+and task drafts (Copy and count, no feedback); note.create/update, task.create/update
+and task.comment return the same warnings. Per-block feedback arrives in
+`option_decisions[].feedback: [{target, note}]`, where target is the channel or
+`copy-<n>` (the nth valid copy block), with derived `feedback_text` lines
+(`[linkedin] …`); `note` stays the whole-option feedback. A `review_outcome` wake
+carries only `review_id`: read that review for the decision and its feedback.
+When delegated a decision, use `option_decisions: [{key, decision, note}]` (plus
+`feedback` when the owner gives it per block) to record each choice explicitly; an
+approval needs at least one approved option.
 In a wake run, review.request with your execution proof completes your execution
 (outcome `review_requested`): post comments first and request review last.
 The review.request result has the review's `url` (with a domain; `path` otherwise),

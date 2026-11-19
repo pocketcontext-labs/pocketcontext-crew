@@ -1,3 +1,5 @@
+import { stripReviewMarkup } from "./reviewMarkup";
+
 /**
  * Markdown to readable plain text for compact previews (agent cards, chips).
  *
@@ -8,6 +10,8 @@
  * rendered: the result is plain text for React to escape.
  */
 export function markdownText(markdown: string): string {
+  // Review markup (0.38.0): its marker lines and notes never show.
+  markdown = stripReviewMarkup(markdown);
   const blocks: string[] = [];
   let paragraph: string[] = [];
   const flush = () => {
@@ -142,11 +146,14 @@ function stripInline(text: string, withUrls: boolean): string {
  * Markdown as plain text to paste into a chat app (a review draft's Copy):
  * no Markdown markers, every line break and paragraph kept, list items as
  * "• " (numbers stay), nested items indented, links as their text plus the
- * address in brackets when they go outside Crew, code blocks verbatim. Lines
+ * address in brackets when they go outside Crew, code blocks verbatim, review
+ * markup without its `:::` lines and notes. Lines
  * of a paragraph stay separate lines, because review drafts show their line
  * breaks.
  */
 export function markdownPlainText(markdown: string): string {
+  // Review markup (0.38.0): no marker lines; notes are never copied.
+  markdown = stripReviewMarkup(markdown);
   const out: string[] = [];
   let fence = "";
   for (const raw of markdown.replace(/\r\n?/g, "\n").split("\n")) {

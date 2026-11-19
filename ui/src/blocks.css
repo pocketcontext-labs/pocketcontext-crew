@@ -1,0 +1,175 @@
+/* Shared icon button (0.38.0): --icon-ink glyphs with 2 px strokes on a 44 px
+   circular target with a subtle fill and hairline. */
+:is(.crew-app, .crew-dialog) button.crew-icon-button {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--icon-line);
+  border-radius: 999px;
+  background: var(--icon-fill);
+  color: var(--icon-ink);
+  line-height: 0;
+}
+:is(.crew-app, .crew-dialog) button.crew-icon-button .crew-icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+@media (hover: hover) {
+  :is(.crew-app, .crew-dialog) button.crew-icon-button:hover:not(:disabled) {
+    background: var(--icon-hover);
+  }
+}
+:is(.crew-app, .crew-dialog) button.crew-icon-button[data-note],
+:is(.crew-app, .crew-dialog) button.crew-icon-button[aria-expanded="true"] {
+  background: var(--icon-on);
+}
+/* Read-only feedback buttons keep their place and contrast. */
+:is(.crew-app, .crew-dialog) button.crew-icon-button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+:is(.crew-app, .crew-dialog) button.crew-icon-button:disabled:not([data-note]) {
+  color: color-mix(in srgb, var(--icon-ink) 55%, transparent);
+}
+
+/* Review markup blocks: bordered sub-cards; side by side when there is room
+   (flex-wrap, never a horizontal scroll), stacked on a phone. */
+.crew-blocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0.6rem 0;
+  min-width: 0;
+}
+.crew-blocks > .crew-block {
+  flex: 1 1 260px;
+  margin: 0;
+}
+.crew-block {
+  min-width: 0;
+  margin: 0.6rem 0;
+  padding: 0 10px 10px;
+  border: 1px solid var(--block-line);
+  border-radius: 12px;
+  background: var(--block-bg);
+}
+.crew-pick-body > .crew-block:first-child,
+.crew-pick-body > .crew-prose > :first-child,
+.crew-pick-body > .crew-prose > .crew-blocks:first-child {
+  margin-top: 0;
+}
+.crew-block-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 52px;
+  margin-right: -4px;
+}
+.crew-block-title {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+.crew-block-name {
+  overflow: hidden;
+  color: var(--icon-ink);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.crew-block-count {
+  overflow: hidden;
+  color: var(--count);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.crew-block-count[data-over] {
+  color: var(--danger);
+  font-weight: 600;
+}
+.crew-block-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.crew-block-body > :first-child,
+.crew-block-body > .crew-prose > :first-child {
+  margin-top: 0;
+}
+.crew-block-body > :last-child,
+.crew-block-body > .crew-prose > :last-child {
+  margin-bottom: 0;
+}
+/* Copy in a block: labelled, the same 44 px pill everywhere; the labels share
+   one grid cell (review.css), so "Copied" never changes its width. */
+:is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--icon-line);
+  border-radius: 999px;
+  background: var(--icon-fill);
+  color: var(--icon-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+:is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button .crew-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+@media (hover: hover) {
+  :is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button:hover:not([data-state]) {
+    background: var(--icon-hover);
+  }
+}
+:is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button[data-state="copied"] {
+  border-color: #233a28;
+  background: #233a28;
+  color: #fff;
+}
+:is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button[data-state="failed"] {
+  border-color: #c98b7c;
+  color: #a14f3c;
+}
+.crew-block .crew-pick-note {
+  margin-top: 10px;
+}
+/* A note for the reviewer: secondary grey text, never copied or counted. */
+.crew-block-note {
+  margin: 0.6rem 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--block-note);
+  color: var(--quiet);
+  font-size: 13px;
+}
+.crew-block-note > :last-child {
+  margin-bottom: 0;
+}
+.crew-block-note > :nth-child(2),
+.crew-block-note > :first-child {
+  margin-top: 0;
+}
+.crew-block-note-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}

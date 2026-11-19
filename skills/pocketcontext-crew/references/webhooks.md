@@ -372,6 +372,12 @@ existing or default configuration subscribes to it, and upgrades never add it.
 Turn it on under Wake rules on the reader's Connect page (Grok setup) or with
 `webhook.integration.update`.
 
+A `review_outcome` wake also carries `review_id` (since 0.38.0), and still no
+decision text: read that review (`crew_read` collection `reviews`, `id`) for its
+status, decision note and `option_decisions`, including per-block
+`feedback: [{target, note}]` and the derived `feedback_text` lines
+(`[linkedin] …`).
+
 Only a comment written through the reader route (the owner browser, actor
 `owner:`) can wake. Work-client comments (MCP or CLI, actor `mcp:`) never wake
 anyone. This is loop prevention, not a privilege: it stops bot comment ping-pong. The

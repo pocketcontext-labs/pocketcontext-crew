@@ -90,33 +90,72 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-/* 44 px tap targets (0.37.1); the negative margins keep the card head as
-   tall as the 34 px buttons it had, so nothing moves. */
-.crew-dialog button.crew-pick-comment {
-  flex: none;
-  display: inline-grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  min-height: 0;
-  margin: -5px -5px -5px 0;
+/* The checkbox's tap target is 44 px tall; the padding and negative margins
+   keep the head as tall as before, so the title does not move. */
+.crew-pick-head > .crew-pick-check {
+  min-height: 44px;
+  margin: -11px 0;
+  padding: 11px 0;
+}
+/* Unchecked boxes have a 2 px --check-border (0.38.0), 6.9:1 on the card. */
+.crew-dialog .crew-pick-check input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-block;
   padding: 0;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: #4d6450;
+  border: 2px solid var(--check-border);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
 }
-@media (hover: hover) {
-  .crew-dialog button.crew-pick-comment:hover:not(:disabled) {
-    background: #e3eadc;
-  }
+.crew-dialog .crew-pick-check input[type="checkbox"]:checked {
+  border-color: var(--check-fill);
+  background: var(--check-fill)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E")
+    center / 16px no-repeat;
 }
-.crew-pick[data-selected] button.crew-pick-comment,
-.crew-dialog button.crew-pick-comment[data-note] {
-  background: #dfe8d8;
+.crew-dialog .crew-pick-check input[type="checkbox"]:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.crew-dialog .crew-pick-check input[type="checkbox"]:focus-visible {
+  outline: 2px solid #487d55;
+  outline-offset: 2px;
+}
+/* The option's More sits at the right edge of its head; the copy toast shows
+   beside it without moving anything. */
+.crew-pick-more {
+  position: relative;
+  flex: none;
+  margin: -11px -6px -11px 0;
+}
+.crew-pick-toast {
+  position: absolute;
+  top: 50%;
+  right: 50px;
+  transform: translateY(-50%);
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: #233a28;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+}
+.crew-pick-toast[data-state] {
+  visibility: visible;
+}
+.crew-pick-toast[data-state="failed"] {
+  background: #a14f3c;
 }
 .crew-pick-body {
-  margin: 0.3rem 0 0 32px;
+  margin: 0.5rem 0 0 32px;
+}
+@media (max-width: 680px) {
+  .crew-pick-body {
+    margin-left: 0;
+  }
 }
 .crew-pick-body .crew-prose > :first-child {
   margin-top: 0;
@@ -131,6 +170,9 @@
 }
 .crew-pick-feedback {
   margin: 0.5rem 0 0 32px;
+}
+.crew-pick-feedback.crew-block-feedback {
+  margin: 8px 0 0;
 }
 .crew-pick-tiles {
   list-style: none;
@@ -310,20 +352,4 @@
 .crew-dialog button.crew-draft-copy {
   float: right;
   margin: -14px -14px 8px 12px;
-}
-/* An option's Copy is an icon beside its feedback icon, borderless like
-   it, so the option's label keeps its width on a phone. */
-.crew-dialog button.crew-pick-copy {
-  justify-content: center;
-  width: 44px;
-  margin: -5px 0;
-  padding: 0;
-  border-color: transparent;
-  background: transparent;
-  color: #4d6450;
-}
-@media (hover: hover) {
-  .crew-dialog button.crew-pick-copy:hover:not([data-state]) {
-    background: #e3eadc;
-  }
 }

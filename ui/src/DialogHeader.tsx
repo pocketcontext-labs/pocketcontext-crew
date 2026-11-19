@@ -98,6 +98,38 @@ export function HeadButton({
   );
 }
 
+/**
+ * An icon-only button with the shared high-contrast icon tokens (0.38.0):
+ * --icon-ink glyphs with 2 px strokes on a 44 px circular target, filled
+ * with --icon-fill and outlined with --icon-line. Review option cards and
+ * their blocks use it for Copy, feedback and More.
+ */
+export function IconButton({
+  icon,
+  label,
+  className = "",
+  buttonRef,
+  ...rest
+}: {
+  icon: IconName;
+  label: string;
+  className?: string;
+  buttonRef?: React.Ref<HTMLButtonElement>;
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "children">) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className={`crew-icon-button ${className}`.trim()}
+      aria-label={label}
+      title={label}
+      {...rest}
+    >
+      <Icon name={icon} />
+    </button>
+  );
+}
+
 export type MenuItem = {
   label: string;
   icon: IconName;
@@ -128,10 +160,13 @@ export const menuIsOpenIn = (element: Element | null) =>
 export function MoreMenu({
   items,
   label: labelProp,
+  iconButton = false,
 }: {
   items: MenuItem[];
   /** The button's and the menu's accessible name. */
   label?: string;
+  /** The shared icon button (review option cards) instead of a header one. */
+  iconButton?: boolean;
 }) {
   const label = labelProp ?? t("More actions");
   const [open, setOpen] = useState(false);
@@ -191,16 +226,30 @@ export function MoreMenu({
   };
   return (
     <div className="crew-more-menu" ref={root}>
-      <HeadButton
-        icon="more"
-        label={label}
-        buttonRef={button}
-        disabled={!items.length}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? id : undefined}
-        onClick={() => setOpen((v) => !v)}
-      />
+      {iconButton ? (
+        <IconButton
+          icon="more"
+          label={label}
+          className="crew-icon-more"
+          buttonRef={button}
+          disabled={!items.length}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? id : undefined}
+          onClick={() => setOpen((v) => !v)}
+        />
+      ) : (
+        <HeadButton
+          icon="more"
+          label={label}
+          buttonRef={button}
+          disabled={!items.length}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? id : undefined}
+          onClick={() => setOpen((v) => !v)}
+        />
+      )}
       {open && (
         <div
           id={id}

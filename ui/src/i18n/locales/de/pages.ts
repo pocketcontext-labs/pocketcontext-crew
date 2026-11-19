@@ -483,6 +483,15 @@ const de: Record<string, string> = {
   tomorrow: "morgen",
   "{n} days ago": "vor {n} Tagen",
   "in {n} days": "in {n} Tagen",
+  // Review markup blocks (0.38.0)
+  "Copy all variants": "Alle Varianten kopieren",
+  "Feedback on the whole option": "Feedback zur ganzen Option",
+  "More actions for {label}": "Weitere Aktionen für {label}",
+  "Feedback on {label}:": "Feedback zu {label}:",
+  "too long": "zu lang",
+  "Note for the reviewer": "Hinweis für die Prüfung",
+  "{label} (1 comment)": "{label} (1 Kommentar)",
+  "{label} ({n} comments)": "{label} ({n} Kommentare)",
 };
 
 export default de;
