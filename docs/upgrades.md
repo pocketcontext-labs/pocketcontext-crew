@@ -1,5 +1,19 @@
 # Crew upgrades and rollback
 
+## Crew 0.37.0 to 0.37.1
+
+Reader fixes only: Copy on review drafts, the review option feedback icon, and the
+Shared status switcher. No data migration, protocol, managed block, skill or
+capabilities change.
+
+1. Replace the binary or image (`CREW_REPLACE_VERSION=0.37.0` for the installer)
+   and upgrade paired clients with the server to 0.37.1.
+2. Old `#/shared?show=` links with several statuses still open, on the first of
+   them.
+
+Rollback to 0.37.0 needs no restore. From 0.36.0 or earlier, also read the notes
+below.
+
 ## Crew 0.36.0 to 0.37.0
 
 One data migration (`1802000000_crew_hidden_help.js`) adds `hidden_help` to
