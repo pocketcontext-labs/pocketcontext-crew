@@ -2671,8 +2671,8 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await optA.locator('.crew-block-note').getByText('Note for the reviewer').waitFor();
   assert.ok((await page.evaluate(()=>window.__copied)).every(t=>!t.includes('Kept short')),'the note is never copied');
   // More: Copy all variants (names, no markers, no note); secondary actions only in More.
-  await optA.getByRole('button',{name:'More actions for A · Markup'}).click();
-  await dialog().getByRole('menu',{name:'More actions for A · Markup'}).getByRole('menuitem',{name:'Copy all variants'}).click();
+  await optA.getByRole('button',{name:'Actions for A · Markup'}).click();
+  await dialog().getByRole('menu',{name:'Actions for A · Markup'}).getByRole('menuitem',{name:'Copy all variants'}).click();
   await page.waitForFunction(()=>window.__copied.length===4);
   assert.equal(await copiedLast(),'LinkedIn\nLinkedIn markup text.\n\nX\n'+xText,'Copy all variants');
   await optA.locator('.crew-pick-toast').getByText('Copied').waitFor();

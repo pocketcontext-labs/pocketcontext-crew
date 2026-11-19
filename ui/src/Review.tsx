@@ -251,7 +251,7 @@ function OptionMore({
       <MoreMenu
         iconButton
         items={items}
-        label={t("More actions for {label}", { label: option.label })}
+        label={t("Actions for {label}", { label: option.label })}
       />
       <span
         className="crew-pick-toast"

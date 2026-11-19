@@ -488,7 +488,7 @@ const it: Record<string, string> = {
   // Review markup blocks (0.38.0)
   "Copy all variants": "Copia tutte le varianti",
   "Feedback on the whole option": "Feedback sull'intera opzione",
-  "More actions for {label}": "Altre azioni per {label}",
+  "Actions for {label}": "Azioni per {label}",
   "Feedback on {label}:": "Feedback su {label}:",
   "too long": "troppo lungo",
   "Note for the reviewer": "Nota per chi revisiona",

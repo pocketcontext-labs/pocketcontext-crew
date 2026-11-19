@@ -207,12 +207,12 @@ it("copies every variant from the option's More, without the note", async () => 
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   decideReview(markupReview);
   const a = screen.getByRole("region", { name: "Draft A" });
-  fireEvent.click(within(a).getByRole("button", { name: "More actions for Draft A" }));
+  fireEvent.click(within(a).getByRole("button", { name: "Actions for Draft A" }));
   fireEvent.click(screen.getByRole("menuitem", { name: "Copy all variants" }));
   expect(writeText).toHaveBeenLastCalledWith("LinkedIn\nLinkedIn A\n\nX\nX A");
   await waitFor(() => expect(a.querySelector(".crew-pick-toast")).toHaveTextContent("Copied"));
   // Feedback on the whole option opens the option's own field.
-  fireEvent.click(within(a).getByRole("button", { name: "More actions for Draft A" }));
+  fireEvent.click(within(a).getByRole("button", { name: "Actions for Draft A" }));
   fireEvent.click(screen.getByRole("menuitem", { name: "Feedback on the whole option" }));
   expect(document.activeElement).toBe(within(a).getByPlaceholderText("Feedback on Draft A…"));
 });
