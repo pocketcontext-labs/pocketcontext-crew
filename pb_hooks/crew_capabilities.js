@@ -30,10 +30,28 @@ const optionDecisions = {
       key: str,
       decision: { enum: ["approved", "rejected"] },
       note: { type: "string", maxLength: 20000 },
+      feedback: {
+        type: "array",
+        maxItems: 100,
+        description:
+          "Optional per-block feedback (0.38.0): target is a variant channel or copy-<n> block of this option's frozen body (see review_markup); one entry per target, note 1-20000 characters. An unknown or duplicate target is refused with 400 and nothing is recorded. Reads add feedback_text, one [target] note line per entry.",
+        items: object(
+          {
+            target: str,
+            note: { type: "string", minLength: 1, maxLength: 20000 },
+          },
+          ["target", "note"],
+        ),
+      },
     },
     ["key", "decision"],
   ),
 };
+// Warn-mode markup checks (0.38.0): results of review.request, note.create,
+// note.update, task.create, task.update and task.comment carry warnings when
+// a body's review markup is invalid; nothing is refused.
+const markupWarningsNote =
+  "Invalid review markup (see review_markup) never blocks the write: the result carries warnings [{code, option, field, line, opener, message}].";
 const strings = { type: "array", items: str };
 // Links (0.24.0): task or note IDs on tasks and notes alike.
 const linkIds = {
@@ -272,14 +290,20 @@ function document() {
   op("bucket.create", bucket, ["name"]);
   op("bucket.update", bucket, [], { revision: "record" });
   op("bucket.assign", { agent: nullable }, ["agent"], { revision: "record" });
-  op("note.create", note, ["bucket", "title"]);
-  op("note.update", note, [], { revision: "record" });
+  op("note.create", note, ["bucket", "title"], {
+    warnings: markupWarningsNote,
+  });
+  op("note.update", note, [], {
+    revision: "record",
+    warnings: markupWarningsNote,
+  });
   op("note.restore", { revision_id: str }, ["revision_id"], {
     revision: "record",
   });
-  op("task.create", task, ["title"]);
+  op("task.create", task, ["title"], { warnings: markupWarningsNote });
   op("task.update", task, [], {
     revision: "record",
+    warnings: markupWarningsNote,
     execution_proof:
       "Required only while another execution is live on the task (lease or acknowledgment window not expired); supplied proof is always validated. Exception: an update that only puts the task on hold (readiness on_hold/waiting, optional waiting_reason) needs no proof and cancels the live execution. Setting on hold releases governance.",
   });
@@ -346,6 +370,7 @@ function document() {
   );
   op("task.comment", { body: str }, ["body"], {
     revision: "record",
+    warnings: markupWarningsNote,
     execution_proof:
       "Required only while another execution is live on the task; proof-bearing comments also require idempotency_key. After your own review.request completed your execution, your proof still works for comments while nobody else holds the task.",
     files:
@@ -353,7 +378,7 @@ function document() {
   });
   op("review.request", { options: reviewOptions }, [], {
     description:
-      "Attach every image or file first and reference attachment:ID. Local file paths are refused with draft_references_unattached_files. The result is the review with its derived path (#/approvals/<id>) and url (with a public base URL): link the owner to it to open the Review draft dialog directly. Send alternatives as options with unique keys, labels and bodies (max 20; combined bodies max 200000 characters); they are frozen with the draft.",
+      "Attach every image or file first and reference attachment:ID. Local file paths are refused with draft_references_unattached_files. The result is the review with its derived path (#/approvals/<id>) and url (with a public base URL): link the owner to it to open the Review draft dialog directly. Send alternatives as options with unique keys, labels and bodies (max 20; combined bodies max 200000 characters); they are frozen with the draft. Mark paste-ready texts with review markup (review_markup); invalid markup in the draft or an option body is reported in warnings [{code, option (key, or empty for the draft), field, line, opener, message}] and does not block the request in this release; a later release will refuse it with 400 review_markup_invalid.",
     revision: "task",
     execution_proof:
       "Required only while another execution is live on the task. With your proof, review.request completes your execution (outcome review_requested; result execution_completed) instead of invalidating it: make it your last step. Your fenced comment and execution.complete (outcome completed, no mark_done) afterwards are accepted as no-ops for the execution.",
@@ -376,7 +401,7 @@ function document() {
       execution_proof:
         "Required only while another execution is live on the task",
       description:
-        "Records the owner's review decision. Work clients use it only when the owner explicitly delegates the decision. Approval never performs an external action. With options, approval requires a decision for every key and at least one approved choice; rejected may omit choices (all rejected), changes_requested may omit them or record partial feedback.",
+        "Records the owner's review decision. Work clients use it only when the owner explicitly delegates the decision. Approval never performs an external action. With options, approval requires a decision for every key and at least one approved choice; rejected may omit choices (all rejected), changes_requested may omit them or record partial feedback. Each option decision may carry feedback [{target, note}] on a variant or copy block of that option.",
     },
   );
   op(
@@ -1280,6 +1305,7 @@ function document() {
     search: searchDiscovery(),
     sql: sqlDiscovery(),
     attachments: attachmentsDiscovery(),
+    review_markup: markupDiscovery(),
     operations,
     write_envelope: object(
       {
@@ -1494,6 +1520,32 @@ function searchDiscovery() {
     archived:
       "Same as crew_read: default excludes archived notes, notes in archived buckets and archived tasks; archived:true selects only them.",
     excludes: "Webhook, review, event and revision data are never searched.",
+  };
+}
+// Review markup (0.38.0): a closed vocabulary of container directives read as
+// data, never executed.
+function markupDiscovery() {
+  const markup = require(`${__hooks}/crew_markup.js`);
+  return {
+    syntax:
+      "Container directives only, each fence on its own line with a blank line after the opener and before the closer: :::variant{channel=C limit=N} ... :::, :::copy{label=\"...\"} ... :::, :::note ... :::. The opener may use 3 or more colons; the closer is a line of at least as many colons. No nesting; directives inside fenced code are text.",
+    variant: {
+      channels: markup.CHANNELS.slice(),
+      default_limits: markup.DEFAULT_LIMITS,
+      limit: "optional integer 1-" + markup.LIMIT_MAX,
+      rule: "One variant per channel in each body; put only the exact text to paste inside.",
+    },
+    copy: "label required, plain text of 1-" + markup.LABEL_MAX + " characters",
+    note: "No attributes; context for the reviewer, never copied or counted.",
+    uninterpreted:
+      "Anything else (other names, attributes, labels, nesting, :text and ::leaf directives) is not interpreted and shows as its source text.",
+    targets:
+      "Feedback targets in an option body: the variant's channel, or copy-<n> for the nth valid copy block (1-based); notes are not addressable.",
+    where:
+      "Review drafts and option bodies (with per-block feedback), also note bodies, task descriptions, drafts and comments (Copy only).",
+    errors: markup.CODES.slice(),
+    enforcement:
+      "Warn mode: review.request, note.create/update, task.create/update and task.comment return warnings [{code, option, field, line, opener, message}] (option = option key, empty otherwise; line is 1-based in that text) and never block. A later release will refuse invalid markup in review.request with 400 review_markup_invalid.",
   };
 }
 function attachmentsDiscovery() {

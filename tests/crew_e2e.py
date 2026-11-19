@@ -496,6 +496,29 @@ def scenario(pc):
     assert current('reviews', pending)['status'] == 'withdrawn'
     assert current('reviews', approved)['status'] == 'approved'
 
+    # Review markup (0.38.0): warn mode on writes, per-block feedback on decisions.
+    variants = ':::variant{channel=linkedin}\n\nSynthetic LinkedIn text.\n\n:::\n\n:::variant{channel=x}\n\nSynthetic X text.\n\n:::'
+    marked = write('task.create', {'title': 'Synthetic markup task', 'draft': ':::poll\n\nA or B\n\n:::'})
+    assert [(w['code'], w['option'], w['field'], w['line']) for w in marked['warnings']] == [('review_markup_unknown_directive', '', 'draft', 1)], marked['warnings']
+    markup_comment = write('task.comment', {'body': ':::variant{channel=x}\n\nUnclosed'}, marked)
+    assert [w['code'] for w in markup_comment['warnings']] == ['review_markup_unclosed'], markup_comment
+    markup_bucket = write('bucket.create', {'name': 'Synthetic markup'})
+    markup_note = write('note.create', {'bucket': markup_bucket['id'], 'title': 'Synthetic variants', 'body': variants})
+    assert 'warnings' not in markup_note, markup_note
+    duplicate = write('note.update', {'body': variants + '\n\n' + variants}, markup_note)
+    assert [(w['code'], w['line']) for w in duplicate['warnings']] == [('review_markup_duplicate_channel', 13), ('review_markup_duplicate_channel', 19)], duplicate['warnings']
+    marked = write('task.update', {'draft': 'Synthetic draft with variants'}, current('tasks', marked))
+    markup_review = write('review.request', {'options': [{'key': 'a', 'label': 'A', 'body': variants}, {'key': 'b', 'label': 'B', 'body': ':::variant{channel=myspace}\n\nText\n\n:::'}]}, marked)
+    assert markup_review['status'] == 'pending'
+    assert [(w['code'], w['option'], w['line']) for w in markup_review['warnings']] == [('review_markup_invalid_attribute', 'b', 1)], markup_review['warnings']
+    bad_feedback = {'decision': 'changes_requested', 'option_decisions': [{'key': 'a', 'decision': 'approved', 'feedback': [{'target': 'email', 'note': 'Synthetic'}]}]}
+    write('review.decide', bad_feedback, markup_review, agent=False, expected=400)
+    assert current('reviews', markup_review)['status'] == 'pending'
+    feedback = [{'target': 'linkedin', 'note': 'Drop the last paragraph'}, {'target': 'x', 'note': 'Shorter'}]
+    markup_decided = write('review.decide', {'decision': 'changes_requested', 'option_decisions': [{'key': 'a', 'decision': 'approved', 'note': 'Synthetic', 'feedback': feedback}]}, current('reviews', markup_review), agent=False)
+    markup_entry = current('reviews', markup_decided)['option_decisions'][0]
+    assert markup_entry['feedback'] == feedback and markup_entry['feedback_text'] == '[linkedin] Drop the last paragraph\n[x] Shorter', markup_entry
+
     # Shared-MCP webhook setup is idempotent and redacts credentials. Keep the
     # synthetic receiver disabled: this test must make no outbound requests.
     build = write('agent.ensure', {'name': 'Webhook synthetic', 'brief': 'Test only'}, key='setup-agent')

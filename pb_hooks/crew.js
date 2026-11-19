@@ -5,6 +5,7 @@ const attachments = require(`${__hooks}/crew_attachments.js`);
 const artifacts = require(`${__hooks}/crew_artifacts.js`);
 const session = require(`${__hooks}/crew_session.js`);
 const reviewChoices = require(`${__hooks}/crew_review.js`);
+const markup = require(`${__hooks}/crew_markup.js`);
 const names = [
   ...webhooks.collections,
   ...execution.collections,
@@ -862,6 +863,8 @@ function write(e, isAgent) {
           d.body.length > 20000
         )
           bad("Comment required");
+        // Review markup is checked in warn mode: reported, never refused.
+        const commentWarnings = markup.warnings(d.body, "", "body");
         // Files become attachments of the task (all or nothing), and
         // attachment:new-N in the body becomes their IDs before it is stored.
         const commentFiles = (app2) => {
@@ -925,6 +928,7 @@ function write(e, isAgent) {
           }
           result = withFiles(webhooks.linkedExport(app, "tasks", r), staged);
         }
+        if (commentWarnings.length) result.warnings = commentWarnings;
         return;
       }
       let values = d;
@@ -1309,6 +1313,17 @@ function write(e, isAgent) {
             : r;
       if (staged.length)
         result.attachments = staged.map((a) => a.publicExport());
+      // Review markup in note bodies, task descriptions and drafts is checked
+      // in warn mode: reported in the result, never refused.
+      if (
+        (kind === "note" || kind === "task") &&
+        ["create", "update"].includes(op)
+      ) {
+        const found = (kind === "note" ? ["body"] : ["description", "draft"])
+          .filter((f) => typeof values[f] === "string")
+          .flatMap((f) => markup.warnings(values[f], "", f));
+        if (found.length) result.warnings = found;
+      }
       return;
     }
     if (kind === "review" && op === "request") {
@@ -1320,6 +1335,10 @@ function write(e, isAgent) {
       const oldTask = webhooks.state(app, t);
       if (!t.getString("draft").trim()) bad("Add a draft first");
       reviewChoices.evidence(app, t, t.getString("draft"), choices);
+      const markupWarnings = reviewChoices.markupWarnings(
+        t.getString("draft"),
+        choices,
+      );
       if (pending(app, t.id).length)
         throw new ApiError(409, "A review is already pending", {});
       const r = new Record(app.findCollectionByNameOrId("crew_reviews"));
@@ -1361,6 +1380,7 @@ function write(e, isAgent) {
       if (approvalCleared) changes.approval_cleared = true;
       event(app, t, b.action, b, actor, changes);
       result = webhooks.reviewExport(app, r);
+      if (markupWarnings.length) result.warnings = markupWarnings;
       if (finished)
         result.execution_completed = {
           id: finished.id,
@@ -1419,7 +1439,10 @@ function write(e, isAgent) {
       }
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
-      webhooks.transition(app, t, oldTask, { outcome: r.getString("status") });
+      webhooks.transition(app, t, oldTask, {
+        outcome: r.getString("status"),
+        review: r.id,
+      });
       execution.invalidateStale(app, t, b, actor);
       event(app, r, b.action, b, actor);
       event(app, t, b.action, b, actor, {

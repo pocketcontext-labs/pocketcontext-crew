@@ -834,6 +834,78 @@ picked that option and wants the changes applied to it. Choices are exposed thro
 `crew_read`, the bounded SQL reviews view, review history and task Activity. Closed
 reviews remain immutable. The owner's delegation rules apply to every decision.
 
+### Review markup, warnings and per-block feedback (0.38.0)
+
+Paste-ready texts inside a review draft or option body are marked with a closed
+vocabulary of container directives (remark-directive syntax), read as data and
+never executed:
+
+```
+:::variant{channel=linkedin}
+
+<exact LinkedIn text>
+
+:::
+
+:::copy{label="WhatsApp reply"}
+
+<any paste-ready text>
+
+:::
+
+:::note
+
+<context for the reviewer, never copied>
+
+:::
+```
+
+| Directive | Attributes | Feedback target |
+| --- | --- | --- |
+| `:::variant` | `channel` (required: `linkedin`, `x`, `email`, `whatsapp`, `slack`, `generic`), `limit` (optional integer 1–100,000; defaults linkedin 3,000, x 280, others none) | the channel, for example `linkedin` |
+| `:::copy` | `label` (required, plain text of 1–80 characters) | `copy-<n>`, the nth valid copy block of the body (1-based) |
+| `:::note` | none | not addressable |
+
+The opener may use three or more colons; the closer is a line of at least as many
+colons. There is no nesting, one variant per channel per body, and directives inside
+fenced code are text. Anything else (other names, other attributes, `[labels]`,
+`:text` and `::leaf` directives) is not interpreted and shows as its source text.
+The server parser is `pb_hooks/crew_markup.js`; it and the reader share the fixtures
+in `tests/fixtures/review_markup.json`. The same blocks render in note bodies, task
+descriptions, drafts and comments (Copy only, no feedback).
+
+Invalid markup is reported in warn mode: it never blocks a write in 0.38.0, and a
+later release will refuse it in `review.request` with 400 `review_markup_invalid`.
+
+| Operation | Checked text | Result |
+| --- | --- | --- |
+| `review.request` | the task draft and every option body | `warnings` |
+| `note.create`, `note.update` | `body` | `warnings` |
+| `task.create`, `task.update` | `description`, `draft` (when sent) | `warnings` |
+| `task.comment` | `body` | `warnings` |
+
+`warnings` is present only when something is wrong:
+`[{code, option, field, line, opener, message}]`, where `option` is the option key
+(empty for the draft and outside reviews), `field` names the checked text (`draft`,
+`body` or `description`), `line` is 1-based in that text and `opener` is the
+offending opener line. Codes: `review_markup_unknown_directive`,
+`review_markup_invalid_attribute`, `review_markup_nesting` (the inner opener),
+`review_markup_duplicate_channel` (the second variant), `review_markup_unclosed`.
+Warnings are not stored.
+
+Each `option_decisions` entry may carry `feedback: [{target, note}]` (reader decide
+and delegated `review.decide`). The target must be a variant channel or `copy-<n>` of
+that option's frozen body as the server parses it, at most once per option, with a
+note of 1–20,000 characters; an unknown or duplicate target, an empty or too long
+note or any other field returns 400 and records nothing. An empty `feedback` array is
+dropped. `note` keeps the whole-option feedback. Review reads (`crew_read reviews`
+and the review in write results) add a derived `feedback_text` to entries with
+feedback: one `[target] note` line per entry, newline separated, for clients that
+show text. The bounded SQL reviews view returns the stored JSON (feedback without
+`feedback_text`). Webhook wakes stay reference-only: a review outcome wake adds
+`review_id` (the decided review), never notes or feedback; the assignee reads the
+review through Crew. Reviews and clients without feedback are unchanged.
+
 Archive is reversible and audited. Archived buckets block note writes without
 cascading note changes; restoring a bucket preserves individually archived notes.
 Historical links stay valid. Agent deactivation blocks new assignments but is

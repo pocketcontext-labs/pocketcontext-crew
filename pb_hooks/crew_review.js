@@ -1,5 +1,6 @@
 // Review evidence and choices are validated before an immutable snapshot is made.
 const attachments = require(`${__hooks}/crew_attachments.js`);
+const markup = require(`${__hooks}/crew_markup.js`);
 function bad(message) {
   throw new BadRequestError(message);
 }
@@ -65,6 +66,51 @@ function evidence(app, task, draft, choices) {
     attachments.checkRefs(app, "task", task, { draft: text }, "create");
   }
 }
+// Warn mode (0.38.0): invalid review markup in the draft or an option body is
+// reported, never refused. A later release answers 400 review_markup_invalid.
+function markupWarnings(draft, choices) {
+  return markup
+    .warnings(draft, "", "draft")
+    .concat(...choices.map((o) => markup.warnings(o.body, o.key, "body")));
+}
+// Per-block feedback (0.38.0): [{target, note}] where target is a variant
+// channel or copy-<n> of the option's frozen body, as the server parses it.
+function feedback(choice, input) {
+  if (input === undefined) return [];
+  if (!Array.isArray(input) || input.length > 100)
+    bad("Option feedback must be an array of at most 100 entries");
+  const valid = markup.targets(choice.body);
+  const seen = new Set();
+  return input.map((f) => {
+    if (
+      !f ||
+      typeof f !== "object" ||
+      Array.isArray(f) ||
+      Object.keys(f).some((k) => !["target", "note"].includes(k))
+    )
+      bad("Invalid option feedback fields (target, note)");
+    if (
+      typeof f.target !== "string" ||
+      !valid.includes(f.target) ||
+      seen.has(f.target)
+    )
+      bad(
+        "Unknown or duplicate feedback target (" +
+          choice.key +
+          "." +
+          String(f.target) +
+          "); targets are the option's variant channels and copy-<n> blocks",
+      );
+    if (typeof f.note !== "string" || !f.note.trim() || f.note.length > 20000)
+      bad("Feedback note must be text of 1 to 20000 characters");
+    seen.add(f.target);
+    return { target: f.target, note: f.note };
+  });
+}
+// The read-only text form of per-block feedback: one "[target] note" line each.
+function feedbackText(entries) {
+  return (entries || []).map((f) => "[" + f.target + "] " + f.note).join("\n");
+}
 function decisions(choices, input, overall) {
   if (input === undefined) {
     if (choices.length && overall === "approved")
@@ -78,7 +124,7 @@ function decisions(choices, input, overall) {
   const keys = new Set(choices.map((o) => o.key));
   const seen = new Set();
   const values = input.map((d) => {
-    only(d, ["key", "decision", "note"]);
+    only(d, ["key", "decision", "note", "feedback"]);
     if (!keys.has(d.key) || seen.has(d.key))
       bad("Unknown or duplicate option decision key");
     if (!["approved", "rejected"].includes(d.decision))
@@ -89,7 +135,13 @@ function decisions(choices, input, overall) {
     )
       bad("Option note must be text of at most 20000 characters");
     seen.add(d.key);
-    return { key: d.key, decision: d.decision, note: d.note || "" };
+    const out = { key: d.key, decision: d.decision, note: d.note || "" };
+    const notes = feedback(
+      choices.find((o) => o.key === d.key),
+      d.feedback,
+    );
+    if (notes.length) out.feedback = notes;
+    return out;
   });
   if (
     choices.length &&
@@ -108,4 +160,11 @@ function decisions(choices, input, overall) {
     bad("Reject requires every option to be rejected");
   return values;
 }
-module.exports = { options, evidence, decisions, localFilePaths };
+module.exports = {
+  options,
+  evidence,
+  decisions,
+  localFilePaths,
+  markupWarnings,
+  feedbackText,
+};

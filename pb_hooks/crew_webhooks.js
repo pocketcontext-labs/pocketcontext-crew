@@ -86,8 +86,25 @@ function withLinks(app, collection, out, title) {
   return out;
 }
 // A review's reader link opens its Review draft dialog: #/approvals/<id>.
+// Per-block feedback (0.38.0) also reads as feedback_text, one
+// "[target] note" line per entry, derived here and never stored.
 function reviewExport(app, record) {
   const out = record.publicExport();
+  const decisions = json(record, "option_decisions", null);
+  if (
+    Array.isArray(decisions) &&
+    decisions.some((d) => d && Array.isArray(d.feedback) && d.feedback.length)
+  )
+    out.option_decisions = decisions.map((d) =>
+      d && Array.isArray(d.feedback) && d.feedback.length
+        ? {
+            ...d,
+            feedback_text: require(`${__hooks}/crew_review.js`).feedbackText(
+              d.feedback,
+            ),
+          }
+        : d,
+    );
   out.path = "#/approvals/" + record.id;
   const base = $pocketcontext.webhookBaseURL(app);
   if (base) out.url = base + "/" + out.path;
@@ -399,7 +416,18 @@ function transition(app, t, old, options) {
     app.save(t);
     cancel(app, "task={:task}", { task: t.id });
   }
-  if (notify) wake(app, t, causes, options.outcome);
+  // A review outcome wake names the decided review (a reference, never its
+  // notes or feedback): the assignee reads it through Crew.
+  if (notify)
+    wake(
+      app,
+      t,
+      causes,
+      options.outcome,
+      options.outcome && options.review
+        ? { review_id: options.review }
+        : undefined,
+    );
 }
 // Advances the wake generation without a wake: queued deliveries for the old
 // generation are cancelled and any deferred comment wake is dropped.
