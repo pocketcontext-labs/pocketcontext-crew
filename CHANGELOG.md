@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.37.2](docs/releases/0.37.2.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.37.2) · Shared shows its statuses as the Tasks chip row on a desktop (the phone keeps the switcher); chip hover only on devices that hover.
 - **[0.37.1](docs/releases/0.37.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.37.1) · Review drafts get Copy (plain text) on the draft and each option, and an option's feedback icon focuses its field; Shared filters by one status at a time with the Tasks switcher, defaulting to Live.
 - **[0.37.0](docs/releases/0.37.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.37.0) · "Don't show this again" on every help panel and Show all help again in Settings; record ids in inline code become links. One data migration.
 - **[0.36.0](docs/releases/0.36.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.36.0) · The reader in English, Deutsch or Italiano; a Settings page (language, what tapping an agent does, account, about); Home agent rows run their default action and coding agents carry a Coding agent tag. One data migration.

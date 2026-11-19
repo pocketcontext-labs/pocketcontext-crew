@@ -1,5 +1,16 @@
 # Crew upgrades and rollback
 
+## Crew 0.37.1 to 0.37.2
+
+Reader fix only: Shared shows its statuses as a chip row on a desktop. No data
+migration, protocol, managed block, skill or capabilities change.
+
+1. Replace the binary or image (`CREW_REPLACE_VERSION=0.37.1` for the installer)
+   and upgrade paired clients with the server to 0.37.2.
+
+Rollback to 0.37.1 needs no restore. From 0.37.0 or earlier, also read the notes
+below.
+
 ## Crew 0.37.0 to 0.37.1
 
 Reader fixes only: Copy on review drafts, the review option feedback icon, and the
