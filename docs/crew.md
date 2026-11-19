@@ -671,9 +671,10 @@ and later edits stay private.
   home-screen app, which has no Back, it opens an in-app preview sheet with
   Back, the title and More: Copy link, Open in Safari, Share), published time, expiry, views, last opened and
   sources, plus Publish, Update content (same link), Set expiry, Edit draft,
-  Revoke, Discard, Archive and Restore. One status shows at a time (0.37.1)
-  in the Tasks and Notes switcher, on every width: Drafts, Live, Revoked
-  (revoked or expired) and Archived, Live by default (else the first status
+  Revoke, Discard, Archive and Restore. One status shows at a time (0.37.1):
+  Drafts, Live, Revoked (revoked or expired) and Archived, as one row of
+  chips with counts like the Tasks agent row on a desktop (0.37.2) and in the
+  Tasks and Notes switcher on a phone, Live by default (else the first status
   with artifacts; a focused artifact opens on its own status). The choice stays
   in the address (`#/shared?show=...`; an older address with several opens the
   first in that order). It reads links from

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +20,26 @@ vi.mock("./crewApi", async (original) => ({
   },
 }));
 import Shared, { PUBLISH_RISK, artifactUrl, expiryFrom } from "./Shared";
+import { phoneQuery } from "./usePhone";
+
+/** A phone-width window (usePhone): the reader shows its phone chrome. */
+const asPhone = () =>
+  vi.stubGlobal(
+    "matchMedia",
+    (query: string) =>
+      ({
+        matches: query === phoneQuery,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList,
+  );
+/** A desktop window's status chip (0.37.2: the Tasks agent row's chips). */
+const chip = (name: string) =>
+  within(screen.getByRole("group", { name: "Filter by status" })).getByRole(
+    "button",
+    { name },
+  );
 
 /** Active rows for the default read, none for the archived read. */
 const only =
@@ -215,8 +236,8 @@ describe("Shared", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     // The page under the sheet never unmounted: filters and scroll stay.
     expect(
-      screen.getByRole("button", { name: /^Status Live, 1 shared page, 2 of 4/ }),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: "Live, 1 shared page" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(location.hash).toBe("#/shared?show=live");
     expect(document.documentElement.scrollTop).toBe(240);
     expect(read).toHaveBeenCalledTimes(2); // no reload
@@ -248,7 +269,75 @@ describe("Shared", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("shows one status at a time, Live by default, with fixed arrows and the choice in the address", async () => {
+  it("shows every status as one chip row on a desktop, one chosen at a time (0.37.2)", async () => {
+    history.replaceState(null, "", "#/shared");
+    const art = (n: number, state: string, extra = {}) => ({
+      id: `art00000000005${n}`,
+      revision: 1,
+      title: `Page ${n}`,
+      status: state === "published" ? "published" : "draft",
+      state,
+      published_revision: state === "published" ? 1 : 0,
+      ...extra,
+    });
+    read.mockImplementation((_c: string, f?: { archived?: boolean }) =>
+      Promise.resolve(
+        f?.archived
+          ? [art(4, "archived", { archived: true })]
+          : [art(1, "draft"), art(2, "published"), art(3, "published")],
+      ),
+    );
+    artifactLinks.mockResolvedValue([]);
+    render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
+    const row = await screen.findByRole("group", { name: "Filter by status" });
+    // The Tasks agent row's classes: one chip per status with its count.
+    expect(row).toHaveClass("crew-agent-row");
+    const chips = Array.from(row.querySelectorAll("button"));
+    expect(chips.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Drafts, 1 shared page",
+      "Live, 2 shared pages",
+      "Revoked, 0 shared pages",
+      "Archived, 1 shared page",
+    ]);
+    expect(chips.map((b) => b.textContent)).toEqual([
+      "Drafts1",
+      "Live2",
+      "Revoked0",
+      "Archived1",
+    ]);
+    chips.forEach((b) => expect(b).toHaveClass("crew-agent-chip"));
+    expect(row.querySelectorAll(".crew-agent-chip-count")).toHaveLength(4);
+    expect(row.querySelector(".crew-avatar")).toBeNull();
+    expect(chips[2]).toHaveAttribute("title", "Revoked or expired");
+    // No phone switcher on a desktop.
+    expect(screen.queryByRole("button", { name: "Previous status" })).toBeNull();
+    // Live by default: exactly one chip pressed, the list matches.
+    const pressed = () =>
+      chips.filter((b) => b.getAttribute("aria-pressed") === "true");
+    expect(pressed()).toEqual([chips[1]]);
+    expect(screen.getByText("Page 2")).toBeInTheDocument();
+    expect(screen.queryByText("Page 1")).toBeNull();
+    expect(location.hash).toBe("#/shared");
+    // A click picks that status alone and keeps it in the address.
+    fireEvent.click(chips[3]);
+    expect(pressed()).toEqual([chips[3]]);
+    expect(screen.getByText("Page 4")).toBeInTheDocument();
+    expect(screen.queryByText("Page 2")).toBeNull();
+    expect(location.hash).toBe("#/shared?show=archived");
+    // Clicking the chosen chip keeps it chosen (Shared has no All).
+    fireEvent.click(chips[3]);
+    expect(pressed()).toEqual([chips[3]]);
+    expect(screen.getByText("Page 4")).toBeInTheDocument();
+    expect(location.hash).toBe("#/shared?show=archived");
+    // An empty status says so.
+    fireEvent.click(chips[2]);
+    expect(pressed()).toEqual([chips[2]]);
+    expect(screen.getByText("No artifacts with this status.")).toBeInTheDocument();
+    history.replaceState(null, "", "#/");
+  });
+
+  it("shows one status at a time on a phone, Live by default, with fixed arrows and the choice in the address", async () => {
+    asPhone();
     history.replaceState(null, "", "#/shared");
     const art = (n: number, state: string, extra = {}) => ({
       id: `art00000000001${n}`,
@@ -306,6 +395,7 @@ describe("Shared", () => {
     // An empty status says so.
     fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
     expect(screen.getByText("No artifacts with this status.")).toBeInTheDocument();
+    vi.unstubAllGlobals();
     history.replaceState(null, "", "#/");
   });
 
@@ -330,9 +420,7 @@ describe("Shared", () => {
     artifactLinks.mockResolvedValue([]);
     render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
     expect(await screen.findByText("Old page")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^Status Archived, 1 shared page, 4 of 4/ }),
-    ).toBeInTheDocument();
+    expect(chip("Archived, 1 shared page")).toHaveAttribute("aria-pressed", "true");
     expect(location.hash).toBe("#/shared");
     history.replaceState(null, "", "#/");
   });
@@ -367,8 +455,8 @@ describe("Shared", () => {
     artifactLinks.mockResolvedValue([]);
     render(<Shared notes={[]} tasks={[]} Prose={Prose} />);
     expect(
-      await screen.findByRole("button", { name: /^Status Revoked, 0 shared pages, 3 of 4/ }),
-    ).toHaveAttribute("title", "Revoked or expired");
+      await screen.findByRole("button", { name: "Revoked, 0 shared pages" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Old page")).toBeNull();
     expect(screen.queryByText("Live page")).toBeNull();
     history.replaceState(null, "", "#/");
@@ -415,7 +503,7 @@ describe("Shared", () => {
         expect.objectContaining({ id: "art000000000009" }),
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Revoked, / }));
     expect(await screen.findByText("Gone")).toBeInTheDocument();
     expect(location.hash).toBe("#/shared?show=ended");
     expect(screen.queryByRole("link", { name: /in a new tab/ })).toBeNull();
@@ -599,17 +687,11 @@ describe("Shared", () => {
       <Shared notes={[]} tasks={[]} focus="art000000000004" Prose={Prose} />,
     );
     await screen.findByRole("group", { name: "shared page 1 of 1" });
-    expect(
-      screen.getByRole("button", { name: /^Status Archived, 1 shared page/ }),
-    ).toBeInTheDocument();
+    expect(chip("Archived, 1 shared page")).toHaveAttribute("aria-pressed", "true");
     // A chosen status that hides it shows it at its place in the list.
-    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
-    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
-    fireEvent.click(screen.getByRole("button", { name: "Previous status" }));
+    fireEvent.click(chip("Drafts, 3 shared pages"));
     await screen.findByRole("group", { name: "shared page 4 of 4" });
-    expect(
-      screen.getByRole("button", { name: /^Status Drafts, 3 shared pages/ }),
-    ).toBeInTheDocument();
+    expect(chip("Drafts, 3 shared pages")).toHaveAttribute("aria-pressed", "true");
     history.replaceState(null, "", "#/");
   });
 

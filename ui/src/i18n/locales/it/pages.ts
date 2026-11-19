@@ -100,6 +100,8 @@ const it: Record<string, string> = {
   "{n} shared pages": "{n} pagine condivise",
   "Revoked or expired": "Revocate o scadute",
   "shared|Revoked": "Revocate",
+  "{name}, {n} shared page": "{name}, {n} pagina condivisa",
+  "{name}, {n} shared pages": "{name}, {n} pagine condivise",
   "No artifacts with this status.": "Nessuna pagina con questo stato.",
   Columns: "Colonne",
   "More actions": "Altre azioni",

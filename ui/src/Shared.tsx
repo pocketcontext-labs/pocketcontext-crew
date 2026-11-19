@@ -16,6 +16,7 @@ import {
   type SharedFilter,
 } from "./itemLink";
 import ColumnSwitcher from "./ColumnSwitcher";
+import { usePhone } from "./usePhone";
 import AutoTextarea from "./AutoTextarea";
 import PagePreview, { isStandaloneDisplay } from "./PagePreview";
 import { ListNavCluster } from "./DialogHeader";
@@ -124,6 +125,7 @@ export function expiryFrom(
 }
 
 export default function Shared({ notes, tasks, focus, Prose }: Props) {
+  const phone = usePhone();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [links, setLinks] = useState<Record<string, ArtifactLink>>({});
   const [error, setError] = useState("");
@@ -213,7 +215,38 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
   return (
     <section className="crew-shared" aria-label={t("Shared artifacts")}>
-      {rows.length > 0 && (
+      {rows.length > 0 && !phone && (
+        // A desktop shows every status at once, like the Tasks agent row
+        // (same chips); one is chosen at a time and Shared has no "All".
+        <div
+          className="crew-agent-row crew-shared-status-row"
+          role="group"
+          aria-label={t("Filter by status")}
+        >
+          {sharedFilters.map((f) => (
+            <button
+              key={f}
+              type="button"
+              className="crew-agent-chip"
+              aria-pressed={filter === f}
+              aria-label={tn(
+                counts[f],
+                "{name}, {n} shared page",
+                "{name}, {n} shared pages",
+                { name: filterLabel(f) },
+              )}
+              title={f === "ended" ? t("Revoked or expired") : undefined}
+              onClick={() => select(f)}
+            >
+              {filterLabel(f)}
+              <span className="crew-agent-chip-count" aria-hidden="true">
+                {counts[f]}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {rows.length > 0 && phone && (
         <ColumnSwitcher
           className="crew-shared-switcher"
           item="status"

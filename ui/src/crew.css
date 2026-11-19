@@ -3997,9 +3997,12 @@ a.crew-logo:hover .product-brand span {
   color: #6b7964;
   font-variant-numeric: tabular-nums;
 }
-.crew-app .crew-agent-chip:hover {
-  background: #f1f4ec;
-  border-color: #7f9670;
+/* Hover only where a pointer hovers, so a tapped chip never stays lit. */
+@media (hover: hover) {
+  .crew-app .crew-agent-chip:hover {
+    background: #f1f4ec;
+    border-color: #7f9670;
+  }
 }
 .crew-app .crew-agent-chip[aria-pressed="true"] {
   background: #e3eee0;

@@ -195,11 +195,11 @@
     padding: 14px;
   }
 }
-/* One status at a time (0.37.1): the Tasks and Notes phone switcher, on every
-   width. On a phone chrome.css places it (sticky, flush under the top bar);
-   the control styles below repeat its phone look so a desktop window gets the
-   same row. Nothing looks selected from hover, focus or a tap: only the
-   label and the picker's aria-current row say which status is shown. */
+/* One status at a time (0.37.1). A desktop window shows every status as the
+   Tasks agent row's chips (0.37.2, below); a phone shows the Tasks and Notes
+   switcher, which chrome.css places (sticky, flush under the top bar). Nothing
+   looks selected from hover, focus or a tap: only the label and the picker's
+   aria-current row say which status is shown. */
 .crew-shared-switcher .crew-switch-step {
   display: grid;
   place-items: center;
@@ -278,21 +278,10 @@
   font-size: 13px;
   font-weight: 400;
 }
-/* A desktop window: in the page flow where the chips were, kept compact. */
-.crew-app:not(.crew-phone) .crew-shared-switcher {
-  position: relative;
-  top: auto;
-  max-width: 420px;
-  height: 56px;
+/* The Tasks agent row's margin pulls it under the board toolbar; Shared has
+   no toolbar, so the chips sit in the page flow above the list. */
+.crew-shared .crew-shared-status-row {
   margin: 0 0 16px;
-  padding: 0 5px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: white;
-}
-.crew-app:not(.crew-phone) .crew-shared-switcher .crew-switch-picker {
-  left: 0;
-  right: 0;
 }
 .crew-shared-none {
   color: var(--quiet);

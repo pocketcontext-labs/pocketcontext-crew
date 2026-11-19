@@ -2433,7 +2433,11 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  await page.addInitScript(()=>{if(sessionStorage.getItem('crew-standalone')!=='1')return;const mm=window.matchMedia.bind(window);window.matchMedia=q=>q==='(display-mode: standalone)'?{matches:true,media:q,onchange:null,addEventListener(){},removeEventListener(){},addListener(){},removeListener(){},dispatchEvent(){return false;}}:mm(q);});
  await page.evaluate(()=>sessionStorage.setItem('crew-standalone','1'));
  for(const width of [390,1024]){await page.setViewportSize({width,height:844});await page.reload();await artifactCard.getByText('0 views').waitFor();
-  const statusName=page.getByRole('button',{name:/^Status /});await statusName.click();await page.getByRole('group',{name:'Show artifacts'}).getByRole('button',{name:/^Archived/}).click();await page.waitForFunction(()=>/^Status Archived,/.test(document.querySelector('.crew-shared-switcher .crew-switch-name')?.getAttribute('aria-label')||''));const hash=await page.evaluate(()=>location.hash);
+  // A phone picks a status in the switcher, a desktop with the status chips (0.37.2).
+  const statusName=page.getByRole('button',{name:/^Status /}),archivedChip=page.getByRole('group',{name:'Filter by status'}).getByRole('button',{name:/^Archived, /});
+  if(width===390){await statusName.click();await page.getByRole('group',{name:'Show artifacts'}).getByRole('button',{name:/^Archived/}).click();await page.waitForFunction(()=>/^Status Archived,/.test(document.querySelector('.crew-shared-switcher .crew-switch-name')?.getAttribute('aria-label')||''));}
+  else{await archivedChip.click();await page.waitForFunction(()=>document.querySelector('.crew-shared-status-row [aria-pressed="true"]')?.getAttribute('aria-label')?.startsWith('Archived, '));}
+  const hash=await page.evaluate(()=>location.hash);
   const openLink=artifactCard.getByRole('link',{name:/^Open .* in a new tab$/});await openLink.scrollIntoViewIfNeeded();await page.evaluate(()=>window.scrollBy(0,40));const scrollY=await page.evaluate(()=>scrollY);
   const tabs=page.context().pages().length;await openLink.click();
   const sheet=page.getByRole('dialog',{name:'Shared page: Synthetic partner pricing'});await sheet.waitFor();
@@ -2446,9 +2450,9 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await snapView('crew-page-preview-menu-'+width);await page.keyboard.press('Escape');
   await snapView('crew-page-preview-'+width);
   await sheet.getByRole('button',{name:'Back to Shared'}).click();await sheet.waitFor({state:'hidden'});
-  assert.equal(await page.evaluate(()=>location.hash),hash,'the filter stays in the address');assert.match(await statusName.getAttribute('aria-label'),/^Status Archived,/,'the status stays chosen');
+  assert.equal(await page.evaluate(()=>location.hash),hash,'the filter stays in the address');if(width===390) assert.match(await statusName.getAttribute('aria-label'),/^Status Archived,/,'the status stays chosen');else assert.equal(await archivedChip.getAttribute('aria-pressed'),'true','the status chip stays chosen');
   assert.equal(await page.evaluate(()=>scrollY),scrollY,'the scroll position stays');
-  await page.getByRole('button',{name:'Previous status'}).click();await page.getByRole('button',{name:'Previous status'}).click();}
+  if(width===390){await page.getByRole('button',{name:'Previous status'}).click();await page.getByRole('button',{name:'Previous status'}).click();}else await page.getByRole('group',{name:'Filter by status'}).getByRole('button',{name:/^Revoked, /}).click();}
  await page.evaluate(()=>sessionStorage.removeItem('crew-standalone'));await page.setViewportSize(size);await page.reload();await artifactCard.getByText('0 views').waitFor();}
  const visitor=await browser.newContext({viewport:{width:390,height:844}});
  const visitorPage=await visitor.newPage();
@@ -2512,23 +2516,53 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  await page.goto(base+'/#/shared');await page.reload();
  const archivedCard=page.locator('.crew-artifact').filter({hasText:'Synthetic partner pricing, revised'});
  {const statusName=page.locator('.crew-shared-switcher .crew-switch-name');
- await statusName.waitFor();await page.waitForLoadState('networkidle');
+ // A desktop window (0.37.2): every status as the Tasks agent row's chips, one chosen at a time.
+ const chipRow=page.getByRole('group',{name:'Filter by status'});
+ const chipState=()=>chipRow.locator('button').evaluateAll(b=>b.map(x=>({label:x.getAttribute('aria-label'),pressed:x.getAttribute('aria-pressed'),count:Number(x.querySelector('.crew-agent-chip-count')?.textContent)})));
+ await page.setViewportSize({width:1440,height:1000});await chipRow.waitFor();await page.waitForLoadState('networkidle');
  // The default: Live, else the first status with artifacts (Drafts, Live, Revoked, Archived), else Live.
- {await statusName.click();const counts=await page.getByRole('group',{name:'Show artifacts'}).locator('.crew-switch-pick-count').evaluateAll(c=>c.map(x=>Number(x.textContent)));await page.keyboard.press('Escape');
+ {const chips=await chipState();const counts=chips.map(c=>c.count);
   const names=['Drafts','Live','Revoked','Archived'];const expected=counts[1]?'Live':names[counts.findIndex(n=>n>0)]??'Live';
-  assert.match(await statusName.getAttribute('aria-label'),new RegExp(`^Status ${expected},`),'the default status from '+counts);
+  assert.deepEqual(chips.filter(c=>c.pressed==='true').map(c=>c.label.split(',')[0]),[expected],'the default status from '+counts);
   assert.equal(await page.evaluate(()=>location.hash),'#/shared','the default keeps the plain address');
   if(expected!=='Archived') assert.equal(await archivedCard.count(),0,'archived artifacts are hidden by default');}
- assert.equal(await page.locator('.crew-shared-filters, .crew-shared [aria-pressed]').count(),0,'no toggle chips');
- for(const width of [390,1440]){
-  await page.setViewportSize({width,height:width===390?844:1000});await page.goto(base+'/#/shared?show=drafts');await page.reload();
+ assert.equal(await page.locator('.crew-shared-filters, .crew-shared-switcher').count(),0,'no old toggle chips and no switcher on a desktop');
+ for(const width of [1440,1024]){
+  await page.setViewportSize({width,height:1000});await page.goto(base+'/#/shared?show=drafts');await page.reload();
+  await chipRow.waitFor();await page.waitForLoadState('networkidle');
+  const chips=chipRow.locator('button.crew-agent-chip');
+  assert.equal(await chips.count(),4,'four status chips at '+width);
+  assert.equal(await chipRow.evaluate(e=>e.classList.contains('crew-agent-row')),true,'the Tasks agent row classes');
+  assert.equal(await chipRow.locator('.crew-avatar').count(),0,'no avatars');
+  const tops=await chips.evaluateAll(b=>b.map(x=>Math.round(x.getBoundingClientRect().top)));
+  assert.equal(new Set(tops).size,1,'one row of chips at '+width+': '+tops);
+  assert.deepEqual((await chipState()).map(c=>c.label.split(',')[0]),['Drafts','Live','Revoked','Archived']);
+  assert.equal(await chips.nth(2).getAttribute('title'),'Revoked or expired');
+  for(const [i,name] of [[0,'drafts'],[1,'live'],[2,'ended'],[3,'archived']]){
+   await chips.nth(i).click();
+   await page.waitForFunction(i=>document.querySelectorAll('.crew-shared-status-row button')[i]?.getAttribute('aria-pressed')==='true',i);
+   const state=await chipState();
+   assert.deepEqual(state.map(c=>c.pressed),['false','false','false','false'].map((x,j)=>j===i?'true':x),'exactly one chip chosen');
+   assert.equal(await page.evaluate(()=>location.hash),'#/shared?show='+name);
+   // The chosen chip's count matches the list.
+   await page.waitForFunction(n=>document.querySelectorAll('.crew-shared-list > li').length===n,state[i].count);}
+  // Clicking the chosen chip keeps it chosen (Shared has no All).
+  await chips.nth(3).click();
+  assert.equal(await chips.nth(3).getAttribute('aria-pressed'),'true','the chosen chip stays chosen');
+  assert.equal(await page.evaluate(()=>location.hash),'#/shared?show=archived');
+  await archivedCard.first().waitFor();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Shared fits at '+width);
+  await snap('crew-shared-status-'+width);}
+ // A phone keeps the 0.37.1 switcher: one status at a time with fixed arrows and a picker.
+ for(const width of [390]){
+  await page.setViewportSize({width,height:844});await page.goto(base+'/#/shared?show=drafts');await page.reload();
   const sw=page.locator('.crew-shared-switcher');await sw.waitFor();
+  assert.equal(await page.locator('.crew-shared-status-row').count(),0,'no status chips on a phone');
   const box=await sw.boundingBox();
   assert.ok(box.height<=57,'the switcher is one row at '+width+': '+box.height);
   const title=await page.locator('.crew-shared-switcher .crew-switch-title').boundingBox();
   assert.ok(title.height<=24,'the label stays on one line at '+width+': '+title.height);
-  if(width===390) assert.ok(box.width>=389,'flush across the phone: '+box.width);
-  else assert.ok(box.width<=420,'compact on a desktop: '+box.width);
+  assert.ok(box.width>=389,'flush across the phone: '+box.width);
   assert.match(await statusName.getAttribute('aria-label'),/^Status Drafts, .*, 1 of 4\. Choose a status$/);
   const previous=page.getByRole('button',{name:'Previous status'}),next=page.getByRole('button',{name:'Next status'});
   assert.equal(await previous.isDisabled(),true,'previous is disabled at the first status');

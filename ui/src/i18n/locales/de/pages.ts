@@ -99,6 +99,8 @@ const de: Record<string, string> = {
   "{n} shared pages": "{n} geteilte Seiten",
   "Revoked or expired": "Widerrufen oder abgelaufen",
   "shared|Revoked": "Widerrufen",
+  "{name}, {n} shared page": "{name}, {n} geteilte Seite",
+  "{name}, {n} shared pages": "{name}, {n} geteilte Seiten",
   "No artifacts with this status.": "Keine Seiten mit diesem Status.",
   Columns: "Spalten",
   "More actions": "Weitere Aktionen",
