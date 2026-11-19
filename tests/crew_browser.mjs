@@ -2619,10 +2619,141 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await snapView(`listnav-shared-${width}`);
  }}
  await visitor.close();
+ // Review markup (0.38.0): :::variant, :::copy and :::note render as blocks with
+ // their own Copy, count and feedback button; the controls sit at the same place
+ // in an option with variants and in one without, copied or not, deciding or
+ // decided; per-block feedback is saved to option_decisions[].feedback; notes,
+ // comments and task drafts show the same blocks with Copy and count only.
+ {
+  const api=async body=>(await page.request.post(base+'/api/crew/read',{headers:{Authorization:syntheticOwnerAuth},data:body})).json();
+  const xText='Markup '+'x'.repeat(283);
+  const variantsBody=':::variant{channel=linkedin}\n\nLinkedIn markup text.\n\n:::\n\n:::variant{channel=x}\n\n'+xText+'\n\n:::\n\n:::note\n\nKept short for the reviewer.\n\n:::';
+  const markupTask=await boardWrite('task.create',{title:'Markup review variants',draft:'Pick the markup option.'});
+  await boardWrite('review.request',{options:[{key:'a',label:'A · Markup',body:variantsBody},{key:'b',label:'B · Plain',body:'Plain option text.'}]},markupTask.id,markupTask.revision);
+  const markupReview=(await api({collection:'reviews',parent:markupTask.id})).items[0];
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(base+'/#/approvals/'+markupReview.id);await page.reload();
+  await dialog().locator('.crew-draft-snapshot').waitFor();
+  const stubClipboard=()=>page.evaluate(()=>{window.__copied=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{window.__copied.push(t);}}});});
+  await stubClipboard();
+  const copiedLast=()=>page.evaluate(()=>window.__copied.at(-1));
+  const optA=dialog().getByRole('region',{name:'A · Markup',exact:true}),optB=dialog().getByRole('region',{name:'B · Plain',exact:true});
+  assert.equal(await optA.locator('.crew-block').count(),2,'two variants, two blocks');
+  assert.equal(await optB.locator('.crew-block').count(),1,'a body without markup is one block');
+  assert.equal(await optA.innerText().then(t=>t.includes(':::')),false,'no markers show');
+  // Copy and comment of the first block, relative to the option card.
+  const controls=opt=>opt.evaluate(card=>{const c=card.getBoundingClientRect(),block=card.querySelector('.crew-block');
+   return ['.crew-block-copy','.crew-pick-comment'].map(s=>{const b=block.querySelector(s).getBoundingClientRect();return [b.x-c.x,b.y-c.y,b.width,b.height,c.right-b.right].map(Math.round);});});
+  const atA=await controls(optA),atB=await controls(optB);
+  assert.deepEqual(atA,atB,'Copy and comment sit at the same place with and without variants');
+  assert.ok(atA.every(r=>r[2]>=44&&r[3]>=44),'Copy and comment are 44 px: '+JSON.stringify(atA));
+  // Each block copies only its own text; "Copied" keeps the button in place.
+  const copyLinkedIn=optA.getByRole('button',{name:'Copy A · Markup · LinkedIn',exact:true});
+  const before=await copyLinkedIn.boundingBox();
+  await copyLinkedIn.click();
+  await page.waitForFunction(()=>window.__copied.length===1);
+  assert.equal(await copiedLast(),'LinkedIn markup text.','LinkedIn Copy copies only its text');
+  assert.equal(await copyLinkedIn.getAttribute('data-state'),'copied');
+  assert.deepEqual(await copyLinkedIn.boundingBox(),before,'Copied keeps the button in place');
+  assert.deepEqual(await controls(optA),atA,'copied and not copied: the same place');
+  await optA.getByRole('button',{name:'Copy A · Markup · X',exact:true}).click();
+  await page.waitForFunction(()=>window.__copied.length===2);
+  assert.equal(await copiedLast(),xText,'X Copy copies only its text');
+  await optB.getByRole('button',{name:'Copy B · Plain',exact:true}).click();
+  await page.waitForFunction(()=>window.__copied.length===3);
+  assert.equal(await copiedLast(),'Plain option text.');
+  // Counts: tabular figures; past the limit in the danger colour with "too long".
+  const counts=await optA.locator('.crew-block-count').evaluateAll(xs=>xs.map(x=>[x.textContent,getComputedStyle(x).color,getComputedStyle(x).fontVariantNumeric,x.hasAttribute('data-over')]));
+  assert.deepEqual(counts.map(c=>c[0]),['21 / 3,000','290 / 280 · too long']);
+  assert.ok(counts.every(c=>c[2].includes('tabular-nums')),'counts use tabular figures');
+  assert.ok(!counts[0][3]&&counts[1][3]&&counts[1][1]==='rgb(161, 57, 48)'&&counts[0][1]!==counts[1][1],'over the limit reads in the danger colour: '+JSON.stringify(counts));
+  // The note is shown, labelled, and never copied.
+  await optA.locator('.crew-block-note').getByText('Note for the reviewer').waitFor();
+  assert.ok((await page.evaluate(()=>window.__copied)).every(t=>!t.includes('Kept short')),'the note is never copied');
+  // More: Copy all variants (names, no markers, no note); secondary actions only in More.
+  await optA.getByRole('button',{name:'More actions for A · Markup'}).click();
+  await dialog().getByRole('menu',{name:'More actions for A · Markup'}).getByRole('menuitem',{name:'Copy all variants'}).click();
+  await page.waitForFunction(()=>window.__copied.length===4);
+  assert.equal(await copiedLast(),'LinkedIn\nLinkedIn markup text.\n\nX\n'+xText,'Copy all variants');
+  await optA.locator('.crew-pick-toast').getByText('Copied').waitFor();
+  // Every control on an option card is a 44 px target, and nothing scrolls sideways.
+  {const small=await dialog().locator('.crew-pick').evaluateAll(cards=>cards.flatMap(card=>[...card.querySelectorAll('button,.crew-pick-head > label')].map(e=>{const b=e.getBoundingClientRect();return [e.getAttribute('aria-label')||e.textContent.trim().slice(0,20),Math.round(b.width),Math.round(b.height)];}).filter(([,w,h])=>w<44||h<44)));
+  assert.deepEqual(small,[],'44 px targets at 390');}
+  assert.equal(await dialog().evaluate(d=>{const b=d.querySelector('.crew-dialog-body')||d;return b.scrollWidth<=b.clientWidth+1;}),true,'no horizontal scroll at 390');
+  await optA.scrollIntoViewIfNeeded();
+  await snapView('crew-review-markup-390');
+  // Per-block feedback: the comment opens and focuses a field under its block; the header stays put.
+  const commentLinkedIn=optA.getByRole('button',{name:'Feedback on A · Markup · LinkedIn',exact:true});
+  await commentLinkedIn.click();
+  const blockField=optA.getByRole('textbox',{name:'Feedback on A · Markup · LinkedIn',exact:true});
+  assert.equal(await blockField.evaluate(e=>e===document.activeElement),true,'the comment focuses its block field');
+  assert.equal(await blockField.getAttribute('placeholder'),'Feedback on A · Markup · LinkedIn…');
+  assert.equal(await blockField.evaluate(e=>!!e.closest('.crew-block[data-target="linkedin"]')),true,'the field opens under its block');
+  assert.deepEqual(await controls(optA),atA,'opening the field moves no control');
+  await blockField.fill('Shorter, please');
+  await optA.getByRole('checkbox',{name:'A · Markup',exact:true}).check();
+  await snapView('crew-review-markup-feedback-390');
+  await dialog().getByRole('button',{name:'Approve 1 selected'}).click();await saved();
+  const decidedMarkup=(await api({collection:'reviews',parent:markupTask.id})).items[0];
+  assert.deepEqual(decidedMarkup.option_decisions,[{key:'a',decision:'approved',note:'',feedback:[{target:'linkedin',note:'Shorter, please'}],feedback_text:'[linkedin] Shorter, please'},{key:'b',decision:'rejected',note:''}],'per-block feedback is saved as structured feedback');
+  // Read-only: the feedback under its block, the summary counts it, controls in the same place.
+  await page.goto(base+'/#/approvals/'+markupReview.id);await page.reload();
+  await dialog().locator('.crew-draft-snapshot').waitFor();
+  const roA=dialog().getByRole('region',{name:'A · Markup',exact:true});
+  assert.equal(await roA.locator('.crew-block[data-target="linkedin"] .crew-block-feedback').innerText(),'Feedback on A · Markup · LinkedIn: Shorter, please');
+  await dialog().getByText('Approved: A · Markup (1 comment); Not selected: B · Plain',{exact:true}).waitFor();
+  {const ro=await controls(roA);assert.ok(ro.every((r,i)=>r.every((v,j)=>Math.abs(v-atA[i][j])<=1)),'read-only controls match the deciding view: '+JSON.stringify([ro,atA]));}
+  await roA.scrollIntoViewIfNeeded();
+  await snapView('crew-review-markup-decided-390');
+  // A wide dialog sets the variants side by side, wrapping, with no horizontal scroll.
+  await page.setViewportSize({width:1440,height:1000});
+  await roA.scrollIntoViewIfNeeded();
+  {const tops=await roA.locator('.crew-block').evaluateAll(bs=>bs.map(b=>Math.round(b.getBoundingClientRect().top)));
+  assert.equal(tops[0],tops[1],'variants sit side by side on a desktop: '+tops);
+  assert.equal(await dialog().evaluate(d=>{const b=d.querySelector('.crew-dialog-body')||d;return b.scrollWidth<=b.clientWidth+1;}),true,'no horizontal scroll on a desktop');}
+  await snapView('crew-review-markup-decided-1440');
+  await close();await dialog().waitFor({state:'hidden'});
+  // A note, a comment and a task draft with variants: Copy and count, no feedback, Copy at the right edge.
+  await page.setViewportSize({width:390,height:844});
+  const markupBucket=(await api({collection:'buckets'})).items[0];
+  const markupNote=await boardWrite('note.create',{bucket:markupBucket.id,title:'Markup launch variants',body:'Ready to paste, re:Crew at 10:30.\n\n'+variantsBody});
+  await page.goto(base+'/#/notes/'+markupNote.id);await page.reload();
+  await stubClipboard();
+  const noteBlocks=dialog().locator('.crew-block');
+  await noteBlocks.first().waitFor();
+  assert.equal(await noteBlocks.count(),2,'a note shows two blocks');
+  assert.equal(await dialog().locator('.crew-pick-comment').count(),0,'no feedback outside reviews');
+  assert.equal(await dialog().getByText('Ready to paste, re:Crew at 10:30.',{exact:true}).count(),1,'prose around the blocks reads as before');
+  {const r=await noteBlocks.evaluateAll(bs=>bs.map(b=>{const c=b.querySelector('.crew-block-copy').getBoundingClientRect(),k=b.getBoundingClientRect();return [Math.round(k.right-c.right),Math.round(c.width),Math.round(c.height)];}));
+  assert.ok(r.every(x=>x[0]===r[0][0]&&x[0]<=12&&x[2]>=44),'Copy sits at the right edge, 44 px: '+JSON.stringify(r));}
+  await dialog().getByRole('button',{name:'Copy X',exact:true}).click();
+  await page.waitForFunction(()=>window.__copied.length===1);
+  assert.equal(await copiedLast(),xText,'a note block copies only its text');
+  await snapView('crew-note-markup-390');
+  await close();await dialog().waitFor({state:'hidden'});
+  const draftTask=await boardWrite('task.create',{title:'Markup draft variants',draft:variantsBody});
+  await boardWrite('task.comment',{body:':::copy{label="WhatsApp reply"}\n\nThanks, see you at 10:30!\n\n:::'},draftTask.id,draftTask.revision);
+  await page.goto(base+'/#/tasks/'+draftTask.id);await page.reload();
+  await dialog().locator('.crew-block[data-target="linkedin"]').waitFor();
+  assert.equal(await dialog().locator('.crew-pick-comment').count(),0,'no feedback on a task draft');
+  assert.equal(await dialog().locator('.crew-block').count(),2,'the draft shows its two variants');
+  await snapView('crew-task-draft-markup-390');
+  await page.goto(base+'/#/tasks/'+draftTask.id+'?tab=comments');await page.reload();await stubClipboard();
+  const commentBlock=dialog().locator('.crew-block[data-target="copy-1"]');
+  await commentBlock.waitFor();
+  assert.equal(await commentBlock.locator('.crew-block-name').innerText(),'WhatsApp reply');
+  assert.equal(await commentBlock.locator('.crew-block-count').innerText(),'25');
+  await commentBlock.getByRole('button',{name:'Copy WhatsApp reply',exact:true}).click();
+  await page.waitForFunction(()=>window.__copied.length===1);
+  assert.equal(await copiedLast(),'Thanks, see you at 10:30!','a comment block copies only its text');
+  await snapView('crew-comment-markup-390');
+  await close();await dialog().waitFor({state:'hidden'});
+  await page.setViewportSize({width:1440,height:1000});
+ }
  await page.goto(base+'/#/settings');
  await page.getByRole('region',{name:'Account'}).getByRole('button',{name:'Sign out',exact:true}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
  assert.equal(await page.locator('.crew-app').count(),0);
  assert.deepEqual(errors,[],'Browser errors');assert.deepEqual(outside,[],'Unexpected external requests');
- console.log('Crew browser workflow passed: sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, session instructions dialog 1024/1280/1440 with hand edit, history restore, restore default and copied prompts, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, file previews (log, CSV, PDF with inert JavaScript, audio, video) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, artifacts (share, publish, signed-out phone view 390, snapshot, replace, expiry, update draft, revoke, archive, filters), logout.');
+ console.log('Crew browser workflow passed: review markup blocks (Copy, counts, per-block feedback, notes and comments), sign-in, starter crew, notes/history/restore/archive, task/review/manual-completion, Notes and Tasks filters, old-address redirects, task link over the board, session instructions dialog 1024/1280/1440 with hand edit, history restore, restore default and copied prompts, global search 1440/390, responsive 1440/390/320, attachments (pasted screenshots, inline images, lightbox, card thumbnail) 1440/390, file previews (log, CSV, PDF with inert JavaScript, audio, video) 1440/390, one-time upload link from a signed-out phone 390/320, file settings, artifacts (share, publish, signed-out phone view 390, snapshot, replace, expiry, update draft, revoke, archive, filters), logout.');
 }catch(error){ console.error('Synthetic browser page:', (await page.locator('body').innerText()).slice(0,2500)); await snap('crew-failure'); throw error; }finally{await browser.close();}
