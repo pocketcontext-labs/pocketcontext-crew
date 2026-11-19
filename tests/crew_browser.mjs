@@ -194,7 +194,7 @@ try {
  assert.equal(await reviewCard.evaluate(e=>e===document.activeElement&&e.matches(':focus-visible')&&getComputedStyle(e).outlineStyle!=='none'),true,'the Approvals card shows keyboard focus');
  await snapView('crew-approvals-focus-1440');await page.keyboard.press('Enter');
  await dialog().locator('.crew-draft-snapshot').waitFor();await headerOneRow('review 1440');
- assert.equal(await dialog().locator('.crew-draft-snapshot').innerText(),'A synthetic draft for the owner to publish manually.');
+ assert.equal(await dialog().locator('.crew-draft-snapshot .crew-prose').innerText(),'A synthetic draft for the owner to publish manually.');
  // Review links (0.28.0): the card puts #/approvals/<id> in the address, closing
  // replaces it with #/approvals, and the link opens the dialog on a phone.
  const reviewLink=new URL(page.url()).hash;
@@ -2094,10 +2094,10 @@ try {
  assert.equal(hash(),at,'a swipe does not step');
  await touch.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch.detach();}
  // Next through the whole list: one history entry each, "x of y", fixed chrome.
- const seen=[hash()];const titles=[await dialog().locator('.crew-draft-snapshot').innerText()];
+ const seen=[hash()];const titles=[await dialog().locator('.crew-draft-snapshot .crew-prose').innerText()];
  for(let i=1;i<n;i++){
   await next.click();await page.waitForFunction(h=>location.hash!==h,seen.at(-1));
-  seen.push(hash());titles.push(await dialog().locator('.crew-draft-snapshot').innerText());
+  seen.push(hash());titles.push(await dialog().locator('.crew-draft-snapshot .crew-prose').innerText());
   assert.equal(await position(),`${i+1} of ${n}`);
   assert.deepEqual(await chrome(),chromeAt,'back/forward, the list capsule, More and close stay put');
  }
@@ -2145,6 +2145,49 @@ try {
  await dialog().getByRole('button',{name:'Feedback on B · One human, many agents'}).click();
  await dialog().getByRole('textbox',{name:'Feedback on B · One human, many agents'}).waitFor();
  assert.equal(await dialog().getByRole('checkbox',{name:'B · One human, many agents'}).isChecked(),false,'feedback opens on an unselected option');
+ // 0.37.1: the feedback icon focuses its option's field in the tap and keeps
+ // it on screen above the footer; the icons are 44 px and don't move.
+ {
+  const fieldB=dialog().getByRole('textbox',{name:'Feedback on B · One human, many agents'});
+  assert.equal(await fieldB.evaluate(e=>e===document.activeElement),true,'the feedback icon focuses its option field');
+  await page.waitForTimeout(400);
+  const fb=await fieldB.boundingBox(),barTop=(await dialog().locator('.crew-review-bar').boundingBox()).y;
+  assert.ok(fb.y>=0&&fb.y+fb.height<=barTop,'the focused feedback field is visible above the footer: '+JSON.stringify([fb,barTop]));
+  const iconA=dialog().getByRole('button',{name:'Feedback on A · Out of tokens'});
+  const before=await iconA.boundingBox();
+  assert.ok(before.width>=44&&before.height>=44,'feedback icons are 44 px tap targets: '+JSON.stringify(before));
+  await iconA.click();
+  assert.equal(await dialog().getByRole('textbox',{name:'Feedback on A · Out of tokens'}).evaluate(e=>e===document.activeElement),true,'another icon moves the focus to its own field');
+  assert.equal(await dialog().getByRole('textbox',{name:'Feedback on A · Out of tokens'}).count(),1,'one field per option');
+  assert.equal(await dialog().getByRole('textbox',{name:'Feedback on A · Out of tokens'}).inputValue(),'Shorten the hook','the open field keeps its feedback');
+ }
+ // Copy (0.37.1): the draft and each text option copy plain text; "Copied"
+ // keeps the button's size and the text never runs under it.
+ {
+  await page.evaluate(()=>{window.__copied=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{window.__copied.push(t);}}});});
+  const draftCopy=dialog().getByRole('button',{name:'Copy draft text',exact:true});
+  await draftCopy.scrollIntoViewIfNeeded();
+  const b0=await draftCopy.boundingBox();
+  assert.ok(b0.height>=44,'Copy is a 44 px tap target: '+b0.height);
+  const overlap=await dialog().locator('.crew-draft-snapshot').evaluate(box=>{const btn=box.querySelector('.crew-draft-copy').getBoundingClientRect();const w=document.createTreeWalker(box.querySelector('.crew-prose'),NodeFilter.SHOW_TEXT),rects=[];for(let n=w.nextNode();n;n=w.nextNode()){const r=document.createRange();r.selectNodeContents(n);rects.push(...r.getClientRects());}return rects.some(t=>t.width>0&&t.left<btn.right&&t.right>btn.left&&t.top<btn.bottom&&t.bottom>btn.top);});
+  assert.equal(overlap,false,'the draft text never runs under Copy');
+  await draftCopy.click();
+  await page.waitForFunction(()=>window.__copied.length===1);
+  assert.equal(await page.evaluate(()=>window.__copied[0]),'Short first draft. Pick any text.','Copy copies the draft as plain text');
+  assert.equal(await draftCopy.locator('[data-shown]').innerText(),'Copied');
+  const b1=await draftCopy.boundingBox();
+  assert.deepEqual([b1.x,b1.width,b1.height].map(Math.round),[b0.x,b0.width,b0.height].map(Math.round),'Copied keeps the button in place');
+  const optionCopy=dialog().getByRole('button',{name:'Copy A · Out of tokens',exact:true});
+  assert.ok((await optionCopy.boundingBox()).height>=44,'option Copy is 44 px');
+  await optionCopy.click();
+  await page.waitForFunction(()=>window.__copied.length===2);
+  assert.equal(await page.evaluate(()=>window.__copied[1]),'LinkedIn and X','an option copies its own text');
+  assert.equal(await dialog().getByRole('button',{name:'Copy Shared notebook'}).count(),0,'image options have no Copy');
+  await draftCopy.scrollIntoViewIfNeeded();
+  await snapView('crew-review-copy-390');
+  await page.waitForTimeout(2100);
+  assert.equal(await draftCopy.locator('[data-shown]').innerText(),'Copy','the label returns after 2 s');
+ }
  const tile=dialog().getByRole('listitem',{name:'Shared notebook'});
  await tile.getByRole('checkbox',{name:'Shared notebook'}).check();
  await dialog().getByRole('textbox',{name:'Feedback on Shared notebook'}).fill('Crop the edges');

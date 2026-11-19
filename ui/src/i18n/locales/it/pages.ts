@@ -227,6 +227,12 @@ const it: Record<string, string> = {
   "Snapshot {id}": "Snapshot {id}",
   "This is the exact submitted draft. Approval does not send, post or publish it.":
     "Questa è esattamente la bozza inviata. L'approvazione non la invia, non la pubblica e non la posta.",
+  "Copy draft text": "Copia il testo della bozza",
+  "Copy {label}": "Copia {label}",
+  "Not copied": "Non copiato",
+  "Copy text": "Copia testo",
+  "Text copied": "Testo copiato",
+  "Couldn't copy the text.": "Impossibile copiare il testo.",
   "Link copied": "Link copiato",
   "Could not copy automatically. Copy it from here:": "Copia automatica non riuscita. Copialo da qui:",
   "Your decision note:": "La tua nota sulla decisione:",

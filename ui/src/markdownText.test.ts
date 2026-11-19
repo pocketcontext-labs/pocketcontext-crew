@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { markdownSummary, markdownText } from "./markdownText";
+import {
+  markdownPlainText,
+  markdownSummary,
+  markdownText,
+} from "./markdownText";
 
 describe("markdownText", () => {
   it("puts a heading on its own line without its markers", () => {
@@ -55,5 +59,59 @@ describe("markdownText", () => {
   it("summarizes the first block", () => {
     expect(markdownSummary("## Role\nWrites posts.")).toBe("Role");
     expect(markdownSummary("")).toBe("");
+  });
+});
+
+describe("markdownPlainText", () => {
+  it("pastes cleanly: no markers, paragraphs and line breaks kept", () => {
+    const draft = [
+      "# Launch post",
+      "",
+      "**We shipped** _Crew_ 0.37 with `copy`.",
+      "Second line of the same paragraph.  ",
+      "",
+      "- one with [the docs](https://example.com/docs)",
+      "  - nested ~~old~~ item",
+      "1. first",
+      "- [x] done",
+      "",
+      "> A quote with a [task](#/tasks/abc) and <https://example.com>",
+      "",
+      "",
+      "![Hero](attachment:abcdefabcdef123)",
+      "```",
+      "  keep *this* as is",
+      "```",
+      "snake_case_name and 2 * 3 * 4 stay \\*literal\\*",
+    ].join("\n");
+    expect(markdownPlainText(draft)).toBe(
+      [
+        "Launch post",
+        "",
+        "We shipped Crew 0.37 with copy.",
+        "Second line of the same paragraph.",
+        "",
+        "• one with the docs (https://example.com/docs)",
+        "  • nested old item",
+        "1. first",
+        "• ☑ done",
+        "",
+        "A quote with a task and https://example.com",
+        "",
+        "Hero",
+        "  keep *this* as is",
+        "snake_case_name and 2 * 3 * 4 stay *literal*",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps plain text as it is and shows mail links once", () => {
+    expect(markdownPlainText("Hook\nProblem\nSolution")).toBe(
+      "Hook\nProblem\nSolution",
+    );
+    expect(
+      markdownPlainText("[a@b.co](mailto:a@b.co) or [me](mailto:me@x.io)"),
+    ).toBe("a@b.co or me (me@x.io)");
+    expect(markdownPlainText("")).toBe("");
   });
 });

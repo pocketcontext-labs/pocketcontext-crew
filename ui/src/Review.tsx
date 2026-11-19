@@ -7,6 +7,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   AttachmentsProvider,
   FileTile,
@@ -30,6 +31,7 @@ import {
 import { Icon, useDialogMenu, type MenuItem } from "./DialogHeader";
 import { reviewHash } from "./itemLink";
 import { copyText } from "./projectAgents";
+import { markdownPlainText } from "./markdownText";
 import "./review.css";
 import AutoTextarea, { AutoTextField } from "./AutoTextarea";
 import PlainRefs from "./PlainRefs";
@@ -59,6 +61,67 @@ function reviewStatusText(status: string): string {
     default:
       return status.replaceAll("_", " ");
   }
+}
+
+/**
+ * Copy (0.37.1): copies Markdown as plain text that pastes cleanly into a
+ * chat app, inside the tap (phones refuse a clipboard write after an await).
+ * The label turns to "Copied" for 2 s, or "Not copied" on failure; every
+ * label sits in the same grid cell, so the button never changes width.
+ */
+export function CopyButton({
+  text,
+  label,
+  className = "",
+  iconOnly = false,
+}: {
+  /** An icon button (option cards): a check when copied, a cross on failure. */
+  iconOnly?: boolean;
+  /** The Markdown to copy. */
+  text: string;
+  /** The accessible name, such as "Copy Draft A". */
+  label: string;
+  className?: string;
+}) {
+  const [state, setState] = useState<"" | "copied" | "failed">("");
+  useEffect(() => {
+    if (!state) return;
+    const timer = window.setTimeout(() => setState(""), 2000);
+    return () => window.clearTimeout(timer);
+  }, [state]);
+  const labels = { "": t("Copy"), copied: t("Copied"), failed: t("Not copied") };
+  return (
+    <>
+      <button
+        type="button"
+        className={`crew-copy-button ${className}`.trim()}
+        data-state={state || undefined}
+        aria-label={label}
+        title={label}
+        onClick={() =>
+          void copyText(markdownPlainText(text)).then((ok) =>
+            setState(ok ? "copied" : "failed"),
+          )
+        }
+      >
+        <Icon
+          name={state === "copied" ? "check" : state === "failed" ? "close" : "copy"}
+        />
+        {!iconOnly && (
+          <span className="crew-copy-labels" aria-hidden="true">
+            {(["", "copied", "failed"] as const).map((key) => (
+              <span key={key} data-shown={key === state || undefined}>
+                {labels[key]}
+              </span>
+            ))}
+          </span>
+        )}
+      </button>
+      <span className="crew-visually-hidden" aria-live="polite">
+        {state ? labels[state] : ""}
+      </span>
+    </>
+  );
 }
 
 type ProseComponent = ComponentType<{ children: string }>;
@@ -97,6 +160,12 @@ export function ReviewContent({
           </div>
         )}
         <div className="crew-draft-snapshot">
+          {/* Floats at the top right, so the text wraps around it. */}
+          <CopyButton
+            className="crew-draft-copy"
+            text={val(row, "draft")}
+            label={t("Copy draft text")}
+          />
           <Prose>{val(row, "draft")}</Prose>
         </div>
         {children}
@@ -146,11 +215,15 @@ const decidedPick = (choices: OptionDecision[], key: string): OptionPick => {
 function FeedbackButton({
   label,
   hasNote,
+  expanded,
+  onPointerDown,
   onClick,
 }: {
   label: string;
   hasNote: boolean;
-  onClick?: () => void;
+  expanded?: boolean;
+  onPointerDown?: () => void;
+  onClick?: (keyboard: boolean) => void;
 }) {
   return (
     <button
@@ -158,9 +231,11 @@ function FeedbackButton({
       className="crew-pick-comment"
       data-note={hasNote || undefined}
       aria-label={t("Feedback on {label}", { label })}
+      aria-expanded={onClick ? expanded : undefined}
       title={t("Feedback on {label}", { label })}
       disabled={!onClick}
-      onClick={onClick}
+      onPointerDown={onPointerDown}
+      onClick={onClick && ((e) => onClick(e.detail === 0))}
     >
       <Icon name="note" />
     </button>
@@ -184,11 +259,14 @@ export function ReviewChoices({
   row: Row;
   Prose: ProseComponent;
   picks?: OptionPicks;
-  onChange?: (key: string, pick: OptionPick, focus?: boolean) => void;
+  onChange?: (key: string, pick: OptionPick) => void;
 }) {
   const options = reviewOptions(row);
   const choices = optionDecisions(row);
   const prefix = useId();
+  // Whether the option's field had focus when its feedback icon was pressed
+  // (the press itself moves focus away).
+  const hadFocus = useRef(false);
   if (!options.length) return null;
   const editable = !!onChange;
   const pickFor = (key: string) =>
@@ -213,11 +291,35 @@ export function ReviewChoices({
         <strong>{t("Feedback:")}</strong> {pick.note}
       </p>
     );
-  const toggleFeedback = (option: ReviewOption, pick: OptionPick) => {
+  const fieldOf = (option: ReviewOption) =>
+    document.getElementById(`${prefix}-${option.key}`) as HTMLTextAreaElement | null;
+  const pressFeedback = (option: ReviewOption) => {
+    const field = fieldOf(option);
+    hadFocus.current = !!field && document.activeElement === field;
+  };
+  // The icon opens the option's field and focuses it (0.37.1). The focus
+  // happens inside the tap, after a synchronous render, because iOS opens
+  // the keyboard only for a focus made by the gesture itself. Pressing it
+  // again on the focused empty field (or from the keyboard on an open empty
+  // one) closes the field.
+  const toggleFeedback = (
+    option: ReviewOption,
+    pick: OptionPick,
+    keyboard: boolean,
+  ) => {
     if (!onChange) return;
-    // An empty open field closes; otherwise open it (or keep it) and focus it.
-    if (shown(pick) && !pick.note) onChange(option.key, { ...pick, open: false });
-    else onChange(option.key, { ...pick, open: true }, true);
+    const focused = hadFocus.current;
+    hadFocus.current = false;
+    if (shown(pick) && !pick.note && (focused || keyboard)) {
+      onChange(option.key, { ...pick, open: false });
+      return;
+    }
+    flushSync(() => onChange(option.key, { ...pick, open: true }));
+    const field = fieldOf(option);
+    if (!field) return;
+    field.focus({ preventScroll: true });
+    // Above the sticky footer and, on a phone, the keyboard.
+    field.scrollIntoView?.({ block: "center" });
   };
   const check = (option: ReviewOption, pick: OptionPick) =>
     // Nothing recorded yet (a pending review in history): no checkboxes.
@@ -266,11 +368,21 @@ export function ReviewChoices({
               >
                 <div className="crew-pick-head">
                   {check(option, pick)}
+                  <CopyButton
+                    className="crew-pick-copy"
+                    iconOnly
+                    text={option.body}
+                    label={t("Copy {label}", { label: option.label })}
+                  />
                   {editable && (
                     <FeedbackButton
                       label={option.label}
                       hasNote={!!pick.note}
-                      onClick={() => toggleFeedback(option, pick)}
+                      expanded={shown(pick)}
+                      onPointerDown={() => pressFeedback(option)}
+                      onClick={(keyboard) =>
+                        toggleFeedback(option, pick, keyboard)
+                      }
                     />
                   )}
                 </div>
@@ -303,8 +415,12 @@ export function ReviewChoices({
                     <FeedbackButton
                       label={option.label}
                       hasNote={!!pick.note}
+                      expanded={shown(pick)}
+                      onPointerDown={() => pressFeedback(option)}
                       onClick={
-                        editable ? () => toggleFeedback(option, pick) : undefined
+                        editable
+                          ? (keyboard) => toggleFeedback(option, pick, keyboard)
+                          : undefined
                       }
                     />
                   )}
@@ -385,27 +501,16 @@ export function ReviewDecision({
   // Uncontrolled: typing a note re-renders nothing, so the draft and its
   // images stay put.
   const note = useRef<HTMLTextAreaElement>(null);
-  const body = useRef<HTMLDivElement>(null);
   const [picks, setPicks] = useState<OptionPicks>({});
-  const [copied, setCopied] = useState<"" | "copied" | "failed">("");
+  // What the More menu copied last: the link or the draft text.
+  const [copied, setCopied] = useState<
+    "" | "copied" | "failed" | "text" | "text-failed"
+  >("");
   const options = reviewOptions(row),
     pending = val(row, "status") === "pending";
   const selected = options.filter((o) => picks[o.key]?.selected).length;
-  const setPick = (key: string, pick: OptionPick, focus = false) => {
+  const setPick = (key: string, pick: OptionPick) =>
     setPicks((all) => ({ ...all, [key]: pick }));
-    if (focus)
-      requestAnimationFrame(() =>
-        body.current
-          ?.querySelector<HTMLInputElement>(
-            `input[aria-label="${CSS.escape(
-              t("Feedback on {label}", {
-                label: options.find((o) => o.key === key)?.label || "",
-              }),
-            )}"]`,
-          )
-          ?.focus(),
-      );
-  };
   // Every option is recorded: checked as approved, unchecked as rejected,
   // each with its feedback (empty stays empty). Reject rejects them all.
   const submit = (decision: string) => {
@@ -430,7 +535,7 @@ export function ReviewDecision({
   const submitRef = useRef(submit);
   submitRef.current = submit;
   useEffect(() => {
-    if (copied !== "copied") return;
+    if (copied !== "copied" && copied !== "text") return;
     const timer = window.setTimeout(() => setCopied(""), 2000);
     return () => window.clearTimeout(timer);
   }, [copied]);
@@ -453,6 +558,14 @@ export function ReviewDecision({
       onSelect: () =>
         void copyText(url).then((ok) => setCopied(ok ? "copied" : "failed")),
     });
+    items.push({
+      label: t("Copy text"),
+      icon: "copy",
+      onSelect: () =>
+        void copyText(markdownPlainText(val(row, "draft"))).then((ok) =>
+          setCopied(ok ? "text" : "text-failed"),
+        ),
+    });
     if (typeof navigator.share === "function")
       items.push({
         label: t("Share"),
@@ -472,7 +585,7 @@ export function ReviewDecision({
     return () => setMenu([]);
   }, [setMenu, row, pending, busy]);
   return (
-    <div className="crew-dialog-body crew-review-body" ref={body}>
+    <div className="crew-dialog-body crew-review-body">
       <div className="crew-review-meta">
         <span className={pending ? "crew-human" : "crew-pill"}>
           {reviewStatusText(val(row, "status"))}
@@ -488,11 +601,19 @@ export function ReviewDecision({
       </p>
       {copied && (
         <p
-          className={copied === "copied" ? "crew-review-toast" : "crew-alert"}
-          role={copied === "copied" ? "status" : "alert"}
+          className={
+            copied === "copied" || copied === "text"
+              ? "crew-review-toast"
+              : "crew-alert"
+          }
+          role={copied === "copied" || copied === "text" ? "status" : "alert"}
         >
           {copied === "copied" ? (
             t("Link copied")
+          ) : copied === "text" ? (
+            t("Text copied")
+          ) : copied === "text-failed" ? (
+            t("Couldn't copy the text.")
           ) : (
             <>
               {t("Could not copy automatically. Copy it from here:")}{" "}

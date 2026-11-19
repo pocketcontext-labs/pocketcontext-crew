@@ -90,21 +90,26 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* 44 px tap targets (0.37.1); the negative margins keep the card head as
+   tall as the 34 px buttons it had, so nothing moves. */
 .crew-dialog button.crew-pick-comment {
   flex: none;
   display: inline-grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   min-height: 0;
+  margin: -5px -5px -5px 0;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: transparent;
   color: #4d6450;
 }
-.crew-dialog button.crew-pick-comment:hover:not(:disabled) {
-  background: #e3eadc;
+@media (hover: hover) {
+  .crew-dialog button.crew-pick-comment:hover:not(:disabled) {
+    background: #e3eadc;
+  }
 }
 .crew-pick[data-selected] button.crew-pick-comment,
 .crew-dialog button.crew-pick-comment[data-note] {
@@ -189,7 +194,14 @@
   width: 30px;
   height: 30px;
   border-radius: 999px;
+  margin: 0;
   background: color-mix(in srgb, #ffffff 85%, transparent);
+}
+/* The badge stays small on the image; its tap target is 44 px. */
+.crew-dialog .crew-pick-tile button.crew-pick-comment::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
 }
 .crew-dialog .crew-pick-tile button.crew-pick-comment[data-note] {
   background: #233a28;
@@ -248,4 +260,70 @@
   background: #233a28;
   color: #fff;
   font-size: 13px;
+}
+
+/* Copy (0.37.1): plain text for a chat app, at the top right of the draft
+   and of each text option. The labels share one grid cell, so "Copied"
+   never changes the button's width. */
+.crew-dialog button.crew-copy-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  min-height: 0;
+  padding: 0 12px 0 10px;
+  text-align: start;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: #2d4538;
+}
+.crew-copy-button .crew-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+.crew-copy-labels {
+  display: grid;
+  justify-items: start;
+}
+.crew-copy-labels > span {
+  grid-area: 1 / 1;
+  visibility: hidden;
+}
+.crew-copy-labels > span[data-shown] {
+  visibility: visible;
+}
+.crew-dialog button.crew-copy-button[data-state="copied"] {
+  background: #233a28;
+  border-color: #233a28;
+  color: #fff;
+}
+.crew-dialog button.crew-copy-button[data-state="failed"] {
+  border-color: #c98b7c;
+  color: #a14f3c;
+}
+/* The draft's Copy floats in the box's corner; the text wraps around it. */
+.crew-dialog button.crew-draft-copy {
+  float: right;
+  margin: -14px -14px 8px 12px;
+}
+/* An option's Copy is an icon beside its feedback icon, borderless like
+   it, so the option's label keeps its width on a phone. */
+.crew-dialog button.crew-pick-copy {
+  justify-content: center;
+  width: 44px;
+  margin: -5px 0;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: #4d6450;
+}
+@media (hover: hover) {
+  .crew-dialog button.crew-pick-copy:hover:not([data-state]) {
+    background: #e3eadc;
+  }
 }

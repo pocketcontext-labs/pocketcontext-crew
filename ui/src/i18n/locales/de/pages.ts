@@ -226,6 +226,12 @@ const de: Record<string, string> = {
   "Snapshot {id}": "Snapshot {id}",
   "This is the exact submitted draft. Approval does not send, post or publish it.":
     "Das ist genau der eingereichte Entwurf. Eine Freigabe sendet, postet oder veröffentlicht ihn nicht.",
+  "Copy draft text": "Entwurfstext kopieren",
+  "Copy {label}": "{label} kopieren",
+  "Not copied": "Nicht kopiert",
+  "Copy text": "Text kopieren",
+  "Text copied": "Text kopiert",
+  "Couldn't copy the text.": "Der Text konnte nicht kopiert werden.",
   "Link copied": "Link kopiert",
   "Could not copy automatically. Copy it from here:": "Automatisches Kopieren fehlgeschlagen. Kopiere es von hier:",
   "Your decision note:": "Deine Entscheidungsnotiz:",

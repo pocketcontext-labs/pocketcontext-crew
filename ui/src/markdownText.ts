@@ -91,8 +91,27 @@ export function markdownText(markdown: string): string {
 }
 
 function inline(text: string): string {
+  return stripInline(text, false).replace(/\s+/g, " ").trim();
+}
+
+/** A link as plain text: its text, plus the address when it goes outside. */
+function linkText(label: string, href: string, withUrl: boolean): string {
+  const url = href.trim().replace(/\s+["'(].*$/, "");
+  if (!withUrl || !/^(https?:|mailto:)/i.test(url)) return label;
+  const bare = url.replace(/^mailto:/i, "");
+  return label === url || label === bare ? label : `${label} (${bare})`;
+}
+
+/** Inline Markdown markers removed; whitespace and line breaks kept. */
+function stripInline(text: string, withUrls: boolean): string {
+  // Escaped characters are set aside first, so `\*` never reads as emphasis.
+  const escaped: string[] = [];
   return (
     text
+      .replace(/\\([\\`*_{}[\]()#+\-.!|~>])/g, (_, ch: string) => {
+        escaped.push(ch);
+        return `\uE000${escaped.length - 1}\uE001`;
+      })
       // Raw HTML is dropped (comments, then tags).
       .replace(/<!--[\s\S]*?-->/g, "")
       .replace(/<(https?:\/\/[^>\s]+)>/g, "$1")
@@ -100,7 +119,9 @@ function inline(text: string): string {
       // Images keep their alt text; links keep their text.
       .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
       .replace(/!\[([^\]]*)\]\[[^\]]*\]/g, "$1")
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)\]\(([^)]*)\)/g, (_, label: string, href: string) =>
+        linkText(label, href, withUrls),
+      )
       .replace(/\[([^\]]+)\]\[[^\]]*\]/g, "$1")
       // Inline code keeps its content.
       .replace(
@@ -113,10 +134,90 @@ function inline(text: string): string {
       .replace(/(^|[^\w_])_(?=\S)([^_]*?\S)_(?![\w_])/g, "$1$2")
       .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "$1")
       // Backslash escapes show the escaped character.
-      .replace(/\\([\\`*_{}[\]()#+\-.!|~>])/g, "$1")
-      .replace(/\s+/g, " ")
-      .trim()
+      .replace(/\uE000(\d+)\uE001/g, (_, i: string) => escaped[Number(i)])
   );
+}
+
+/**
+ * Markdown as plain text to paste into a chat app (a review draft's Copy):
+ * no Markdown markers, every line break and paragraph kept, list items as
+ * "• " (numbers stay), nested items indented, links as their text plus the
+ * address in brackets when they go outside Crew, code blocks verbatim. Lines
+ * of a paragraph stay separate lines, because review drafts show their line
+ * breaks.
+ */
+export function markdownPlainText(markdown: string): string {
+  const out: string[] = [];
+  let fence = "";
+  for (const raw of markdown.replace(/\r\n?/g, "\n").split("\n")) {
+    const fenceMatch = /^\s{0,3}(`{3,}|~{3,})/.exec(raw);
+    if (fence) {
+      if (
+        fenceMatch &&
+        fenceMatch[1][0] === fence[0] &&
+        fenceMatch[1].length >= fence.length
+      )
+        fence = "";
+      else out.push(raw.replace(/\s+$/, ""));
+      continue;
+    }
+    if (fenceMatch) {
+      fence = fenceMatch[1];
+      continue;
+    }
+    // A hard break (two trailing spaces or a backslash) is a line break anyway.
+    let line = raw
+      .replace(/^\s{0,3}(>\s?)+/, "")
+      .replace(/(\\| {2,})$/, "")
+      .replace(/\s+$/, "");
+    if (!line.trim()) {
+      out.push("");
+      continue;
+    }
+    if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      out.push("");
+      continue;
+    }
+    // A setext underline: the line above already reads as the heading.
+    if (/^\s{0,3}(=+|-+)\s*$/.test(line) && out.length && out.at(-1)) continue;
+    const heading = /^\s{0,3}#{1,6}(?:\s+(.*?))?(?:\s+#+)?\s*$/.exec(line);
+    if (heading) {
+      out.push(stripInline(heading[1] || "", true).trim());
+      continue;
+    }
+    if (/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line))
+      continue;
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      out.push(
+        line
+          .trim()
+          .replace(/^\||\|$/g, "")
+          .split("|")
+          .map((cell) => stripInline(cell, true).trim())
+          .filter(Boolean)
+          .join(" · "),
+      );
+      continue;
+    }
+    const item = /^(\s*)([-*+]|\d{1,9}[.)])\s+(?:\[([ xX])\]\s+)?(.*)$/.exec(
+      line,
+    );
+    if (item) {
+      const indent = "  ".repeat(
+        Math.floor(item[1].replace(/\t/g, "    ").length / 2),
+      );
+      const marker = /^\d/.test(item[2]) ? item[2] : "•";
+      const box = item[3] ? (item[3] === " " ? "☐ " : "☑ ") : "";
+      out.push(`${indent}${marker} ${box}${stripInline(item[4], true).trim()}`);
+      continue;
+    }
+    line = stripInline(line, true);
+    out.push(line.trim());
+  }
+  return out
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^\n+|\n+$/g, "");
 }
 
 /** The first block of a brief as one line, for a tooltip or a chip. */
