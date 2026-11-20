@@ -41,7 +41,7 @@ import { markdownExcerpt, markdownText } from "./markdownText";
 import { taskBrief } from "./reviewMarkup";
 import { ExcerptContent } from "./ExcerptContent";
 import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest, ReviewRequestBlocked } from "./Review";
-import { decisionSummary, objects } from "./reviews";
+import { decisionSummary, objects, reviewOptions } from "./reviews";
 import { strandedWakes } from "./wakes";
 import {
   approvalLine,
@@ -3110,7 +3110,7 @@ export default function CrewWorkspace() {
                         className="crew-review-preview"
                         id={`review-preview-${x.id}`}
                       >
-                        <ExcerptContent excerpt={markdownExcerpt(val(x, "draft"), 600)} />
+                        <ExcerptContent excerpt={markdownExcerpt(reviewOptions(x)[0]?.body ?? val(x, "draft"), 600)} />
                       </p>
                     </button>
                   );
