@@ -275,6 +275,8 @@ const de: Record<string, string> = {
     "Der Text und die Optionen, die du freigeben möchtest. Du oder ein Agent könnt sie in der Aufgabe bearbeiten.",
   "Save the draft and its options here. Saving a change to them withdraws the pending review.":
     "Speichere hier den Entwurf und seine Optionen. Wenn du Änderungen daran speicherst, wird die ausstehende Freigabeanfrage zurückgezogen.",
+  "Jump to option": "Zur Option springen",
+  "{n} options": "{n} Optionen",
   "Option settings": "Optionseinstellungen",
   "Option {n} key": "Schlüssel für Option {n}",
   "Review settings": "Freigabeeinstellungen",

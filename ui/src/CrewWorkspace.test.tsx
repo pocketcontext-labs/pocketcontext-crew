@@ -713,6 +713,17 @@ it("keeps the task's matching draft in sync when the owner renames or removes it
   const dialog = within(await screen.findByRole("dialog"));
   expect(dialog.getAllByRole("heading", { name: "Original main plan" })).toHaveLength(1);
   expect(dialog.getByRole("heading", { name: "Another plan" })).toBeVisible();
+  const jump = dialog.getByRole("combobox", { name: "Jump to option" });
+  expect(jump).toHaveDisplayValue("2 options");
+  expect(within(jump).getByRole("option", { name: "Main plan" })).toBeInTheDocument();
+  const destination = within(jump).getByRole<HTMLOptionElement>("option", { name: "Alternative" });
+  const alternate = dialog.getByRole("group", { name: "Alternative" });
+  const scroll = vi.fn();
+  alternate.scrollIntoView = scroll;
+  fireEvent.change(jump, { target: { value: destination.value } });
+  expect(alternate).toHaveFocus();
+  expect(scroll).toHaveBeenCalledWith({ block: "start" });
+  expect(dialog.getByRole("button", { name: "Save task" })).toBeDisabled();
   const first = within(dialog.getByRole("group", { name: "Main plan" }));
   fireEvent.click(first.getByText("Option settings"));
   fireEvent.change(first.getByLabelText("Option 1 key"), { target: { value: "main" } });

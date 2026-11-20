@@ -433,3 +433,22 @@
 .crew-task-draft summary {
   cursor: pointer;
 }
+
+.crew-task-draft .crew-option-jump {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+.crew-dialog .crew-option-jump select {
+  flex: 1;
+  min-width: 0;
+  max-width: 20rem;
+  margin: 0;
+}
+.crew-task-option {
+  scroll-margin-block-start: 4.5rem;
+}
+.crew-task-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

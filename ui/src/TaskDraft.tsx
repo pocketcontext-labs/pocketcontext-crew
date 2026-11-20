@@ -106,6 +106,9 @@ type TaskDraftProps = WorkingDraft & {
   request?: ReactNode;
 };
 
+const optionAnchor = (option: EditorOption) =>
+  `crew-draft-option-${option.editorId}`;
+
 function OptionEditor({
   option,
   index,
@@ -124,7 +127,11 @@ function OptionEditor({
   const [settingsOpen, setSettingsOpen] = useState(!option.label);
   const number = { n: index + 1 };
   return (
-    <fieldset className="crew-review-option crew-task-option">
+    <fieldset
+      id={optionAnchor(option)}
+      tabIndex={-1}
+      className="crew-review-option crew-task-option"
+    >
       <legend>{option.label || t("Option {n}", number)}</legend>
       <MarkdownField
         label={t("Option {n} draft", number)}
@@ -200,6 +207,30 @@ export default function TaskDraft(props: TaskDraftProps) {
           onChange={props.onDraft}
           {...files()}
         />
+      )}
+      {options.length > 1 && (
+        <label className="crew-option-jump">
+          {t("Jump to option")}
+          <select
+            value=""
+            onChange={(event) => {
+              // Navigation must not mark the task as edited.
+              event.stopPropagation();
+              const card = document.getElementById(event.currentTarget.value);
+              card?.focus({ preventScroll: true });
+              card?.scrollIntoView?.({ block: "start" });
+            }}
+          >
+            <option value="" disabled>
+              {t("{n} options", { n: options.length })}
+            </option>
+            {options.map((option, index) => (
+              <option key={option.editorId} value={optionAnchor(option)}>
+                {option.label || t("Option {n}", { n: index + 1 })}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
       {options.map((option, index) => (
         <OptionEditor

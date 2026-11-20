@@ -276,6 +276,8 @@ const it: Record<string, string> = {
     "Il testo e le opzioni da approvare. Tu o un agente potete modificarli nell’attività.",
   "Save the draft and its options here. Saving a change to them withdraws the pending review.":
     "Salva qui la bozza e le sue opzioni. Salvare una modifica ritira la richiesta di approvazione in sospeso.",
+  "Jump to option": "Vai a un’opzione",
+  "{n} options": "{n} opzioni",
   "Option settings": "Impostazioni dell’opzione",
   "Option {n} key": "Chiave dell’opzione {n}",
   "Review settings": "Impostazioni della revisione",
