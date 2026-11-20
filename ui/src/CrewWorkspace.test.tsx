@@ -4370,17 +4370,17 @@ describe("stepping through the list a dialog was opened from (0.32.0)", () => {
     // A step never decides.
     expect(crewApi.write).not.toHaveBeenCalled();
     // History back/forward retrace the steps; the dialog stays open.
-    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    history.back();
     await within(dialog).findByText("The submitted draft");
     expect(location.hash).toBe("#/approvals/review000000001");
     expect(position(dialog)).toBe("1 of 2");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Forward" }));
+    history.forward();
     await within(dialog).findByText("The second draft");
     expect(location.hash).toBe("#/approvals/review000000002");
     // Back twice: the first review, then the list, which closes the dialog.
-    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    history.back();
     await within(dialog).findByText("The submitted draft");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    history.back();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(location.hash).toBe("#/approvals");
   });
