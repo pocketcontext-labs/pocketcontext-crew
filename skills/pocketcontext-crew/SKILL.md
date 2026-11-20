@@ -232,10 +232,11 @@ withdraws the review like a draft edit.
   call, follow `next_offset`), with `id` one image preview, text file or, on
   request, paged base64 bytes. The CLI downloads with
   `"{{BINARY}}" attachment ID --out FILE --db "{{DB}}"`; it never overwrites a file.
-- You can attach only bytes you hold. An image you merely see in a chat cannot
-  be re-encoded: file the task, then ask the owner to paste the screenshots into
-  it in the reader (or through an upload link the owner creates there). Agents
-  cannot create upload links.
+- If you have the original bytes of a screenshot or file from the owner's chat
+  (including a copy saved locally by the chat client), attach it to the relevant
+  task or note using the commands above. Only if you lack the original bytes,
+  ask the owner to add the file in the reader or through an upload link they
+  create there. Never re-encode a preview as the original.
 - If `storage_limit` refuses a file, tell the owner; change the limit only when
   the owner asks.
 

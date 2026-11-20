@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.38.0 to 0.38.1
+
+Replace the binary or image (`CREW_REPLACE_VERSION=0.38.0` for the installer)
+and upgrade paired clients to 0.38.1. Run `skill` once and refresh MCP tool
+descriptions so agents pick up the revised screenshot instructions.
+
+The reader layout and attachment guidance changes use the existing database,
+protocol and upload API. You can roll back to 0.38.0 without a restore.
+
 ## Crew 0.37.2 to 0.38.0
 
 Review markup blocks, per-block feedback and markup warnings. No data migration

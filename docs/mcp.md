@@ -140,9 +140,11 @@ as MCP image content (1600 px previews, at most 6 per call, follow
 `task.create`, `note.create` and `task.comment` take `data.files: [{name,
 content_base64}]`, at most 5 MiB decoded per call, and Markdown references files
 as `![alt](attachment:ID)` (`attachment:new-N` on create or comment, where files
-become attachments of the task). An assistant that only
-sees an image in its chat cannot re-encode it: it files the task and asks the
-owner to paste the screenshots into it in the reader. Upload links are
+become attachments of the task). When the assistant has the original file bytes, including
+a screenshot saved locally from the owner's chat, it attaches them to the
+relevant task or note. Only if those bytes are unavailable does it ask the
+owner to add the file in the reader or through an upload link. It must never
+re-encode a preview as the original. Upload links are
 owner-browser-only, and agents change the storage limit only when the owner
 asks.
 

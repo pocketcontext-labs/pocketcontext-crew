@@ -30,7 +30,7 @@ export const markupChannels = [
   "generic",
 ] as const;
 export type MarkupChannel = (typeof markupChannels)[number];
-const defaultLimits: Partial<Record<string, number>> = {
+export const defaultLimits: Partial<Record<string, number>> = {
   linkedin: 3000,
   x: 280,
 };

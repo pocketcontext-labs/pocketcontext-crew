@@ -55,24 +55,21 @@
   color: #6a7d63;
 }
 .crew-review-option.crew-pick {
-  margin: 0 0 0.6rem;
-  padding: 0.7rem 0.8rem;
-  border-radius: 14px;
-  background: #fbfcf8;
+  border: 0;
+  margin: 0 0 1rem;
+  padding: 0;
 }
-.crew-pick[data-selected] {
-  border: 2px solid #2f4a35;
-  background: #eef3ea;
-  padding: calc(0.7rem - 1px) calc(0.8rem - 1px);
+.crew-pick[data-selected] .crew-block {
+  border-color: var(--check-fill);
 }
 .crew-pick-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
 }
 .crew-pick-check {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   flex: 1 1 auto;
   min-width: 0;
@@ -83,19 +80,16 @@
   flex: none;
   width: 22px;
   height: 22px;
-  margin: 1px 0 0;
+  margin: 0;
   accent-color: #2f4a35;
 }
 .crew-pick-label {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-/* The checkbox's tap target is 44 px tall; the padding and negative margins
-   keep the head as tall as before, so the title does not move. */
+/* Keep the whole label tappable alongside its More button. */
 .crew-pick-head > .crew-pick-check {
   min-height: 44px;
-  margin: -11px 0;
-  padding: 11px 0;
 }
 /* Unchecked boxes have a 2 px --check-border (0.38.0), 6.9:1 on the card. */
 .crew-dialog .crew-pick-check input[type="checkbox"] {
@@ -127,7 +121,6 @@
 .crew-pick-more {
   position: relative;
   flex: none;
-  margin: -11px -6px -11px 0;
 }
 .crew-pick-toast {
   position: absolute;
@@ -150,12 +143,7 @@
   background: #a14f3c;
 }
 .crew-pick-body {
-  margin: 0.5rem 0 0 32px;
-}
-@media (max-width: 680px) {
-  .crew-pick-body {
-    margin-left: 0;
-  }
+  margin-top: 0.4rem;
 }
 .crew-pick-body .crew-prose > :first-child {
   margin-top: 0;

@@ -2627,8 +2627,9 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  {
   const api=async body=>(await page.request.post(base+'/api/crew/read',{headers:{Authorization:syntheticOwnerAuth},data:body})).json();
   const xText='Markup '+'x'.repeat(283);
-  const variantsBody=':::variant{channel=linkedin}\n\nLinkedIn markup text.\n\n:::\n\n:::variant{channel=x}\n\n'+xText+'\n\n:::\n\n:::note\n\nKept short for the reviewer.\n\n:::';
-  const markupTask=await boardWrite('task.create',{title:'Markup review variants',draft:'Pick the markup option.'});
+  const linkedIn='A synthetic draft for the reader. '.repeat(24).slice(0,795);
+  const variantsBody=':::variant{channel=linkedin}\n\n'+linkedIn+'\n\n:::\n\n:::variant{channel=x}\n\n'+xText+'\n\n:::\n\n:::note\n\nKept short for the reviewer.\n\n:::';
+  const markupTask=await boardWrite('task.create',{title:'Markup review variants',draft:variantsBody});
   await boardWrite('review.request',{options:[{key:'a',label:'A · Markup',body:variantsBody},{key:'b',label:'B · Plain',body:'Plain option text.'}]},markupTask.id,markupTask.revision);
   const markupReview=(await api({collection:'reviews',parent:markupTask.id})).items[0];
   await page.setViewportSize({width:390,height:844});
@@ -2641,6 +2642,33 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   assert.equal(await optA.locator('.crew-block').count(),2,'two variants, two blocks');
   assert.equal(await optB.locator('.crew-block').count(),1,'a body without markup is one block');
   assert.equal(await optA.innerText().then(t=>t.includes(':::')),false,'no markers show');
+  // The snapshot and the option have the same usable width. Both variants
+  // must be fully readable through the dialog's single scroll, even when
+  // the snapshot is longer than the viewport.
+  const snapshot=dialog().locator('.crew-draft-snapshot');
+  const checkVariantLayout=async(section,columns)=>{
+   const measure=await section.evaluate(el=>{
+    const bounds=el.getBoundingClientRect();
+    const blocks=[...el.querySelectorAll('.crew-block')].map(b=>b.getBoundingClientRect());
+    const header=el.querySelector('.crew-block-head');
+    const name=header.querySelector('.crew-block-name').getBoundingClientRect();
+    const count=header.querySelector('.crew-block-count').getBoundingClientRect();
+    const copy=header.querySelector('.crew-block-copy').getBoundingClientRect();
+    return {
+     fullWidth:Math.abs(blocks[0].left-bounds.left)<2&&Math.abs(blocks[1].right-bounds.right)<2,
+     flows:el.scrollHeight<=el.clientHeight+1&&blocks.every(b=>b.bottom<=bounds.bottom+1),
+     columns:Math.abs(blocks[0].top-blocks[1].top)<1?2:1,
+     headerFits:count.left>=name.right&&count.right<=copy.left&&count.top<name.bottom&&count.bottom>name.top,
+     copyWidth:Math.round(copy.width),
+    };
+   });
+   assert.equal(measure.columns,columns,'variants use the available columns');
+   assert.ok(measure.flows&&measure.fullWidth&&measure.headerFits,'unclipped cards and header: '+JSON.stringify(measure));
+   if(columns===1)assert.equal(measure.copyWidth,44,'phone Copy is icon-only');
+  };
+  assert.equal(await snapshot.getByRole('button',{name:/^Copy/}).count(),2,'one Copy per snapshot variant');
+  await checkVariantLayout(snapshot,1);
+  await checkVariantLayout(optA,1);
   // Copy and comment of the first block, relative to the option card.
   const controls=opt=>opt.evaluate(card=>{const c=card.getBoundingClientRect(),block=card.querySelector('.crew-block');
    return ['.crew-block-copy','.crew-pick-comment'].map(s=>{const b=block.querySelector(s).getBoundingClientRect();return [b.x-c.x,b.y-c.y,b.width,b.height,c.right-b.right].map(Math.round);});});
@@ -2649,10 +2677,11 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   assert.ok(atA.every(r=>r[2]>=44&&r[3]>=44),'Copy and comment are 44 px: '+JSON.stringify(atA));
   // Each block copies only its own text; "Copied" keeps the button in place.
   const copyLinkedIn=optA.getByRole('button',{name:'Copy A · Markup · LinkedIn',exact:true});
+  await copyLinkedIn.scrollIntoViewIfNeeded();
   const before=await copyLinkedIn.boundingBox();
   await copyLinkedIn.click();
   await page.waitForFunction(()=>window.__copied.length===1);
-  assert.equal(await copiedLast(),'LinkedIn markup text.','LinkedIn Copy copies only its text');
+  assert.equal(await copiedLast(),linkedIn,'LinkedIn Copy copies only its text');
   assert.equal(await copyLinkedIn.getAttribute('data-state'),'copied');
   assert.deepEqual(await copyLinkedIn.boundingBox(),before,'Copied keeps the button in place');
   assert.deepEqual(await controls(optA),atA,'copied and not copied: the same place');
@@ -2664,7 +2693,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   assert.equal(await copiedLast(),'Plain option text.');
   // Counts: tabular figures; past the limit in the danger colour with "too long".
   const counts=await optA.locator('.crew-block-count').evaluateAll(xs=>xs.map(x=>[x.textContent,getComputedStyle(x).color,getComputedStyle(x).fontVariantNumeric,x.hasAttribute('data-over')]));
-  assert.deepEqual(counts.map(c=>c[0]),['21 / 3,000','290 / 280 · too long']);
+  assert.deepEqual(counts.map(c=>c[0]),[linkedIn.length+' / 3,000','290 / 280 · too long']);
   assert.ok(counts.every(c=>c[2].includes('tabular-nums')),'counts use tabular figures');
   assert.ok(!counts[0][3]&&counts[1][3]&&counts[1][1]==='rgb(161, 57, 48)'&&counts[0][1]!==counts[1][1],'over the limit reads in the danger colour: '+JSON.stringify(counts));
   // The note is shown, labelled, and never copied.
@@ -2674,7 +2703,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await optA.getByRole('button',{name:'Actions for A · Markup'}).click();
   await dialog().getByRole('menu',{name:'Actions for A · Markup'}).getByRole('menuitem',{name:'Copy all variants'}).click();
   await page.waitForFunction(()=>window.__copied.length===4);
-  assert.equal(await copiedLast(),'LinkedIn\nLinkedIn markup text.\n\nX\n'+xText,'Copy all variants');
+  assert.equal(await copiedLast(),'LinkedIn\n'+linkedIn+'\n\nX\n'+xText,'Copy all variants');
   await optA.locator('.crew-pick-toast').getByText('Copied').waitFor();
   // Every control on an option card is a 44 px target, and nothing scrolls sideways.
   {const small=await dialog().locator('.crew-pick').evaluateAll(cards=>cards.flatMap(card=>[...card.querySelectorAll('button,.crew-pick-head > label')].map(e=>{const b=e.getBoundingClientRect();return [e.getAttribute('aria-label')||e.textContent.trim().slice(0,20),Math.round(b.width),Math.round(b.height)];}).filter(([,w,h])=>w<44||h<44)));
@@ -2708,6 +2737,8 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   // A wide dialog sets the variants side by side, wrapping, with no horizontal scroll.
   await page.setViewportSize({width:1440,height:1000});
   await roA.scrollIntoViewIfNeeded();
+  await checkVariantLayout(snapshot,2);
+  await checkVariantLayout(roA,2);
   {const tops=await roA.locator('.crew-block').evaluateAll(bs=>bs.map(b=>Math.round(b.getBoundingClientRect().top)));
   assert.equal(tops[0],tops[1],'variants sit side by side on a desktop: '+tops);
   assert.equal(await dialog().evaluate(d=>{const b=d.querySelector('.crew-dialog-body')||d;return b.scrollWidth<=b.clientWidth+1;}),true,'no horizontal scroll on a desktop');}
@@ -2722,6 +2753,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   const noteBlocks=dialog().locator('.crew-block');
   await noteBlocks.first().waitFor();
   assert.equal(await noteBlocks.count(),2,'a note shows two blocks');
+  await checkVariantLayout(dialog().locator('.crew-md-box:has(.crew-blocks)'),1);
   assert.equal(await dialog().locator('.crew-pick-comment').count(),0,'no feedback outside reviews');
   assert.equal(await dialog().getByText('Ready to paste, re:Crew at 10:30.',{exact:true}).count(),1,'prose around the blocks reads as before');
   {const r=await noteBlocks.evaluateAll(bs=>bs.map(b=>{const c=b.querySelector('.crew-block-copy').getBoundingClientRect(),k=b.getBoundingClientRect();return [Math.round(k.right-c.right),Math.round(c.width),Math.round(c.height)];}));
@@ -2737,6 +2769,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await dialog().locator('.crew-block[data-target="linkedin"]').waitFor();
   assert.equal(await dialog().locator('.crew-pick-comment').count(),0,'no feedback on a task draft');
   assert.equal(await dialog().locator('.crew-block').count(),2,'the draft shows its two variants');
+  await checkVariantLayout(dialog().locator('.crew-md-box:has(.crew-blocks)'),1);
   await snapView('crew-task-draft-markup-390');
   await page.goto(base+'/#/tasks/'+draftTask.id+'?tab=comments');await page.reload();await stubClipboard();
   const commentBlock=dialog().locator('.crew-block[data-target="copy-1"]');

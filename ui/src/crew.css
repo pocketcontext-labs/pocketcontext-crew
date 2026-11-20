@@ -1720,6 +1720,17 @@ a.crew-logo:hover .product-brand span {
   padding: 12px;
   min-height: 120px;
 }
+/* In Read view the paste-ready cards provide the frame. The textarea and
+   plain Markdown keep their normal field chrome. */
+.crew-md-box:has(> .crew-md-preview .crew-blocks) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.crew-md-preview:has(.crew-blocks) {
+  padding: 0;
+}
 .crew-md-preview > p {
   margin: 0;
   color: #71806e;
@@ -1816,6 +1827,12 @@ a.crew-logo:hover .product-brand span {
   padding: 16px;
   margin: 12px 0;
 }
+.crew-version:has(> .crew-review-content .crew-block) {
+  border: 0;
+  border-top: 1px solid var(--block-line);
+  border-radius: 0;
+  padding: 12px 0;
+}
 .crew-version summary {
   cursor: pointer;
   font-size: 12px;
@@ -1876,6 +1893,10 @@ a.crew-logo:hover .product-brand span {
 .crew-time:hover {
   background: rgba(112, 130, 93, 0.14);
 }
+.crew-comments > li:has(.crew-comment-body .crew-blocks) {
+  border: 0;
+  padding-left: 0;
+}
 .crew-comment-body {
   margin-top: 6px;
 }
@@ -1920,8 +1941,16 @@ a.crew-logo:hover .product-brand span {
   background: white;
   border-radius: 6px;
   margin: 20px 0;
-  max-height: 45vh;
-  overflow: auto;
+  display: flow-root;
+}
+.crew-snapshot-actions {
+  display: flex;
+  justify-content: end;
+}
+.crew-draft-snapshot[data-blocks] {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 .crew-dialog .crew-danger {
   color: #a14f3c;

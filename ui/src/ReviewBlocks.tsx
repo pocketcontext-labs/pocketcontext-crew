@@ -19,6 +19,7 @@ import {
   blockCopyText,
   characterCount,
   copyBlocks,
+  defaultLimits,
   parseReviewMarkup,
   type MarkupBlock,
 } from "./reviewMarkup";
@@ -220,13 +221,18 @@ export function MarkupSection({ index, children }: { index: number; children: Re
       </aside>
     );
   const copy = blockCopyText(block);
+  // Task descriptions can hold several options as named copy blocks, e.g.
+  // "Text A LinkedIn" and "Text B LinkedIn". Use their channel for the
+  // displayed count while preserving the author's label and feedback target.
+  const channel = block.channel
+    ?? /^(?:Text [A-Z] )?(LinkedIn|X)$/i.exec(block.label?.trim() ?? "")?.[1].toLowerCase();
   return (
     <BlockCard
       name={blockName(block)}
       target={block.target}
       copy={copy}
-      count={characterCount(copy, block.channel)}
-      limit={block.limit}
+      count={characterCount(copy, channel)}
+      limit={block.limit ?? (channel ? defaultLimits[channel] : null)}
       kind={block.kind}
     >
       {children}

@@ -73,6 +73,14 @@ it("renders variants and notes as blocks, and the rest as before", () => {
   expect(container.querySelector(".crew-pick-comment")).toBeNull();
 });
 
+it("counts channel-labelled copy blocks using channel defaults and keeps other labels unconstrained", () => {
+  const { container } = render(
+    <Prose>{':::copy{label="Text A LinkedIn"}\nHi\n:::\n\n:::copy{label="Text A X"}\nhttps://example.com/post\n:::\n\n:::copy{label="Notes on X"}\nHi\n:::'}</Prose>,
+  );
+  expect(Array.from(container.querySelectorAll(".crew-block-count"), (el) => el.textContent))
+    .toEqual(["2 / 3,000", "23 / 280", "2"]);
+});
+
 it("copies only a block's text", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });

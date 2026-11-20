@@ -38,60 +38,55 @@
   color: color-mix(in srgb, var(--icon-ink) 55%, transparent);
 }
 
-/* Review markup blocks: bordered sub-cards; side by side when there is room
-   (flex-wrap, never a horizontal scroll), stacked on a phone. */
-.crew-blocks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0.6rem 0;
-  min-width: 0;
+/* Size the group against its actual reading column (including history and
+   embedded Markdown fields). A lone block uses the full column. */
+.crew-prose:has(> .crew-blocks) {
+  container: crew-prose / inline-size;
 }
-.crew-blocks > .crew-block {
-  flex: 1 1 260px;
-  margin: 0;
+.crew-blocks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin: 0.6rem 0;
+}
+@container crew-prose (min-width: 610px) {
+  .crew-blocks:has(> .crew-block:nth-child(2)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .crew-block {
   min-width: 0;
-  margin: 0.6rem 0;
-  padding: 0 10px 10px;
+  padding: 0 12px 12px;
   border: 1px solid var(--block-line);
   border-radius: 12px;
   background: var(--block-bg);
-}
-.crew-pick-body > .crew-block:first-child,
-.crew-pick-body > .crew-prose > :first-child,
-.crew-pick-body > .crew-prose > .crew-blocks:first-child {
-  margin-top: 0;
+  color: var(--icon-ink);
+  container: crew-block / inline-size;
 }
 .crew-block-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-height: 52px;
-  margin-right: -4px;
+  margin-right: -5px;
 }
 .crew-block-title {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
+  flex: 1;
   min-width: 0;
-  line-height: 1.3;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .crew-block-name {
-  overflow: hidden;
   color: var(--icon-ink);
   font-weight: 600;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 .crew-block-count {
-  overflow: hidden;
   color: var(--count);
-  white-space: nowrap;
-  text-overflow: ellipsis;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+.crew-block-name + .crew-block-count::before {
+  content: " · ";
 }
 .crew-block-count[data-over] {
   color: var(--danger);
@@ -109,17 +104,18 @@
 .crew-block-body > .crew-prose > :last-child {
   margin-bottom: 0;
 }
-/* Copy in a block: labelled, the same 44 px pill everywhere; the labels share
-   one grid cell (review.css), so "Copied" never changes its width. */
+/* On wider cards the labels share one grid cell, so Copy keeps its size. */
 :is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button {
   flex: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  width: 44px;
   height: 44px;
   min-height: 0;
   margin: 0;
-  padding: 0 14px 0 12px;
+  padding: 0;
   border: 1px solid var(--icon-line);
   border-radius: 999px;
   background: var(--icon-fill);
@@ -133,6 +129,20 @@
   width: 18px;
   height: 18px;
   stroke-width: 2;
+}
+.crew-block-copy .crew-copy-labels {
+  display: none;
+}
+@media (min-width: 681px) {
+  @container crew-block (min-width: 285px) {
+    :is(.crew-app, .crew-dialog) .crew-block-head button.crew-block-copy {
+      width: auto;
+      padding: 0 12px;
+    }
+    .crew-block-copy .crew-copy-labels {
+      display: grid;
+    }
+  }
 }
 @media (hover: hover) {
   :is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button:hover:not([data-state]) {

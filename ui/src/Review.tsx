@@ -2,6 +2,7 @@ import {
   Fragment,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -78,15 +79,19 @@ export function ReviewContent({
   row,
   attachments,
   loaded = true,
+  draftCopyInMenu = false,
   Prose,
   children,
 }: {
   row: Row;
   attachments: Attachment[];
   loaded?: boolean;
+  draftCopyInMenu?: boolean;
   Prose: ProseComponent;
   children?: React.ReactNode;
 }) {
+  const draft = val(row, "draft");
+  const hasCopyBlocks = useMemo(() => copyBlocks(parseReviewMarkup(draft)).length > 0, [draft]);
   const files = reviewFiles(row, attachments);
   const missing = missingReviewEvidence(row, files, loaded);
   return (
@@ -109,14 +114,17 @@ export function ReviewContent({
             </ul>
           </div>
         )}
-        <div className="crew-draft-snapshot">
-          {/* Floats at the top right, so the text wraps around it. */}
-          <CopyButton
-            className="crew-draft-copy"
-            text={val(row, "draft")}
-            label={t("Copy draft text")}
-          />
-          <Prose>{val(row, "draft")}</Prose>
+        <div className="crew-draft-snapshot" data-blocks={hasCopyBlocks || undefined}>
+          {!(hasCopyBlocks && draftCopyInMenu) && (
+            <header className={hasCopyBlocks ? "crew-snapshot-actions" : undefined}>
+              <CopyButton
+                className={hasCopyBlocks ? undefined : "crew-draft-copy"}
+                text={draft}
+                label={t("Copy draft text")}
+              />
+            </header>
+          )}
+          <Prose>{draft}</Prose>
         </div>
         {children}
         {files.length > 0 && (
@@ -704,6 +712,7 @@ export function ReviewDecision({
         row={row}
         attachments={attachments}
         loaded={loaded}
+        draftCopyInMenu
         Prose={Prose}
       >
         <ReviewChoices
