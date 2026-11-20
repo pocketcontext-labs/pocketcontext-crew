@@ -4334,6 +4334,7 @@ a.crew-logo:hover .product-brand span {
   color: var(--icon-ink);
   text-align: center;
   line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 .crew-list-position::before,
 .crew-list-position > span {
