@@ -1,10 +1,4 @@
-/**
- * Review markup blocks as the reader shows them (Crew 0.38.0): each
- * `:::variant` and `:::copy` is a bordered sub-card whose header holds its
- * name, its character count, Copy and (in a review option) the feedback
- * button, fixed at the right edge; `:::note` is grey secondary text. The same
- * blocks render in notes, comments and task drafts with Copy and count only.
- */
+/** Review markup shared by reviews, task drafts, notes and comments. */
 import {
   createContext,
   useContext,
@@ -18,9 +12,7 @@ import { markdownPlainText } from "./markdownText";
 import {
   blockCopyText,
   characterCount,
-  copyBlocks,
   defaultLimits,
-  parseReviewMarkup,
   type MarkupBlock,
 } from "./reviewMarkup";
 import { locale, t } from "./i18n";
@@ -123,17 +115,6 @@ export function channelName(channel: string): string {
 export const blockName = (block: MarkupBlock) =>
   block.kind === "copy" ? block.label || "" : channelName(block.channel || "");
 
-/**
- * Copy all variants: each variant and copy block preceded by its name on its
- * own line, a blank line between blocks, notes left out. A body without
- * blocks copies as a whole.
- */
-export function copyAllText(body: string): string {
-  const blocks = copyBlocks(parseReviewMarkup(body));
-  if (!blocks.length) return markdownPlainText(body);
-  return blocks.map((b) => `${blockName(b)}\n${blockCopyText(b)}`).join("\n\n");
-}
-
 /** The blocks Prose found in the body it renders. */
 export const MarkupBlocksContext = createContext<MarkupBlock[]>([]);
 /** Inside a review (draft or option): notes say who they are for. */
@@ -142,8 +123,8 @@ export const ReviewMarkupContext = createContext(false);
 /** What a review option gives its blocks: its label and feedback controls. */
 export type BlockOption = {
   label: string;
-  /** The block's feedback button and its field (or recorded feedback). */
-  feedback?: (target: string, name: string) => { button: ReactNode; field: ReactNode };
+  /** The block’s editable or recorded feedback, if present. */
+  feedback: (target: string, name: string) => ReactNode;
 };
 export const BlockOptionContext = createContext<BlockOption | null>(null);
 
@@ -185,7 +166,7 @@ export function BlockCard({
 }) {
   const option = useContext(BlockOptionContext);
   const full = option ? (name ? `${option.label} · ${name}` : option.label) : name;
-  const controls = option?.feedback?.(target, name);
+  const feedback = option?.feedback(target, name);
   return (
     <div className="crew-block" data-kind={kind || "body"} data-target={target || undefined}>
       <div className="crew-block-head">
@@ -199,10 +180,9 @@ export function BlockCard({
           plainText={copy}
           label={full ? t("Copy {label}", { label: full }) : t("Copy")}
         />
-        {controls?.button}
       </div>
       <div className="crew-block-body">{children}</div>
-      {controls?.field}
+      {feedback}
     </div>
   );
 }

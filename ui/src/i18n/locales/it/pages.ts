@@ -2,6 +2,22 @@
 // sign-in, reviews, dialogs headers, claims and relative dates (Crew 0.36.0).
 // Includes the English values of label tables that render through t().
 const it: Record<string, string> = {
+  "Save a draft or add an option first.": "Prima salva una bozza o aggiungi un’opzione.",
+  "Note for you": "Nota per te",
+  "Text · pick one": "Testo · scegli un’opzione",
+  "Options · pick one": "Opzioni · scegline una",
+  "Images · pick one": "Immagini · scegline una",
+  "To {recipient}": "A {recipient}",
+  "Approval does not send, post or publish this.": "L’approvazione non invia né pubblica la bozza.",
+  "You paste the reply on LinkedIn yourself.": "Incolli tu la risposta su LinkedIn.",
+  "Approve {label}": "Approva {label}",
+  "Approve": "Approva",
+  "Recipient (optional)": "Destinatario (facoltativo)",
+  "Selection": "Selezione",
+  "Pick any": "Selezione multipla",
+  "Pick one": "Selezione singola",
+  "Open task": "Apri attività",
+  "{n} characters": "{n} caratteri",
   "Search archived tasks by title": "Cerca attività archiviate per titolo",
   "No archived tasks match “{q}”.":
     "Nessuna attività archiviata corrisponde a “{q}”.",

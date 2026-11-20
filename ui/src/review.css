@@ -54,14 +54,6 @@
   text-transform: uppercase;
   color: #6a7d63;
 }
-.crew-review-option.crew-pick {
-  border: 0;
-  margin: 0 0 1rem;
-  padding: 0;
-}
-.crew-pick[data-selected] .crew-block {
-  border-color: var(--check-fill);
-}
 .crew-pick-head {
   display: flex;
   align-items: center;
@@ -115,32 +107,6 @@
 .crew-dialog .crew-pick-check input[type="checkbox"]:focus-visible {
   outline: 2px solid #487d55;
   outline-offset: 2px;
-}
-/* The option's More sits at the right edge of its head; the copy toast shows
-   beside it without moving anything. */
-.crew-pick-more {
-  position: relative;
-  flex: none;
-}
-.crew-pick-toast {
-  position: absolute;
-  top: 50%;
-  right: 50px;
-  transform: translateY(-50%);
-  padding: 3px 9px;
-  border-radius: 8px;
-  background: #233a28;
-  color: #fff;
-  font-size: 12px;
-  white-space: nowrap;
-  pointer-events: none;
-  visibility: hidden;
-}
-.crew-pick-toast[data-state] {
-  visibility: visible;
-}
-.crew-pick-toast[data-state="failed"] {
-  background: #a14f3c;
 }
 .crew-pick-body {
   margin-top: 0.4rem;
@@ -340,4 +306,90 @@
 .crew-dialog button.crew-draft-copy {
   float: right;
   margin: -14px -14px 8px 12px;
+}
+
+/* Review navigation has one list capsule and room for full-size targets. */
+.crew-dialog:has(.crew-review-body) > header.crew-dialog-head button.crew-head-button {
+  width: 44px;
+  height: 44px;
+  color: var(--icon-ink);
+}
+.crew-dialog:has(.crew-review-body) > header .crew-head-button .crew-icon {
+  stroke-width: 2;
+}
+.crew-dialog .crew-review-meta {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: .875rem;
+}
+.crew-review-help {
+  margin: 8px 0;
+  padding: 8px 12px 4px;
+  border-radius: 12px;
+  border: 1px solid var(--block-line);
+  background: var(--block-note);
+}
+.crew-review-help p {
+  margin: 0;
+}
+.crew-review-option.crew-pick {
+  margin: 0 0 .75rem;
+  border: 1px solid var(--block-line);
+  border-radius: 12px;
+  padding: 6px 12px 12px;
+  background: var(--block-bg);
+}
+.crew-pick-check input[type="radio"] {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--check-fill);
+}
+.crew-review-bar .crew-actions button {
+  min-height: 44px;
+}
+
+.crew-option-channel {
+  color: var(--quiet);
+  font-size: .85rem;
+}
+.crew-review-option.crew-pick[data-selected] {
+  border-color: var(--check-fill);
+  box-shadow: inset 0 0 0 1px var(--check-fill);
+}
+.crew-review-option.crew-pick:has(.crew-blocks) {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.crew-review-body .crew-review-bar textarea.crew-review-note {
+  min-height: 44px;
+}
+@media (max-width: 680px) {
+  .crew-option-channel {
+    display: none;
+  }
+  .crew-dialog:has(.crew-review-body) .crew-list-nav {
+    order: -1;
+  }
+}
+
+@media (min-width: 681px) {
+  .crew-dialog:has(.crew-review-body) {
+    width: min(1080px, calc(100vw - 48px));
+  }
+}
+.crew-dialog .crew-pick-head > button.crew-copy-button {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--icon-ink);
 }

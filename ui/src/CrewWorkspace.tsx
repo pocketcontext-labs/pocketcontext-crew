@@ -3261,7 +3261,7 @@ export default function CrewWorkspace() {
       {dialog && (
         <Modal
           record={!!dialog.row}
-          nav={dialog.row ? <TrailNav /> : <NavCluster />}
+          nav={dialog.kind === "review" ? false : dialog.row ? <TrailNav /> : <NavCluster />}
           listNav={
             dialog.row
               ? {
@@ -3277,7 +3277,7 @@ export default function CrewWorkspace() {
           }
           title={
             dialog.kind === "review"
-              ? t("Review draft")
+              ? val([...data.tasks, ...archived.tasks].find(task => task.id === val(dialog.row, "task")), "title") || t("Review draft")
               : archiveNotice
                 ? dialog.kind === "note"
                   ? t("Archived note")
@@ -3821,7 +3821,7 @@ function Editor({
     void save(`${kind}.${row ? "update" : "create"}`, fields, row, reason);
   };
   if (kind === "review" && row)
-    return <ReviewDecision row={row} busy={busy} error={error}
+    return <ReviewDecision row={row} task={data.tasks.find(task => task.id === val(row, "task"))} busy={busy} error={error}
       attachments={item.attachments} loaded={item.loaded} Prose={Prose}
       when={when} save={save} />;
   const bar = (action?: ReactNode) =>
@@ -3885,10 +3885,8 @@ function Editor({
   const reviewHelp = <Help topic="send-for-approval" />;
   const reviewState = draft !== savedDraft ? (
     <ReviewRequestBlocked hint={t("Save your draft first.")} help={reviewHelp} />
-  ) : !savedDraft.trim() ? (
-    <ReviewRequestBlocked hint={t("Save a draft first.")} help={reviewHelp} />
   ) : (
-    <ReviewRequest busy={busy} help={reviewHelp} submit={(options) => void save("review.request", options.length ? { options } : {}, row)} />
+    <ReviewRequest busy={busy} hasDraft={!!savedDraft.trim()} help={reviewHelp} submit={(options, metadata) => void save("review.request", { ...(options.length ? { options } : {}), ...metadata }, row)} />
   );
   const buckets = data.buckets.find((x) => x.id === val(row, "bucket"));
   // A coding session's claim; the owner may always release it (In progress goes back to To do).

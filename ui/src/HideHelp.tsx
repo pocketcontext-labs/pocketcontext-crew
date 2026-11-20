@@ -12,6 +12,7 @@ export const helpIds = {
   homeGuideRow: "home.guide_row",
   homeGetStarted: "home.get_started",
   sessionGuide: "session_guide",
+  review: "review.explainer",
   page: (view: string) => `page.${view}`,
 } as const;
 

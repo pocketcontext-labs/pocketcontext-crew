@@ -86,7 +86,8 @@ it("picks any options, with feedback on each, and records every option (0.32.0)"
   });
   // The feedback icon opens the field on an unselected option too.
   expect(screen.queryByRole("textbox", { name: "Feedback on Draft B · LinkedIn" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Feedback on Draft B · LinkedIn" }));
+  fireEvent.click(screen.getByRole("button", { name: "Actions for Draft B · LinkedIn" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Feedback on the whole option" }));
   fireEvent.change(
     screen.getByRole("textbox", { name: "Feedback on Draft B · LinkedIn" }),
     { target: { value: "Too long" } },
@@ -205,52 +206,18 @@ it("shows a decided review's selection and feedback read-only", () => {
   ).toBeTruthy();
   expect(screen.queryByRole("button", { name: /Approve/ })).toBeNull();
 });
-// 0.37.1: the feedback icon focuses its option's field inside the tap (iOS
-// opens the keyboard only for a focus made by the gesture) and scrolls it
-// into view; an already open field (a selected option) stays open.
-it("focuses the option's feedback field synchronously on a tap of its icon", () => {
+it("opens and focuses whole-option feedback from More, including an unselected option", () => {
   const scrolled: Element[] = [];
-  Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
-    scrolled.push(this);
-  });
+  Element.prototype.scrollIntoView = vi.fn(function (this: Element) { scrolled.push(this); });
   decide(review);
-  const icon = (label: string) =>
-    screen.getByRole("button", { name: `Feedback on ${label}` });
-  // A tap or click (detail 1), as opposed to Enter or Space (detail 0).
-  const tap = (label: string) => {
-    fireEvent.pointerDown(icon(label));
-    fireEvent.click(icon(label), { detail: 1 });
-  };
-  const field = (label: string) =>
-    screen.queryByRole("textbox", { name: `Feedback on ${label}` });
-  expect(field("Draft B · X")).toBeNull();
-  expect(icon("Draft B · X")).toHaveAttribute("aria-expanded", "false");
-  tap("Draft B · X");
-  // Right after the click, with no frame or timer in between.
-  expect(field("Draft B · X")).toHaveFocus();
-  expect(scrolled.at(-1)).toBe(field("Draft B · X"));
-  expect(icon("Draft B · X")).toHaveAttribute("aria-expanded", "true");
-  // Another option's icon moves the focus there; one field per option.
-  tap("Draft A · X");
-  expect(field("Draft A · X")).toHaveFocus();
-  expect(screen.getAllByRole("textbox", { name: "Feedback on Draft A · X" })).toHaveLength(1);
-  // A selected option's field is already open: the icon focuses it, never closes it.
-  fireEvent.click(screen.getByRole("checkbox", { name: "Draft A · LinkedIn" }));
-  (document.activeElement as HTMLElement).blur();
-  tap("Draft A · LinkedIn");
-  expect(field("Draft A · LinkedIn")).toHaveFocus();
-  // Pressed again while its empty field has focus, the icon closes it.
-  tap("Draft A · LinkedIn");
-  expect(field("Draft A · LinkedIn")).toBeNull();
-  // A field with feedback never closes.
-  fireEvent.change(field("Draft A · X")!, { target: { value: "Keep" } });
-  tap("Draft A · X");
-  expect(field("Draft A · X")).toHaveFocus();
-  // From the keyboard, the icon toggles an open empty field.
-  fireEvent.click(icon("Draft B · X"), { detail: 0 });
-  expect(field("Draft B · X")).toBeNull();
-  fireEvent.click(icon("Draft B · X"), { detail: 0 });
-  expect(field("Draft B · X")).toHaveFocus();
+  for (const name of ["Draft A · LinkedIn", "Draft B · X"]) {
+    fireEvent.click(screen.getByRole("button", { name: `Actions for ${name}` }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Feedback on the whole option" }));
+    const field = screen.getByRole("textbox", { name: `Feedback on ${name}` });
+    expect(field).toHaveFocus();
+    expect(scrolled.at(-1)).toBe(field);
+    expect(screen.getByRole("checkbox", {name})).not.toBeChecked();
+  }
 });
 const stubClipboard = () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
@@ -260,34 +227,53 @@ const stubClipboard = () => {
   });
   return writeText;
 };
-it("copies the draft and each option as plain text, with a short Copied", async () => {
+it("copies only the option's paste-ready text and moves legacy snapshot prose to the reviewer's note", async () => {
   const writeText = stubClipboard();
   const { menu } = decide({
     ...review,
-    draft: "## Launch\n\n**Big** news, see [the post](https://example.com/p).\n- one\n- two",
+    draft: "**Text A (recommended)**\n\n_Ready_ to post\n\nOnly the reviewer sees this.",
     options: [
-      { key: "a", label: "Draft A", body: "_Short_ hook\n\nwith `code`" },
+      { key: "a", label: "Text A (recommended)", body: "_Ready_ to post" },
       { key: "img", label: "Picture", body: "![Picture](attachment:abcdefabcdef123)" },
     ],
   });
-  const draftCopy = screen.getByRole("button", { name: "Copy draft text" });
-  expect(draftCopy).toHaveTextContent("Copy");
-  fireEvent.click(draftCopy);
-  expect(writeText).toHaveBeenLastCalledWith(
-    "Launch\n\nBig news, see the post (https://example.com/p).\n• one\n• two",
-  );
-  await waitFor(() => expect(draftCopy).toHaveAttribute("data-state", "copied"));
-  expect(draftCopy.querySelector("[data-shown]")).toHaveTextContent("Copied");
-  fireEvent.click(screen.getByRole("button", { name: "Copy Draft A" }));
-  expect(writeText).toHaveBeenLastCalledWith("Short hook\n\nwith code");
-  // Image options have no Copy.
-  expect(screen.queryByRole("button", { name: "Copy Picture" })).toBeNull();
-  // More has Copy text too, beside Copy link.
-  menu().find((x) => x.label === "Copy text")!.onSelect();
-  expect(writeText).toHaveBeenLastCalledWith(
-    "Launch\n\nBig news, see the post (https://example.com/p).\n• one\n• two",
-  );
-  await screen.findByText("Text copied");
+  expect(screen.queryByRole("button", {name:"Copy draft text"})).toBeNull();
+  expect(menu().find(item => item.label === "Copy text")).toBeUndefined();
+  const note = screen.getByRole("complementary", { name: "Note for you" });
+  expect(note).toHaveTextContent("Only the reviewer sees this.");
+  expect(note).not.toHaveTextContent("Ready");
+  expect(note).not.toHaveTextContent("recommended");
+  expect(within(note).queryByRole("button")).toBeNull();
+  const copy = screen.getByRole("button", {name:"Copy Text A (recommended)"});
+  fireEvent.click(copy);
+  expect(writeText).toHaveBeenCalledWith("Ready to post");
+  await waitFor(() => expect(copy).toHaveAttribute("data-state", "copied"));
+  expect(screen.queryByRole("button", {name:"Copy Picture"})).toBeNull();
+});
+it("shows the recipient and selected variant's count and preserves feedback across radio selections", () => {
+  const { save } = decide({
+    ...review, selection: "one", recipient: "Test recipient",
+    options: [
+      { key:"a",label:"Text A",body:":::variant{channel=linkedin}\n\nSample\n\n:::" },
+      { key:"b",label:"Text B",body:":::variant{channel=x}\n\nShort\n\n:::" },
+    ],
+  });
+  expect(screen.getByRole("heading", {name:"Options · pick one"})).toBeTruthy();
+  expect(screen.getByText("To Test recipient")).toBeTruthy();
+  expect(screen.getByText("6 / 3,000")).toBeTruthy();
+  const a = screen.getByRole("radio", {name:"Text A"});
+  fireEvent.click(a);
+  expect(screen.getByRole("button", {name:"Approve Text A"})).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", {name:"Actions for Text A"}));
+  fireEvent.click(screen.getByRole("menuitem", {name:"Feedback on the whole option"}));
+  fireEvent.change(screen.getByRole("textbox", {name:"Feedback on Text A"}),{target:{value:"Keep for later"}});
+  fireEvent.click(screen.getByRole("radio", {name:"Text B"}));
+  expect(a).not.toBeChecked();
+  expect(screen.getByText("5 / 280")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", {name:"Approve Text B"}));
+  expect(save).toHaveBeenCalledWith("review.decide",expect.objectContaining({
+    option_decisions:[{key:"a",decision:"rejected",note:"Keep for later"},{key:"b",decision:"approved",note:""}]
+  }),expect.anything());
 });
 it("copies from a decided review and says when the copy failed", async () => {
   const writeText = stubClipboard().mockRejectedValue(new Error("denied"));
@@ -477,7 +463,8 @@ it("warns for legacy local paths and unresolved snapshot evidence", () => {
 });
 it("lets browser owners submit named review alternatives", () => {
   const submit = vi.fn();
-  render(<ReviewRequest busy={false} submit={submit} />);
+  render(<ReviewRequest busy={false} hasDraft={false} submit={submit} />);
+  expect(screen.getByRole("button", {name:"Request approval"})).toBeDisabled();
   fireEvent.click(screen.getByText("Review alternatives (optional)"));
   fireEvent.click(screen.getByRole("button", { name: "Add review option" }));
   expect(
@@ -489,12 +476,14 @@ it("lets browser owners submit named review alternatives", () => {
   fireEvent.change(screen.getByLabelText("Option 1 draft"), {
     target: { value: "A draft" },
   });
+  fireEvent.change(screen.getByLabelText("Selection"), {target:{value:"one"}});
+  fireEvent.change(screen.getByLabelText("Recipient (optional)"), {target:{value:" Sam "}});
   fireEvent.click(
     screen.getByRole("button", { name: "Request approval" }),
   );
   expect(submit).toHaveBeenCalledWith([
     { key: "option-1", label: "A · LinkedIn", body: "A draft" },
-  ]);
+  ], {selection:"one",recipient:"Sam"});
 });
 it("finds Unix, home, Windows, UNC and file URLs but not HTTPS", () => {
   expect(

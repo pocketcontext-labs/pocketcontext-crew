@@ -13,8 +13,6 @@ import {
   AttachmentsProvider,
   FileTile,
   fromAttachment,
-  ProseImage,
-  ProseLink,
   useAttachmentsContext,
 } from "./Attachments";
 import { attachmentsApi, type Attachment } from "./attachmentsApi";
@@ -25,32 +23,45 @@ import {
   missingReviewEvidence,
   optionDecisions,
   reviewFiles,
-  reviewOptions,
   type OptionDecision,
   type ReviewOption,
 } from "./reviews";
-import { IconButton, MoreMenu, useDialogMenu, type MenuItem } from "./DialogHeader";
 import {
-  BlockCard,
+  IconButton,
+  MoreMenu,
+  useDialogMenu,
+  type MenuItem,
+} from "./DialogHeader";
+import {
   BlockOptionContext,
   CopyButton,
   ReviewMarkupContext,
-  copyAllText,
+  blockName,
+  channelName,
 } from "./ReviewBlocks";
-import { copyBlocks, parseReviewMarkup } from "./reviewMarkup";
-import { reviewHash } from "./itemLink";
+import { blockCopyText, characterCount } from "./reviewMarkup";
+import { reviewPresentation, type PresentedReview } from "./reviewPresentation";
+import HideHelp, { helpIds, useHelpShown } from "./HideHelp";
+import { itemPath, reviewHash } from "./itemLink";
 import { copyText } from "./projectAgents";
-import { markdownPlainText } from "./markdownText";
 import "./review.css";
 import AutoTextarea, { AutoTextField } from "./AutoTextarea";
 import PlainRefs from "./PlainRefs";
-import { t } from "./i18n";
+import { locale, t } from "./i18n";
+import { followTrail } from "./trail";
 
 /** Fills a translated sentence's {name} slots with elements. */
-function fillNodes(text: string, nodes: Record<string, ReactNode>): ReactNode[] {
+function fillNodes(
+  text: string,
+  nodes: Record<string, ReactNode>,
+): ReactNode[] {
   return text.split(/(\{\w+\})/).map((part, i) => {
     const name = /^\{(\w+)\}$/.exec(part)?.[1];
-    return name && name in nodes ? <Fragment key={i}>{nodes[name]}</Fragment> : part;
+    return name && name in nodes ? (
+      <Fragment key={i}>{nodes[name]}</Fragment>
+    ) : (
+      part
+    );
   });
 }
 
@@ -79,61 +90,76 @@ export function ReviewContent({
   row,
   attachments,
   loaded = true,
-  draftCopyInMenu = false,
+  presentation,
   Prose,
   children,
 }: {
   row: Row;
   attachments: Attachment[];
   loaded?: boolean;
-  draftCopyInMenu?: boolean;
+  presentation?: PresentedReview;
   Prose: ProseComponent;
   children?: React.ReactNode;
 }) {
-  const draft = val(row, "draft");
-  const hasCopyBlocks = useMemo(() => copyBlocks(parseReviewMarkup(draft)).length > 0, [draft]);
+  const { draft, options, notes } = useMemo(
+    () => presentation ?? reviewPresentation(row),
+    [row, presentation],
+  );
   const files = reviewFiles(row, attachments);
   const missing = missingReviewEvidence(row, files, loaded);
   return (
     <AttachmentsProvider attachments={files} stepThroughAll>
       <ReviewMarkupContext.Provider value={true}>
-      <div className="crew-review-content">
-        {missing.length > 0 && (
-          <div className="crew-alert" role="alert">
-            <p>
-              {t(
-                "This draft mentions files that aren't attached to Crew. Request changes and ask the agent to attach them.",
-              )}
-            </p>
-            <ul>
-              {missing.map((path) => (
-                <li key={path}>
-                  <code>{path}</code>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div className="crew-draft-snapshot" data-blocks={hasCopyBlocks || undefined}>
-          {!(hasCopyBlocks && draftCopyInMenu) && (
-            <header className={hasCopyBlocks ? "crew-snapshot-actions" : undefined}>
-              <CopyButton
-                className={hasCopyBlocks ? undefined : "crew-draft-copy"}
-                text={draft}
-                label={t("Copy draft text")}
-              />
-            </header>
+        <div className="crew-review-content">
+          {missing.length > 0 && (
+            <div className="crew-alert" role="alert">
+              <p>
+                {t(
+                  "This draft mentions files that aren't attached to Crew. Request changes and ask the agent to attach them.",
+                )}
+              </p>
+              <ul>
+                {missing.map((path) => (
+                  <li key={path}>
+                    <code>{path}</code>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
-          <Prose>{draft}</Prose>
+          {!options.length && draft.body && (
+            <div
+              className="crew-draft-snapshot"
+              data-blocks={draft.paste.length > 0 || undefined}
+            >
+              {!draft.paste.length && (
+                <header>
+                  <CopyButton
+                    className="crew-draft-copy"
+                    plainText={draft.copy}
+                    label={t("Copy draft text")}
+                  />
+                </header>
+              )}
+              <Prose>{draft.body}</Prose>
+            </div>
+          )}
+          {notes.length > 0 && (
+            <aside className="crew-block-note" aria-label={t("Note for you")}>
+              <h3 className="crew-block-note-label">{t("Note for you")}</h3>
+              {notes.map((note, i) => (
+                <Prose key={i}>{note}</Prose>
+              ))}
+            </aside>
+          )}
+          {children}
+          {files.length > 0 && (
+            <section aria-label={t("Files submitted for review")}>
+              <h3>{t("Files submitted for review")}</h3>
+              <ReviewFileTiles files={files} />
+            </section>
+          )}
         </div>
-        {children}
-        {files.length > 0 && (
-          <section aria-label={t("Files submitted for review")}>
-            <h3>{t("Files submitted for review")}</h3>
-            <ReviewFileTiles files={files} />
-          </section>
-        )}
-      </div>
       </ReviewMarkupContext.Provider>
     </AttachmentsProvider>
   );
@@ -179,7 +205,8 @@ const decidedPick = (choices: OptionDecision[], key: string): OptionPick => {
   const choice = choices.find((x) => x.key === key);
   const feedback: Record<string, string> = {};
   for (const entry of choice?.feedback ?? [])
-    if (entry && typeof entry.target === "string") feedback[entry.target] = String(entry.note ?? "");
+    if (entry && typeof entry.target === "string")
+      feedback[entry.target] = String(entry.note ?? "");
   return {
     selected: choice?.decision === "approved",
     note: choice?.note || "",
@@ -220,82 +247,25 @@ function FeedbackButton({
   );
 }
 
-/**
- * An option card's More (0.38.0): Copy all variants and, while deciding,
- * Feedback on the whole option. "Copied" shows beside the button for 2 s
- * without moving anything.
- */
-function OptionMore({
-  option,
-  onWholeFeedback,
-}: {
-  option: ReviewOption;
-  onWholeFeedback?: () => void;
-}) {
-  const [copied, setCopied] = useState<"" | "copied" | "failed">("");
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(""), 2000);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
-  const items: MenuItem[] = [
-    {
-      label: t("Copy all variants"),
-      icon: "copy",
-      onSelect: () =>
-        void copyText(copyAllText(option.body)).then((ok) =>
-          setCopied(ok ? "copied" : "failed"),
-        ),
-    },
-  ];
-  if (onWholeFeedback)
-    items.push({
-      label: t("Feedback on the whole option"),
-      icon: "note",
-      onSelect: onWholeFeedback,
-    });
-  return (
-    <div className="crew-pick-more">
-      <MoreMenu
-        iconButton
-        items={items}
-        label={t("Actions for {label}", { label: option.label })}
-      />
-      <span
-        className="crew-pick-toast"
-        data-state={copied || undefined}
-        role="status"
-        aria-live="polite"
-      >
-        {copied === "copied" ? t("Copied") : copied === "failed" ? t("Not copied") : ""}
-      </span>
-    </div>
-  );
-}
-
-/**
- * The options of a review (0.32.0, as in the approved mockup): pick any
- * number with checkboxes, and give each option its own feedback in a
- * one-line field under it. Since 0.38.0 a text option's header is checkbox,
- * label and More; its body is blocks (`:::variant` and `:::copy`, or one
- * unnamed block for a body without them), each with Copy and its own
- * feedback button at the right edge, so the controls sit at the same place on
- * every option. Options whose body is one image are tiles, with a badge when
- * they have feedback. Read-only (decided reviews and history) shows the
- * recorded selection and feedback, each under its block.
- */
+/** Option selection and feedback always refer to the frozen option keys. */
 export function ReviewChoices({
   row,
   Prose,
   picks,
+  presentation,
   onChange,
 }: {
   row: Row;
   Prose: ProseComponent;
   picks?: OptionPicks;
+  presentation?: PresentedReview;
   onChange?: (key: string, pick: OptionPick) => void;
 }) {
-  const options = reviewOptions(row);
+  const { options } = useMemo(
+    () => presentation ?? reviewPresentation(row),
+    [row, presentation],
+  );
+  const pickOne = row.selection === "one";
   const choices = optionDecisions(row);
   const prefix = useId();
   // Whether the field had focus when its feedback icon was pressed (the
@@ -314,18 +284,35 @@ export function ReviewChoices({
         ? (pick.openBlocks?.[target] ?? !!noteOf(pick, target))
         : !!noteOf(pick, target)
       : editable
-        ? (pick.open ?? (pick.selected || !!pick.note))
+        ? (pick.open ?? ((!pickOne && pick.selected) || !!pick.note))
         : !!pick.note;
   const shown = (pick: OptionPick) => shownFor(pick, "");
-  const withNote = (pick: OptionPick, target: string, note: string): OptionPick =>
-    target ? { ...pick, feedback: { ...pick.feedback, [target]: note } } : { ...pick, note };
-  const withOpen = (pick: OptionPick, target: string, open: boolean): OptionPick =>
-    target ? { ...pick, openBlocks: { ...pick.openBlocks, [target]: open } } : { ...pick, open };
+  const withNote = (
+    pick: OptionPick,
+    target: string,
+    note: string,
+  ): OptionPick =>
+    target
+      ? { ...pick, feedback: { ...pick.feedback, [target]: note } }
+      : { ...pick, note };
+  const withOpen = (
+    pick: OptionPick,
+    target: string,
+    open: boolean,
+  ): OptionPick =>
+    target
+      ? { ...pick, openBlocks: { ...pick.openBlocks, [target]: open } }
+      : { ...pick, open };
   const fieldId = (option: ReviewOption, target: string) =>
     target ? `${prefix}-${option.key}--${target}` : `${prefix}-${option.key}`;
   const text = options.filter((o) => !isImageOption(o));
   const images = options.filter(isImageOption);
-  const field = (option: ReviewOption, pick: OptionPick, target = "", label = option.label) =>
+  const field = (
+    option: ReviewOption,
+    pick: OptionPick,
+    target = "",
+    label = option.label,
+  ) =>
     editable ? (
       <AutoTextarea
         id={fieldId(option, target)}
@@ -347,7 +334,9 @@ export function ReviewChoices({
       </p>
     );
   const fieldOf = (option: ReviewOption, target = "") =>
-    document.getElementById(fieldId(option, target)) as HTMLTextAreaElement | null;
+    document.getElementById(
+      fieldId(option, target),
+    ) as HTMLTextAreaElement | null;
   const pressFeedback = (option: ReviewOption, target = "") => {
     const field = fieldOf(option, target);
     hadFocus.current = !!field && document.activeElement === field;
@@ -366,7 +355,11 @@ export function ReviewChoices({
     if (!onChange) return;
     const focused = hadFocus.current;
     hadFocus.current = false;
-    if (shownFor(pick, target) && !noteOf(pick, target) && (focused || keyboard)) {
+    if (
+      shownFor(pick, target) &&
+      !noteOf(pick, target) &&
+      (focused || keyboard)
+    ) {
       onChange(option.key, withOpen(pick, target, false));
       return;
     }
@@ -384,54 +377,50 @@ export function ReviewChoices({
         <span className="crew-pick-label">{option.label}</span>
       </span>
     ) : (
-    <label className="crew-pick-check">
-      <input
-        type="checkbox"
-        checked={pick.selected}
-        disabled={!editable}
-        onChange={(e) =>
-          onChange?.(option.key, {
-            ...pick,
-            selected: e.target.checked,
-            open: undefined,
-          })
-        }
-      />
-      <span className="crew-pick-label">{option.label}</span>
-    </label>
+      <label className="crew-pick-check">
+        <input
+          type={pickOne ? "radio" : "checkbox"}
+          name={pickOne ? prefix : undefined}
+          checked={pick.selected}
+          disabled={!editable}
+          onChange={(e) =>
+            onChange?.(option.key, {
+              ...pick,
+              selected: e.target.checked,
+              open: undefined,
+            })
+          }
+        />
+        <span className="crew-pick-label">{option.label}</span>
+      </label>
     );
   /** What the option's blocks get: its label and their feedback controls. */
-  const blockOption = (option: ReviewOption, pick: OptionPick) => ({
+  const blockOption = (
+    option: PresentedReview["options"][number],
+    pick: OptionPick,
+  ) => ({
     label: option.label,
     feedback: (target: string, name: string) => {
       const label = name ? `${option.label} · ${name}` : option.label;
-      return {
-        button: (
-          <FeedbackButton
-            label={label}
-            hasNote={!!noteOf(pick, target)}
-            expanded={shownFor(pick, target)}
-            onPointerDown={() => pressFeedback(option, target)}
-            onClick={
-              editable
-                ? (keyboard) => toggleFeedback(option, pick, keyboard, target)
-                : undefined
-            }
-          />
-        ),
-        // The whole option's field stays under the card.
-        field: target && shownFor(pick, target) ? field(option, pick, target, label) : null,
-      };
+      return shownFor(pick, target) ? field(option, pick, target, label) : null;
     },
   });
   const textHeading = images.length
     ? editable
-      ? t("Text · pick any")
+      ? pickOne
+        ? t("Text · pick one")
+        : t("Text · pick any")
       : t("Text")
     : editable
-      ? t("Options · pick any")
+      ? pickOne
+        ? t("Options · pick one")
+        : t("Options · pick any")
       : t("Options");
-  const imagesHeading = editable ? t("Images · pick any") : t("Images");
+  const imagesHeading = editable
+    ? pickOne
+      ? t("Images · pick one")
+      : t("Images · pick any")
+    : t("Images");
   return (
     <div className="crew-review-options">
       {text.length > 0 && (
@@ -439,7 +428,25 @@ export function ReviewChoices({
           <h3 className="crew-pick-heading">{textHeading}</h3>
           {text.map((option) => {
             const pick = pickFor(option.key);
-            const blocks = copyBlocks(parseReviewMarkup(option.body));
+            const single =
+              option.paste.length === 1 ? option.paste[0] : undefined;
+            const feedbackItems: MenuItem[] = editable
+              ? [
+                  {
+                    label: t("Feedback on the whole option"),
+                    icon: "note",
+                    onSelect: () => toggleFeedback(option, pick, false),
+                  },
+                  ...option.paste.map((block) => ({
+                    label: t("Feedback on {label}", {
+                      label: blockName(block),
+                    }),
+                    icon: "note" as const,
+                    onSelect: () =>
+                      toggleFeedback(option, pick, false, block.target),
+                  })),
+                ]
+              : [];
             return (
               <section
                 key={option.key}
@@ -449,26 +456,45 @@ export function ReviewChoices({
               >
                 <div className="crew-pick-head">
                   {check(option, pick)}
-                  <OptionMore
-                    option={option}
-                    onWholeFeedback={
-                      editable ? () => toggleFeedback(option, pick, false) : undefined
-                    }
-                  />
+                  {single && (
+                    <span className="crew-option-channel">
+                      {blockName(single)} ·{" "}
+                      {characterCount(
+                        option.copy,
+                        single.channel,
+                      ).toLocaleString(locale())}
+                      {single.limit &&
+                        ` / ${single.limit.toLocaleString(locale())}`}
+                    </span>
+                  )}
+                  {option.copy && (
+                    <CopyButton
+                      plainText={option.copy}
+                      iconOnly
+                      label={t("Copy {label}", { label: option.label })}
+                    />
+                  )}
+                  {feedbackItems.length > 0 && (
+                    <MoreMenu
+                      iconButton
+                      items={feedbackItems}
+                      label={t("Actions for {label}", { label: option.label })}
+                    />
+                  )}
                 </div>
                 <div className="crew-pick-body">
-                  <BlockOptionContext.Provider value={blockOption(option, pick)}>
-                    {blocks.length ? (
-                      <Prose>{option.body}</Prose>
-                    ) : (
-                      <BlockCard
-                        name=""
-                        target=""
-                        copy={copyAllText(option.body)}
-                      >
-                        <Prose>{option.body}</Prose>
-                      </BlockCard>
-                    )}
+                  <BlockOptionContext.Provider
+                    value={blockOption(option, pick)}
+                  >
+                    <Prose>{single?.content ?? option.body}</Prose>
+                    {single &&
+                      shownFor(pick, single.target) &&
+                      field(
+                        option,
+                        pick,
+                        single.target,
+                        `${option.label} · ${blockName(single)}`,
+                      )}
                   </BlockOptionContext.Provider>
                 </div>
                 {shown(pick) && field(option, pick)}
@@ -559,6 +585,7 @@ const reviewUrl = (row: Row) =>
 
 export function ReviewDecision({
   row,
+  task,
   busy,
   error,
   attachments,
@@ -568,6 +595,7 @@ export function ReviewDecision({
   save,
 }: {
   row: Row;
+  task?: Row;
   busy: boolean;
   error: string;
   attachments: Attachment[];
@@ -584,15 +612,37 @@ export function ReviewDecision({
   // images stay put.
   const note = useRef<HTMLTextAreaElement>(null);
   const [picks, setPicks] = useState<OptionPicks>({});
-  // What the More menu copied last: the link or the draft text.
-  const [copied, setCopied] = useState<
-    "" | "copied" | "failed" | "text" | "text-failed"
-  >("");
-  const options = reviewOptions(row),
-    pending = val(row, "status") === "pending";
+  const [copied, setCopied] = useState<"" | "copied" | "failed">("");
+  const presentation = useMemo(() => reviewPresentation(row), [row]);
+  const { options } = presentation;
+  const pending = val(row, "status") === "pending";
   const selected = options.filter((o) => picks[o.key]?.selected).length;
+  const pickOne = row.selection === "one";
+  const chosen = options.find((o) =>
+    pending
+      ? picks[o.key]?.selected
+      : decidedPick(optionDecisions(row), o.key).selected,
+  );
+  const current = chosen ?? options[0] ?? presentation.draft;
+  const metaBlock = current.paste[0];
+  const channel = metaBlock?.channel;
+  const count = characterCount(
+    metaBlock ? blockCopyText(metaBlock) : current.copy,
+    channel,
+  );
+  const autoHelp = useHelpShown(helpIds.review);
+  const helpPanel = useRef<HTMLElement>(null);
+  const [showHelp, setShowHelp] = useState<boolean>();
   const setPick = (key: string, pick: OptionPick) =>
-    setPicks((all) => ({ ...all, [key]: pick }));
+    setPicks((all) => {
+      if (!pickOne || !pick.selected || all[key]?.selected)
+        return { ...all, [key]: pick };
+      const next = { ...all };
+      for (const [other, prev] of Object.entries(next))
+        next[other] = { ...prev, selected: false };
+      next[key] = pick;
+      return next;
+    });
   // Every option is recorded: checked as approved, unchecked as rejected,
   // each with its feedback (empty stays empty). Reject rejects them all.
   const submit = (decision: string) => {
@@ -621,7 +671,7 @@ export function ReviewDecision({
   const submitRef = useRef(submit);
   submitRef.current = submit;
   useEffect(() => {
-    if (copied !== "copied" && copied !== "text") return;
+    if (copied !== "copied") return;
     const timer = window.setTimeout(() => setCopied(""), 2000);
     return () => window.clearTimeout(timer);
   }, [copied]);
@@ -644,20 +694,29 @@ export function ReviewDecision({
       onSelect: () =>
         void copyText(url).then((ok) => setCopied(ok ? "copied" : "failed")),
     });
+    if (task)
+      items.push({
+        label: t("Open task"),
+        icon: "link",
+        onSelect: () => followTrail(itemPath("task", task)),
+      });
     items.push({
-      label: t("Copy text"),
-      icon: "copy",
-      onSelect: () =>
-        void copyText(markdownPlainText(val(row, "draft"))).then((ok) =>
-          setCopied(ok ? "text" : "text-failed"),
-        ),
+      label: t("How it works"),
+      icon: "note",
+      onSelect: () => {
+        flushSync(() => setShowHelp(true));
+        helpPanel.current?.focus();
+        helpPanel.current?.scrollIntoView?.({ block: "center" });
+      },
     });
     if (typeof navigator.share === "function")
       items.push({
         label: t("Share"),
         icon: "share",
         onSelect: () =>
-          void navigator.share({ title: t("Review draft"), url }).catch(() => undefined),
+          void navigator
+            .share({ title: t("Review draft"), url })
+            .catch(() => undefined),
       });
     if (pending)
       items.push({
@@ -669,37 +728,44 @@ export function ReviewDecision({
       });
     setMenu(items);
     return () => setMenu([]);
-  }, [setMenu, row, pending, busy]);
+  }, [setMenu, row, task, pending, busy]);
   return (
     <div className="crew-dialog-body crew-review-body">
       <div className="crew-review-meta">
         <span className={pending ? "crew-human" : "crew-pill"}>
           {reviewStatusText(val(row, "status"))}
         </span>
-        <span>
-          {t("Snapshot {id}", { id: row.id })} · {when(row.created)}
-        </span>
-      </div>
-      <p>
-        {t(
-          "This is the exact submitted draft. Approval does not send, post or publish it.",
+        {channel && <span className="crew-pill">{channelName(channel)}</span>}
+        {val(row, "recipient") && (
+          <span>
+            {t("To {recipient}", { recipient: val(row, "recipient") })}
+          </span>
         )}
-      </p>
+        {!!current.copy && (
+          <span>
+            {metaBlock?.limit
+              ? `${count.toLocaleString(locale())} / ${metaBlock.limit.toLocaleString(locale())}`
+              : t("{n} characters", { n: count.toLocaleString(locale()) })}
+          </span>
+        )}
+      </div>
+      {(showHelp ?? autoHelp) && (
+        <aside className="crew-review-help" ref={helpPanel} tabIndex={-1}>
+          <p>
+            {t("Approval does not send, post or publish this.")}{" "}
+            {channel === "linkedin" &&
+              t("You paste the reply on LinkedIn yourself.")}
+          </p>
+          <HideHelp id={helpIds.review} />
+        </aside>
+      )}
       {copied && (
         <p
-          className={
-            copied === "copied" || copied === "text"
-              ? "crew-review-toast"
-              : "crew-alert"
-          }
-          role={copied === "copied" || copied === "text" ? "status" : "alert"}
+          className={copied === "copied" ? "crew-review-toast" : "crew-alert"}
+          role={copied === "copied" ? "status" : "alert"}
         >
           {copied === "copied" ? (
             t("Link copied")
-          ) : copied === "text" ? (
-            t("Text copied")
-          ) : copied === "text-failed" ? (
-            t("Couldn't copy the text.")
           ) : (
             <>
               {t("Could not copy automatically. Copy it from here:")}{" "}
@@ -712,12 +778,13 @@ export function ReviewDecision({
         row={row}
         attachments={attachments}
         loaded={loaded}
-        draftCopyInMenu
+        presentation={presentation}
         Prose={Prose}
       >
         <ReviewChoices
           row={row}
           Prose={Prose}
+          presentation={presentation}
           picks={pending ? picks : undefined}
           onChange={pending ? setPick : undefined}
         />
@@ -742,14 +809,6 @@ export function ReviewDecision({
       )}
       {pending && (
         <>
-          <p className="crew-footnote">
-            {options.length > 0 &&
-              t("Check every option you approve and add feedback on any option.") +
-                " "}
-            {t(
-              "After approval, perform the external action yourself and mark the task Done. Reject is in the More menu.",
-            )}
-          </p>
           {/* Pinned to the bottom (0.31.0) and compact (0.32.0): a one-line
               note that grows upward on focus, then the two primary actions,
               which never move. */}
@@ -775,10 +834,17 @@ export function ReviewDecision({
                 onClick={() => submit("approved")}
               >
                 {options.length
-                  ? t("Approve {n} selected", { n: selected })
+                  ? pickOne
+                    ? chosen
+                      ? t("Approve {label}", { label: chosen.label })
+                      : t("Approve")
+                    : t("Approve {n} selected", { n: selected })
                   : t("Approve draft")}
               </button>
-              <button disabled={busy} onClick={() => submit("changes_requested")}>
+              <button
+                disabled={busy}
+                onClick={() => submit("changes_requested")}
+              >
                 {t("Request changes")}
               </button>
             </div>
@@ -796,17 +862,27 @@ export function ReviewDecision({
 
 export function ReviewRequest({
   busy,
+  hasDraft = true,
   submit,
   help,
 }: {
   busy: boolean;
-  submit: (options: ReviewOption[]) => void;
+  submit: (
+    options: ReviewOption[],
+    metadata: { selection?: "one"; recipient?: string },
+  ) => void;
+  hasDraft?: boolean;
   /** The standard "?" shown right after the button. */
   help?: ReactNode;
 }) {
   const [options, setOptions] = useState<ReviewOption[]>([]);
   const [nextKey, setNextKey] = useState(1);
-  const valid = options.every((o) => o.label.trim() && o.body.trim());
+  const [selection, setSelection] = useState("any");
+  const [recipient, setRecipient] = useState("");
+  const hint = useId();
+  const missingDraft = !hasDraft && !options.length;
+  const valid =
+    !missingDraft && options.every((o) => o.label.trim() && o.body.trim());
   return (
     <div className="crew-review-request">
       <div className="crew-review-actions">
@@ -814,11 +890,24 @@ export function ReviewRequest({
           type="button"
           className="crew-review-submit"
           disabled={busy || !valid}
-          onClick={() => submit(options)}
+          aria-describedby={missingDraft ? hint : undefined}
+          onClick={() =>
+            submit(options, {
+              ...(options.length && selection === "one"
+                ? { selection: "one" }
+                : {}),
+              ...(recipient.trim() ? { recipient: recipient.trim() } : {}),
+            })
+          }
         >
           {t("Request approval")}
         </button>
         {help}
+        {missingDraft && (
+          <span id={hint} className="crew-review-hint">
+            {t("Save a draft or add an option first.")}
+          </span>
+        )}
       </div>
       <details>
         <summary>{t("Review alternatives (optional)")}</summary>
@@ -827,6 +916,26 @@ export function ReviewRequest({
             "Give each draft or platform its own option so the reviewer can choose exactly what to approve. Options are saved when you send the review.",
           )}
         </p>
+        <label className="crew-option-note">
+          {t("Recipient (optional)")}
+          <input
+            maxLength={200}
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+          />
+        </label>
+        {options.length > 0 && (
+          <label>
+            {t("Selection")}
+            <select
+              value={selection}
+              onChange={(e) => setSelection(e.target.value)}
+            >
+              <option value="any">{t("Pick any")}</option>
+              <option value="one">{t("Pick one")}</option>
+            </select>
+          </label>
+        )}
         {options.map((option, index) => (
           <fieldset key={option.key} className="crew-review-option">
             <legend>{t("Option {n}", { n: index + 1 })}</legend>
@@ -897,7 +1006,12 @@ export function ReviewRequestBlocked({
   return (
     <div className="crew-review-request">
       <div className="crew-review-actions">
-        <button type="button" className="crew-review-submit" disabled aria-describedby={id}>
+        <button
+          type="button"
+          className="crew-review-submit"
+          disabled
+          aria-describedby={id}
+        >
           {t("Request approval")}
         </button>
         {help}

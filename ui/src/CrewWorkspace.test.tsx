@@ -502,7 +502,8 @@ describe("review links (#/approvals/<id>)", () => {
     history.replaceState(null, "", "/#/approvals/review000000001");
     render(<CrewWorkspace />);
     const dialog = within(await screen.findByRole("dialog"));
-    expect(dialog.getByRole("heading", { name: "Review draft" })).toBeTruthy();
+    expect(dialog.getByRole("heading", { name: "Launch post" })).toBeTruthy();
+    expect(dialog.queryByRole("group", { name: "Link history" })).toBeNull();
     for (const name of ["Approve draft", "Request changes"])
       expect(dialog.getByRole("button", { name })).toBeEnabled();
     // Reject is a secondary action: last in the More menu, in red (0.32.0).
@@ -2139,7 +2140,7 @@ describe("simple dialogs", () => {
     const dialog = await openTask({ draft: "" });
     const request = dialog.getByRole("button", { name: "Request approval" });
     expect(request).toBeDisabled();
-    expect(request).toHaveAccessibleDescription("Save a draft first.");
+    expect(request).toHaveAccessibleDescription("Save a draft or add an option first.");
     // The standard "?" sits in the same row as the button.
     expect(
       request.parentElement?.querySelector(".crew-help-button"),

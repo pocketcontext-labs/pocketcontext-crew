@@ -4,7 +4,6 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import Prose from "./Prose";
-import { copyAllText } from "./ReviewBlocks";
 import { markdownPlainText, markdownText } from "./markdownText";
 import { ReviewDecision } from "./Review";
 import { decisionSummary } from "./reviews";
@@ -91,14 +90,13 @@ it("copies only a block's text", async () => {
   await waitFor(() => expect(copy).toHaveAttribute("data-state", "copied"));
 });
 
-it("keeps markers and notes out of plain text, previews and Copy all", () => {
-  for (const text of [markdownPlainText(variants), markdownText(variants), copyAllText(variants)]) {
+it("keeps markers and notes out of plain text, previews and draft copy", () => {
+  for (const text of [markdownPlainText(variants), markdownText(variants)]) {
     expect(text).not.toContain(":::variant");
     expect(text).not.toContain(":::note");
     expect(text).not.toContain("Why it works");
     expect(text).toContain("LinkedIn text.");
   }
-  expect(copyAllText(variants)).toMatch(/^LinkedIn\nLinkedIn text\.\n\nX\nx{270} https:\/\/example\.com\/long\/path$/);
 });
 
 it("never renders HTML or attribute handlers from markup", () => {
@@ -149,18 +147,19 @@ it("saves feedback per block into option_decisions[].feedback", () => {
   // Option A: two blocks with Copy and feedback; the note is labelled.
   const a = screen.getByRole("region", { name: "Draft A" });
   expect(within(a).getByRole("button", { name: "Copy Draft A · LinkedIn" })).toBeInTheDocument();
-  expect(within(a).getByText("Note for the reviewer")).toBeInTheDocument();
+  expect(screen.getByRole("complementary", { name: "Note for you" })).toHaveTextContent("Short on purpose.");
   // Option B: one unnamed block with the same controls.
   const b = screen.getByRole("region", { name: "Draft B" });
   expect(within(b).getByRole("button", { name: "Copy Draft B" })).toBeInTheDocument();
-  expect(within(b).getByRole("button", { name: "Feedback on Draft B" })).toBeInTheDocument();
+  expect(within(b).getByRole("button", { name: "Actions for Draft B" })).toBeInTheDocument();
 
-  const comment = within(a).getByRole("button", { name: "Feedback on Draft A · LinkedIn" });
-  fireEvent.click(comment);
+  fireEvent.click(within(a).getByRole("button", { name: "Actions for Draft A" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Feedback on LinkedIn" }));
   const field = within(a).getByPlaceholderText("Feedback on Draft A · LinkedIn…");
   expect(document.activeElement).toBe(field);
   fireEvent.change(field, { target: { value: "Drop the last line" } });
-  fireEvent.click(within(a).getByRole("button", { name: "Feedback on Draft A · X" }));
+  fireEvent.click(within(a).getByRole("button", { name: "Actions for Draft A" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Feedback on X" }));
   // An empty field sends nothing.
   fireEvent.click(screen.getByRole("button", { name: "Request changes" }));
   expect(save).toHaveBeenCalledWith(
@@ -205,20 +204,19 @@ it("shows recorded block feedback under its block and counts it", () => {
   const blocks = a.querySelectorAll(".crew-block");
   expect(blocks[0]).toHaveTextContent("Feedback on Draft A · LinkedIn: Shorter");
   expect(blocks[1]).toHaveTextContent("Feedback on Draft A · X: Add the link");
-  // The read-only feedback button stays in place, disabled.
-  expect(within(a).getByRole("button", { name: "Feedback on Draft A · X" })).toBeDisabled();
+  expect(within(a).queryByRole("button", { name: "Actions for Draft A" })).toBeNull();
   expect(decisionSummary(decided)).toBe("Selected: Draft A (2 comments); Not selected: Draft B");
 });
 
-it("copies every variant from the option's More, without the note", async () => {
+it("copies each variant from the option header, omitting labels and reviewer notes", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   decideReview(markupReview);
   const a = screen.getByRole("region", { name: "Draft A" });
-  fireEvent.click(within(a).getByRole("button", { name: "Actions for Draft A" }));
-  fireEvent.click(screen.getByRole("menuitem", { name: "Copy all variants" }));
-  expect(writeText).toHaveBeenLastCalledWith("LinkedIn\nLinkedIn A\n\nX\nX A");
-  await waitFor(() => expect(a.querySelector(".crew-pick-toast")).toHaveTextContent("Copied"));
+  const copy = within(a).getByRole("button", { name: "Copy Draft A" });
+  fireEvent.click(copy);
+  expect(writeText).toHaveBeenLastCalledWith("LinkedIn A\n\nX A");
+  await waitFor(() => expect(copy).toHaveAttribute("data-state","copied"));
   // Feedback on the whole option opens the option's own field.
   fireEvent.click(within(a).getByRole("button", { name: "Actions for Draft A" }));
   fireEvent.click(screen.getByRole("menuitem", { name: "Feedback on the whole option" }));
