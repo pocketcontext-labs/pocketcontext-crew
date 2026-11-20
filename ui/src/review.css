@@ -377,7 +377,7 @@
 
 @media (min-width: 681px) {
   .crew-dialog:has(.crew-review-body) {
-    width: min(1080px, calc(100vw - 48px));
+    width: min(1080px, calc(100vw - 30px));
   }
 }
 .crew-dialog .crew-pick-head > button.crew-copy-button {

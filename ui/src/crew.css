@@ -1465,7 +1465,8 @@ a.crew-logo:hover .product-brand span {
   border-radius: 6px;
 }
 .crew-dialog {
-  width: min(760px, calc(100vw - 30px));
+  --crew-dialog-width: 760px;
+  width: min(var(--crew-dialog-width), calc(100vw - 30px));
   max-height: 90dvh;
   padding: 0;
   background: #fafbf6;
@@ -4391,6 +4392,13 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-record-dialog > header .crew-head-button .crew-icon {
   stroke-width: 2;
+}
+@media (min-width: 681px) {
+  /* Reviews can widen to compare drafts. Anchor every record's controls to
+     the standard dialog width so switching records keeps them in place. */
+  .crew-record-dialog > header.crew-dialog-head {
+    padding-inline: calc(18px + max(0px, (100% - var(--crew-dialog-width)) / 2));
+  }
 }
 @media (max-width: 520px) {
   .crew-record-dialog > header.crew-dialog-head {

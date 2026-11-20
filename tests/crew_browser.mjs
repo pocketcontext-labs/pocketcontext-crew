@@ -2798,15 +2798,18 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   assert.equal(tops[0],tops[1],'variants sit side by side on a desktop: '+tops);
   assert.equal(await dialog().evaluate(d=>{const b=d.querySelector('.crew-dialog-body')||d;return b.scrollWidth<=b.clientWidth+1;}),true,'no horizontal scroll on a desktop');}
   await snapView('crew-review-markup-decided-1440');
+  const headerCloseX = async () => (await dialog().locator('header .crew-head-close').boundingBox()).x;
+  const reviewCloseX = await headerCloseX();
   await close();await dialog().waitFor({state:'hidden'});
   // A note, a comment and a task draft with variants: Copy and count, no feedback, Copy at the right edge.
-  await page.setViewportSize({width:390,height:844});
   const markupBucket=(await api({collection:'buckets'})).items[0];
   const markupNote=await boardWrite('note.create',{bucket:markupBucket.id,title:'Markup launch variants',body:'Ready to paste, re:Crew at 10:30.\n\n'+variantsBody});
   await page.goto(base+'/#/notes/'+markupNote.id);await page.reload();
   await stubClipboard();
   const noteBlocks=dialog().locator('.crew-block');
   await noteBlocks.first().waitFor();
+  assert.ok(Math.abs(await headerCloseX() - reviewCloseX) <= 2,'wide approval and note headers keep their controls in the same position');
+  await page.setViewportSize({width:390,height:844});
   assert.equal(await noteBlocks.count(),2,'a note shows two blocks');
   await checkVariantLayout(dialog().locator('.crew-md-box:has(.crew-blocks)'),1);
   assert.equal(await dialog().locator('.crew-pick-comment').count(),0,'no feedback outside reviews');
