@@ -1,14 +1,28 @@
 # Crew upgrades and rollback
 
-## Development after 0.38.1
+## Crew 0.38.1 to 0.39.0
 
-Make and verify a complete backup before starting this build. The first migration
-adds the selection mode and recipient to frozen reviews. The next adds working
-options, selection mode and recipient to tasks. A task with a pending review
-inherits these fields from that review. Older decisions and withdrawn reviews
-remain available in history. To roll back, stop the newer
-server and restore the complete pre-upgrade backup with its matching binary.
-Refresh MCP schemas and reinstall the agent skill to discover the new fields.
+1. Stop the writer and make a verified complete backup of the project and
+   private runtime state. Include `pocketcontext.db`, `pocketcontext.json`,
+   `storage/`, `legacy-knowledge/` when present, and the webhook key when
+   configured. Keep the matching 0.38.1 binary or image digest. Hosted
+   deployments prepare a verified backup before replacement.
+2. Replace the binary or image (`CREW_REPLACE_VERSION=0.38.1` for the
+   installer). Upgrade paired clients with the server to 0.39.0.
+3. Run `skill` once and refresh MCP tool schemas to pick up editable task
+   alternatives and pick-one reviews. Agents get a new capabilities digest.
+   The webhook protocol remains at version 3.
+
+Two data migrations run at startup. Existing reviews get pick-any selection.
+A task with a pending review inherits the submitted alternatives, selection and
+recipient as its working draft options. Other tasks start with empty options.
+Review history keeps the submitted text and decisions. Crew uses the
+single-account policy in PocketContext Core 0.3.0.
+
+To roll back, stop 0.39.0 and restore the complete pre-upgrade backup and the
+matching 0.38.1 binary or image. Older binaries refuse the migrated database.
+Changes since the backup must be reapplied after restoring.
+See [hosted backups and upgrades](hosting.md#complete-backups-and-upgrades).
 
 ## Crew 0.38.0 to 0.38.1
 

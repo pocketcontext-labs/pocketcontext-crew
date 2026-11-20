@@ -99,6 +99,7 @@ button:focus-visible,a:focus-visible{outline:2px solid #35694f;outline-offset:4p
 // Policy returns the public routes, maintenance reads and observability lists.
 func Policy() appserver.Policy {
 	return appserver.Policy{
+		Accounts:    appserver.AccountsSingle,
 		PublicRoute: func(core.App) func(method, path string) bool { return PublicRoute },
 		Maintenance: maintenance.Policy{
 			ReadPosts: map[string]bool{"/api/crew/read": true, "/api/crew/search": true, "/api/crew/query": true, "/api/crew/attachment-read": true, "/api/files/token": true},
