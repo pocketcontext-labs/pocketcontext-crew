@@ -884,8 +884,8 @@ paste-ready work in the task draft, alternatives in review options and progress
 in task comments. A valid copy or variant block inside a submitted description
 produces a nonblocking `task_description_contains_draft` warning on create or
 update. A task card and the description's Read view omit those blocks. Edit opens
-the full stored Markdown, including existing blocks. A pending review has its
-own link just below the description.
+the full stored Markdown, including existing blocks. When a review is pending, open it from
+**More → Review the draft** in the task header.
 
 Invalid markup is reported in warn mode: it never blocks a write in 0.38.0, and a
 later release will refuse it in `review.request` with 400 `review_markup_invalid`.

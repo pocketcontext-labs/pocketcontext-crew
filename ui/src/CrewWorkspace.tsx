@@ -152,6 +152,7 @@ import DialogHeader, {
 } from "./DialogHeader";
 import {
   followLink,
+  followTrail,
   listDepth,
   pushFromList,
   resetTrail,
@@ -3510,6 +3511,10 @@ function Editor({
       .getElementById(`crew-comment-${askedComment}`)
       ?.scrollIntoView?.({ block: "center" });
   }, [askedComment, commentLoaded, tab]);
+  const reviewPending = kind === "task" && row
+    ? data.reviews.find((review) => val(review, "task") === row.id && val(review, "status") === "pending")
+    : undefined;
+  const pendingReviewId = reviewPending?.id;
   // The header's More menu: a note's History and Archive (Deactivate for an
   // agent). They call through a ref, so the menu always runs the latest save.
   const setMenu = useDialogMenu();
@@ -3524,6 +3529,12 @@ function Editor({
         icon: "history",
         onSelect: () => menuActions.current.history(),
       });
+    if (pendingReviewId && !readOnly)
+      items.push({
+        label: t("Review the draft"),
+        icon: "check",
+        onSelect: () => followTrail(reviewHash(pendingReviewId)),
+      });
     if (row && !readOnly)
       items.push({
         label: archiveLabel(kind),
@@ -3534,7 +3545,7 @@ function Editor({
       });
     setMenu(items);
     return () => setMenu([]);
-  }, [setMenu, row, kind, readOnly, busy]);
+  }, [setMenu, row, kind, readOnly, busy, pendingReviewId]);
   const [start] = useState(() => formValues(kind, row, data));
   const [title, setTitle] = useState(start.title),
     [body, setBody] = useState(start.body),
@@ -3888,9 +3899,6 @@ function Editor({
   );
   const brief = kind === "task" ? taskBrief(body) : undefined;
   const savedDraft = val(row, "draft");
-  const reviewPending = data.reviews.find(
-    (x) => val(x, "task") === row?.id && val(x, "status") === "pending",
-  );
   const reviewHelp = <Help topic="send-for-approval" />;
   const reviewState = (
     <ReviewRequest
@@ -4220,16 +4228,6 @@ function Editor({
             )}
             {kind === "task" && (
               <>
-                {reviewPending && !readOnly && (
-                  <a
-                    className="crew-pending-review-link"
-                    href={reviewHash(reviewPending.id)}
-                    onClick={(e) => followLink(e, reviewHash(reviewPending.id))}
-                  >
-                    <span>{t("Waiting for your approval.")}</span>
-                    <strong>{t("Review draft")} <span aria-hidden="true">→</span></strong>
-                  </a>
-                )}
                 {row && claim.state && (
                   <ClaimBanner
                     claim={claim}

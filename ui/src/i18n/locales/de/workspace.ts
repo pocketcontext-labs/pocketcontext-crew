@@ -267,6 +267,7 @@ const de: Record<string, string> = {
   "Session instructions for {name}": "Session-Anweisungen für {name}",
   "Copy prompt": "Prompt kopieren",
   "Prompt copied": "Prompt kopiert",
+  "Review the draft": "Entwurf prüfen",
   "Review draft": "Entwurf prüfen",
   "Archived note": "Archivierte Notiz",
   "Archived task": "Archivierte Aufgabe",
