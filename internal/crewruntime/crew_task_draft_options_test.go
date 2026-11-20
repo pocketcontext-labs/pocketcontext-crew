@@ -61,6 +61,52 @@ func TestTaskDraftOptionsSnapshotAndResubmission(t *testing.T) {
 	}
 }
 
+func TestDraftOnlyClientsUpdateMirroredOptions(t *testing.T) {
+	a := newTestApp(t)
+	opts := []map[string]any{{"key": "A", "label": "Main", "body": "First copy"}, {"key": "B", "label": "Alternate", "body": "Other copy"}}
+	task := newTask(t, a, map[string]any{"draft": "First copy", "draft_options": opts})
+	id := task["id"].(string)
+	r := crewWrite(t, a, true, "review.request", id, 1, map[string]any{}, 200)
+	rev := func() int { return taskRevision(t, a, id) }
+	crewWrite(t, a, true, "task.update", id, rev(), map[string]any{"draft": strings.Repeat("x", 100001)}, 400)
+	if readTask(t, a, id)["status"] != "needs_review" {
+		t.Fatal("a refused edit withdrew the review")
+	}
+	crewWrite(t, a, true, "task.update", id, rev(), map[string]any{"draft": "Revised main"}, 200)
+	pending := crewWrite(t, a, true, "review.request", id, rev(), map[string]any{}, 200)
+	body := func(row map[string]any, field string, index int) string {
+		return row[field].([]any)[index].(map[string]any)["body"].(string)
+	}
+	if body(pending, "options", 0) != "Revised main" || body(pending, "options", 1) != "Other copy" || body(r, "options", 0) != "First copy" {
+		t.Fatal("new snapshot missed the draft-only edit", pending)
+	}
+	// Explicit choices win even when the update also sets independent reviewer prose.
+	task = crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"draft_options": opts, "draft": "Context for reviewer"}, 200)
+	if body(task, "draft_options", 0) != "First copy" || task["draft"] != "Context for reviewer" {
+		t.Fatal("explicit working options overridden", task)
+	}
+	task = crewWrite(t, a, true, "task.update", id, rev(), map[string]any{"draft": "New context"}, 200)
+	if body(task, "draft_options", 0) != "First copy" {
+		t.Fatal("editing distinct context changed an option", task)
+	}
+	// Clear just an aliased draft to request an options-only review.
+	crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"draft": "First copy"}, 200)
+	crewWrite(t, a, false, "task.update", id, rev(), map[string]any{"draft": ""}, 200)
+	optsOnly := crewWrite(t, a, true, "review.request", id, rev(), map[string]any{}, 200)
+	if optsOnly["draft"] != "" || body(optsOnly, "options", 0) != "First copy" || body(optsOnly, "options", 1) != "Other copy" {
+		t.Fatal("clearing the independent draft corrupted the options", optsOnly)
+	}
+
+	largeAlternatives := []map[string]any{
+		{"key": "a", "label": "Main", "body": "Mirrored"},
+		{"key": "b", "label": "Second", "body": strings.Repeat("b", 100000)},
+		{"key": "c", "label": "Third", "body": "Another"},
+	}
+	large := newTask(t, a, map[string]any{"draft": "Mirrored", "draft_options": largeAlternatives})
+	// Each option by itself fits, but a legacy draft edit would put the total over 200000.
+	crewWrite(t, a, true, "task.update", large["id"].(string), 1, map[string]any{"draft": strings.Repeat("a", 100000)}, 400)
+}
+
 func TestDraftOptionsCreateWithFiles(t *testing.T) {
 	a := newTestApp(t)
 	opts := []map[string]any{{"key": "A", "label": "Image", "body": "![first](attachment:new-1)"}}

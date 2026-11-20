@@ -1089,6 +1089,7 @@ function write(e, isAgent) {
       if (kind === "task" && (op === "create" || op === "update")) {
         const { draft_options, draft_selection, draft_recipient, ...other } = values;
         if (
+          (typeof values.draft === "string" && values.draft !== r.getString("draft")) ||
           draft_options !== undefined ||
           draft_selection !== undefined ||
           draft_recipient !== undefined

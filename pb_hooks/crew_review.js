@@ -55,20 +55,26 @@ function storedOptions(record, field) {
 function draftChanges(task, input) {
   const changes = {};
   const before = storedOptions(task, "draft_options");
-  const after =
-    input.draft_options === undefined ? before : options(input.draft_options);
-  if (JSON.stringify(before) !== JSON.stringify(after)) {
+  const draft = task.getString("draft");
+  const mirror = before.find((choice) => choice.body === draft);
+  let after = before;
+  if (input.draft_options !== undefined) {
+    after = options(input.draft_options);
+  } else if (mirror && typeof input.draft === "string" && input.draft.trim() && input.draft !== draft) {
+    // Existing clients edit the plain draft. Advance its mirrored option too.
+    // Clearing just the plain draft leaves an options-only task.
+    after = options(before.map((choice) =>
+      choice.key === mirror.key ? { ...choice, body: input.draft } : choice,
+    ));
+  }
+  if (after !== before && JSON.stringify(before) !== JSON.stringify(after)) {
     changes.draft_options = after;
     // Some legacy drafts repeated one option verbatim. Keep that one editable
     // copy in sync by its stable key. Distinct reviewer prose stays untouched.
-    const draft = task.getString("draft");
-    if (input.draft === undefined || input.draft === draft) {
-      const mirror = before.find((choice) => choice.body === draft);
-      if (mirror) {
-        const replacement = after.find((choice) => choice.key === mirror.key);
-        if (replacement) changes.draft = replacement.body;
-        else if (!after.some((choice) => choice.body === draft)) changes.draft = "";
-      }
+    if (mirror && (input.draft === undefined || input.draft === draft)) {
+      const replacement = after.find((choice) => choice.key === mirror.key);
+      if (replacement) changes.draft = replacement.body;
+      else if (!after.some((choice) => choice.body === draft)) changes.draft = "";
     }
   }
   const oldMode = task.getString("draft_selection") || "any";
