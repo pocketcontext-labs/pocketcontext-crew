@@ -21,7 +21,7 @@
   stroke-width: 2;
 }
 @media (hover: hover) {
-  :is(.crew-app, .crew-dialog) button.crew-icon-button:hover:not(:disabled) {
+  :is(.crew-app, .crew-dialog) button.crew-icon-button:hover:not(:disabled, .crew-copy-control) {
     background: var(--icon-hover);
   }
 }
@@ -142,11 +142,6 @@
     .crew-block-copy .crew-copy-labels {
       display: grid;
     }
-  }
-}
-@media (hover: hover) {
-  :is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button:hover {
-    background: var(--icon-hover);
   }
 }
 :is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button[data-state="failed"] {

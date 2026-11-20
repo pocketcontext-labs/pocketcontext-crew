@@ -26,8 +26,8 @@
   cursor: pointer;
 }
 .crew-sidebar nav a:hover,
-.crew-app button:hover,
-.crew-dialog button:hover {
+.crew-app button:hover:where(:not(.crew-copy-control)),
+.crew-dialog button:hover:where(:not(.crew-copy-control)) {
   background: #edf2e9;
 }
 .crew-app button:disabled,

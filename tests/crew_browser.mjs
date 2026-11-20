@@ -2187,7 +2187,7 @@ try {
   assert.equal(await dialog().getByRole('button',{name:'Copy draft text',exact:true}).count(),0,'no second snapshot Copy');
   const optionCopy=dialog().getByRole('button',{name:'Copy A · Out of tokens',exact:true});
   await optionCopy.scrollIntoViewIfNeeded();
-  await optionCopy.hover();
+  await page.mouse.move(0, 0);
   const fill=await optionCopy.evaluate(b=>getComputedStyle(b).backgroundColor);
   const before=await optionCopy.boundingBox();
   assert.ok(before.height>=44&&before.width>=44,'option Copy is a 44 px target');
