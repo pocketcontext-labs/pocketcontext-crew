@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ReviewContent, ReviewDecision, ReviewRequest, useReviewSetup } from "./Review";
+import { ReviewContent, ReviewDecision } from "./Review";
 import { DialogMenuContext, type MenuItem } from "./DialogHeader";
 import { decisionSummary, localFilePaths, reviewFiles } from "./reviews";
 import { attachmentsApi, formatBytes, type Attachment } from "./attachmentsApi";
@@ -460,33 +460,6 @@ it("warns for legacy local paths and unresolved snapshot evidence", () => {
     "Request changes and ask the agent to attach them",
   );
   expect(screen.getByRole("alert")).toHaveTextContent("attachment:missing");
-});
-it("lets browser owners submit named review alternatives", () => {
-  const submit = vi.fn();
-  function Form() {
-    return <ReviewRequest busy={false} hasDraft={false} setup={useReviewSetup()} submit={submit} />;
-  }
-  render(<Form />);
-  expect(screen.getByRole("button", {name:"Request approval"})).toBeDisabled();
-  fireEvent.click(screen.getByText("Review alternatives (optional)"));
-  fireEvent.click(screen.getByRole("button", { name: "Add review option" }));
-  expect(
-    screen.getByRole("button", { name: "Request approval" }),
-  ).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("Option 1 label"), {
-    target: { value: "A · LinkedIn" },
-  });
-  fireEvent.change(screen.getByLabelText("Option 1 draft"), {
-    target: { value: "A draft" },
-  });
-  fireEvent.change(screen.getByLabelText("Selection"), {target:{value:"one"}});
-  fireEvent.change(screen.getByLabelText("Recipient (optional)"), {target:{value:" Sam "}});
-  fireEvent.click(
-    screen.getByRole("button", { name: "Request approval" }),
-  );
-  expect(submit).toHaveBeenCalledWith([
-    { key: "option-1", label: "A · LinkedIn", body: "A draft" },
-  ], {selection:"one",recipient:"Sam"});
 });
 it("finds Unix, home, Windows, UNC and file URLs but not HTTPS", () => {
   expect(

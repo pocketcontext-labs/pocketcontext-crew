@@ -270,10 +270,10 @@ function glossaryEntries() {
       name: t("Draft"),
       question: t("What is a draft?"),
       what: t(
-        "The text you want approved, kept on the task. You or an agent can write it.",
+        "The text and options you want approved. You or an agent can edit them on the task.",
       ),
       action: t(
-        "Write it here and save. Changing a draft withdraws any pending approval for it.",
+        "Save the draft and its options here. Saving a change to them withdraws the pending review.",
       ),
     },
     "send-for-approval": {

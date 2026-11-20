@@ -681,20 +681,55 @@ it("keeps review alternatives while editing the brief and requests approval only
   expect(request()).toHaveAccessibleDescription("Save your task changes first.");
   fireEvent.click(request());
   expect(crewApi.write).not.toHaveBeenCalled();
-  fireEvent.change(dialog.getByLabelText("Draft for review"), { target: { value: "New working draft" } });
+  fireEvent.change(dialog.getByLabelText("Draft context"), { target: { value: "New working draft" } });
   expect(request()).toHaveAccessibleDescription("Save your draft first.");
   expect(dialog.getByLabelText("Option 1 draft")).toHaveValue("An alternative");
   fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
   await waitFor(() => expect(request()).toBeEnabled());
   expect(vi.mocked(crewApi.write).mock.calls.map(([action]) => action)).toEqual(["task.update"]);
-  expect(fixtures.tasks[0]).toMatchObject({ description: "Owner's revised request", draft: "New working draft" });
+  expect(fixtures.tasks[0]).toMatchObject({ description: "Owner's revised request", draft: "New working draft", draft_options: [{key: "option-1", label: "Synthetic A", body: "An alternative"}], draft_selection: "one", draft_recipient: "Sam" });
   expect(dialog.getByLabelText("Recipient (optional)")).toHaveValue("Sam");
   fireEvent.click(request());
   await waitFor(() => expect(crewApi.write).toHaveBeenCalledWith(
     "review.request",
-    { options: [{ key: "option-1", label: "Synthetic A", body: "An alternative" }], selection: "one", recipient: "Sam" },
+    {},
     fixtures.tasks[0], "",
   ));
+});
+it("keeps the task's matching draft in sync when the owner renames or removes its option", async () => {
+  const options = [
+    { key: "option-2", label: "Main plan", body: "### Original main plan" },
+    { key: "other", label: "Alternative", body: "### Another plan" },
+  ];
+  fixtures.tasks = [{ ...task, draft: options[0].body, draft_options: options }];
+  vi.mocked(crewApi.write).mockImplementation(async (_action, fields) => {
+    const saved = { ...fixtures.tasks[0], ...fields, revision: fixtures.tasks[0].revision + 1 };
+    fixtures.tasks = [saved];
+    fixtures.reviews = [];
+    return saved;
+  });
+  history.replaceState(null, "", "/#/tasks/task00000000001");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  expect(dialog.getAllByRole("heading", { name: "Original main plan" })).toHaveLength(1);
+  expect(dialog.getByRole("heading", { name: "Another plan" })).toBeVisible();
+  const first = within(dialog.getByRole("group", { name: "Main plan" }));
+  fireEvent.click(first.getByText("Option settings"));
+  fireEvent.change(first.getByLabelText("Option 1 key"), { target: { value: "main" } });
+  fireEvent.click(within(first.getByRole("tablist")).getByRole("tab", { name: "Edit" }));
+  const text = first.getByLabelText("Option 1 draft");
+  fireEvent.change(text, { target: { value: "" } });
+  fireEvent.change(text, { target: { value: "### Revised main plan" } });
+  expect(dialog.getByText("Saving these changes will withdraw the pending review.")).toBeVisible();
+  fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+  await waitFor(() => expect(dialog.getByRole("button", { name: "Request approval" })).toBeEnabled());
+  expect(fixtures.tasks[0]).toMatchObject({
+    draft: "### Revised main plan",
+    draft_options: [{ ...options[0], key: "main", body: "### Revised main plan" }, options[1]],
+  });
+  fireEvent.click(first.getByRole("button", { name: "Remove option 1" }));
+  fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+  await waitFor(() => expect(fixtures.tasks[0]).toMatchObject({ draft: "", draft_options: [options[1]] }));
 });
 it("requires restoring the owning bucket before an inherited archived note", async () => {
   const note: Row = {

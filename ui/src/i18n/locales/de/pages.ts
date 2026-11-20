@@ -271,6 +271,15 @@ const de: Record<string, string> = {
   "Approve draft": "Entwurf freigeben",
   "Request changes": "Änderungen anfordern",
   "Request approval": "Freigabe anfragen",
+  "The text and options you want approved. You or an agent can edit them on the task.":
+    "Der Text und die Optionen, die du freigeben möchtest. Du oder ein Agent könnt sie in der Aufgabe bearbeiten.",
+  "Save the draft and its options here. Saving a change to them withdraws the pending review.":
+    "Speichere hier den Entwurf und seine Optionen. Wenn du Änderungen daran speicherst, wird die ausstehende Freigabeanfrage zurückgezogen.",
+  "Option settings": "Optionseinstellungen",
+  "Option {n} key": "Schlüssel für Option {n}",
+  "Review settings": "Freigabeeinstellungen",
+  "Draft context": "Kontext zum Entwurf",
+  "Saving these changes will withdraw the pending review.": "Wenn du diese Änderungen speicherst, wird die ausstehende Freigabeanfrage zurückgezogen.",
   "Review alternatives (optional)": "Alternativen zur Freigabe (optional)",
   "Give each draft or platform its own option so the reviewer can choose exactly what to approve. Options are saved when you send the review.":
     "Gib jedem Entwurf oder jeder Plattform eine eigene Option, damit genau gewählt werden kann, was freigegeben wird. Optionen werden gespeichert, wenn du die Freigabe anfragst.",

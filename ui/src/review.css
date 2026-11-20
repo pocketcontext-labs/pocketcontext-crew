@@ -411,3 +411,25 @@
   border-radius: 50%;
   color: var(--icon-ink);
 }
+
+.crew-task-draft {
+  min-width: 0;
+  margin-bottom: 18px;
+}
+.crew-task-draft > h3,
+.crew-task-option > legend {
+  max-width: 100%;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.crew-task-option > legend {
+  padding-inline: .25rem;
+}
+.crew-task-option .crew-md-field {
+  margin-bottom: .5rem;
+}
+.crew-task-draft summary {
+  cursor: pointer;
+}

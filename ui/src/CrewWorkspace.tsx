@@ -5,11 +5,11 @@ import {
   useId,
   useRef,
   useState,
-  type ComponentProps,
   type FormEvent,
   type MouseEvent,
   type ReactElement,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import Brand from "./Brand";
 import { api } from "./api";
@@ -40,7 +40,9 @@ import LabelsInput from "./LabelsInput";
 import { markdownExcerpt, markdownText } from "./markdownText";
 import { taskBrief } from "./reviewMarkup";
 import { ExcerptContent } from "./ExcerptContent";
-import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest, useReviewSetup } from "./Review";
+import { ReviewChoices, ReviewContent, ReviewDecision } from "./Review";
+import MarkdownField from "./MarkdownField";
+import TaskDraft, { draftFields, makeEditorOptions, savedOptions, updateOption, removeOption, type WorkingDraft } from "./TaskDraft";
 import { decisionSummary, objects, reviewOptions } from "./reviews";
 import { strandedWakes } from "./wakes";
 import {
@@ -541,136 +543,6 @@ async function shareAsArtifact(note: Row) {
     "Share as artifact",
   );
   return created.id as string;
-}
-/**
- * Grows with its content, so a long note scrolls with the dialog, not inside it.
- * The agent brief is capped (CSS max-height) and past that scrolls itself.
- */
-function GrowingTextarea({ value, ...props }: ComponentProps<"textarea">) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const measure = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    const scroller = el.closest("dialog");
-    const top = scroller?.scrollTop;
-    const own = el.scrollTop;
-    el.style.height = "auto";
-    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight + 2}px`;
-    // Past the cap the field scrolls itself; keep its place while typing.
-    el.scrollTop = own;
-    if (scroller && top !== undefined) scroller.scrollTop = top;
-  }, []);
-  useLayoutEffect(measure, [measure, value, props.hidden]);
-  // A textarea in a dialog not yet shown, or hidden, measures zero; children's
-  // layout effects run before the dialog's showModal(). Measure again when it
-  // gets a width, and when the width changes and the text rewraps.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    let width = 0;
-    const observer = new ResizeObserver(() => {
-      if (el.clientWidth === width) return;
-      width = el.clientWidth;
-      measure();
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [measure]);
-  return (
-    <textarea
-      ref={ref}
-      value={value}
-      {...props}
-      className={`crew-grow ${props.className || ""}`}
-    />
-  );
-}
-function MarkdownField({
-  label,
-  help,
-  hint,
-  preview,
-  required,
-  className,
-  value,
-  onChange,
-  tabs = true,
-  onFiles,
-  status,
-}: {
-  label: string;
-  help?: ReactNode;
-  hint?: string;
-  preview?: string;
-  tabs?: boolean;
-  required?: boolean;
-  className?: string;
-  value: string;
-  onChange: (value: string) => void;
-  /** Pasted or dropped files at the caret; returns the inserted text. */
-  onFiles?: (
-    files: File[],
-    range: [number, number],
-    pasted: boolean,
-  ) => string | void;
-  /** Upload messages shown under the field. */
-  status?: ReactNode;
-}) {
-  const id = useId();
-  const [reading, setReading] = useState(tabs && Boolean(value.trim()));
-  return (
-    <div className="crew-md-field">
-      <div className="crew-md-label">
-        <label htmlFor={id}>{label}</label>
-        <small>{t("Markdown supported")}</small>
-        {help}
-      </div>
-      {hint && <p id={`${id}-hint`} className="crew-md-hint">{hint}</p>}
-      <div className="crew-md-box">
-        {tabs && (
-          <div
-            className="crew-md-tabs"
-            role="tablist"
-            aria-label={t("{label} view", { label })}
-          >
-            {[true, false].map((showRead) => (
-              <button
-                key={String(showRead)}
-                type="button"
-                role="tab"
-                aria-selected={reading === showRead}
-                onClick={() => setReading(showRead)}
-              >
-                {showRead ? t("Read") : t("Edit")}
-              </button>
-            ))}
-          </div>
-        )}
-        {/* Hidden rather than removed, so undo and the height survive Read. */}
-        <GrowingTextarea
-          id={id}
-          aria-describedby={hint ? `${id}-hint` : undefined}
-          hidden={reading}
-          required={required}
-          className={className}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onInvalid={() => setReading(false)}
-          {...fileInputHandlers(onFiles)}
-        />
-        {reading && (
-          <div className="crew-md-preview">
-            {(preview ?? value).trim() ? (
-              <Prose>{preview ?? value}</Prose>
-            ) : (
-              <p>{t("Nothing written yet.")}</p>
-            )}
-          </div>
-        )}
-      </div>
-      {status}
-    </div>
-  );
 }
 type Related = { id: string; kind: ItemKind; row?: Row };
 /**
@@ -1675,18 +1547,20 @@ export default function CrewWorkspace() {
     const withdraws =
       action === "task.update" &&
       !!row &&
-      typeof fields.draft === "string" &&
-      fields.draft !== val(row, "draft") &&
+      ((typeof fields.draft === "string" && fields.draft !== val(row, "draft")) ||
+        ["draft_options", "draft_selection", "draft_recipient"].some(key => key in fields)) &&
       data.reviews.some(
         (x) => val(x, "task") === row.id && val(x, "status") === "pending",
       );
     const saved = await perform(
       async () => {
         const updated = await crewApi.write(action, fields, row, reason);
-        if (keepOpen)
+        if (keepOpen) {
+          edited.current = false;
           setDialog((open) =>
             open?.row?.id === updated.id ? { ...open, row: updated } : open,
           );
+        }
       },
       withdraws ? `${t("Saved.")} ${withdrawnNoticeText()}` : t("Saved."),
     );
@@ -3434,7 +3308,7 @@ function formValues(kind: Kind, row: Row | undefined, data: Data) {
             ? "description"
             : "body",
     ),
-    draft: val(row, "draft"),
+    ...draftFields(row),
     links: list(row, "links").join("\n"),
     selection:
       val(
@@ -3476,7 +3350,6 @@ function Editor({
   refreshRow,
 }: EditorProps) {
   const readOnly = !!archiveNotice;
-  const reviewSetup = useReviewSetup();
   const root = useRef<HTMLDivElement>(null);
   const [tab, setTabState] = useState<string>(
       kind === "note" && row ? "read" : kind === "task" && row && askedTab ? askedTab : "edit",
@@ -3549,10 +3422,21 @@ function Editor({
   const [start] = useState(() => formValues(kind, row, data));
   const [title, setTitle] = useState(start.title),
     [body, setBody] = useState(start.body),
-    [draft, setDraft] = useState(start.draft),
     [reason, setReason] = useState(""),
     [comment, setComment] = useState(""),
     [links, setLinks] = useState(start.links);
+  const [workingDraft, setWorkingDraft] = useState<WorkingDraft>(() => ({
+    draft: start.draft,
+    options: makeEditorOptions(JSON.parse(start.draftOptions)),
+  }));
+  const { draft, options } = workingDraft;
+  const [draftSelection, setDraftSelection] = useState(start.draftSelection);
+  const [draftRecipient, setDraftRecipient] = useState(start.draftRecipient);
+  const setDraft = (update: SetStateAction<string>) => setWorkingDraft(current => ({
+    ...current, mirrorId: undefined, draft: typeof update === "function" ? update(current.draft) : update,
+  }));
+  const editOption = (id: string, edit: Parameters<typeof updateOption>[2]) =>
+    setWorkingDraft(current => updateOption(current, id, edit));
   const [selection, setSelection] = useState(start.selection),
     [status, setStatus] = useState(start.status),
     [readiness, setReadiness] = useState(start.readiness),
@@ -3620,7 +3504,7 @@ function Editor({
    */
   const insertFiles =
     (
-      field: "body" | "draft" | "comment",
+      field: string,
       setText: (update: (text: string) => string) => void,
     ) =>
     (incoming: File[], [from, to]: [number, number], pasted: boolean) => {
@@ -3685,7 +3569,7 @@ function Editor({
       });
       return text;
     };
-  const inlineStatus = (field: "body" | "draft" | "comment") =>
+  const inlineStatus = (field: string) =>
     inlineErrors[field] ? (
       <p className="crew-alert crew-inline-upload-error" role="alert">
         {inlineErrors[field]}
@@ -3695,7 +3579,11 @@ function Editor({
   const unstage = (key: number) => {
     const ref = new RegExp(`!?\\[(?:[^\\]\\\\]|\\\\.)*\\]\\(attachment:new-${key}\\)\\n?`, "g");
     setBody((text) => text.replace(ref, ""));
-    setDraft((text) => text.replace(ref, ""));
+    setWorkingDraft(current => ({
+      ...current,
+      draft: current.draft.replace(ref, ""),
+      options: current.options.map(option => ({ ...option, body: option.body.replace(ref, "") })),
+    }));
     staged.unstage(key);
   };
   // A newer revision of the open record (after a file change withdrew its
@@ -3739,6 +3627,9 @@ function Editor({
     title,
     body,
     draft,
+    draftOptions: JSON.stringify(savedOptions(options)),
+    draftSelection,
+    draftRecipient: draftRecipient.trim(),
     links,
     selection,
     status,
@@ -3751,6 +3642,11 @@ function Editor({
     title: setTitle,
     body: setBody,
     draft: setDraft,
+    draftOptions: raw => setWorkingDraft(current => ({
+      ...current, mirrorId: undefined, options: makeEditorOptions(JSON.parse(raw), current.options),
+    })),
+    draftSelection: setDraftSelection,
+    draftRecipient: setDraftRecipient,
     links: setLinks,
     selection: setSelection,
     status: setStatus,
@@ -3775,6 +3671,9 @@ function Editor({
     (key) => current[key] !== initial[key],
   );
   const dirty = changed.length > 0;
+  const reviewSettingsChanged = current.draftOptions !== initial.draftOptions ||
+    draftSelection !== initial.draftSelection || current.draftRecipient !== initial.draftRecipient;
+  const reviewChanged = draft !== initial.draft || reviewSettingsChanged;
   const onlyLinksChanged = changed.length === 1 && changed[0] === "links";
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -3795,6 +3694,9 @@ function Editor({
               title,
               ...(!row || body !== initial.body ? { description: body } : {}),
               ...(!row || draft !== initial.draft ? { draft } : {}),
+              ...(current.draftOptions !== initial.draftOptions ? { draft_options: savedOptions(options) } : {}),
+              ...(draftSelection !== initial.draftSelection ? { draft_selection: draftSelection } : {}),
+              ...(current.draftRecipient !== initial.draftRecipient ? { draft_recipient: current.draftRecipient } : {}),
               assigned_agent: selection,
               readiness,
               waiting_reason: readiness !== "ready" ? waitingReason : "",
@@ -3822,6 +3724,8 @@ function Editor({
       for (const key of textKeys)
         if (typeof withFiles[key] === "string")
           withFiles[key] = prepared.renumber(withFiles[key] as string);
+      if (kind === "task" && options.length)
+        withFiles.draft_options = savedOptions(options).map(option => ({ ...option, body: prepared.renumber(option.body) }));
       void perform(async () => {
         try {
           await attachmentsApi.createWithFiles(itemKind, withFiles, prepared.files, {
@@ -3836,9 +3740,8 @@ function Editor({
       });
       return;
     }
-    const keepReviewSetup = kind === "task" && !!row &&
-      (reviewSetup.options.length > 0 || !!reviewSetup.recipient.trim());
-    void save(`${kind}.${row ? "update" : "create"}`, fields, row, reason, keepReviewSetup);
+    const keepOpen = kind === "task" && !!row && (options.length > 0 || !!draftRecipient.trim() || reviewSettingsChanged);
+    void save(`${kind}.${row ? "update" : "create"}`, fields, row, reason, keepOpen);
   };
   if (kind === "review" && row)
     return <ReviewDecision row={row} task={data.tasks.find(task => task.id === val(row, "task"))} busy={busy} error={error}
@@ -3898,20 +3801,20 @@ function Editor({
     </button>
   );
   const brief = kind === "task" ? taskBrief(body) : undefined;
-  const savedDraft = val(row, "draft");
-  const reviewHelp = <Help topic="send-for-approval" />;
-  const reviewState = (
-    <ReviewRequest
-      busy={busy || inlineUploads > 0}
-      hasDraft={!!savedDraft.trim()}
-      setup={reviewSetup}
-      blockedHint={
-        draft !== savedDraft ? t("Save your draft first.")
-          : dirty ? t("Save your task changes first.") : undefined
-      }
-      help={reviewHelp}
-      submit={(options, metadata) => void save("review.request", { ...(options.length ? { options } : {}), ...metadata }, row)}
-    />
+  const whyBlocked = draft !== initial.draft ? t("Save your draft first.")
+    : dirty ? t("Save your task changes first.")
+    : !draft.trim() && !options.length ? t("Save a draft or add an option first.") : "";
+  const requestApproval = row && !readOnly && !reviewPending && (
+    <div className="crew-review-actions">
+      <button type="button" className="crew-review-submit"
+        disabled={busy || inlineUploads > 0 || !!whyBlocked}
+        aria-describedby={whyBlocked ? `${hintId}-request` : undefined}
+        onClick={() => void save("review.request", {}, row)}>
+        {t("Request approval")}
+      </button>
+      <Help topic="send-for-approval" />
+      {whyBlocked && <span id={`${hintId}-request`} className="crew-review-hint">{whyBlocked}</span>}
+    </div>
   );
   const buckets = data.buckets.find((x) => x.id === val(row, "bucket"));
   // A coding session's claim; the owner may always release it (In progress goes back to To do).
@@ -4317,19 +4220,42 @@ function Editor({
                     <WakeMissingChip /> {wakeMissingTitle()}
                   </p>
                 )}
-                <MarkdownField
-                  label={t("Draft for review")}
+                <TaskDraft
+                  {...workingDraft}
+                  recipient={draftRecipient}
+                  selection={draftSelection}
+                  setRecipient={setDraftRecipient}
+                  setSelection={setDraftSelection}
+                  readOnly={readOnly}
+                  pending={!!reviewPending}
+                  dirtyReview={reviewChanged}
                   help={!readOnly && <Help topic="draft" />}
-                  hint={t("Save work for approval here. Put progress updates in Comments.")}
-                  className="crew-long-text"
-                  value={draft}
-                  onChange={setDraft}
-                  onFiles={insertFiles("draft", setDraft)}
-                  status={inlineStatus("draft")}
+                  request={requestApproval}
+                  onDraft={setDraft}
+                  onOption={editOption}
+                  onAdd={() => {
+                    onEdit();
+                    setWorkingDraft(current => {
+                      const keys = new Set(current.options.map(option => option.key));
+                      let n = 1;
+                      while (keys.has(`option-${n}`)) n++;
+                      const [added] = makeEditorOptions([{ key: `option-${n}`, label: "", body: "" }]);
+                      return { ...current, options: [...current.options, added] };
+                    });
+                  }}
+                  onRemove={id => {
+                    onEdit();
+                    if (options.length === 1) setDraftSelection("any");
+                    setWorkingDraft(current => removeOption(current, id));
+                  }}
+                  files={id => {
+                    const field = id ? `option-${id}` : "draft";
+                    return {
+                      status: inlineStatus(field),
+                      onFiles: insertFiles(field, id ? body => editOption(id, { body }) : setDraft),
+                    };
+                  }}
                 />
-                {row && !readOnly && !reviewPending && (
-                  <div className="crew-review-row">{reviewState}</div>
-                )}
               </>
             )}
             {(kind === "note" || kind === "task") && (

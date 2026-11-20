@@ -272,6 +272,15 @@ const it: Record<string, string> = {
   "Approve draft": "Approva bozza",
   "Request changes": "Richiedi modifiche",
   "Request approval": "Richiedi approvazione",
+  "The text and options you want approved. You or an agent can edit them on the task.":
+    "Il testo e le opzioni da approvare. Tu o un agente potete modificarli nell’attività.",
+  "Save the draft and its options here. Saving a change to them withdraws the pending review.":
+    "Salva qui la bozza e le sue opzioni. Salvare una modifica ritira la richiesta di approvazione in sospeso.",
+  "Option settings": "Impostazioni dell’opzione",
+  "Option {n} key": "Chiave dell’opzione {n}",
+  "Review settings": "Impostazioni della revisione",
+  "Draft context": "Contesto della bozza",
+  "Saving these changes will withdraw the pending review.": "Salvando queste modifiche ritirerai la richiesta di approvazione in sospeso.",
   "Review alternatives (optional)": "Alternative da approvare (facoltative)",
   "Give each draft or platform its own option so the reviewer can choose exactly what to approve. Options are saved when you send the review.":
     "Dai a ogni bozza o piattaforma la sua opzione, così chi approva può scegliere esattamente cosa approvare. Le opzioni vengono salvate quando invii la richiesta.",
