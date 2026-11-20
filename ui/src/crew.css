@@ -1466,6 +1466,7 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-dialog {
   --crew-dialog-width: 760px;
+  --crew-body-gutter: 24px;
   width: min(var(--crew-dialog-width), calc(100vw - 30px));
   max-height: 90dvh;
   padding: 0;
@@ -1540,8 +1541,7 @@ a.crew-logo:hover .product-brand span {
   min-width: 0;
 }
 .crew-dialog-body {
-  padding: 24px;
-  --crew-body-gutter: 24px;
+  padding: var(--crew-body-gutter);
   flex: 1 0 auto;
   display: flex;
   flex-direction: column;
@@ -1647,7 +1647,6 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-dialog .crew-read-title {
   margin: 0;
-  padding: 10px 0;
   font-size: 16px;
   font-weight: 600;
   line-height: 1.4;
@@ -2153,6 +2152,7 @@ a.crew-logo:hover .product-brand span {
     min-width: 0;
   }
   .crew-dialog {
+    --crew-body-gutter: 18px;
     width: 100%;
     max-width: none;
     height: 100dvh;
@@ -2168,10 +2168,6 @@ a.crew-logo:hover .product-brand span {
   .crew-dialog textarea,
   .crew-dialog select {
     font-size: 16px;
-  }
-  .crew-dialog-body {
-    padding: 18px;
-    --crew-body-gutter: 18px;
   }
   .crew-dialog > header {
     padding: calc(15px + env(safe-area-inset-top)) 18px 15px;
@@ -4394,10 +4390,9 @@ a.crew-logo:hover .product-brand span {
   stroke-width: 2;
 }
 @media (min-width: 681px) {
-  /* Reviews can widen to compare drafts. Anchor every record's controls to
-     the standard dialog width so switching records keeps them in place. */
+  /* Keep record navigation on the same edges as its content and footer. */
   .crew-record-dialog > header.crew-dialog-head {
-    padding-inline: calc(18px + max(0px, (100% - var(--crew-dialog-width)) / 2));
+    padding-inline: var(--crew-body-gutter);
   }
 }
 @media (max-width: 520px) {

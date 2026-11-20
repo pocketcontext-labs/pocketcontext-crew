@@ -95,7 +95,7 @@ export type BlockOption = {
 export const BlockOptionContext = createContext<BlockOption | null>(null);
 
 /** "612 / 3,000", in the danger colour with "too long" past the limit. */
-function BlockCount({ count, limit }: { count: number; limit: number | null }) {
+export function BlockCount({ count, limit }: { count: number; limit: number | null }) {
   const format = new Intl.NumberFormat(locale());
   const over = limit !== null && count > limit;
   return (
@@ -155,6 +155,16 @@ export function BlockCard({
   );
 }
 
+/** Legacy named copy blocks also carry channels in labels such as "Text A LinkedIn". */
+export function blockMetrics(block: MarkupBlock, copy: string) {
+  const channel = block.channel
+    ?? /^(?:Text [A-Z] )?(LinkedIn|X)$/i.exec(block.label?.trim() ?? "")?.[1].toLowerCase();
+  return {
+    count: characterCount(copy, channel),
+    limit: block.limit ?? (channel ? defaultLimits[channel] : undefined) ?? null,
+  };
+}
+
 /** A `:::` block Prose found, by its index in the body's blocks. */
 export function MarkupSection({ index, children }: { index: number; children: ReactNode }) {
   const blocks = useContext(MarkupBlocksContext);
@@ -169,18 +179,14 @@ export function MarkupSection({ index, children }: { index: number; children: Re
       </aside>
     );
   const copy = blockCopyText(block);
-  // Task descriptions can hold several options as named copy blocks, e.g.
-  // "Text A LinkedIn" and "Text B LinkedIn". Use their channel for the
-  // displayed count while preserving the author's label and feedback target.
-  const channel = block.channel
-    ?? /^(?:Text [A-Z] )?(LinkedIn|X)$/i.exec(block.label?.trim() ?? "")?.[1].toLowerCase();
+  const { count, limit } = blockMetrics(block, copy);
   return (
     <BlockCard
       name={blockName(block)}
       target={block.target}
       copy={copy}
-      count={characterCount(copy, channel)}
-      limit={block.limit ?? (channel ? defaultLimits[channel] : null)}
+      count={count}
+      limit={limit}
       kind={block.kind}
     >
       {children}

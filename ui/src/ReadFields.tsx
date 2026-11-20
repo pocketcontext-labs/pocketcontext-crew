@@ -3,8 +3,10 @@ import { t } from "./i18n";
 
 export function ReadTitle({ title }: { title: string }) {
   return (
-    <div className="crew-field">
-      <span>{t("Title")}</span>
+    <div className="crew-md-field">
+      <div className="crew-md-label">
+        <span className="crew-md-name">{t("Title")}</span>
+      </div>
       <h3 className="crew-read-title">{title}</h3>
     </div>
   );

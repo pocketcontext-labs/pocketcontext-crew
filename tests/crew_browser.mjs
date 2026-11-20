@@ -2688,9 +2688,8 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await card.click();
   await dialog().getByRole('heading',{name:'Options · pick one'}).waitFor();
   const meta=dialog().locator('.crew-review-meta');
-  assert.match(await meta.innerText(),/LinkedIn/);
   await meta.getByText('To Synthetic reader').waitFor();
-  await meta.getByText(linkedIn.length+' / 3,000',{exact:true}).waitFor();
+  assert.doesNotMatch(await meta.innerText(),/LinkedIn|3,000|characters/,'the page metadata does not describe an individual option');
   assert.equal(await dialog().getByText(markupReview.id,{exact:true}).count(),0,'the header omits the raw record id');
   const stubClipboard=()=>page.evaluate(()=>{window.__copied=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>{window.__copied.push(t);}}});});
   await stubClipboard();
@@ -2703,6 +2702,24 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   // must be fully readable through the dialog's single scroll, even when
   // the snapshot is longer than the viewport.
   assert.equal(await dialog().locator('.crew-draft-snapshot').count(),0,'no duplicate of the option bodies');
+  for (const width of [390,1024]) {
+   await page.setViewportSize({width,height:844});
+   const scroller=dialog().locator('.crew-review-body');
+   await scroller.evaluate(e=>{e.scrollTop=e.scrollHeight;});
+   const last=await optB.boundingBox(),footer=dialog().locator('.crew-review-bar');
+   const footerBounds=await footer.boundingBox();
+   assert.ok(last.y+last.height<=footerBounds.y-5,'the last option scrolls clear of the footer at '+width);
+   if(width===1024){
+    const firstNav=await dialog().locator('.crew-trail-nav').boundingBox();
+    const close=await dialog().locator('header .crew-head-close').boundingBox();
+    const input=await footer.locator('textarea').boundingBox();
+    assert.ok(Math.abs(firstNav.x-last.x)<2&&Math.abs(last.x-input.x)<2,'header, cards and decision note align on the left');
+    assert.ok(Math.abs(close.x+close.width-last.x-last.width)<2&&Math.abs(input.width-last.width)<2,'header, cards and decision note align on the right');
+    const action=await footer.getByRole('button',{name:'Request changes'}).boundingBox();
+    assert.ok(action.width<input.width/3&&action.y+action.height<footerBounds.y+footerBounds.height-6,'the desktop footer has compact actions and bottom padding');
+   }
+  }
+  await page.setViewportSize({width:390,height:844});
   const checkVariantLayout=async(section,columns)=>{
    const measure=await section.evaluate(el=>{
     const bounds=el.getBoundingClientRect();
@@ -2773,7 +2790,8 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   const radioA=optA.getByRole('radio',{name:'A · Markup',exact:true});
   const radioB=optB.getByRole('radio',{name:'B · Plain',exact:true});
   await radioB.check();
-  await meta.getByText('18 characters',{exact:true}).waitFor();
+  await optB.getByText('18 characters',{exact:true}).waitFor();
+  assert.doesNotMatch(await meta.innerText(),/characters/,'selecting the plain option keeps its count in its own card');
   await radioA.check();
   assert.equal(await radioB.isChecked(),false,'pick-one switches the selected alternative');
   await snapView('crew-review-markup-feedback-390');

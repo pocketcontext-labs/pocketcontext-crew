@@ -250,7 +250,7 @@ it("copies only the option's paste-ready text and moves legacy snapshot prose to
   await waitFor(() => expect(copy).toHaveAttribute("data-state", "copied"));
   expect(screen.queryByRole("button", {name:"Copy Picture"})).toBeNull();
 });
-it("shows the recipient and selected variant's count and preserves feedback across radio selections", () => {
+it("keeps the page metadata independent of selections and each count with its option", () => {
   const { save } = decide({
     ...review, selection: "one", recipient: "Test recipient",
     options: [
@@ -259,8 +259,10 @@ it("shows the recipient and selected variant's count and preserves feedback acro
     ],
   });
   expect(screen.getByRole("heading", {name:"Options · pick one"})).toBeTruthy();
-  expect(screen.getByText("To Test recipient")).toBeTruthy();
-  expect(screen.getByText("6 / 3,000")).toBeTruthy();
+  const meta = screen.getByText("To Test recipient").parentElement!;
+  expect(meta).not.toHaveTextContent(/LinkedIn|3,000|280/);
+  expect(within(screen.getByRole("region", { name: "Text A" })).getByText("6 / 3,000")).toBeVisible();
+  expect(within(screen.getByRole("region", { name: "Text B" })).getByText("5 / 280")).toBeVisible();
   const a = screen.getByRole("radio", {name:"Text A"});
   fireEvent.click(a);
   expect(screen.getByRole("button", {name:"Approve Text A"})).toBeEnabled();
@@ -269,11 +271,15 @@ it("shows the recipient and selected variant's count and preserves feedback acro
   fireEvent.change(screen.getByRole("textbox", {name:"Feedback on Text A"}),{target:{value:"Keep for later"}});
   fireEvent.click(screen.getByRole("radio", {name:"Text B"}));
   expect(a).not.toBeChecked();
-  expect(screen.getByText("5 / 280")).toBeTruthy();
+  expect(meta).not.toHaveTextContent(/LinkedIn|3,000|280/);
   fireEvent.click(screen.getByRole("button", {name:"Approve Text B"}));
   expect(save).toHaveBeenCalledWith("review.decide",expect.objectContaining({
     option_decisions:[{key:"a",decision:"rejected",note:"Keep for later"},{key:"b",decision:"approved",note:""}]
   }),expect.anything());
+});
+it("keeps the character count in the page metadata for a standalone draft", () => {
+  decide({ ...review, options: [], draft: "A short message.", recipient: "Riley" });
+  expect(screen.getByText("To Riley").parentElement).toHaveTextContent("16 characters");
 });
 it("copies from a decided review and says when the copy failed", async () => {
   const writeText = stubClipboard().mockRejectedValue(new Error("denied"));

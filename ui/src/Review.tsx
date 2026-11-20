@@ -36,6 +36,8 @@ import {
   BlockOptionContext,
   CopyButton,
   ReviewMarkupContext,
+  BlockCount,
+  blockMetrics,
   blockName,
   channelName,
 } from "./ReviewBlocks";
@@ -46,7 +48,7 @@ import { itemPath, reviewHash } from "./itemLink";
 import "./review.css";
 import AutoTextarea from "./AutoTextarea";
 import PlainRefs from "./PlainRefs";
-import { ReadTitle, ReadField } from "./ReadFields";
+import { ReadTitle } from "./ReadFields";
 import { locale, t } from "./i18n";
 import { followTrail } from "./trail";
 
@@ -145,12 +147,15 @@ export function ReviewContent({
             </div>
           )}
           {notes.length > 0 && (
-            <aside aria-label={t("Note for you")}>
-              <ReadField label={t("Note for you")}>
+            <aside className="crew-md-field" aria-label={t("Note for you")}>
+              <div className="crew-md-label">
+                <h3 className="crew-md-name">{t("Note for you")}</h3>
+              </div>
+              <div className="crew-reviewer-note">
                 {notes.map((note, i) => (
                   <Prose key={i}>{note}</Prose>
                 ))}
-              </ReadField>
+              </div>
             </aside>
           )}
           {children}
@@ -457,15 +462,14 @@ export function ReviewChoices({
               >
                 <div className="crew-pick-head">
                   {check(option, pick)}
-                  {single && (
+                  {single ? (
                     <span className="crew-option-channel">
-                      {blockName(single)} ·{" "}
-                      {characterCount(
-                        option.copy,
-                        single.channel,
-                      ).toLocaleString(locale())}
-                      {single.limit &&
-                        ` / ${single.limit.toLocaleString(locale())}`}
+                      {blockName(single) && `${blockName(single)} · `}
+                      <BlockCount {...blockMetrics(single, option.copy)} />
+                    </span>
+                  ) : !option.paste.length && (
+                    <span className="crew-option-channel">
+                      {t("{n} characters", { n: characterCount(option.copy).toLocaleString(locale()) })}
                     </span>
                   )}
                   {option.copy && (
@@ -624,13 +628,11 @@ export function ReviewDecision({
       ? picks[o.key]?.selected
       : decidedPick(optionDecisions(row), o.key).selected,
   );
-  const current = chosen ?? options[0] ?? presentation.draft;
-  const metaBlock = current.paste[0];
-  const channel = metaBlock?.channel;
-  const count = characterCount(
-    metaBlock ? blockCopyText(metaBlock) : current.copy,
-    channel,
-  );
+  const { draft } = presentation;
+  const draftBlock = draft.paste[0];
+  const channel = (chosen ?? options[0] ?? draft).paste[0]?.channel;
+  // Page metadata describes a standalone draft. Alternatives carry their own counts.
+  const showDraftMeta = !options.length && !!draft.copy;
   const autoHelp = useHelpShown(helpIds.review);
   const helpPanel = useRef<HTMLElement>(null);
   const [showHelp, setShowHelp] = useState<boolean>();
@@ -730,134 +732,129 @@ export function ReviewDecision({
     return () => setMenu([]);
   }, [setMenu, row, task, pending, busy]);
   return (
-    <div className="crew-dialog-body crew-review-body">
-      <span className="crew-note-bucket">{t("Approvals")}</span>
-      <div className="crew-review-meta">
-        <span className={pending ? "crew-human" : "crew-pill"}>
-          {reviewStatusText(val(row, "status"))}
-        </span>
-        {channel && <span className="crew-pill">{channelName(channel)}</span>}
-        {val(row, "recipient") && (
-          <span>
-            {t("To {recipient}", { recipient: val(row, "recipient") })}
+    <>
+      <div className="crew-dialog-body crew-review-body">
+        <span className="crew-note-bucket">{t("Approvals")}</span>
+        <div className="crew-review-meta">
+          <span className={pending ? "crew-human" : "crew-pill"}>
+            {reviewStatusText(val(row, "status"))}
           </span>
-        )}
-        {!!current.copy && (
-          <span>
-            {metaBlock?.limit
-              ? `${count.toLocaleString(locale())} / ${metaBlock.limit.toLocaleString(locale())}`
-              : t("{n} characters", { n: count.toLocaleString(locale()) })}
-          </span>
-        )}
-      </div>
-      {val(task, "title") && <ReadTitle title={val(task, "title")} />}
-      {(showHelp ?? autoHelp) && (
-        <aside className="crew-review-help" ref={helpPanel} tabIndex={-1}>
-          <p>
-            {t("Approval does not send, post or publish this.")}{" "}
-            {channel === "linkedin" &&
-              t("You paste the reply on LinkedIn yourself.")}
-          </p>
-          <HideHelp id={helpIds.review} />
-        </aside>
-      )}
-      {copied && (
-        <p
-          className={copied === "copied" ? "crew-review-toast" : "crew-alert"}
-          role={copied === "copied" ? "status" : "alert"}
-        >
-          {copied === "copied" ? (
-            t("Link copied")
-          ) : (
-            <>
-              {t("Could not copy automatically. Copy it from here:")}{" "}
-              <code>{reviewUrl(row)}</code>
-            </>
+          {showDraftMeta && draftBlock?.channel && (
+            <span className="crew-pill">{channelName(draftBlock.channel)}</span>
           )}
-        </p>
-      )}
-      <ReviewContent
-        row={row}
-        attachments={attachments}
-        loaded={loaded}
-        presentation={presentation}
-        Prose={Prose}
-      >
-        <ReviewChoices
-          row={row}
-          Prose={Prose}
-          presentation={presentation}
-          picks={pending ? picks : undefined}
-          onChange={pending ? setPick : undefined}
-        />
-      </ReviewContent>
-      {!pending && val(row, "decided_at") && (
-        <p className="crew-review-decided">
-          {decidedLine(
-            val(row, "status"),
-            val(row, "decided_by"),
-            when(val(row, "decided_at")),
+          {val(row, "recipient") && (
+            <span>
+              {t("To {recipient}", { recipient: val(row, "recipient") })}
+            </span>
           )}
-        </p>
-      )}
-      {!!decisionSummary(row) && (
-        <p className="crew-review-decision-summary">{decisionSummary(row)}</p>
-      )}
-      {val(row, "decision_note") && (
-        <p>
-          <strong>{t("Your decision note:")}</strong>{" "}
-          <PlainRefs text={val(row, "decision_note")} />
-        </p>
-      )}
-      {pending && (
-        <>
-          {/* Pinned to the bottom (0.31.0) and compact (0.32.0): a one-line
-              note that grows upward on focus, then the two primary actions,
-              which never move. */}
-          <div className="crew-save-bar crew-review-bar">
-            {error && (
-              <p className="crew-alert" role="alert">
-                {error}
-              </p>
+          {showDraftMeta && (
+            <span>
+              {draftBlock ? (
+                <BlockCount {...blockMetrics(draftBlock, blockCopyText(draftBlock))} />
+              ) : t("{n} characters", { n: characterCount(draft.copy).toLocaleString(locale()) })}
+            </span>
+          )}
+        </div>
+        {val(task, "title") && <ReadTitle title={val(task, "title")} />}
+        {(showHelp ?? autoHelp) && (
+          <aside className="crew-review-help" ref={helpPanel} tabIndex={-1}>
+            <p>
+              {t("Approval does not send, post or publish this.")}{" "}
+              {channel === "linkedin" &&
+                t("You paste the reply on LinkedIn yourself.")}
+            </p>
+            <HideHelp id={helpIds.review} />
+          </aside>
+        )}
+        {copied && (
+          <p
+            className={copied === "copied" ? "crew-review-toast" : "crew-alert"}
+            role={copied === "copied" ? "status" : "alert"}
+          >
+            {copied === "copied" ? (
+              t("Link copied")
+            ) : (
+              <>
+                {t("Could not copy automatically. Copy it from here:")}{" "}
+                <code>{reviewUrl(row)}</code>
+              </>
             )}
-            <textarea
-              ref={note}
-              className="crew-review-note"
-              aria-label={t("Decision note")}
-              rows={1}
-              defaultValue=""
-              maxLength={20000}
-              placeholder={t("Add a note…")}
-            />
-            <div className="crew-actions">
-              <button
-                className="crew-primary"
-                disabled={busy || (options.length > 0 && selected === 0)}
-                onClick={() => submit("approved")}
-              >
-                {options.length
-                  ? pickOne
-                    ? chosen
-                      ? t("Approve {label}", { label: chosen.label })
-                      : t("Approve")
-                    : t("Approve {n} selected", { n: selected })
-                  : t("Approve draft")}
-              </button>
-              <button
-                disabled={busy}
-                onClick={() => submit("changes_requested")}
-              >
-                {t("Request changes")}
-              </button>
-            </div>
+          </p>
+        )}
+        <ReviewContent
+          row={row}
+          attachments={attachments}
+          loaded={loaded}
+          presentation={presentation}
+          Prose={Prose}
+        >
+          <ReviewChoices
+            row={row}
+            Prose={Prose}
+            presentation={presentation}
+            picks={pending ? picks : undefined}
+            onChange={pending ? setPick : undefined}
+          />
+        </ReviewContent>
+        {!pending && val(row, "decided_at") && (
+          <p className="crew-review-decided">
+            {decidedLine(
+              val(row, "status"),
+              val(row, "decided_by"),
+              when(val(row, "decided_at")),
+            )}
+          </p>
+        )}
+        {!!decisionSummary(row) && (
+          <p className="crew-review-decision-summary">{decisionSummary(row)}</p>
+        )}
+        {val(row, "decision_note") && (
+          <p>
+            <strong>{t("Your decision note:")}</strong>{" "}
+            <PlainRefs text={val(row, "decision_note")} />
+          </p>
+        )}
+        {!pending && error && <p className="crew-alert" role="alert">{error}</p>}
+      </div>
+      {pending && (
+        <div className="crew-save-bar crew-review-bar">
+          {error && (
+            <p className="crew-alert" role="alert">
+              {error}
+            </p>
+          )}
+          <textarea
+            ref={note}
+            className="crew-review-note"
+            aria-label={t("Decision note")}
+            rows={1}
+            defaultValue=""
+            maxLength={20000}
+            placeholder={t("Add a note…")}
+          />
+          <div className="crew-actions">
+            <button
+              className="crew-primary"
+              disabled={busy || (options.length > 0 && selected === 0)}
+              onClick={() => submit("approved")}
+            >
+              {options.length
+                ? pickOne
+                  ? chosen
+                    ? t("Approve {label}", { label: chosen.label })
+                    : t("Approve")
+                  : t("Approve {n} selected", { n: selected })
+                : t("Approve draft")}
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => submit("changes_requested")}
+            >
+              {t("Request changes")}
+            </button>
           </div>
-        </>
+        </div>
       )}
-      {!pending && error && (
-        <p className="crew-alert" role="alert">
-          {error}
-        </p>
-      )}
-    </div>
+    </>
   );
 }

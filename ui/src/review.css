@@ -223,15 +223,28 @@
 /* The pinned decision bar, compact (0.32.0): a one-line note that grows
    upward into the body on focus (the bar is pinned to the bottom, so the
    buttons stay put), then Approve and Request changes on one row. */
-.crew-dialog .crew-review-bar {
-  padding-top: 10px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+/* Only the review body scrolls. The footer takes up its own space even
+   when the decision note grows or the translated actions wrap. */
+.crew-dialog:has(> .crew-review-body) {
+  overflow: hidden;
+}
+.crew-dialog > .crew-review-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: block;
+  overflow: auto;
+}
+.crew-dialog > .crew-review-bar {
+  position: static;
+  flex: none;
+  margin: 0;
+  padding: 10px var(--crew-body-gutter) calc(14px + env(safe-area-inset-bottom));
 }
 .crew-dialog .crew-review-bar textarea.crew-review-note {
   display: block;
   width: 100%;
   height: 40px;
-  min-height: 40px;
+  min-height: 44px;
   margin: 0 0 8px;
   padding: 8px 12px;
   resize: none;
@@ -311,8 +324,19 @@
 .crew-review-body > .crew-review-meta {
   margin-bottom: 12px;
 }
-.crew-review-content .crew-md-preview {
-  min-height: 0;
+.crew-reviewer-note {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--block-note);
+}
+.crew-reviewer-note > .crew-prose > :first-child {
+  margin-top: 0;
+}
+.crew-reviewer-note > .crew-prose > :last-child {
+  margin-bottom: 0;
+}
+.crew-reviewer-note > .crew-prose + .crew-prose {
+  margin-top: .6rem;
 }
 .crew-dialog .crew-review-meta {
   flex-direction: row;
@@ -366,18 +390,29 @@
   background: transparent;
   box-shadow: none;
 }
-.crew-review-body .crew-review-bar textarea.crew-review-note {
-  min-height: 44px;
-}
 @media (max-width: 680px) {
+  .crew-pick-head {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .crew-pick-head > .crew-pick-check {
+    flex-basis: 0;
+  }
   .crew-option-channel {
-    display: none;
+    flex-basis: 100%;
+    order: 1;
   }
 }
 
 @media (min-width: 681px) {
-  .crew-dialog:has(.crew-review-body) {
-    width: min(1080px, calc(100vw - 30px));
+  .crew-dialog .crew-review-bar .crew-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .crew-dialog .crew-review-bar .crew-actions button {
+    width: auto;
+    max-width: 65%;
+    padding-inline: 20px;
   }
 }
 .crew-dialog .crew-pick-head > button.crew-copy-button {
