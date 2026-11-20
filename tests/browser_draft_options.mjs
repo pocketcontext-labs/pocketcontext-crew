@@ -19,14 +19,23 @@ export async function editTaskOptions(page, base, write) {
       dialog.getByRole('button', { name, exact: true }).click(),
     ]);
     assert.equal(response.status(), 200, action);
+    await page.locator('.crew-notice').filter({ hasText: 'Saved.' }).first().waitFor();
     return response.json();
   };
 
   await page.goto(taskUrl);
-  await page.reload();
   await heading('Main release plan').waitFor();
   await heading('Joint announcement').waitFor();
   assert.equal(await heading('Main release plan').count(), 1, 'the task presents the draft repeated by option A only once');
+  const jump = dialog.getByRole('combobox', { name: 'Jump to option' });
+  assert.deepEqual(await jump.locator('option').allTextContents(), ['2 options', ...options.map(o => o.label)]);
+  await jump.selectOption({ label: options[1].label });
+  const second = dialog.getByRole('group', { name: options[1].label, exact: true });
+  assert.ok(await second.evaluate(card => card === document.activeElement), 'jumping focuses the chosen option');
+  assert.ok(await second.locator('legend').evaluate(el => {
+    const bounds = el.getBoundingClientRect();
+    return bounds.top >= 0 && bounds.bottom <= innerHeight;
+  }), 'the chosen option title is in view');
   assert.equal(await dialog.getByRole('button', { name: 'Save task', exact: true }).isDisabled(), true);
   assert.ok(await dialog.locator('.crew-dialog-body').evaluate(d => d.scrollWidth <= d.clientWidth + 1), 'long option labels fit the task editor');
 
@@ -37,13 +46,13 @@ export async function editTaskOptions(page, base, write) {
   await dialog.getByText('Saving these changes will withdraw the pending review.', { exact: true }).waitFor();
   await clickWrite('Save task', 'task.update');
   await page.goto(base + '/#/approvals/' + first.id);
-  await page.reload();
   await dialog.getByText('withdrawn', { exact: true }).waitFor();
   await heading('Joint announcement').waitFor();
   assert.equal(await heading('Revised announcement').count(), 0, 'the withdrawn snapshot keeps the original Markdown');
 
   await page.goto(taskUrl);
-  await page.reload();
+  await heading('Revised announcement').waitFor();
+  await page.reload({ waitUntil: 'networkidle' });
   await heading('Revised announcement').waitFor();
   assert.equal(await heading('Main release plan').count(), 1, 'the untouched option stays visible once after reopening');
   await dialog.getByRole('tablist', { name: 'Option 1 draft view' }).getByRole('tab', { name: 'Edit' }).click();
@@ -52,8 +61,7 @@ export async function editTaskOptions(page, base, write) {
   assert.ok(await dialog.getByRole('button', { name: 'Request approval', exact: true }).isDisabled());
   const updatedTask = await clickWrite('Save task', 'task.update');
   assert.equal(updatedTask.draft, revisedMain, 'editing the main option keeps the matching task draft in sync');
-  await page.goto(taskUrl);
-  await page.reload();
+  await dialog.getByRole('tablist', { name: 'Option 1 draft view' }).getByRole('tab', { name: 'Read' }).click();
   await heading('Main release schedule').waitFor();
   assert.equal(await heading('Main release schedule').count(), 1);
   assert.equal(await heading('Main release plan').count(), 0);
@@ -63,7 +71,6 @@ export async function editTaskOptions(page, base, write) {
   assert.equal(next.selection, 'one');
   assert.equal(next.recipient, 'Synthetic reviewer');
   await page.goto(base + '/#/approvals/' + next.id);
-  await page.reload();
   await dialog.getByRole('radio', { name: options[1].label, exact: true }).waitFor();
   await heading('Revised announcement').waitFor();
 }
