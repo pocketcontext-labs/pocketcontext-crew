@@ -5,7 +5,7 @@ export async function editTaskOptions(page, base, write) {
   const taskDraft = '### Main release plan\n\nShip the synthetic example on Friday.';
   const options = [
     { key: 'main', label: 'Main plan', body: taskDraft },
-    { key: 'partner', label: 'Partner variation', body: '### Joint announcement\n\nAsk the partner first.' },
+    { key: 'partner', label: 'Optional partner variation requiring a second team to confirm the release schedule', body: '### Joint announcement\n\nAsk the partner first.' },
   ];
   const revised = '### Revised announcement\n\nConfirm the **joint** schedule first.';
   const task = await write('task.create', { title: 'Synthetic editable review plans', draft: taskDraft });
@@ -28,12 +28,13 @@ export async function editTaskOptions(page, base, write) {
   await heading('Joint announcement').waitFor();
   assert.equal(await heading('Main release plan').count(), 1, 'the task presents the draft repeated by option A only once');
   assert.equal(await dialog.getByRole('button', { name: 'Save task', exact: true }).isDisabled(), true);
-  assert.ok(await dialog.evaluate(d => d.scrollWidth <= d.clientWidth + 1), 'the task editor fits the viewport');
+  assert.ok(await dialog.locator('.crew-dialog-body').evaluate(d => d.scrollWidth <= d.clientWidth + 1), 'long option labels fit the task editor');
 
   await dialog.getByRole('tablist', { name: 'Option 2 draft view' }).getByRole('tab', { name: 'Edit' }).click();
   const editor = dialog.getByRole('textbox', { name: 'Option 2 draft', exact: true });
   assert.equal(await editor.inputValue(), options[1].body);
   await editor.fill(revised);
+  await dialog.getByText('Saving these changes will withdraw the pending review.', { exact: true }).waitFor();
   await clickWrite('Save task', 'task.update');
   await page.goto(base + '/#/approvals/' + first.id);
   await page.reload();
