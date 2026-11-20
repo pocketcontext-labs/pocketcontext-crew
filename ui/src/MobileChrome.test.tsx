@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ColumnSwitcher from "./ColumnSwitcher";
 import CrewWorkspace from "./CrewWorkspace";
+import { MobileTabBar } from "./MobileChrome";
 import { attachmentsApi } from "./attachmentsApi";
 import { crewApi, type Row } from "./crewApi";
 import { resetReferencesForTests } from "./references";
@@ -155,6 +156,53 @@ const tabs = () =>
 const sheet = (name: string) => within(screen.getByRole("dialog", { name }));
 
 describe("phone chrome", () => {
+  it.each([
+    ["home", "Home", "#/"],
+    ["board", "Tasks", "#/tasks?column=in_progress&sort=title"],
+    ["memory", "Notes", "#/notes?bucket=bucket000000001&q=launch"],
+    ["reviews", "Approvals", "#/approvals"],
+  ] as const)(
+    "retaps the current %s page without navigating",
+    (view, name, hash) => {
+      history.replaceState(null, "", hash);
+      const entries = history.length;
+      const scroll = vi.fn();
+      vi.stubGlobal("scrollTo", scroll);
+      vi.stubGlobal("scrollY", 680);
+      render(<MobileTabBar view={view} pending={0} />);
+      const link = tabs().getByRole("link", { name, current: "page" });
+      expect(fireEvent.click(link)).toBe(false);
+      expect(scroll).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
+      vi.stubGlobal("scrollY", 0);
+      expect(fireEvent.click(link)).toBe(false);
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(location.hash).toBe(hash);
+      expect(history.length).toBe(entries);
+    },
+  );
+
+  it("honors reduced motion when the current page is chosen again in More", () => {
+    const hash = "#/shared?show=archived";
+    history.replaceState(null, "", hash);
+    const scroll = vi.fn();
+    vi.stubGlobal("scrollTo", scroll);
+    vi.stubGlobal("scrollY", 500);
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(prefers-reduced-motion: reduce)",
+    }));
+    render(<MobileTabBar view="shared" pending={0} />);
+    fireEvent.click(tabs().getByRole("button", { name: "More" }));
+    expect(scroll).not.toHaveBeenCalled();
+    const current = sheet("More").getByRole("link", {
+      name: "Shared",
+      current: "page",
+    });
+    expect(fireEvent.click(current)).toBe(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(scroll).toHaveBeenCalledWith({ top: 0, behavior: "instant" });
+    expect(location.hash).toBe(hash);
+  });
+
   it("has a one-row top bar and bottom tabs instead of the sidebar", async () => {
     render(<CrewWorkspace />);
     await screen.findByText("Write the launch post");

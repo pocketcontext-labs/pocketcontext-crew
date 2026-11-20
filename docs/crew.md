@@ -123,8 +123,12 @@ it works opens it in place (the box checked; unticking lets it show again), and 
 panel showing How it works opens the page's Guide section. The bottom tabs (since
 0.34.0 a floating, frosted pill inset from the screen edges, with the page scrolling
 under it; the current tab has a soft grey-green highlight) open Home, Tasks, Notes and
-Approvals (a small dot while drafts wait; the count is in the tab's accessible name);
-More opens Shared, Agents, Archive, Connect an agent, Guide and Sign out. The Tasks board shows one column at a time under a sticky switcher
+Approvals (a small dot while drafts wait; the count is in the tab's accessible name).
+Tap the current tab again to scroll to the top of that page. Your filters and place
+in the navigation history are preserved. When a record is open, close it to return
+to its list first. More opens a menu with Shared, Agents, Archive, Settings, Connect
+an agent and Guide. Choose the current page again in More to scroll to its top.
+The Tasks board shows one column at a time under a sticky switcher
 (`‹ To do · 6 (1 of 4) ›`, previous and next disabled in place at the ends; the name
 opens a picker with every column's count); its search, scope, sort, agent chips and
 filters are in the filter sheet, and active filters show as removable chips under the

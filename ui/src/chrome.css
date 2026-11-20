@@ -220,6 +220,7 @@
   place-items: center;
   width: 28px;
   height: 26px;
+  color: var(--icon-ink);
 }
 /* The active tab: a soft grey-green highlight behind icon and label. */
 .crew-tabbar > [aria-current="page"],

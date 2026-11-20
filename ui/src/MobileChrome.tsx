@@ -539,6 +539,26 @@ const moreLinks: [View, string][] = [
   ["guide", "Guide"],
 ];
 
+/** The phone lists scroll with the document. Keep their URL and history entry. */
+function retapCurrentPage(event: MouseEvent<HTMLAnchorElement>) {
+  if (
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    event.shiftKey
+  )
+    return;
+  event.preventDefault();
+  if (window.scrollY <= 0) return;
+  window.scrollTo({
+    top: 0,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "instant"
+      : "smooth",
+  });
+}
+
 /**
  * The phone's bottom tabs: Home, Tasks, Notes, Approvals (a dot while drafts
  * wait; the count is in its name) and More, whose sheet reaches every other
@@ -555,6 +575,7 @@ export function MobileTabBar({ view, pending }: { view: View; pending: number })
           key={key}
           href={viewHashes[key]}
           aria-current={view === key ? "page" : undefined}
+          onClick={view === key ? retapCurrentPage : undefined}
           aria-label={
             key === "reviews" && pending > 0
               ? t("{label}, {n} pending", { label: t(label), n: pending })
@@ -592,7 +613,10 @@ export function MobileTabBar({ view, pending }: { view: View; pending: number })
                 <a
                   href={viewHashes[key]}
                   aria-current={view === key ? "page" : undefined}
-                  onClick={() => setMoreOpen(false)}
+                  onClick={(event) => {
+                    if (view === key) retapCurrentPage(event);
+                    setMoreOpen(false);
+                  }}
                 >
                   {t(label)}
                 </a>
