@@ -1040,7 +1040,7 @@ export default function CrewWorkspace() {
     columnRefs = useRef<Record<string, HTMLElement | null>>({}),
     [ready, setReady] = useState(false),
     generation = useRef(0),
-    edited = useRef(false),
+    edited = useRef(0),
     busyRef = useRef(false),
     loadsInFlight = useRef(0),
     loadFailed = useRef(false);
@@ -1052,7 +1052,7 @@ export default function CrewWorkspace() {
   // A layout effect, so the reset precedes any edit to the newly shown dialog;
   // a deferred effect could run after the first change and erase it.
   useLayoutEffect(() => {
-    edited.current = false;
+    edited.current = 0;
   }, [dialog?.kind, dialog?.row?.id]);
   // A silent load is the background refresh: it changes data only when the data
   // changed, and a failure leaves the page as it is until the next attempt.
@@ -1422,7 +1422,7 @@ export default function CrewWorkspace() {
     if (depth > 0) {
       // Saved or confirmed already: the hashchange may arrive before the
       // closed dialog's render resets this, and must not ask again.
-      edited.current = false;
+      edited.current = 0;
       setDialog(null);
       history.go(-depth);
       return;
@@ -1543,6 +1543,7 @@ export default function CrewWorkspace() {
     reason = "",
     keepOpen = false,
   ) => {
+    const editsAtSave = edited.current;
     // A changed draft withdraws a pending approval; say so, as file changes do.
     const withdraws =
       action === "task.update" &&
@@ -1556,7 +1557,8 @@ export default function CrewWorkspace() {
       async () => {
         const updated = await crewApi.write(action, fields, row, reason);
         if (keepOpen) {
-          edited.current = false;
+          // A keystroke after Save still needs the dialog's discard prompt.
+          if (edited.current === editsAtSave) edited.current = 0;
           setDialog((open) =>
             open?.row?.id === updated.id ? { ...open, row: updated } : open,
           );
@@ -3212,7 +3214,7 @@ export default function CrewWorkspace() {
               : []
           }
           onEdit={() => {
-            edited.current = true;
+            edited.current++;
           }}
           close={() => {
             if (!busy && discardOk()) closeDialog();
@@ -3230,7 +3232,7 @@ export default function CrewWorkspace() {
             }}
             archiveNotice={archiveNotice}
             onEdit={() => {
-              edited.current = true;
+              edited.current++;
             }}
             wakeMissing={
               dialog.kind === "task" && !!dialog.row && wakeMissing.has(dialog.row.id)

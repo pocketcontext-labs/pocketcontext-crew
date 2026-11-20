@@ -742,6 +742,32 @@ it("keeps the task's matching draft in sync when the owner renames or removes it
   fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
   await waitFor(() => expect(fixtures.tasks[0]).toMatchObject({ draft: "", draft_options: [options[1]] }));
 });
+it("keeps edits made while saving draft options guarded by the discard prompt", async () => {
+  const option = { key: "main", label: "Main plan", body: "### Main draft" };
+  fixtures.tasks = [{ ...task, draft: option.body, draft_options: [option] }];
+  fixtures.reviews = [];
+  let finish!: () => void;
+  const waiting = new Promise<void>(resolve => { finish = resolve; });
+  vi.mocked(crewApi.write).mockImplementation(async (_action, fields) => {
+    await waiting;
+    const saved = { ...fixtures.tasks[0], ...fields, revision: task.revision + 1 };
+    fixtures.tasks = [saved];
+    return saved;
+  });
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  history.replaceState(null, "", "/#/tasks/task00000000001");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  const text = dialog.getByLabelText("Option 1 draft");
+  fireEvent.change(text, { target: { value: "First edit" } });
+  fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+  fireEvent.change(text, { target: { value: "Second edit" } });
+  await act(async () => { finish(); });
+  expect(text).toHaveValue("Second edit");
+  expect(dialog.getByRole("button", { name: "Save task" })).toBeEnabled();
+  fireEvent.click(dialog.getByRole("button", { name: "Close dialog" }));
+  expect(confirm).toHaveBeenCalledWith("Discard your unsaved changes?");
+});
 it("requires restoring the owning bucket before an inherited archived note", async () => {
   const note: Row = {
     id: "note00000000001",
