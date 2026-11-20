@@ -346,6 +346,27 @@ it("opens task Markdown in Read and edits it second", async () => {
   fireEvent.click(views.getByRole("tab", { name: "Edit" }));
   expect(dialog.getByLabelText("Description")).toHaveValue("**Bold step**");
 });
+it("keeps legacy copy blocks out of the brief and preserves their source when saving a draft", async () => {
+  const original = 'Introduce our product\n\n:::copy{label="Copy for X"}\n\nSynthetic legacy post\n\n:::';
+  fixtures.tasks = [{ ...task, description: original }];
+  history.replaceState(null, "", "/#/tasks/task00000000001");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  expect(dialog.getByText("Introduce our product", { selector: "p" })).toBeVisible();
+  expect(dialog.queryByText("Synthetic legacy post", { selector: "p" })).toBeNull();
+  const brief = within(dialog.getByRole("tablist", { name: "Description view" }));
+  fireEvent.click(brief.getByRole("tab", { name: "Edit" }));
+  expect(dialog.getByLabelText("Description")).toHaveValue(original);
+
+  const draft = within(dialog.getByRole("tablist", { name: "Draft for review view" }));
+  fireEvent.click(draft.getByRole("tab", { name: "Edit" }));
+  fireEvent.change(dialog.getByLabelText("Draft for review"), { target: { value: "Revised post" } });
+  fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+  await waitFor(() => expect(crewApi.write).toHaveBeenCalled());
+  const [, fields] = vi.mocked(crewApi.write).mock.calls[0];
+  expect(fields).toMatchObject({ draft: "Revised post" });
+  expect(fields).not.toHaveProperty("description");
+});
 it("gives agents with the same first letter distinct initials", async () => {
   fixtures.agents = [
     agent,
@@ -2113,12 +2134,12 @@ describe("simple dialogs", () => {
     ).toHaveAccessibleName("What does Request approval do?");
   });
 
-  it("points to Approvals while a review is pending", async () => {
+  it("links directly to the pending draft outside the description", async () => {
     const dialog = await openTask({});
     expect(dialog.getByText(/Waiting for your approval/)).toBeInTheDocument();
-    expect(dialog.getByRole("link", { name: "Approvals" })).toHaveAttribute(
+    expect(dialog.getByRole("link", { name: /Review draft/ })).toHaveAttribute(
       "href",
-      "#/approvals",
+      `#/approvals/${review.id}`,
     );
     expect(
       dialog.queryByRole("button", { name: "Request approval" }),

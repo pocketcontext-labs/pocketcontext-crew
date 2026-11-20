@@ -876,8 +876,16 @@ colons. There is no nesting, one variant per channel per body, and directives in
 fenced code are text. Anything else (other names, other attributes, `[labels]`,
 `:text` and `::leaf` directives) is not interpreted and shows as its source text.
 The server parser is `pb_hooks/crew_markup.js`; it and the reader share the fixtures
-in `tests/fixtures/review_markup.json`. The same blocks render in note bodies, task
-descriptions, drafts and comments (Copy only, no feedback).
+in `tests/fixtures/review_markup.json`. The same blocks render in note bodies,
+task drafts and comments (Copy only).
+
+The task description holds the owner's request, sources and constraints. Save
+paste-ready work in the task draft, alternatives in review options and progress
+in task comments. A valid copy or variant block inside a submitted description
+produces a nonblocking `task_description_contains_draft` warning on create or
+update. A task card and the description's Read view omit those blocks. Edit opens
+the full stored Markdown, including existing blocks. A pending review has its
+own link just below the description.
 
 Invalid markup is reported in warn mode: it never blocks a write in 0.38.0, and a
 later release will refuse it in `review.request` with 400 `review_markup_invalid`.

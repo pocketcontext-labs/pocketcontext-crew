@@ -175,7 +175,10 @@ function document() {
   };
   const task = {
     title: str,
-    description: str,
+    description: {
+      type: "string",
+      description: "The owner's request, sources, constraints and style. A :::variant or :::copy block here returns a task_description_contains_draft warning.",
+    },
     assigned_agent: str,
     labels: strings,
     status: {
@@ -183,7 +186,10 @@ function document() {
       description:
         "Done and wont_do (Won't do) are terminal: they end any claim, never wake a bot and leaving either reopens the task. Enter needs_review only with review.request.",
     },
-    draft: str,
+    draft: {
+      type: "string",
+      description: "Working draft for approval. Put paste-ready versions here or in review.request options and progress updates in task.comment.",
+    },
     links: linkIds,
     archived: bool,
     readiness: {
@@ -1562,7 +1568,7 @@ function markupDiscovery() {
     targets:
       "Feedback targets in an option body: the variant's channel, or copy-<n> for the nth valid copy block (1-based); notes are not addressable.",
     where:
-      "Review drafts and option bodies (with per-block feedback), also note bodies, task descriptions, drafts and comments (Copy only).",
+      "Review drafts and option bodies (with per-block feedback), also note bodies, task drafts and comments (Copy only). The task description holds the owner's request. A paste-ready :::variant or :::copy block there returns a task_description_contains_draft warning on create or update.",
     errors: markup.CODES.slice(),
     enforcement:
       "Warn mode: review.request, note.create/update, task.create/update and task.comment return warnings [{code, option, field, line, opener, message}] (option = option key, empty otherwise; line is 1-based in that text) and never block. A later release will refuse invalid markup in review.request with 400 review_markup_invalid.",

@@ -383,7 +383,21 @@ function targets(body) {
 // Write warnings (never blocking): [{code, option, field, line, opener, message}].
 function warnings(body, option, field) {
   if (typeof body !== "string" || !body.includes(":::")) return [];
-  return parse(body).errors.map((e) => ({
+  const { errors, blocks } = parse(body);
+  if (field === "description") {
+    const lines = body.split(/\r\n|\r|\n/);
+    for (const b of blocks) {
+      if (b.kind === "note") continue;
+      errors.push({
+        code: "task_description_contains_draft",
+        line: b.line,
+        opener: excerpt(lines[b.line - 1]),
+        message: "Keep the owner's request in description. Move this paste-ready block to draft or a review option.",
+      });
+    }
+    errors.sort((a, b) => a.line - b.line);
+  }
+  return errors.map((e) => ({
     code: e.code,
     option: option || "",
     field: field || "",

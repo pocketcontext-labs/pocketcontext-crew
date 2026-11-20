@@ -38,6 +38,7 @@ import Settings from "./Settings";
 import { loadReaderSettings } from "./sessionGuide";
 import LabelsInput from "./LabelsInput";
 import { markdownExcerpt, markdownText } from "./markdownText";
+import { taskBrief } from "./reviewMarkup";
 import { ExcerptContent } from "./ExcerptContent";
 import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest, ReviewRequestBlocked } from "./Review";
 import { decisionSummary, objects } from "./reviews";
@@ -586,6 +587,8 @@ function GrowingTextarea({ value, ...props }: ComponentProps<"textarea">) {
 function MarkdownField({
   label,
   help,
+  hint,
+  preview,
   required,
   className,
   value,
@@ -596,6 +599,8 @@ function MarkdownField({
 }: {
   label: string;
   help?: ReactNode;
+  hint?: string;
+  preview?: string;
   tabs?: boolean;
   required?: boolean;
   className?: string;
@@ -619,6 +624,7 @@ function MarkdownField({
         <small>{t("Markdown supported")}</small>
         {help}
       </div>
+      {hint && <p id={`${id}-hint`} className="crew-md-hint">{hint}</p>}
       <div className="crew-md-box">
         {tabs && (
           <div
@@ -642,6 +648,7 @@ function MarkdownField({
         {/* Hidden rather than removed, so undo and the height survive Read. */}
         <GrowingTextarea
           id={id}
+          aria-describedby={hint ? `${id}-hint` : undefined}
           hidden={reading}
           required={required}
           className={className}
@@ -652,8 +659,8 @@ function MarkdownField({
         />
         {reading && (
           <div className="crew-md-preview">
-            {value.trim() ? (
-              <Prose>{value}</Prose>
+            {(preview ?? value).trim() ? (
+              <Prose>{preview ?? value}</Prose>
             ) : (
               <p>{t("Nothing written yet.")}</p>
             )}
@@ -2749,7 +2756,7 @@ export default function CrewWorkspace() {
                       />
                     )}
                     <h3>{val(x, "title")}</h3>
-                    <p><ExcerptContent excerpt={markdownExcerpt(val(x, "description"), 150)} /></p>
+                    <p><ExcerptContent excerpt={markdownExcerpt(taskBrief(val(x, "description")), 150)} /></p>
                     {invalidAssignment(x) && (
                       <p className="crew-assignment-warning">
                         {t("Assigned agent is inactive or unavailable. Reassign this task.")}
@@ -3768,8 +3775,8 @@ function Editor({
         : kind === "task"
           ? {
               title,
-              description: body,
-              draft,
+              ...(!row || body !== initial.body ? { description: body } : {}),
+              ...(!row || draft !== initial.draft ? { draft } : {}),
               assigned_agent: selection,
               readiness,
               waiting_reason: readiness !== "ready" ? waitingReason : "",
@@ -3870,19 +3877,13 @@ function Editor({
       {t("← Back to note")}
     </button>
   );
+  const brief = kind === "task" ? taskBrief(body) : undefined;
   const savedDraft = val(row, "draft");
-  const reviewPending = data.reviews.some(
+  const reviewPending = data.reviews.find(
     (x) => val(x, "task") === row?.id && val(x, "status") === "pending",
   );
   const reviewHelp = <Help topic="send-for-approval" />;
-  const reviewState = reviewPending ? (
-    <div className="crew-review-actions">
-      <p className="crew-review-state">
-        {t("Waiting for your approval.")} <a href={viewHashes.reviews}>{t("Approvals")}</a>
-      </p>
-      {reviewHelp}
-    </div>
-  ) : draft !== savedDraft ? (
+  const reviewState = draft !== savedDraft ? (
     <ReviewRequestBlocked hint={t("Save your draft first.")} help={reviewHelp} />
   ) : !savedDraft.trim() ? (
     <ReviewRequestBlocked hint={t("Save a draft first.")} help={reviewHelp} />
@@ -4181,6 +4182,10 @@ function Editor({
                 className={kind === "note" ? "crew-note-text" : ""}
                 value={body}
                 onChange={setBody}
+                preview={brief}
+                hint={kind === "task" ? (brief === body
+                  ? t("The owner’s request, sources and constraints.")
+                  : t("Edit to see the full description, including saved draft blocks.")) : undefined}
                 tabs={kind === "task"}
                 onFiles={insertFiles("body", setBody)}
                 status={inlineStatus("body")}
@@ -4200,6 +4205,16 @@ function Editor({
             )}
             {kind === "task" && (
               <>
+                {reviewPending && !readOnly && (
+                  <a
+                    className="crew-pending-review-link"
+                    href={reviewHash(reviewPending.id)}
+                    onClick={(e) => followLink(e, reviewHash(reviewPending.id))}
+                  >
+                    <span>{t("Waiting for your approval.")}</span>
+                    <strong>{t("Review draft")} <span aria-hidden="true">→</span></strong>
+                  </a>
+                )}
                 {row && claim.state && (
                   <ClaimBanner
                     claim={claim}
@@ -4291,14 +4306,15 @@ function Editor({
                 )}
                 <MarkdownField
                   label={t("Draft for review")}
-                  help={help("draft")}
+                  help={!readOnly && <Help topic="draft" />}
+                  hint={t("Save work for approval here. Put progress updates in Comments.")}
                   className="crew-long-text"
                   value={draft}
                   onChange={setDraft}
                   onFiles={insertFiles("draft", setDraft)}
                   status={inlineStatus("draft")}
                 />
-                {row && !readOnly && (
+                {row && !readOnly && !reviewPending && (
                   <div className="crew-review-row">{reviewState}</div>
                 )}
               </>

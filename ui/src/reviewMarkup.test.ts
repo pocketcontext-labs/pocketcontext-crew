@@ -8,6 +8,7 @@ import {
   characterCount,
   parseReviewMarkup,
   stripReviewMarkup,
+  taskBrief,
 } from "./reviewMarkup";
 
 type Case = {
@@ -51,6 +52,18 @@ it("strips interpreted markup and notes, keeping invalid markup as text", () => 
   expect(out).not.toContain("Secret");
   expect(out).toContain(":::poll");
   expect(blockCopyText(parseReviewMarkup(body).blocks[0])).toBe("Hello world");
+});
+
+it("preserves literal examples, invalid directives and surrounding instructions in task briefs", () => {
+  const example = '```md\n:::variant{channel=x}\n\nExample\n\n:::\n```';
+  const ask = "Keep this example:\n" + example;
+  const invalid = ":::copy\n\nIncomplete label\n\n:::";
+  const body = ask + '\n\n:::copy{label="Option A"}\n\nLegacy post\n\n:::\n\n' + invalid;
+  const brief = taskBrief(body);
+  expect(brief).toContain(ask);
+  expect(brief).toContain(invalid);
+  expect(brief).not.toContain("Legacy post");
+  expect(taskBrief(ask)).toBe(ask);
 });
 
 it("counts code points, URLs as 23 on X", () => {

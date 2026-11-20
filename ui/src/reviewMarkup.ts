@@ -385,6 +385,22 @@ export function stripReviewMarkup(markdown: string): string {
   return lines.filter((_, i) => !drop.has(i + 1)).join("\n");
 }
 
+/** The brief as shown on the task. Keep the stored Markdown intact for editing. */
+export function taskBrief(description: string): string {
+  if (!description.includes(":::")) return description;
+  const blocks = copyBlocks(parseReviewMarkup(description));
+  if (!blocks.length) return description;
+  const lines = description.replace(/\r\n?/g, "\n").split("\n");
+  const brief: string[] = [];
+  let nextLine = 0;
+  for (const block of blocks) {
+    brief.push(lines.slice(nextLine, block.line - 1).join("\n"));
+    nextLine = block.end;
+  }
+  brief.push(lines.slice(nextLine).join("\n"));
+  return brief.join("\n").trimEnd();
+}
+
 /** What a block's Copy puts on the clipboard. */
 export const blockCopyText = (block: MarkupBlock) => markdownPlainText(block.content);
 

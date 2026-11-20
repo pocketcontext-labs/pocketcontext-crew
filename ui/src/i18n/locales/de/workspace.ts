@@ -325,6 +325,9 @@ const de: Record<string, string> = {
   Hold: "Pause",
   "On hold: nobody is woken; a person decides. Ready: the assigned bot may act.":
     "Angehalten: Niemand wird geweckt; ein Mensch entscheidet. Bereit: Der zugewiesene Bot darf handeln.",
+  "Edit to see the full description, including saved draft blocks.": "Unter Bearbeiten siehst du die vollständige Beschreibung einschließlich gespeicherter Entwurfsblöcke.",
+  "The owner’s request, sources and constraints.": "Die Anfrage des Eigentümers mit Quellen und Vorgaben.",
+  "Save work for approval here. Put progress updates in Comments.": "Hier den Entwurf zur Freigabe speichern. Fortschritte gehören in die Kommentare.",
   "Draft for review": "Entwurf zur Freigabe",
   "Reason for change": "Grund der Änderung",
   "Optional: what changed and why?":

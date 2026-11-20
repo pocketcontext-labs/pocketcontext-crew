@@ -114,6 +114,27 @@ func TestReviewMarkupFixturesWarnOnReviewRequest(t *testing.T) {
 	}
 }
 
+func TestTaskDescriptionDraftWarnings(t *testing.T) {
+	a := newTestApp(t)
+	block := ":::variant{channel=x}\n\nSynthetic post\n\n:::"
+	description := "The request\n\n" + block
+	task := crewWrite(t, a, true, "task.create", "", 0, map[string]any{"title": "Synthetic request", "description": description, "draft": block}, 200)
+	if got := warningsOf(t, task, "", "description"); !reflect.DeepEqual(got, [][2]any{{"task_description_contains_draft", 3}}) || task["description"] != description {
+		t.Fatal("create must warn and preserve the description", task)
+	}
+	id := task["id"].(string)
+	// A documented example inside fenced code is literal. The following real block warns.
+	raw := "```md\n" + block + "\n```\n\n:::copy{label=\"Example\"}\n\nA second draft\n\n:::"
+	task = crewWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"description": raw}, 200)
+	if got := warningsOf(t, task, "", "description"); !reflect.DeepEqual(got, [][2]any{{"task_description_contains_draft", 9}}) {
+		t.Fatal("update must warn only for the actual copy block", task)
+	}
+	task = crewWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"draft": block}, 200)
+	if _, warned := task["warnings"]; warned || readTask(t, a, id)["description"] != raw {
+		t.Fatal("a draft-only edit must preserve the brief without warning", task)
+	}
+}
+
 func TestMarkupWarningsOnNoteTaskAndCommentWrites(t *testing.T) {
 	a := newTestApp(t)
 	bad := ":::variant{channel=myspace}\n\nText\n\n:::"

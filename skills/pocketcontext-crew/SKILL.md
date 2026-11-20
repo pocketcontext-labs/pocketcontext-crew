@@ -109,10 +109,16 @@ string clears it. `bucket.update` also accepts responsible_agent. The read field
 responsible_agent remains an ID; responsible_agent_details supplies id/name.
 The optional responsible_agent filter applies to bucket reads.
 
-For mutually exclusive alternatives, set `selection: "one"` on `review.request`. The default `"any"` permits multiple choices. Supply `recipient` when known. Put alternatives only in option bodies, mark paste-ready text with `:::variant` or `:::copy`, and place reviewer context in `:::note`. With options the task draft may be empty.
-
-Save durable findings as notes. Tasks track work and drafts. Request human review
+Save durable findings as notes. Keep the owner's request, sources, constraints
+and style in task `description`. Save working copy in `draft` and alternatives in
+`review.request` options. Put paste-ready `:::copy` or `:::variant` blocks there,
+reviewer context in `:::note`, and progress in `task.comment`. A
+`task_description_contains_draft` warning identifies misplaced copy in a
+successful task write. Request human review
 with review.request; record a decision only as the Authorization rules allow.
+Set `selection: "one"` for mutually exclusive alternatives. The default `"any"`
+permits multiple choices. Supply `recipient` when known. With options, the task
+draft may be empty.
 Attach every image or file the draft is about first and reference it with
 `attachment:ID`; local file paths cannot be reviewed. For alternatives, send
 `options: [{key, label, body}]` (one option per draft; one variant per platform
