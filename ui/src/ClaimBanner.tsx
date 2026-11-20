@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { MoreMenu, type MenuItem } from "./DialogHeader";
 import { t } from "./i18n";
-import { claimTitle, copyText, type Claim } from "./projectAgents";
+import { claimTitle, type Claim } from "./projectAgents";
 import {
   RelativeTime,
   formatDuration,
@@ -42,10 +42,10 @@ export default function ClaimBanner({
     {
       label: t("Copy details"),
       icon: "copy",
-      onSelect: () =>
-        void copyText(claimTitle(claim)).then((ok) =>
-          setCopied(ok ? "copied" : "failed"),
-        ),
+      copy: {
+        text: claimTitle(claim),
+        onResult: (ok) => setCopied(ok ? "copied" : "failed"),
+      },
     },
   ];
   if (!readOnly)

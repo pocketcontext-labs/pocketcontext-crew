@@ -1052,8 +1052,11 @@ until Save or Cancel.
 started agent has a copy button under its card on the Agents page (**Copy coding
 prompt** since 0.27.0, so its **?** stays on the same row); on Home (since 0.34.0)
 **Copy prompt for a coding agent** and **How coding sessions work** are in that
-agent's ⋯ menu (active manual agents only). After a copy the button
-shows **Copied** for 2 seconds. The reader reads the
+agent's ⋯ menu (active manual agents only). A successful copy shows a check in
+place for 1.3 seconds. The card button also shows **Copied**. When copying
+from the menu, the check appears on the ⋯ button after the menu closes. Crew
+uses a 160 ms crossfade for the check, or an instant swap with reduced motion.
+The reader reads the
 session when the button renders, so the click copies `prompt` straight away (a
 phone refuses a clipboard write that waits for the network). A toast confirms
 "Copied the session prompt for <name>. Paste it into a new session in your coding

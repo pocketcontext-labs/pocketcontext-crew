@@ -7,6 +7,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
+import { CopyControl } from "./CopyFeedback";
 import { crewApi, val, list, type ArtifactLink, type Row } from "./crewApi";
 import {
   itemPath,
@@ -20,6 +21,7 @@ import { usePhone } from "./usePhone";
 import AutoTextarea from "./AutoTextarea";
 import PagePreview, { isStandaloneDisplay } from "./PagePreview";
 import { ListNavCluster } from "./DialogHeader";
+import { copyText } from "./projectAgents";
 import { t, tc, tn } from "./i18n";
 import { listKeyStep, type Step } from "./swipe";
 import { parseInstant, RelativeTime, type Instant } from "./relativeTime";
@@ -366,7 +368,7 @@ function ArtifactCard({
   const [body, setBody] = useState(val(row, "body"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState<"" | "copied" | "failed">("");
+  const [copyFailed, setCopyFailed] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const url = state === "published" ? artifactUrl(link) : "";
   const run = async (action: string, data: Record<string, unknown> = {}) => {
@@ -382,14 +384,6 @@ function ArtifactCard({
       setError(e instanceof Error ? e.message : t("That did not work."));
     } finally {
       setBusy(false);
-    }
-  };
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied("copied");
-    } catch {
-      setCopied("failed");
     }
   };
   const sources = list(row, "sources").map((id) => {
@@ -503,9 +497,12 @@ function ArtifactCard({
             value={url}
             onFocus={(e) => e.currentTarget.select()}
           />
-          <button type="button" onClick={() => void copy()}>
-            {copied === "copied" ? t("Link copied") : t("Copy link")}
-          </button>
+          <CopyControl
+            copy={() => copyText(url)}
+            label={t("Copy link")}
+            successLabel={t("Link copied")}
+            onResult={(ok) => setCopyFailed(!ok)}
+          />
           {/* Opens what recipients see in a new tab; Crew does not count it
               as a view (same-origin navigation). The home-screen app has no
               Back, so there it opens in the in-app preview instead. */}
@@ -531,7 +528,7 @@ function ArtifactCard({
               onClose={() => setPreviewing(false)}
             />
           )}
-          {copied === "failed" && (
+          {copyFailed && (
             <span role="alert" className="crew-copy-error">
               {t("Could not copy automatically. Copy it from the box.")}
             </span>

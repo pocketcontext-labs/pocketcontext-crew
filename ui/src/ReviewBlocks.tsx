@@ -2,11 +2,9 @@
 import {
   createContext,
   useContext,
-  useEffect,
-  useState,
   type ReactNode,
 } from "react";
-import { Icon } from "./DialogHeader";
+import { CopyControl } from "./CopyFeedback";
 import { copyText } from "./projectAgents";
 import { markdownPlainText } from "./markdownText";
 import {
@@ -21,7 +19,7 @@ import "./blocks.css";
 /**
  * Copy (0.37.1): copies Markdown as plain text that pastes cleanly into a
  * chat app, inside the tap (phones refuse a clipboard write after an await).
- * The label turns to "Copied" for 2 s, or "Not copied" on failure; every
+ * The label confirms success or failure; every
  * label sits in the same grid cell, so the button never changes width.
  */
 export function CopyButton({
@@ -47,49 +45,17 @@ export function CopyButton({
   label: string;
   className?: string;
 }) {
-  const [state, setState] = useState<"" | "copied" | "failed">("");
-  useEffect(() => {
-    if (!state) return;
-    const timer = window.setTimeout(() => setState(""), 2000);
-    return () => window.clearTimeout(timer);
-  }, [state]);
-  const labels = { "": t("Copy"), copied: t("Copied"), failed: t("Not copied") };
   return (
-    <>
-      <button
-        type="button"
-        className={`crew-copy-button ${iconOnly ? "crew-icon-button" : ""} ${className}`
-          .replace(/\s+/g, " ")
-          .trim()}
-        data-state={state || undefined}
-        aria-label={label}
-        title={label}
-        onClick={() =>
-          void copyText(plainText ?? markdownPlainText(text)).then((ok) =>
-            setState(ok ? "copied" : "failed"),
-          )
-        }
-      >
-        <Icon
-          name={state === "copied" ? "check" : state === "failed" ? "close" : "copy"}
-        />
-        {!iconOnly && (
-          <span className="crew-copy-labels" aria-hidden="true">
-            {(short ? (["", "copied"] as const) : (["", "copied", "failed"] as const)).map((key) => (
-              <span
-                key={key}
-                data-shown={key === (short && state === "failed" ? "" : state) || undefined}
-              >
-                {labels[key]}
-              </span>
-            ))}
-          </span>
-        )}
-      </button>
-      <span className="crew-visually-hidden" aria-live="polite">
-        {state ? labels[state] : ""}
-      </span>
-    </>
+    <CopyControl
+      copy={() => copyText(plainText ?? markdownPlainText(text))}
+      label={t("Copy")}
+      successLabel={t("Copied")}
+      failureLabel={short ? undefined : t("Not copied")}
+      accessibleLabel={label}
+      className={`crew-copy-button ${iconOnly ? "crew-icon-button" : ""} ${className}`.trim()}
+      iconOnly={iconOnly}
+      announce
+    />
   );
 }
 

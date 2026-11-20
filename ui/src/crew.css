@@ -3795,7 +3795,7 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-session-guide-prompt pre {
   margin: 0;
-  padding: 10px 44px 10px 12px;
+  padding: 10px 54px 10px 12px;
   border: 1px solid #dfe4d6;
   border-radius: 8px;
   background: #f1f4ec;
@@ -3810,17 +3810,10 @@ a.crew-logo:hover .product-brand span {
   right: 5px;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  border: 0;
-  background: transparent;
-  color: #4f6a45;
-}
-.crew-session-guide-copy svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.3;
+  border-radius: 50%;
 }
 .crew-session-guide > footer {
   display: flex;
@@ -3871,15 +3864,10 @@ a.crew-logo:hover .product-brand span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
+  min-height: 44px;
   padding: 5px 12px;
   font-size: 12px;
   white-space: nowrap;
-}
-.crew-session-copy-icon {
-  display: inline-block;
-  min-width: 1em;
-  text-align: center;
 }
 /* Download beside Remove under an image, and under review files. */
 .crew-attachment-actions {
@@ -4208,19 +4196,6 @@ a.crew-logo:hover .product-brand span {
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-.crew-head-toast {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 4px 9px;
-  border-radius: 8px;
-  background: #233a28;
-  color: #fff;
-  font-size: 12px;
-  white-space: nowrap;
-  pointer-events: none;
 }
 /* Fixed inside the header: its backdrop-filter makes it the containing block,
    so the message spans the header's width just below it. */

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { CopyGlyph, useCopyFeedback } from "./CopyFeedback";
 import { icons, PopoverMenu, type MenuItem } from "./MobileChrome";
 import { ConnectionPending, skillCommand } from "./Connect";
 import Help from "./Help";
@@ -10,7 +11,6 @@ import {
   isCodingAgent,
   resolveAgentTap,
   type AgentTap,
-  type TapAction,
 } from "./agentTap";
 import { val, type ConnectionState, type Row } from "./crewApi";
 import { isClosed } from "./closedTasks";
@@ -405,18 +405,23 @@ type AgentRowProps = {
  */
 function CodingAgentRow(props: AgentRowProps) {
   const session = useSessionStart(props.agent, props.onStartSession);
+  const rowCopy = useCopyFeedback();
+  const menuCopy = useCopyFeedback();
   return (
     <AgentRowView
       {...props}
       coding
-      copyPrompt={session.start}
+      copyPrompt={() => void rowCopy.run(session.start)}
+      copyIcon={<CopyGlyph state={rowCopy.state} />}
+      moreIcon={<CopyGlyph state={menuCopy.state} idle="more" />}
       extra={[
         {
           label: session.loading
             ? t("Preparing the prompt…")
             : t("Copy prompt for coding agent"),
           disabled: session.loading,
-          onSelect: session.start,
+          icon: <CopyGlyph state="" />,
+          onSelect: () => void menuCopy.run(session.start),
         },
         { label: t("How coding sessions work"), onSelect: session.openGuide },
       ]}
@@ -448,11 +453,15 @@ function AgentRowView({
   openItem,
   coding = false,
   copyPrompt,
+  copyIcon,
+  moreIcon,
   extra,
   children,
 }: AgentRowProps & {
   coding?: boolean;
   copyPrompt?: () => void;
+  copyIcon?: ReactNode;
+  moreIcon?: ReactNode;
   extra: MenuItem[];
   children?: ReactNode;
 }) {
@@ -462,7 +471,8 @@ function AgentRowView({
   const showTasks = () => {
     location.hash = boardAgentHash(agent.id);
   };
-  const run = (action: TapAction) => {
+  const action = resolveAgentTap(tap, agent);
+  const run = () => {
     if (action === "copy_prompt" && copyPrompt) copyPrompt();
     else if (action === "show_tasks") showTasks();
     else open();
@@ -472,7 +482,7 @@ function AgentRowView({
       <button
         type="button"
         className="crew-home-agent"
-        onClick={() => run(resolveAgentTap(tap, agent))}
+        onClick={run}
       >
         <span className="crew-avatar" aria-hidden="true">
           {agentInitials(name, agents)}
@@ -486,6 +496,7 @@ function AgentRowView({
           </span>
           <small>{status}</small>
         </span>
+        {action === "copy_prompt" && copyIcon}
       </button>
       <button
         type="button"
@@ -496,7 +507,7 @@ function AgentRowView({
         aria-expanded={!!menu}
         onClick={(e) => setMenu(e.currentTarget)}
       >
-        {icons.more}
+        {moreIcon ?? icons.more}
       </button>
       {menu && (
         <PopoverMenu

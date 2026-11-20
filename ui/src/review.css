@@ -292,28 +292,12 @@
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  color: #2d4538;
+  color: var(--icon-ink);
 }
 .crew-copy-button .crew-icon {
   flex: none;
   width: 18px;
   height: 18px;
-}
-.crew-copy-labels {
-  display: grid;
-  justify-items: start;
-}
-.crew-copy-labels > span {
-  grid-area: 1 / 1;
-  visibility: hidden;
-}
-.crew-copy-labels > span[data-shown] {
-  visibility: visible;
-}
-.crew-dialog button.crew-copy-button[data-state="copied"] {
-  background: #233a28;
-  border-color: #233a28;
-  color: #fff;
 }
 .crew-dialog button.crew-copy-button[data-state="failed"] {
   border-color: #c98b7c;

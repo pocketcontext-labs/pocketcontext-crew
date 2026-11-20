@@ -6,12 +6,13 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { CopyControl } from "./CopyFeedback";
 import { crewApi, list, val, type Row } from "./crewApi";
 import Help, { HelpField } from "./Help";
 import type { HelpTopic } from "./helpContent";
 import { t, tn } from "./i18n";
 import { itemPath } from "./itemLink";
-import { isBot } from "./projectAgents";
+import { copyText, isBot } from "./projectAgents";
 import { AutoTextField } from "./AutoTextarea";
 import { isClosed } from "./closedTasks";
 import { RelativeTime } from "./relativeTime";
@@ -666,13 +667,9 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
     .concat(
       "\n\nEach bot: reply once here to confirm, then stop. Do not respond to other bots' confirmations.",
     );
-  async function copy(text: string, success: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setMessage(success);
-    } catch {
-      setError(t("Could not copy. Open the prompt and copy its text manually."));
-    }
+  function promptCopyResult(ok: boolean, message: string) {
+    if (ok) setMessage(message);
+    else setError(t("Could not copy. Open the prompt and copy its text manually."));
   }
   async function saveCredentials(event: FormEvent) {
     event.preventDefault();
@@ -1015,18 +1012,12 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 readLabel={t("Read setup prompt")}
                 prompt={setupPrompt}
                 copyButton={
-                  <button
-                    className="crew-primary"
+                  <CopyControl
                     disabled={blocked || !currentAgent}
-                    onClick={() =>
-                      void copy(
-                        setupPrompt,
-                        t("Setup prompt copied. It contains no credentials."),
-                      )
-                    }
-                  >
-                    {t("Copy setup prompt")}
-                  </button>
+                    copy={() => copyText(setupPrompt)}
+                    label={t("Copy setup prompt")}
+                    onResult={(ok) => promptCopyResult(ok, t("Setup prompt copied. It contains no credentials."))}
+                  />
                 }
               />
               <p>
@@ -1083,20 +1074,12 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     readLabel={t("Read group authorization prompt")}
                     prompt={groupAuthorizationPrompt}
                     copyButton={
-                      <button
-                        className="crew-primary"
+                      <CopyControl
                         disabled={blocked}
-                        onClick={() =>
-                          void copy(
-                            groupAuthorizationPrompt,
-                            t(
-                              "Group authorization prompt copied. Paste it once in the group with all your bots.",
-                            ),
-                          )
-                        }
-                      >
-                        {t("Copy group authorization prompt")}
-                      </button>
+                        copy={() => copyText(groupAuthorizationPrompt)}
+                        label={t("Copy group authorization prompt")}
+                        onResult={(ok) => promptCopyResult(ok, t("Group authorization prompt copied. Paste it once in the group with all your bots."))}
+                      />
                     }
                   />
                   <details className="crew-prompt-fallback">
@@ -1107,19 +1090,12 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                     readLabel={t("Read bot authorization prompt")}
                     prompt={authorizationPrompt}
                     copyButton={
-                      <button
+                      <CopyControl
                         disabled={blocked}
-                        onClick={() =>
-                          void copy(
-                            authorizationPrompt,
-                            t(
-                              "Authorization prompt copied. Paste it into each bot's own conversation.",
-                            ),
-                          )
-                        }
-                      >
-                        {t("Copy bot authorization prompt")}
-                      </button>
+                        copy={() => copyText(authorizationPrompt)}
+                        label={t("Copy bot authorization prompt")}
+                        onResult={(ok) => promptCopyResult(ok, t("Authorization prompt copied. Paste it into each bot's own conversation."))}
+                      />
                     }
                   />
                   </details>
@@ -1403,19 +1379,12 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 readLabel={t("Read routing test prompt")}
                 prompt={routingPrompt}
                 copyButton={
-                  <button
+                  <CopyControl
                     disabled={blocked || !currentAgent || !config.enabled}
-                    onClick={() =>
-                      void copy(
-                        routingPrompt,
-                        t(
-                          "Routing test prompt copied. It authorizes only the described synthetic tasks.",
-                        ),
-                      )
-                    }
-                  >
-                    {t("Copy routing test prompt")}
-                  </button>
+                    copy={() => copyText(routingPrompt)}
+                    label={t("Copy routing test prompt")}
+                    onResult={(ok) => promptCopyResult(ok, t("Routing test prompt copied. It authorizes only the described synthetic tasks."))}
+                  />
                 }
               />
               <p className="crew-footnote">
@@ -1675,17 +1644,12 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                 disabled={blocked}
               />
             </label>
-            <button
+            <CopyControl
               disabled={blocked}
-              onClick={() =>
-                void copy(
-                  val(config, "instructions"),
-                  t("Managed instructions copied. No credentials are included."),
-                )
-              }
-            >
-              {t("Copy instructions")}
-            </button>
+              copy={() => copyText(val(config, "instructions"))}
+              label={t("Copy instructions")}
+              onResult={(ok) => promptCopyResult(ok, t("Managed instructions copied. No credentials are included."))}
+            />
             <form
               aria-label={t("Role and reporting instructions")}
               onSubmit={(e) => {

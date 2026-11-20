@@ -1,0 +1,63 @@
+/* Keep the target, its neutral surface and its ink fixed while only the glyph fades. */
+:is(.crew-app, .crew-dialog) button.crew-copy-control {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  color: var(--icon-ink);
+  background-color: var(--icon-fill);
+  border-color: var(--icon-line);
+}
+:is(.crew-app, .crew-dialog) button.crew-copy-trigger {
+  min-width: 44px;
+  min-height: 44px;
+}
+.crew-copy-glyph {
+  display: inline-grid;
+  flex: none;
+  color: var(--icon-ink);
+  place-items: center;
+  width: 20px;
+  height: 20px;
+}
+.crew-copy-glyph[data-state="failed"] {
+  color: var(--danger);
+}
+.crew-copy-glyph > svg.crew-icon {
+  grid-area: 1 / 1;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.crew-copy-glyph path {
+  vector-effect: non-scaling-stroke;
+}
+.crew-copy-glyph:not([data-state]) > svg:first-child,
+.crew-copy-glyph[data-state="copied"] > svg:nth-child(2),
+.crew-copy-glyph[data-state="failed"] > svg:last-child {
+  opacity: 1;
+}
+.crew-copy-labels {
+  display: inline-grid;
+  align-items: center;
+}
+.crew-copy-labels > span {
+  grid-area: 1 / 1;
+  visibility: hidden;
+}
+.crew-copy-labels > span[data-shown] {
+  visibility: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-copy-glyph > svg.crew-icon {
+    transition: none;
+  }
+}

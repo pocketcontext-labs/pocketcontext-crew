@@ -13,6 +13,7 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from "react";
+import { CopyControl } from "./CopyFeedback";
 import { defaultUrlTransform } from "react-markdown";
 import { AttachmentPreview } from "./AttachmentPreview";
 import {
@@ -40,6 +41,7 @@ import type { ArrivedBy } from "./ViewerBar";
 import type { Row } from "./crewApi";
 import { connectSectionHash } from "./itemLink";
 import { RelativeTime } from "./relativeTime";
+import { copyText } from "./projectAgents";
 import { t, tn } from "./i18n";
 import "./upload.css";
 
@@ -847,11 +849,11 @@ function UploadLinkButton({ parent }: { parent: ParentRef }) {
   const [link, setLink] = useState<UploadLink | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState<"" | "copied" | "failed">("");
+  const [copyFailed, setCopyFailed] = useState(false);
   const create = async () => {
     setBusy(true);
     setError("");
-    setCopied("");
+    setCopyFailed(false);
     try {
       setLink(await attachmentsApi.createUploadLink(parent));
     } catch (e) {
@@ -891,18 +893,13 @@ function UploadLinkButton({ parent }: { parent: ParentRef }) {
             )}
           </p>
           <code>{address}</code>
-          <button
-            type="button"
-            onClick={() =>
-              navigator.clipboard.writeText(address).then(
-                () => setCopied("copied"),
-                () => setCopied("failed"),
-              )
-            }
-          >
-            {copied === "copied" ? t("Link copied") : t("Copy upload link")}
-          </button>
-          {copied === "failed" && (
+          <CopyControl
+            copy={() => copyText(address)}
+            label={t("Copy upload link")}
+            successLabel={t("Link copied")}
+            onResult={(ok) => setCopyFailed(!ok)}
+          />
+          {copyFailed && (
             <span role="alert">
               {t("Could not copy automatically; copy it from above.")}
             </span>

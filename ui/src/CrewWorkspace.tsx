@@ -11,6 +11,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { CopyControl } from "./CopyFeedback";
 import Brand from "./Brand";
 import { api } from "./api";
 import {
@@ -145,7 +146,6 @@ import Shared from "./Shared";
 import Prose from "./Prose";
 import DialogHeader, {
   DialogMenuContext,
-  HeadButton,
   ListNavCluster,
   NavCluster,
   menuIsOpenIn,
@@ -472,15 +472,16 @@ function CopyLink({
   label?: string;
   copiedLabel?: string;
 }) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-  // One copy helper for the reader: the Clipboard API, then the copy command.
-  const copy = async () => setState((await copyText(target)) ? "copied" : "failed");
+  const [failed, setFailed] = useState(false);
   return (
     <span className="crew-copy-link">
-      <button type="button" onClick={() => void copy()}>
-        {state === "copied" ? copiedLabel : label}
-      </button>
-      {state === "failed" && (
+      <CopyControl
+        copy={() => copyText(target)}
+        label={label}
+        successLabel={copiedLabel}
+        onResult={(ok) => setFailed(!ok)}
+      />
+      {failed && (
         <span role="alert" className="crew-copy-error">
           {t("Could not copy automatically. Copy it from here:")} <code>{target}</code>
         </span>
@@ -490,7 +491,7 @@ function CopyLink({
 }
 /**
  * Copy link as a header icon (0.30.0): the icon turns into a check and the
- * name into the copied label for 2 s, with a small "Copied" bubble.
+ * name into the copied label for the duration of the check.
  */
 function HeadCopy({
   target,
@@ -503,26 +504,19 @@ function HeadCopy({
   copiedLabel?: string;
   icon?: "link" | "copy";
 }) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-  useEffect(() => {
-    if (state !== "copied") return;
-    const timer = window.setTimeout(() => setState("idle"), 2000);
-    return () => window.clearTimeout(timer);
-  }, [state]);
-  const copy = async () => setState((await copyText(target)) ? "copied" : "failed");
+  const [failed, setFailed] = useState(false);
   return (
     <span className="crew-head-copy">
-      <HeadButton
-        icon={state === "copied" ? "check" : icon}
-        label={state === "copied" ? copiedLabel : label}
-        onClick={() => void copy()}
+      <CopyControl
+        copy={() => copyText(target)}
+        label={label}
+        successLabel={copiedLabel}
+        idleIcon={icon}
+        iconOnly
+        className="crew-head-button"
+        onResult={(ok) => setFailed(!ok)}
       />
-      {state === "copied" && (
-        <span className="crew-head-toast" aria-hidden="true">
-          {t("Copied")}
-        </span>
-      )}
-      {state === "failed" && (
+      {failed && (
         <span role="alert" className="crew-head-alert">
           {t("Could not copy automatically. Copy it from here:")} <code>{target}</code>
         </span>
@@ -3188,13 +3182,12 @@ export default function CrewWorkspace() {
                   {
                     label: t("Copy link"),
                     icon: "link",
-                    onSelect: () => {
-                      const url = itemShareUrl(dialog.kind as ItemKind, dialog.row!);
-                      void copyText(url).then((ok) =>
-                        ok
-                          ? setNotice(t("Link copied."))
-                          : setError(t("Could not copy automatically. Copy it from here: {url}", { url })),
-                      );
+                    copy: {
+                      text: itemShareUrl(dialog.kind as ItemKind, dialog.row),
+                      onResult: (ok, url) => {
+                        if (ok) setNotice(t("Link copied."));
+                        else setError(t("Could not copy automatically. Copy it from here: {url}", { url }));
+                      },
                     },
                   },
                   ...(dialog.kind === "note" && !archiveNotice

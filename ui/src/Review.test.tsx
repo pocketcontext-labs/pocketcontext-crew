@@ -138,7 +138,7 @@ it("keeps the selection and feedback on Request changes; Reject in More rejects 
   expect(menu().map((x) => x.label)).toEqual(
     expect.arrayContaining(["Add note", "Copy link"]),
   );
-  reject.onSelect();
+  reject.onSelect!();
   expect(save).toHaveBeenLastCalledWith(
     "review.decide",
     expect.objectContaining({
@@ -156,7 +156,7 @@ it("focuses the one-line note from Add note in More", () => {
   const note = screen.getByRole("textbox", { name: "Decision note" });
   expect(note).toHaveAttribute("rows", "1");
   expect(note).toHaveAttribute("placeholder", "Add a note…");
-  menu().find((x) => x.label === "Add note")!.onSelect();
+  menu().find((x) => x.label === "Add note")!.onSelect!();
   expect(note).toHaveFocus();
 });
 it("shows image options as tiles with a feedback badge, under Text and Images", () => {

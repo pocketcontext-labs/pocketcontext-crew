@@ -43,7 +43,6 @@ import { blockCopyText, characterCount } from "./reviewMarkup";
 import { reviewPresentation, type PresentedReview } from "./reviewPresentation";
 import HideHelp, { helpIds, useHelpShown } from "./HideHelp";
 import { itemPath, reviewHash } from "./itemLink";
-import { copyText } from "./projectAgents";
 import "./review.css";
 import AutoTextarea from "./AutoTextarea";
 import PlainRefs from "./PlainRefs";
@@ -691,8 +690,7 @@ export function ReviewDecision({
     items.push({
       label: t("Copy link"),
       icon: "link",
-      onSelect: () =>
-        void copyText(url).then((ok) => setCopied(ok ? "copied" : "failed")),
+      copy: { text: url, onResult: (ok) => setCopied(ok ? "copied" : "failed") },
     });
     if (task)
       items.push({

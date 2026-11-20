@@ -145,14 +145,9 @@
   }
 }
 @media (hover: hover) {
-  :is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button:hover:not([data-state]) {
+  :is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button:hover {
     background: var(--icon-hover);
   }
-}
-:is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button[data-state="copied"] {
-  border-color: #233a28;
-  background: #233a28;
-  color: #fff;
 }
 :is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button[data-state="failed"] {
   border-color: #c98b7c;

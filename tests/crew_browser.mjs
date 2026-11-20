@@ -1182,9 +1182,9 @@ try {
  for(const width of [390,1024,1280,1440]){
   await page.setViewportSize({width,height:900});
   // The card footer keeps Copy coding prompt and its ? on one centred row (after the short "Copied").
-  await page.waitForFunction(()=>document.querySelector('.crew-agent-tile .crew-session-copy')?.textContent==='⧉Copy coding prompt');
-  {const footer=await page.locator('.crew-agent-tile .crew-session-row').first().evaluate(r=>{const b=r.querySelector('.crew-session-copy').getBoundingClientRect();const h=r.querySelector('.crew-help-button').getBoundingClientRect();return {label:r.querySelector('.crew-session-copy').textContent,centred:Math.abs((b.top+b.bottom)/2-(h.top+h.bottom)/2)<=2,beside:h.left>=b.right};});
-  assert.deepEqual(footer,{label:'⧉Copy coding prompt',centred:true,beside:true},`button and ? share a row at ${width}`);}
+  await page.waitForFunction(()=>document.querySelector('.crew-agent-tile .crew-session-copy .crew-copy-labels [data-shown]')?.textContent==='Copy coding prompt');
+  {const footer=await page.locator('.crew-agent-tile .crew-session-row').first().evaluate(r=>{const b=r.querySelector('.crew-session-copy').getBoundingClientRect();const h=r.querySelector('.crew-help-button').getBoundingClientRect();return {label:r.querySelector('.crew-session-copy .crew-copy-labels [data-shown]').textContent,centred:Math.abs((b.top+b.bottom)/2-(h.top+h.bottom)/2)<=2,beside:h.left>=b.right};});
+  assert.deepEqual(footer,{label:'Copy coding prompt',centred:true,beside:true},`button and ? share a row at ${width}`);}
   if(width===390) continue;
   const networkHeight=await networkCard.evaluate(e=>e.getBoundingClientRect().height);
   assert.equal(await pageOverflows(),false,`Agents horizontal overflow at ${width}`);
@@ -2181,6 +2181,8 @@ try {
   assert.equal(await dialog().getByRole('button',{name:'Copy draft text',exact:true}).count(),0,'no second snapshot Copy');
   const optionCopy=dialog().getByRole('button',{name:'Copy A · Out of tokens',exact:true});
   await optionCopy.scrollIntoViewIfNeeded();
+  await optionCopy.hover();
+  const fill=await optionCopy.evaluate(b=>getComputedStyle(b).backgroundColor);
   const before=await optionCopy.boundingBox();
   assert.ok(before.height>=44&&before.width>=44,'option Copy is a 44 px target');
   await optionCopy.click();
@@ -2188,6 +2190,16 @@ try {
   assert.equal(await page.evaluate(()=>window.__copied[0]),'LinkedIn and X');
   assert.equal(await optionCopy.getAttribute('data-state'),'copied');
   assert.deepEqual(await optionCopy.boundingBox(),before,'Copied keeps the control in place');
+  assert.equal(await optionCopy.evaluate(b=>getComputedStyle(b).backgroundColor),fill,'Copy keeps its neutral surface');
+  const check=optionCopy.locator('.crew-copy-glyph > svg').nth(1);
+  const checkStyle=()=>check.evaluate(svg=>{
+   const style=getComputedStyle(svg);
+   return [style.opacity,style.color,style.strokeWidth,style.transitionDuration];
+  });
+  assert.deepEqual(await checkStyle(),['1','rgb(47, 58, 47)','2px','0s'],'reduced motion shows an instant, high-contrast check');
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  assert.equal((await checkStyle())[3],'0.16s','the normal crossfade lasts 160ms');
+  await page.emulateMedia({reducedMotion:'reduce'});
   assert.equal(await dialog().getByRole('button',{name:'Copy Shared notebook'}).count(),0,'image options have no Copy');
   await snapView('crew-review-copy-390');
  }

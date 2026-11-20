@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
+import { CopyControl } from "./CopyFeedback";
 import {
   crewApi,
   val,
@@ -65,15 +66,8 @@ export default function SessionInstructions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Row[] | null>(null);
-  // The rewrite prompt names the revision it was copied at, so the copied
-  // state belongs to that revision and clears when the revision changes. It
-  // is derived rather than reset by an effect: a mount effect that resets it
-  // can run after a fast click and swallow the copied state.
-  const [copy, setCopy] = useState<{
-    state: "copied" | "manual";
-    revision: number;
-  } | null>(null);
-  const copied = copy && copy.revision === session.revision ? copy.state : "";
+  // Manual fallback belongs to the revision whose prompt failed to copy.
+  const [failedRevision, setFailedRevision] = useState<number | null>(null);
   const editorId = useId();
   const agent = session.agent.id;
   const name = session.agent.name;
@@ -134,14 +128,6 @@ export default function SessionInstructions({
     if (next === "edit") setText((draft) => draft ?? session.body);
     setMode(next);
   };
-  const rewrite = async () => {
-    const revision = session.revision;
-    setCopy({
-      state: (await copyText(session.rewrite_prompt)) ? "copied" : "manual",
-      revision,
-    });
-  };
-
   const draft = text ?? session.body;
   return (
     <div className="crew-dialog-body crew-session-dialog">
@@ -155,16 +141,14 @@ export default function SessionInstructions({
       </p>
       <div className="crew-session-toolbar">
         <div className="crew-session-rewrite">
-          <button
-            type="button"
-            className="crew-primary"
+          <CopyControl
+            key={session.revision}
             disabled={!session.rewrite_prompt}
-            onClick={() => void rewrite()}
-          >
-            {copied === "copied"
-              ? t("Rewrite prompt copied")
-              : t("Rewrite with an agent")}
-          </button>
+            copy={() => copyText(session.rewrite_prompt)}
+            label={t("Rewrite with an agent")}
+            successLabel={t("Rewrite prompt copied")}
+            onResult={(ok) => setFailedRevision(ok ? null : session.revision)}
+          />
           <small>
             {t(
               "Recommended. Copies a prompt for an agent conversation: the agent reads the current text, asks what to change, shows you the new version and saves it only after you approve.",
@@ -218,7 +202,7 @@ export default function SessionInstructions({
       {/* Only this area changes between Read, Edit and History; the
           dialog, the hint and the toolbar above keep their size and place. */}
       <div className={`crew-session-view crew-session-view-${mode}`}>
-        {copied === "manual" && (
+        {failedRevision === session.revision && (
           <div role="alert" className="crew-session-note">
             <p>
               {t(

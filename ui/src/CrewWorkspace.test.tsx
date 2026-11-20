@@ -3528,10 +3528,8 @@ describe("project agents and coding sessions", () => {
     const guide = screen.getByRole("dialog", {
       name: "Start a coding session as synthetic-repo",
     });
-    // Only the button's label confirms the copy for a moment.
-    expect(card.innerHTML).toBe(
-      before.replace(">⧉</span>Copy coding prompt<", ">✓</span>Copied<"),
-    );
+    expect(copy).toHaveAttribute("data-state", "copied");
+    expect(copy.querySelector(".crew-copy-glyph")).toHaveAttribute("data-state", "copied");
     expect(guide.querySelector("textarea")).toBeNull();
     expect(within(guide).getByLabelText("Session prompt for synthetic-repo").textContent).toBe(
       session.prompt,

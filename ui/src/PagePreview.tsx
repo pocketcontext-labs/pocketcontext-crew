@@ -81,16 +81,12 @@ export default function PagePreview({
       previous?.focus?.({ preventScroll: true });
     };
   }, []);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setNotice("copied");
-    } catch {
-      setNotice("failed");
-    }
-  };
   const menu: MenuItem[] = [
-    { label: t("Copy link"), icon: "copy", onSelect: () => void copy() },
+    {
+      label: t("Copy link"),
+      icon: "copy",
+      copy: { text: url, onResult: (ok) => setNotice(ok ? "copied" : "failed") },
+    },
     {
       label: isIOS() ? t("Open in Safari") : t("Open in browser"),
       icon: "forward",

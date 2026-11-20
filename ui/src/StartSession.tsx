@@ -7,6 +7,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { CopyControl } from "./CopyFeedback";
 import { createPortal } from "react-dom";
 import { markdownSummary } from "./markdownText";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
@@ -92,17 +93,6 @@ export function useSessionStart(
   const name = val(agent, "name");
   const cached = useRef<AgentSession | undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  // A short "Copied" on the button itself, like the other copy actions.
-  const [copied, setCopied] = useState(0);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(0), 2000);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
-  const onStart = (start: SessionStart) => {
-    if (start.state === "copied") setCopied((n) => n + 1);
-    notify(start);
-  };
   const [guide, setGuide] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [guideLoaded, guideOff] = useSessionGuideOff();
@@ -136,45 +126,43 @@ export function useSessionStart(
     if (ready) {
       const copying = copyText(ready.prompt);
       const session = refresh().catch(() => ready);
-      onStart({
-        name,
-        prompt: ready.prompt,
-        state: (await copying) ? "copied" : "manual",
-        session,
-      });
-      return;
+      const ok = await copying;
+      notify({ name, prompt: ready.prompt, state: ok ? "copied" : "manual", session });
+      return ok;
     }
     // Not read yet (or the read failed): read now; the copy may then need a
     // manual step on a phone.
     setLoading(true);
     try {
       const session = await refresh();
-      onStart({
+      const ok = await copyText(session.prompt);
+      notify({
         name,
         prompt: session.prompt,
-        state: (await copyText(session.prompt)) ? "copied" : "manual",
+        state: ok ? "copied" : "manual",
         session: Promise.resolve(session),
       });
+      return ok;
     } catch {
-      onStart({ name, prompt: "", state: "failed" });
+      notify({ name, prompt: "", state: "failed" });
+      return false;
     } finally {
       setLoading(false);
     }
   };
   const start = () => {
     if (guideLoaded && !guideOff) setGuide(true);
-    void copy();
+    return copy();
   };
   return {
     start,
     openGuide: () => setGuide(true),
     loading,
-    copied: copied > 0,
     guide: guide ? (
       <SessionGuide
         name={name}
         prompt={prompt}
-        copy={() => void copy()}
+        copy={copy}
         close={() => setGuide(false)}
       />
     ) : null,
@@ -215,24 +203,14 @@ export default function StartSession({
     <div className="crew-session">
       <div className="crew-session-row">
         {showAgent && <AgentChip agent={agent} agents={agents ?? [agent]} />}
-        <button
-          type="button"
+        <CopyControl
           className="crew-session-copy"
           disabled={session.loading}
-          aria-label={t("Copy prompt for a coding agent as {name}", { name })}
-          onClick={session.start}
-        >
-          <span className="crew-session-copy-icon" aria-hidden="true">
-            {session.copied ? "✓" : "⧉"}
-          </span>
-          {session.loading
-            ? t("Preparing…")
-            : session.copied
-              ? t("Copied")
-              : compact
-                ? t("Copy coding prompt")
-                : t("Copy prompt for a coding agent")}
-        </button>
+          accessibleLabel={t("Copy prompt for a coding agent as {name}", { name })}
+          label={session.loading ? t("Preparing…") : compact ? t("Copy coding prompt") : t("Copy prompt for a coding agent")}
+          successLabel={t("Copied")}
+          copy={session.start}
+        />
         <div className="crew-help">
           <button
             type="button"
@@ -267,7 +245,7 @@ function SessionGuide({
 }: {
   name: string;
   prompt: string;
-  copy: () => void;
+  copy: () => Promise<boolean>;
   close: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -367,19 +345,14 @@ function SessionGuide({
         <pre aria-label={t("Session prompt for {name}", { name })}>
           <code>{prompt || t("Loading the prompt…")}</code>
         </pre>
-        <button
-          type="button"
+        <CopyControl
           className="crew-session-guide-copy"
           disabled={!prompt}
-          aria-label={t("Copy session prompt for {name}", { name })}
+          label={t("Copy session prompt for {name}", { name })}
           title={t("Copy")}
-          onClick={copy}
-        >
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-            <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
-            <path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5" />
-          </svg>
-        </button>
+          iconOnly
+          copy={copy}
+        />
       </div>
       <footer>
         <HideHelp id={helpIds.sessionGuide} />
