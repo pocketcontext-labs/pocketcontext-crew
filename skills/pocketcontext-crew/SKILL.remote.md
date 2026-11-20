@@ -105,6 +105,8 @@ string clears it. `bucket.update` also accepts responsible_agent. The read field
 responsible_agent remains an ID; responsible_agent_details supplies id/name.
 The optional responsible_agent filter applies to bucket reads.
 
+For mutually exclusive alternatives, set `selection: "one"` on `review.request`. The default `"any"` permits multiple choices. Supply `recipient` when known. Put alternatives only in option bodies, mark paste-ready text with `:::variant` or `:::copy`, and place reviewer context in `:::note`. With options the task draft may be empty.
+
 Save durable findings as notes. Tasks track work and drafts. Request human review
 with review.request; record a decision only as the Authorization rules allow.
 In a wake run, review.request with your execution proof completes your execution

@@ -376,13 +376,31 @@ function document() {
     files:
       "Optional data.files (or multipart parts named files) become attachments of the task, all or nothing; attachment:new-N in body names the Nth file. Every attachment:ID in body must name an active attachment of this task. Files on a task with a pending review withdraw it like attachment.add.",
   });
-  op("review.request", { options: reviewOptions }, [], {
-    description:
-      "Attach every image or file first and reference attachment:ID. Local file paths are refused with draft_references_unattached_files. The result is the review with its derived path (#/approvals/<id>) and url (with a public base URL): link the owner to it to open the Review draft dialog directly. Send alternatives as options with unique keys, labels and bodies (max 20; combined bodies max 200000 characters); they are frozen with the draft. Mark paste-ready texts with review markup (review_markup); invalid markup in the draft or an option body is reported in warnings [{code, option (key, or empty for the draft), field, line, opener, message}] and does not block the request in this release; a later release will refuse it with 400 review_markup_invalid.",
-    revision: "task",
-    execution_proof:
-      "Required only while another execution is live on the task. With your proof, review.request completes your execution (outcome review_requested; result execution_completed) instead of invalidating it: make it your last step. Your fenced comment and execution.complete (outcome completed, no mark_done) afterwards are accepted as no-ops for the execution.",
-  });
+  op(
+    "review.request",
+    {
+      options: reviewOptions,
+      selection: {
+        enum: ["one", "any"],
+        default: "any",
+        description:
+          "Use one for mutually exclusive alternatives, any for independent choices.",
+      },
+      recipient: {
+        type: "string",
+        maxLength: 200,
+        description: "Optional display name of the intended recipient.",
+      },
+    },
+    [],
+    {
+      description:
+        "Attach every image or file first and reference attachment:ID. Local file paths are refused with draft_references_unattached_files. The result is the review with its derived path (#/approvals/<id>) and url (with a public base URL): link the owner to it to open the Review draft dialog directly. Send alternatives as options with unique keys, labels and bodies (max 20; combined bodies max 200000 characters); they are frozen with the draft. Put alternatives only in options, use selection one for mutually exclusive options, and place reviewer context in :::note. With options the task draft may be empty. Mark paste-ready texts with review markup (review_markup); invalid markup in the draft or an option body is reported in warnings [{code, option (key, or empty for the draft), field, line, opener, message}] and does not block the request in this release; a later release will refuse it with 400 review_markup_invalid.",
+      revision: "task",
+      execution_proof:
+        "Required only while another execution is live on the task. With your proof, review.request completes your execution (outcome review_requested; result execution_completed) instead of invalidating it: make it your last step. Your fenced comment and execution.complete (outcome completed, no mark_done) afterwards are accepted as no-ops for the execution.",
+    },
+  );
   op("review.withdraw", {}, [], {
     revision: "review",
     execution_proof:
@@ -401,7 +419,7 @@ function document() {
       execution_proof:
         "Required only while another execution is live on the task",
       description:
-        "Records the owner's review decision. Work clients use it only when the owner explicitly delegates the decision. Approval never performs an external action. With options, approval requires a decision for every key and at least one approved choice; rejected may omit choices (all rejected), changes_requested may omit them or record partial feedback. Each option decision may carry feedback [{target, note}] on a variant or copy block of that option.",
+        "Records the owner's review decision. Work clients use it only when the owner explicitly delegates the decision. Approval never performs an external action. With options, approval requires a decision for every key and at least one approved choice (exactly one for selection one); rejected may omit choices (all rejected), changes_requested may omit them or record partial feedback. Each option decision may carry feedback [{target, note}] on a variant or copy block of that option.",
     },
   );
   op(
@@ -940,6 +958,8 @@ function document() {
       changes: { type: "object" },
     },
     reviews: {
+      selection: { enum: ["one", "any"] },
+      recipient: str,
       options: { ...reviewOptions, type: ["array", "null"] },
       option_decisions: { ...optionDecisions, type: ["array", "null"] },
       task: str,

@@ -17,7 +17,7 @@ advisory claim: claimed_at (start, unchanged by renewal), claimed_by (reported s
 and derived claim_state ("", live or expired; also a task read filter). Reviews preserve exact draft and attachment snapshots, optional options
 [{key,label,body}] and option_decisions [{key,decision,note}]. Attach evidence first,
 use attachment:ID references and submit each draft/platform alternative as an
-option. An approval requires explicit choices and at least one approved option. Events preserve action, actor, reported_agent, reason and changes.
+option. An approval requires explicit choices and at least one approved option. For `selection: "one"`, exactly one option can be approved; `"any"` is the default. The optional `recipient` is frozen with the review. Events preserve action, actor, reported_agent, reason and changes.
 Attachments: parent_kind (task or note), parent, name, media_type, image, width,
 height, size, sha256, position, actor, reported_agent, archived; bytes come only
 through crew_attachment or the `attachment` command, never as URLs. Settings:

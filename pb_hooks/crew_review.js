@@ -111,7 +111,7 @@ function feedback(choice, input) {
 function feedbackText(entries) {
   return (entries || []).map((f) => "[" + f.target + "] " + f.note).join("\n");
 }
-function decisions(choices, input, overall) {
+function decisions(choices, input, overall, selection) {
   if (input === undefined) {
     if (choices.length && overall === "approved")
       bad("Decide every option before approving");
@@ -158,6 +158,11 @@ function decisions(choices, input, overall) {
       values.some((d) => d.decision !== "rejected"))
   )
     bad("Reject requires every option to be rejected");
+  if (
+    selection === "one" &&
+    values.filter((d) => d.decision === "approved").length > 1
+  )
+    bad("Pick one allows only one approved option");
   return values;
 }
 module.exports = {

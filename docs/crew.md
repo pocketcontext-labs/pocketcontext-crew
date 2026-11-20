@@ -200,7 +200,7 @@ review without options) beside Request changes. The buttons stay put when the no
 opens, when More opens or closes and from one review to the next. The draft and its
 options scroll above the footer.
 
-Review options are pick any (since 0.32.0): each option is a card with a checkbox and
+For pick-any reviews (the default), each option is a card with a checkbox and
 a feedback icon, under "Options · pick any" (or "Text · pick any" and
 "Images · pick any" when some options are a single image, which show as tiles with a
 feedback badge). Checking an option, or tapping its feedback icon (also on an option
@@ -813,7 +813,12 @@ when a legacy draft mentions missing local files. Snapshot images appear inline
 and in the attachment gallery with full-size previews.
 
 `review.request` optionally accepts `options: [{key, label, body}]`. Use a unique
-key for each alternative, including its platform when relevant (for example
+key for each alternative. Set `selection: "one"` for mutually exclusive options.
+The reader shows radios and approval requires exactly one selection. The default
+`"any"` keeps checkboxes. Supply an optional `recipient` display name (up to 200
+characters). Put alternatives only in the options and reviewer context in
+`:::note`. The task draft may be empty when options are present. Include the
+platform in the option key when relevant (for example
 `A-linkedin` and `A-x`). Option bodies use the same Markdown and attachment
 references as the draft; all are frozen in the review. Without options, existing
 review requests and decisions behave as before. At most 20 options are accepted;
@@ -823,7 +828,7 @@ most 200,000. Option decision notes have at most 20,000 characters.
 
 `review.decide` accepts `option_decisions: [{key, decision, note}]` alongside the
 overall `decision` and optional `note`. An approval needs explicit approved/rejected
-choices for every option and at least one approved option. Unknown or duplicate
+choices for every option and at least one approved option (exactly one in pick-one mode). Unknown or duplicate
 keys and contradictory decisions are refused. Rejecting with omitted option decisions
 records every option as rejected; supplied rejection choices must reject them all.
 Request changes can include partial choices. Since 0.32.0 the reader's pick-any

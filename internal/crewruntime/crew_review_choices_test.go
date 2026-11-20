@@ -13,7 +13,7 @@ func TestReviewChoicesRoundTrip(t *testing.T) {
 	id := task["id"].(string)
 	options := []map[string]any{{"key": "A-linkedin", "label": "Draft A · LinkedIn", "body": "Synthetic A LinkedIn"}, {"key": "A-x", "label": "Draft A · X", "body": "Synthetic A X"}, {"key": "B-linkedin", "label": "Draft B · LinkedIn", "body": "Synthetic B LinkedIn"}, {"key": "B-x", "label": "Draft B · X", "body": "Synthetic B X"}}
 	review := crewWrite(t, a, true, "review.request", id, taskRevision(t, a, id), map[string]any{"options": options}, 200)
-	if len(review["options"].([]any)) != 4 {
+	if len(review["options"].([]any)) != 4 || review["selection"] != "any" {
 		t.Fatal(review)
 	}
 	rid := review["id"].(string)
@@ -53,6 +53,31 @@ func TestReviewChoicesRoundTrip(t *testing.T) {
 	// A no-option review remains compatible.
 	legacy := crewWrite(t, a, false, "review.request", id, taskRevision(t, a, id), map[string]any{}, 200)
 	crewWrite(t, a, false, "review.decide", legacy["id"].(string), 1, map[string]any{"decision": "approved"}, 200)
+}
+
+func TestReviewPickOne(t *testing.T) {
+	a := newTestApp(t)
+	task := newTask(t, a, map[string]any{"draft": ""})
+	id := task["id"].(string)
+	choices := []map[string]any{{"key": "a", "label": "A", "body": "Synthetic first"}, {"key": "b", "label": "B", "body": "Synthetic second"}}
+	request := func(data map[string]any, status int) map[string]any {
+		return crewWrite(t, a, true, "review.request", id, taskRevision(t, a, id), data, status)
+	}
+	request(map[string]any{"selection": "one"}, 400)
+	request(map[string]any{"options": choices, "selection": "invalid"}, 400)
+	request(map[string]any{"options": choices, "recipient": []string{"Not a name"}}, 400)
+	r := request(map[string]any{"options": choices, "selection": "one", "recipient": "Sample reader"}, 200)
+	if r["selection"] != "one" || r["recipient"] != "Sample reader" {
+		t.Fatal(r)
+	}
+	decisions := []map[string]any{{"key": "a", "decision": "approved"}, {"key": "b", "decision": "approved"}}
+	decide := func(overall string, status int) {
+		crewWrite(t, a, false, "review.decide", r["id"].(string), 1, map[string]any{"decision": overall, "option_decisions": decisions}, status)
+	}
+	decide("approved", 400)
+	decide("changes_requested", 400)
+	decisions[0]["decision"] = "rejected"
+	decide("approved", 200)
 }
 
 func TestReviewEvidencePathsAndOptions(t *testing.T) {

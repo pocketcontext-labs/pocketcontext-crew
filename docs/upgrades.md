@@ -1,5 +1,13 @@
 # Crew upgrades and rollback
 
+## Development after 0.38.1
+
+Make and verify a complete backup before starting this build. The review migration
+adds the selection mode and recipient to frozen reviews. Existing reviews keep
+pick-any behavior and have an empty recipient. To roll back, stop the newer
+server and restore the complete pre-upgrade backup with its matching binary.
+Refresh MCP schemas and reinstall the agent skill to discover the new fields.
+
 ## Crew 0.38.0 to 0.38.1
 
 Replace the binary or image (`CREW_REPLACE_VERSION=0.38.0` for the installer)

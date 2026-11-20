@@ -1327,13 +1327,26 @@ function write(e, isAgent) {
       return;
     }
     if (kind === "review" && op === "request") {
-      only(d, ["options"]);
+      only(d, ["options", "selection", "recipient"]);
       const choices = reviewChoices.options(d.options);
+      const selection = d.selection === undefined ? "any" : d.selection;
+      if (!["one", "any"].includes(selection))
+        bad("selection must be one or any");
+      if (selection === "one" && !choices.length)
+        bad("Pick one requires options");
+      if (
+        d.recipient !== undefined &&
+        (typeof d.recipient !== "string" ||
+          d.recipient.length > 200 ||
+          /[\r\n]/.test(d.recipient))
+      )
+        bad("recipient must be a single line of at most 200 characters");
       const t = active(app, "tasks", b.id);
       check(t, b);
       execution.guardTaskWrite(app, t, b, isAgent);
       const oldTask = webhooks.state(app, t);
-      if (!t.getString("draft").trim()) bad("Add a draft first");
+      if (!choices.length && !t.getString("draft").trim())
+        bad("Add a draft first");
       reviewChoices.evidence(app, t, t.getString("draft"), choices);
       const markupWarnings = reviewChoices.markupWarnings(
         t.getString("draft"),
@@ -1346,6 +1359,8 @@ function write(e, isAgent) {
       r.set("draft", t.getString("draft"));
       r.set("attachments", attachments.snapshot(app, t.id));
       r.set("options", choices);
+      r.set("selection", selection);
+      r.set("recipient", (d.recipient || "").trim());
       r.set("option_decisions", []);
       r.set("status", "pending");
       r.set("revision", 1);
@@ -1410,6 +1425,7 @@ function write(e, isAgent) {
           choices,
           d.option_decisions,
           d.decision,
+          r.getString("selection"),
         );
         r.set("option_decisions", decisions);
         if (choices.length) {

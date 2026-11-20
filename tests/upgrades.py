@@ -274,6 +274,7 @@ def rehearse(target, previous, root):
             settings_fields = {f['name']: f['type'] for f in json.loads(current.execute("SELECT fields FROM _collections WHERE name='crew_settings'").fetchone()[0])}
             assert settings_fields.get('hidden_help') == 'json', settings_fields
             assert current.execute("SELECT coalesce(hidden_help, 'null') FROM crew_settings").fetchall() in ([('null',)], [('',)]), current.execute('SELECT hidden_help FROM crew_settings').fetchall()
+            assert current.execute("SELECT selection, recipient FROM crew_reviews").fetchall() == [('any', '')]
             # Current managed instructions, opt-in comment wakes and the default handoff limit.
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()
