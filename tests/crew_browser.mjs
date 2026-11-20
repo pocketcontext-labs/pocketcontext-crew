@@ -1,4 +1,5 @@
 import { chromium } from '../ui/node_modules/playwright/index.mjs';
+import { editTaskOptions } from './browser_draft_options.mjs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 const base = process.env.CREW_TEST_URL;
@@ -2819,6 +2820,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await close();await dialog().waitFor({state:'hidden'});
   await page.setViewportSize({width:1440,height:1000});
  }
+ await editTaskOptions(page,base,boardWrite);
  await page.goto(base+'/#/settings');
  await page.getByRole('region',{name:'Account'}).getByRole('button',{name:'Sign out',exact:true}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
