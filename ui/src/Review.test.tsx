@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ReviewContent, ReviewDecision, ReviewRequest } from "./Review";
+import { ReviewContent, ReviewDecision, ReviewRequest, useReviewSetup } from "./Review";
 import { DialogMenuContext, type MenuItem } from "./DialogHeader";
 import { decisionSummary, localFilePaths, reviewFiles } from "./reviews";
 import { attachmentsApi, formatBytes, type Attachment } from "./attachmentsApi";
@@ -463,7 +463,10 @@ it("warns for legacy local paths and unresolved snapshot evidence", () => {
 });
 it("lets browser owners submit named review alternatives", () => {
   const submit = vi.fn();
-  render(<ReviewRequest busy={false} hasDraft={false} submit={submit} />);
+  function Form() {
+    return <ReviewRequest busy={false} hasDraft={false} setup={useReviewSetup()} submit={submit} />;
+  }
+  render(<Form />);
   expect(screen.getByRole("button", {name:"Request approval"})).toBeDisabled();
   fireEvent.click(screen.getByText("Review alternatives (optional)"));
   fireEvent.click(screen.getByRole("button", { name: "Add review option" }));

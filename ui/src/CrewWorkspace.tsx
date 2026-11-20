@@ -40,7 +40,7 @@ import LabelsInput from "./LabelsInput";
 import { markdownExcerpt, markdownText } from "./markdownText";
 import { taskBrief } from "./reviewMarkup";
 import { ExcerptContent } from "./ExcerptContent";
-import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest, ReviewRequestBlocked } from "./Review";
+import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest, useReviewSetup } from "./Review";
 import { decisionSummary, objects, reviewOptions } from "./reviews";
 import { strandedWakes } from "./wakes";
 import {
@@ -1668,6 +1668,7 @@ export default function CrewWorkspace() {
     fields: Record<string, unknown>,
     row?: Row,
     reason = "",
+    keepOpen = false,
   ) => {
     // A changed draft withdraws a pending approval; say so, as file changes do.
     const withdraws =
@@ -1678,13 +1679,17 @@ export default function CrewWorkspace() {
       data.reviews.some(
         (x) => val(x, "task") === row.id && val(x, "status") === "pending",
       );
-    if (
-      await perform(
-        () => crewApi.write(action, fields, row, reason),
-        withdraws ? `${t("Saved.")} ${withdrawnNoticeText()}` : t("Saved."),
-      )
-    )
-      closeDialog();
+    const saved = await perform(
+      async () => {
+        const updated = await crewApi.write(action, fields, row, reason);
+        if (keepOpen)
+          setDialog((open) =>
+            open?.row?.id === updated.id ? { ...open, row: updated } : open,
+          );
+      },
+      withdraws ? `${t("Saved.")} ${withdrawnNoticeText()}` : t("Saved."),
+    );
+    if (saved && !keepOpen) closeDialog();
   };
   // After a file change withdrew an approval the task has a new revision; the
   // open form takes it so its next save does not conflict.
@@ -3403,6 +3408,7 @@ type EditorProps = {
     fields: Record<string, unknown>,
     row?: Row,
     reason?: string,
+    keepOpen?: boolean,
   ) => Promise<void>;
   perform: (work: () => Promise<unknown>, message?: string) => Promise<boolean>;
   close: () => void;
@@ -3469,6 +3475,7 @@ function Editor({
   refreshRow,
 }: EditorProps) {
   const readOnly = !!archiveNotice;
+  const reviewSetup = useReviewSetup();
   const root = useRef<HTMLDivElement>(null);
   const [tab, setTabState] = useState<string>(
       kind === "note" && row ? "read" : kind === "task" && row && askedTab ? askedTab : "edit",
@@ -3818,7 +3825,9 @@ function Editor({
       });
       return;
     }
-    void save(`${kind}.${row ? "update" : "create"}`, fields, row, reason);
+    const keepReviewSetup = kind === "task" && !!row &&
+      (reviewSetup.options.length > 0 || !!reviewSetup.recipient.trim());
+    void save(`${kind}.${row ? "update" : "create"}`, fields, row, reason, keepReviewSetup);
   };
   if (kind === "review" && row)
     return <ReviewDecision row={row} task={data.tasks.find(task => task.id === val(row, "task"))} busy={busy} error={error}
@@ -3883,10 +3892,18 @@ function Editor({
     (x) => val(x, "task") === row?.id && val(x, "status") === "pending",
   );
   const reviewHelp = <Help topic="send-for-approval" />;
-  const reviewState = draft !== savedDraft ? (
-    <ReviewRequestBlocked hint={t("Save your draft first.")} help={reviewHelp} />
-  ) : (
-    <ReviewRequest busy={busy} hasDraft={!!savedDraft.trim()} help={reviewHelp} submit={(options, metadata) => void save("review.request", { ...(options.length ? { options } : {}), ...metadata }, row)} />
+  const reviewState = (
+    <ReviewRequest
+      busy={busy || inlineUploads > 0}
+      hasDraft={!!savedDraft.trim()}
+      setup={reviewSetup}
+      blockedHint={
+        draft !== savedDraft ? t("Save your draft first.")
+          : dirty ? t("Save your task changes first.") : undefined
+      }
+      help={reviewHelp}
+      submit={(options, metadata) => void save("review.request", { ...(options.length ? { options } : {}), ...metadata }, row)}
+    />
   );
   const buckets = data.buckets.find((x) => x.id === val(row, "bucket"));
   // A coding session's claim; the owner may always release it (In progress goes back to To do).

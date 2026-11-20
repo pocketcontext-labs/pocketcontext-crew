@@ -860,9 +860,21 @@ export function ReviewDecision({
   );
 }
 
+/** Kept with the task editor so saving the task or switching tabs preserves
+ * the options and recipient until the owner actually requests approval. */
+export function useReviewSetup() {
+  const [options, setOptions] = useState<ReviewOption[]>([]);
+  const [nextKey, setNextKey] = useState(1);
+  const [selection, setSelection] = useState("any");
+  const [recipient, setRecipient] = useState("");
+  return { options, setOptions, nextKey, setNextKey, selection, setSelection, recipient, setRecipient };
+}
+
 export function ReviewRequest({
   busy,
-  hasDraft = true,
+  hasDraft,
+  setup,
+  blockedHint,
   submit,
   help,
 }: {
@@ -871,18 +883,17 @@ export function ReviewRequest({
     options: ReviewOption[],
     metadata: { selection?: "one"; recipient?: string },
   ) => void;
-  hasDraft?: boolean;
+  hasDraft: boolean;
+  setup: ReturnType<typeof useReviewSetup>;
+  blockedHint?: string;
   /** The standard "?" shown right after the button. */
   help?: ReactNode;
 }) {
-  const [options, setOptions] = useState<ReviewOption[]>([]);
-  const [nextKey, setNextKey] = useState(1);
-  const [selection, setSelection] = useState("any");
-  const [recipient, setRecipient] = useState("");
+  const { options, setOptions, nextKey, setNextKey, selection, setSelection, recipient, setRecipient } = setup;
   const hint = useId();
-  const missingDraft = !hasDraft && !options.length;
-  const valid =
-    !missingDraft && options.every((o) => o.label.trim() && o.body.trim());
+  const whyBlocked = blockedHint ||
+    (!hasDraft && !options.length ? t("Save a draft or add an option first.") : "");
+  const valid = !whyBlocked && options.every((o) => o.label.trim() && o.body.trim());
   return (
     <div className="crew-review-request">
       <div className="crew-review-actions">
@@ -890,7 +901,7 @@ export function ReviewRequest({
           type="button"
           className="crew-review-submit"
           disabled={busy || !valid}
-          aria-describedby={missingDraft ? hint : undefined}
+          aria-describedby={whyBlocked ? hint : undefined}
           onClick={() =>
             submit(options, {
               ...(options.length && selection === "one"
@@ -903,9 +914,9 @@ export function ReviewRequest({
           {t("Request approval")}
         </button>
         {help}
-        {missingDraft && (
+        {whyBlocked && (
           <span id={hint} className="crew-review-hint">
-            {t("Save a draft or add an option first.")}
+            {whyBlocked}
           </span>
         )}
       </div>
@@ -920,6 +931,10 @@ export function ReviewRequest({
           {t("Recipient (optional)")}
           <input
             maxLength={200}
+            onKeyDown={(e) => {
+              // Enter in review metadata must not submit the surrounding task form.
+              if (e.key === "Enter") e.preventDefault();
+            }}
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
           />
@@ -990,35 +1005,6 @@ export function ReviewRequest({
           {t("Add review option")}
         </button>
       </details>
-    </div>
-  );
-}
-
-/** Request approval while it can't be sent yet: disabled, with why. */
-export function ReviewRequestBlocked({
-  hint,
-  help,
-}: {
-  hint: string;
-  help?: ReactNode;
-}) {
-  const id = useId();
-  return (
-    <div className="crew-review-request">
-      <div className="crew-review-actions">
-        <button
-          type="button"
-          className="crew-review-submit"
-          disabled
-          aria-describedby={id}
-        >
-          {t("Request approval")}
-        </button>
-        {help}
-        <span id={id} className="crew-review-hint">
-          {hint}
-        </span>
-      </div>
     </div>
   );
 }

@@ -323,6 +323,7 @@ const it: Record<string, string> = {
   "On hold: nobody is woken; a person decides. Ready: the assigned bot may act.":
     "In pausa: nessuno viene risvegliato; decide una persona. Pronta: il bot assegnato può agire.",
   "Edit to see the full description, including saved draft blocks.": "Scegli Modifica per vedere la descrizione completa, inclusi i blocchi della bozza salvati.",
+  "Save your task changes first.": "Prima salva le modifiche all’attività.",
   "The owner’s request, sources and constraints.": "La richiesta del proprietario, le fonti e i vincoli.",
   "Save work for approval here. Put progress updates in Comments.": "Salva qui il lavoro da approvare. Scrivi gli aggiornamenti nei commenti.",
   "Draft for review": "Bozza da approvare",

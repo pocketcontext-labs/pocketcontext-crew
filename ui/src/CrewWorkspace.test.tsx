@@ -655,6 +655,47 @@ it("requires saving a changed draft before submitting it for review", async () =
   ).toHaveAccessibleDescription("Save your draft first.");
   expect(crewApi.write).not.toHaveBeenCalled();
 });
+it("keeps review alternatives while editing the brief and requests approval only after an explicit save", async () => {
+  fixtures.tasks = [{ ...task, status: "in_progress" }];
+  fixtures.reviews = [];
+  vi.mocked(crewApi.write).mockImplementation(async (action, fields) => {
+    if (action === "task.update") {
+      const saved = { ...fixtures.tasks[0], ...fields, revision: task.revision + 1 };
+      fixtures.tasks = [saved];
+      return saved;
+    }
+    return review;
+  });
+  history.replaceState(null, "", "/#/tasks/task00000000001");
+  render(<CrewWorkspace />);
+  const dialog = within(await screen.findByRole("dialog"));
+  fireEvent.click(dialog.getByText("Review alternatives (optional)"));
+  fireEvent.click(dialog.getByRole("button", { name: "Add review option" }));
+  fireEvent.change(dialog.getByLabelText("Option 1 label"), { target: { value: "Synthetic A" } });
+  fireEvent.change(dialog.getByLabelText("Option 1 draft"), { target: { value: "An alternative" } });
+  fireEvent.change(dialog.getByLabelText("Recipient (optional)"), { target: { value: "Sam" } });
+  fireEvent.change(dialog.getByLabelText("Selection"), { target: { value: "one" } });
+  fireEvent.change(dialog.getByLabelText("Description"), { target: { value: "Owner's revised request" } });
+  const request = () => dialog.getByRole("button", { name: "Request approval" });
+  expect(request()).toBeDisabled();
+  expect(request()).toHaveAccessibleDescription("Save your task changes first.");
+  fireEvent.click(request());
+  expect(crewApi.write).not.toHaveBeenCalled();
+  fireEvent.change(dialog.getByLabelText("Draft for review"), { target: { value: "New working draft" } });
+  expect(request()).toHaveAccessibleDescription("Save your draft first.");
+  expect(dialog.getByLabelText("Option 1 draft")).toHaveValue("An alternative");
+  fireEvent.click(dialog.getByRole("button", { name: "Save task" }));
+  await waitFor(() => expect(request()).toBeEnabled());
+  expect(vi.mocked(crewApi.write).mock.calls.map(([action]) => action)).toEqual(["task.update"]);
+  expect(fixtures.tasks[0]).toMatchObject({ description: "Owner's revised request", draft: "New working draft" });
+  expect(dialog.getByLabelText("Recipient (optional)")).toHaveValue("Sam");
+  fireEvent.click(request());
+  await waitFor(() => expect(crewApi.write).toHaveBeenCalledWith(
+    "review.request",
+    { options: [{ key: "option-1", label: "Synthetic A", body: "An alternative" }], selection: "one", recipient: "Sam" },
+    fixtures.tasks[0], "",
+  ));
+});
 it("requires restoring the owning bucket before an inherited archived note", async () => {
   const note: Row = {
     id: "note00000000001",
