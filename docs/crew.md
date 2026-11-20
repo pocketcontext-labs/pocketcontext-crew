@@ -197,11 +197,13 @@ changes ask first (staying adds no history entry), and a step never saves or
 decides. A horizontal swipe no longer steps; the file viewer keeps its own swipe
 between files.
 
-The Approval dialog uses the same header as a note. Back and Forward retrace
-opened records, and the list controls step through approvals. The body shows
-the Approvals context, status, recipient when supplied, and channel and count
-when available. The full task title wraps below the Title label. The explainer
-can be hidden and reopened from More.
+The Approval dialog uses the same desktop column and header as a note. Back and
+Forward retrace opened records, and the list controls step through approvals.
+The body shows the status, the recipient when supplied, and the full task title.
+For a review with options, each text option shows its own character count and
+any channel information. A review with one draft and no options shows its draft
+metadata at the top. **Note for you** contains the author's read-only guidance.
+The explainer can be hidden and reopened from More.
 
 The decision footer keeps the note field, Approve and Request changes on screen
 as you scroll. With options, the cards hold the submitted alternatives. Their
