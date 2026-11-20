@@ -2024,7 +2024,8 @@ try {
  const reviewTask=await boardWrite('task.create',{title:'Synthetic review alternatives',draft:'Hook\nProblem\nSolution\n![First](attachment:new-1)\n![Second](attachment:new-2)',files:shotsBase64.map((content_base64,i)=>({name:`review-${i+1}.png`,content_base64}))});
  const reviewOptions=[{key:'a-linkedin',label:'Draft A · LinkedIn',body:'LinkedIn A'},{key:'a-x',label:'Draft A · X',body:'X A'},{key:'b-linkedin',label:'Draft B · LinkedIn',body:'LinkedIn B'},{key:'b-x',label:'Draft B · X',body:'X B'}];
  await boardWrite('review.request',{options:reviewOptions},reviewTask.id,reviewTask.revision);
- await page.goto(base+'/#/approvals');
+ // This fixture write happened outside the reader. Load it immediately.
+ await page.goto(base+'/#/approvals');await page.reload();
  await page.getByRole('button',{name:'Review draft: Synthetic review alternatives'}).click();
  await dialog().getByRole('region',{name:'Files submitted for review'}).waitFor();
  const reviewTiles=dialog().getByRole('region',{name:'Files submitted for review'}).locator('.crew-file-tile');
@@ -2394,7 +2395,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   if(Array.isArray(body.items)) for(const row of body.items) if(row.id===legacyReview.id) row.draft='/workspace/unattached.png';
   await route.fulfill({response,json:body});
  });
- await page.goto(base+'/#/approvals');
+ await page.goto(base+'/#/approvals');await page.reload();
  await page.getByRole('button',{name:'Review draft: Synthetic legacy missing image'}).click();
  await dialog().getByRole('alert').filter({hasText:"This draft mentions files that aren't attached to Crew"}).waitFor();
  await close();await dialog().waitFor({state:'hidden'});
