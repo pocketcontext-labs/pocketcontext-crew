@@ -2,9 +2,11 @@
 
 ## Development after 0.38.1
 
-Make and verify a complete backup before starting this build. The review migration
-adds the selection mode and recipient to frozen reviews. Existing reviews keep
-pick-any behavior and have an empty recipient. To roll back, stop the newer
+Make and verify a complete backup before starting this build. The first migration
+adds the selection mode and recipient to frozen reviews. The next adds working
+options, selection mode and recipient to tasks. A task with a pending review
+inherits these fields from that review. Older decisions and withdrawn reviews
+remain available in history. To roll back, stop the newer
 server and restore the complete pre-upgrade backup with its matching binary.
 Refresh MCP schemas and reinstall the agent skill to discover the new fields.
 

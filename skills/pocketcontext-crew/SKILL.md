@@ -110,19 +110,22 @@ responsible_agent remains an ID; responsible_agent_details supplies id/name.
 The optional responsible_agent filter applies to bucket reads.
 
 Save durable findings as notes. Keep the owner's request, sources, constraints
-and style in task `description`. Save working copy in `draft` and alternatives in
-`review.request` options. Put paste-ready `:::copy` or `:::variant` blocks there,
+and style in task `description`. Save working copy in task `draft` and alternatives in
+`draft_options` as an array of `{key, label, body}`. Use `draft_selection` for
+the selection mode and `draft_recipient` for the recipient. Put paste-ready `:::copy` or `:::variant` blocks there,
 reviewer context in `:::note`, and progress in `task.comment`. A
 `task_description_contains_draft` warning identifies misplaced copy in a
 successful task write. Request human review
-with review.request; record a decision only as the Authorization rules allow.
+with `review.request` and empty data to freeze the saved draft and alternatives.
+Save later revisions on the task. A changed draft, option, selection mode or
+recipient withdraws a pending review. Record a decision only as the Authorization
+rules allow.
 Set `selection: "one"` for mutually exclusive alternatives. The default `"any"`
 permits multiple choices. Supply `recipient` when known. With options, the task
 draft may be empty.
 Attach every image or file the draft is about first and reference it with
-`attachment:ID`; local file paths cannot be reviewed. For alternatives, send
-`options: [{key, label, body}]` (one option per draft; one variant per platform
-inside it) with review.request. Options are the decision unit: one option per idea
+`attachment:ID`; local file paths cannot be reviewed. You can also submit `options: [{key, label, body}]`
+with `review.request`. Crew saves the options on the task in the same operation. Options are the decision unit: one option per idea
 or draft. Inside an option body (and the draft), wrap every paste-ready text in
 `:::variant{channel=C}` (C is linkedin, x, email, whatsapp, slack or generic; one
 per channel; optional `limit=N`, defaults linkedin 3000 and x 280) or

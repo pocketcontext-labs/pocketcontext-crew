@@ -106,12 +106,16 @@ responsible_agent remains an ID; responsible_agent_details supplies id/name.
 The optional responsible_agent filter applies to bucket reads.
 
 Save durable findings as notes. Keep the owner's request, sources, constraints
-and style in task `description`. Save working copy in `draft` and alternatives in
-`review.request` options. Put paste-ready `:::copy` or `:::variant` blocks there,
+and style in task `description`. Save working copy in task `draft` and alternatives in
+`draft_options` as an array of `{key, label, body}`. Use `draft_selection` for
+the selection mode and `draft_recipient` for the recipient. Put paste-ready `:::copy` or `:::variant` blocks there,
 reviewer context in `:::note`, and progress in `task.comment`. A
 `task_description_contains_draft` warning identifies misplaced copy in a
 successful task write. Request human review
-with review.request; record a decision only as the Authorization rules allow.
+with `review.request` and empty data to freeze the saved draft and alternatives.
+Save later revisions on the task. A changed draft, option, selection mode or
+recipient withdraws a pending review. Record a decision only as the Authorization
+rules allow.
 Set `selection: "one"` for mutually exclusive alternatives. The default `"any"`
 permits multiple choices. Supply `recipient` when known. With options, the task
 draft may be empty.

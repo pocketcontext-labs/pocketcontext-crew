@@ -812,8 +812,18 @@ the paths to replace. Existing reviews keep their snapshots; the reader warns
 when a legacy draft mentions missing local files. Snapshot images appear inline
 and in the attachment gallery with full-size previews.
 
-`review.request` optionally accepts `options: [{key, label, body}]`. Use a unique
-key for each alternative. Set `selection: "one"` for mutually exclusive options.
+In the task's **Draft for review**, each alternative has a label and an editable
+Markdown body. When the draft matches one option, the task shows that text once.
+To do the same through the API, save `draft_options: [{key, label, body}]`,
+`draft_selection` and `draft_recipient` with `task.create` or `task.update`.
+Use a unique key for each alternative. Request approval with `review.request`
+and empty data to freeze the saved draft, options, selection mode and recipient.
+Editing and saving any of those fields withdraws a pending review. The task keeps
+the edits for the next request, and review history keeps the submitted version.
+
+Clients can also supply `options`, `selection` or `recipient` directly on
+`review.request`. The task keeps the submitted values for later editing.
+Set `selection: "one"` for mutually exclusive options.
 The reader shows radios and approval requires exactly one selection. The default
 `"any"` keeps checkboxes. Supply an optional `recipient` display name (up to 200
 characters). Put alternatives only in the options and reviewer context in
@@ -880,7 +890,7 @@ in `tests/fixtures/review_markup.json`. The same blocks render in note bodies,
 task drafts and comments (Copy only).
 
 The task description holds the owner's request, sources and constraints. Save
-paste-ready work in the task draft, alternatives in review options and progress
+paste-ready work in the task draft, alternatives in its draft options and progress
 in task comments. A valid copy or variant block inside a submitted description
 produces a nonblocking `task_description_contains_draft` warning on create or
 update. A task card and the description's Read view omit those blocks. Edit opens

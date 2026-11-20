@@ -68,10 +68,13 @@ SHA-256, position, attribution and archive state. Their bytes are immutable and
 never purged. Upload links store only a token SHA-256 with parent, expiry,
 maximum files, usage and revocation. `crew_settings` is a singleton holding
 `storage_limit_bytes` (default 5 GiB). Reviews snapshot the task's active
-attachments as `[{id, sha256}]`. Optional review `options` freeze keyed alternative
-bodies. Reviews also freeze the optional `recipient` display name and the
-`selection` mode. A pick-one review can approve one option. Existing reviews
-and requests that omit the mode use pick-any. The `option_decisions` field
+attachments as `[{id, sha256}]`. Tasks store editable alternatives in
+`draft_options` (key, label and Markdown body), with `draft_selection` and
+`draft_recipient`. Requesting approval freezes these as `options`, `selection`
+and `recipient` alongside the submitted draft. Editing the task's draft or its
+review settings withdraws a pending review and preserves the submitted snapshot.
+A pick-one review can approve one option. The default mode is pick-any.
+The `option_decisions` field
 records the decision and feedback for each choice. Tasks have
 server-managed `held_since` for stable hold age on open tasks. See [Attachments](crew.md#attachments).
 
