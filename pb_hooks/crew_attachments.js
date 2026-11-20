@@ -459,47 +459,53 @@ function refs(text) {
 // archived (the reader shows "removed"); note.restore may bring back the
 // note's own archived references.
 function checkRefs(app, kind, r, values, op) {
-  const fields = TEXT_FIELDS[kind];
-  for (const f of fields) {
-    if (typeof values[f] !== "string") continue;
-    const text = values[f];
-    const before = {};
-    if (op !== "create")
-      for (const id of refs(r.getString(f))) before[id] = true;
-    const parsed = markdown(text);
-    if (parsed.dataImage || HTML_DATA_IMAGE.test(text))
-      bad(
-        f +
-          " embeds a data: image; attach the file and reference it as ![alt](attachment:ID)",
-      );
-    for (const ref of parsed.refs) {
-      if (/^new-\d+$/i.test(ref))
-        bad(
-          "attachment:" +
-            ref +
-            " placeholders work only in task.create, note.create or task.comment with files",
-        );
-      let a = null;
-      if (ID.test(ref))
-        try {
-          a = app.findRecordById("crew_attachments", ref);
-        } catch (_) {
-          a = null;
-        }
-      if (!a) bad("Unknown attachment reference attachment:" + ref);
-      if (a.getString("parent") !== r.id)
-        bad(
-          "attachment:" +
-            ref +
-            " belongs to another task or note; attach the file here first",
-        );
-      if (a.getBool("archived") && !before[ref] && op !== "restore")
-        bad(
-          "attachment:" +
-            ref +
-            " is archived; restore it before referencing it",
-        );
+  for (const field of TEXT_FIELDS[kind]) {
+    if (typeof values[field] === "string")
+      checkTextRefs(app, r, values[field], op === "create" ? "" : r.getString(field), field, op);
+  }
+  if (kind === "task" && values.draft_options) {
+    const saved = JSON.parse(r.getString("draft_options") || "null") || [];
+    for (const option of values.draft_options) {
+      const before = saved.find((choice) => choice.key === option.key);
+      checkTextRefs(app, r, option.body, before ? before.body : "", "draft_options", op);
     }
+  }
+}
+function checkTextRefs(app, r, text, previous, field, op) {
+  const before = new Set(previous ? refs(previous) : []);
+  const parsed = markdown(text);
+  if (parsed.dataImage || HTML_DATA_IMAGE.test(text))
+    bad(
+      field +
+        " embeds a data: image; attach the file and reference it as ![alt](attachment:ID)",
+    );
+  for (const ref of parsed.refs) {
+    if (/^new-\d+$/i.test(ref))
+      bad(
+        "attachment:" +
+          ref +
+          " placeholders work only in task.create, note.create or task.comment with files",
+      );
+    let a = null;
+    if (ID.test(ref))
+      try {
+        a = app.findRecordById("crew_attachments", ref);
+      } catch (_) {
+        a = null;
+      }
+    if (!a) bad("Unknown attachment reference attachment:" + ref);
+    if (a.getString("parent") !== r.id)
+      bad(
+        "attachment:" +
+          ref +
+          " belongs to another task or note; attach the file here first",
+      );
+    if (a.getBool("archived") && !before.has(ref) && op !== "restore")
+      bad(
+        "attachment:" +
+          ref +
+          " is archived; restore it before referencing it",
+      );
   }
 }
 
@@ -531,6 +537,9 @@ function stageCreate(app, kind, r, values, files, ctx) {
   for (const f of TEXT_FIELDS[kind])
     if (typeof values[f] === "string")
       values[f] = resolvePlaceholders(values[f], ids);
+  if (values.draft_options)
+    for (const option of values.draft_options)
+      option.body = resolvePlaceholders(option.body, ids);
   return out.saved;
 }
 // Replaces attachment:new-N (N = 1-based position among ids) in text.

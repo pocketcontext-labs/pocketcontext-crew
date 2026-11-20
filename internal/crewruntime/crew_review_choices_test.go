@@ -50,8 +50,8 @@ func TestReviewChoicesRoundTrip(t *testing.T) {
 	if len(events) != 1 || !strings.Contains(events[0].GetString("changes"), "A-linkedin") {
 		t.Fatal(events)
 	}
-	// A no-option review remains compatible.
-	legacy := crewWrite(t, a, false, "review.request", id, taskRevision(t, a, id), map[string]any{}, 200)
+	// Explicitly clear the previously saved options to request a plain review.
+	legacy := crewWrite(t, a, false, "review.request", id, taskRevision(t, a, id), map[string]any{"options": []any{}}, 200)
 	crewWrite(t, a, false, "review.decide", legacy["id"].(string), 1, map[string]any{"decision": "approved"}, 200)
 }
 

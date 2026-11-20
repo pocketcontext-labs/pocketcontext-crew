@@ -188,8 +188,14 @@ function document() {
     },
     draft: {
       type: "string",
-      description: "Working draft for approval. Put paste-ready versions here or in review.request options and progress updates in task.comment.",
+      description: "Working draft for approval. Send alternatives in draft_options and progress updates in task.comment.",
     },
+    draft_options: {
+      ...reviewOptions,
+      description: "Editable alternatives for the next review. Saving changes withdraws a pending review. Send [] to remove all options.",
+    },
+    draft_selection: { enum: ["any", "one"], description: "Use one for mutually exclusive draft options. Defaults to any." },
+    draft_recipient: { type: "string", maxLength: 200, description: "Single-line display name of the intended recipient; an empty string clears it." },
     links: linkIds,
     archived: bool,
     readiness: {
@@ -388,9 +394,8 @@ function document() {
       options: reviewOptions,
       selection: {
         enum: ["one", "any"],
-        default: "any",
         description:
-          "Use one for mutually exclusive alternatives, any for independent choices.",
+          "Omit to use the task's saved draft_selection. Use one for mutually exclusive alternatives, any for independent choices.",
       },
       recipient: {
         type: "string",
@@ -401,7 +406,7 @@ function document() {
     [],
     {
       description:
-        "Attach every image or file first and reference attachment:ID. Local file paths are refused with draft_references_unattached_files. The result is the review with its derived path (#/approvals/<id>) and url (with a public base URL): link the owner to it to open the Review draft dialog directly. Send alternatives as options with unique keys, labels and bodies (max 20; combined bodies max 200000 characters); they are frozen with the draft. Put alternatives only in options, use selection one for mutually exclusive options, and place reviewer context in :::note. With options the task draft may be empty. Mark paste-ready texts with review markup (review_markup); invalid markup in the draft or an option body is reported in warnings [{code, option (key, or empty for the draft), field, line, opener, message}] and does not block the request in this release; a later release will refuse it with 400 review_markup_invalid.",
+        "Attach every image or file first and reference attachment:ID. Local file paths are refused with draft_references_unattached_files. The result is the review with its derived path (#/approvals/<id>) and url (with a public base URL): link the owner to it to open the Review draft dialog directly. Omit options, selection and recipient to snapshot the working values saved on the task. Supplying these fields updates the task and freezes them with the draft in one transaction. Send [] to clear the options. Alternatives have unique keys, labels and bodies (max 20; combined bodies max 200000 characters). Put alternatives only in options, use selection one for mutually exclusive options, and place reviewer context in :::note. With options the task draft may be empty. Mark paste-ready texts with review markup (review_markup); invalid markup in the draft or an option body is reported in warnings [{code, option (key, or empty for the draft), field, line, opener, message}] and does not block the request in this release; a later release will refuse it with 400 review_markup_invalid.",
       revision: "task",
       execution_proof:
         "Required only while another execution is live on the task. With your proof, review.request completes your execution (outcome review_requested; result execution_completed) instead of invalidating it: make it your last step. Your fenced comment and execution.complete (outcome completed, no mark_done) afterwards are accepted as no-ops for the execution.",
@@ -569,7 +574,7 @@ function document() {
   delete task.files;
   delete note.files;
   operations["task.create"].files =
-    "Optional files created with the task in one step; attachment:new-N in description or draft names the Nth file (1-based). Any refused file refuses the whole create.";
+    "Optional files created with the task in one step; attachment:new-N in description, draft or draft_options bodies names the Nth file (1-based). Any refused file refuses the whole create.";
   operations["note.create"].files =
     "Optional files created with the note in one step; attachment:new-N in body names the Nth file (1-based). Any refused file refuses the whole create.";
   op("attachment.add", { task: str, note: str, artifact: str, files }, [], {

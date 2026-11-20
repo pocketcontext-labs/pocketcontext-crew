@@ -31,6 +31,9 @@ const fields = {
     "labels",
     "status",
     "draft",
+    "draft_options",
+    "draft_selection",
+    "draft_recipient",
     "links",
     "archived",
     "readiness",
@@ -1082,6 +1085,19 @@ function write(e, isAgent) {
         approved = taskApproval(r, values, op);
         values = approved.values;
       }
+      let reviewDraftChanged = false;
+      if (kind === "task" && (op === "create" || op === "update")) {
+        const { draft_options, draft_selection, draft_recipient, ...other } = values;
+        if (
+          draft_options !== undefined ||
+          draft_selection !== undefined ||
+          draft_recipient !== undefined
+        ) {
+          const edits = reviewChoices.draftChanges(r, values);
+          reviewDraftChanged = Object.keys(edits).length > 0;
+          values = { ...other, ...edits };
+        }
+      }
       let staged = [];
       if (op === "create" && files.length)
         staged = attachments.stageCreate(app, kind, r, values, files, {
@@ -1091,6 +1107,8 @@ function write(e, isAgent) {
           ownerTouch: !isAgent,
           link: null,
         });
+      // Resolved attachment IDs can be longer than their upload placeholders.
+      if (staged.length && values.draft_options) reviewChoices.options(values.draft_options);
       if (kind === "task" || kind === "note")
         attachments.checkRefs(app, kind, r, values, op);
       if (op === "create") {
@@ -1098,6 +1116,8 @@ function write(e, isAgent) {
         if (kind === "task") {
           r.set("status", "todo");
           r.set("readiness", "waiting");
+          r.set("draft_options", []);
+          r.set("draft_selection", "any");
           r.set("created_by_agent", b.reported_agent || "");
         }
       } else r.set("revision", r.getInt("revision") + 1);
@@ -1126,15 +1146,10 @@ function write(e, isAgent) {
           bad(
             "Resolve or withdraw the pending review before changing task status",
           );
-        if (
-          (values.draft !== undefined &&
-            values.draft !== r.getString("draft")) ||
-          values.archived === true
-        ) {
-          autoWithdraw =
-            pending(app, r.id).length > 0 &&
-            values.draft !== undefined &&
-            values.draft !== r.getString("draft");
+        const draftEdited = reviewDraftChanged ||
+          (values.draft !== undefined && values.draft !== r.getString("draft"));
+        if (draftEdited || values.archived === true) {
+          autoWithdraw = draftEdited && pending(app, r.id).length > 0;
           withdraw(app, r, b, actor);
           if (autoWithdraw)
             values = {
@@ -1247,6 +1262,8 @@ function write(e, isAgent) {
           if (typeof d[f] === "string" && typeof values[f] === "string")
             changes[f] = values[f];
       if (kind === "task") {
+        for (const field of ["draft", "draft_options", "draft_selection", "draft_recipient"])
+          if (values[field] !== undefined) changes[field] = values[field];
         changes.readiness = r.getString("readiness");
         changes.wake_generation = r.getInt("wake_generation");
         if (
@@ -1322,29 +1339,26 @@ function write(e, isAgent) {
         const found = (kind === "note" ? ["body"] : ["description", "draft"])
           .filter((f) => typeof values[f] === "string")
           .flatMap((f) => markup.warnings(values[f], "", f));
+        if (values.draft_options)
+          for (const option of values.draft_options)
+            found.push(...markup.warnings(option.body, option.key, "body"));
         if (found.length) result.warnings = found;
       }
       return;
     }
     if (kind === "review" && op === "request") {
       only(d, ["options", "selection", "recipient"]);
-      const choices = reviewChoices.options(d.options);
-      const selection = d.selection === undefined ? "any" : d.selection;
-      if (!["one", "any"].includes(selection))
-        bad("selection must be one or any");
-      if (selection === "one" && !choices.length)
-        bad("Pick one requires options");
-      if (
-        d.recipient !== undefined &&
-        (typeof d.recipient !== "string" ||
-          d.recipient.length > 200 ||
-          /[\r\n]/.test(d.recipient))
-      )
-        bad("recipient must be a single line of at most 200 characters");
       const t = active(app, "tasks", b.id);
       check(t, b);
       execution.guardTaskWrite(app, t, b, isAgent);
       const oldTask = webhooks.state(app, t);
+      const edits = reviewChoices.draftChanges(t, {
+        draft_options: d.options,
+        draft_selection: d.selection,
+        draft_recipient: d.recipient,
+      });
+      for (const field of Object.keys(edits)) t.set(field, edits[field]);
+      const choices = reviewChoices.storedOptions(t, "draft_options");
       if (!choices.length && !t.getString("draft").trim())
         bad("Add a draft first");
       reviewChoices.evidence(app, t, t.getString("draft"), choices);
@@ -1359,8 +1373,8 @@ function write(e, isAgent) {
       r.set("draft", t.getString("draft"));
       r.set("attachments", attachments.snapshot(app, t.id));
       r.set("options", choices);
-      r.set("selection", selection);
-      r.set("recipient", (d.recipient || "").trim());
+      r.set("selection", t.getString("draft_selection") || "any");
+      r.set("recipient", t.getString("draft_recipient"));
       r.set("option_decisions", []);
       r.set("status", "pending");
       r.set("revision", 1);
@@ -1416,11 +1430,16 @@ function write(e, isAgent) {
       if (op === "decide") {
         if (!["approved", "changes_requested", "rejected"].includes(d.decision))
           bad("Invalid decision");
-        if (t.getString("draft") !== r.getString("draft"))
+        const choices = reviewChoices.storedOptions(r, "options");
+        if (
+          t.getString("draft") !== r.getString("draft") ||
+          (t.getString("draft_selection") || "any") !== (r.getString("selection") || "any") ||
+          t.getString("draft_recipient") !== r.getString("recipient") ||
+          JSON.stringify(reviewChoices.storedOptions(t, "draft_options")) !== JSON.stringify(choices)
+        )
           bad("Draft changed; request a new review");
         if (!attachments.snapshotMatches(app, r))
           bad("Attachments changed; request a new review");
-        const choices = JSON.parse(r.getString("options") || "null") || [];
         const decisions = reviewChoices.decisions(
           choices,
           d.option_decisions,

@@ -46,6 +46,51 @@ function options(input) {
     return { key: o.key, label: o.label.trim(), body: o.body };
   });
 }
+function storedOptions(record, field) {
+  return options(JSON.parse(record.getString(field) || "null") || []);
+}
+
+// Return working-draft changes only. Comparing normalized options ignores JSON
+// object key order while preserving the author's order of alternatives.
+function draftChanges(task, input) {
+  const changes = {};
+  const before = storedOptions(task, "draft_options");
+  const after =
+    input.draft_options === undefined ? before : options(input.draft_options);
+  if (JSON.stringify(before) !== JSON.stringify(after)) {
+    changes.draft_options = after;
+    // Some legacy drafts repeated one option verbatim. Keep that one editable
+    // copy in sync by its stable key. Distinct reviewer prose stays untouched.
+    const draft = task.getString("draft");
+    if (input.draft === undefined || input.draft === draft) {
+      const mirror = before.find((choice) => choice.body === draft);
+      if (mirror) {
+        const replacement = after.find((choice) => choice.key === mirror.key);
+        changes.draft = replacement ? replacement.body : "";
+      }
+    }
+  }
+  const oldMode = task.getString("draft_selection") || "any";
+  const mode = input.draft_selection !== undefined
+    ? input.draft_selection
+    : after.length ? oldMode : "any";
+  if (!["one", "any"].includes(mode)) bad("selection must be one or any");
+  if (mode === "one" && !after.length) bad("Pick one requires options");
+  if (mode !== oldMode) changes.draft_selection = mode;
+  if (input.draft_recipient !== undefined) {
+    const recipient = input.draft_recipient;
+    if (
+      typeof recipient !== "string" ||
+      recipient.length > 200 ||
+      /[\r\n]/.test(recipient)
+    )
+      bad("recipient must be a single line of at most 200 characters");
+    if (recipient.trim() !== task.getString("draft_recipient"))
+      changes.draft_recipient = recipient.trim();
+  }
+  return changes;
+}
+
 function evidence(app, task, draft, choices) {
   const texts = [draft, ...choices.map((o) => o.body)];
   const paths = [...new Set(texts.flatMap(localFilePaths))];
@@ -167,6 +212,8 @@ function decisions(choices, input, overall, selection) {
 }
 module.exports = {
   options,
+  storedOptions,
+  draftChanges,
   evidence,
   decisions,
   localFilePaths,
