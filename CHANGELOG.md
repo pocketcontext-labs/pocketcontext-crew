@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.40.0](docs/releases/0.40.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.40.0) · Archive a task from its pending approval and undo the archive to reopen the same review.
 - **[0.39.1](docs/releases/0.39.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.39.1) · Copy actions in menus have a visible label and use the same row as other menu items.
 - **[0.39.0](docs/releases/0.39.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.39.0) · Edit alternatives on the task and submit pick-one or pick-any reviews. Approvals show each option’s reply and recipient, with separate reviewer notes and a single Copy action for each text.
 - **[0.38.1](docs/releases/0.38.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.38.1) · Draft blocks fit the review or editor and show the full text. Agent guidance covers attaching original files received in chat.

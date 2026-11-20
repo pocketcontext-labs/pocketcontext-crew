@@ -113,8 +113,8 @@ connected agent can read.
 
 ## Shipped in the open
 
-The latest release is [Crew 0.39.1](docs/releases/0.39.1.md)
-([GitHub release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.39.1)).
+The latest release is [Crew 0.40.0](docs/releases/0.40.0.md)
+([GitHub release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.40.0)).
 Every release is listed in the [changelog](CHANGELOG.md), with its release notes in
 [docs/releases/](docs/releases/), downloads on the
 [releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases)

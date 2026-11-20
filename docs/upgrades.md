@@ -1,5 +1,11 @@
 # Crew upgrades and rollback
 
+## Crew 0.39.1 to 0.40.0
+
+Replace the binary or image (`CREW_REPLACE_VERSION=0.39.1` for the installer)
+and upgrade paired clients to 0.40.0. Run `skill` once and refresh MCP tool
+schemas for `review.restore`. Version 0.39.1 can reopen the same database.
+
 ## Crew 0.39.0 to 0.39.1
 
 Replace the binary or image (`CREW_REPLACE_VERSION=0.39.0` for the
