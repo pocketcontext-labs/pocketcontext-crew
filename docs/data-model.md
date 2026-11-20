@@ -69,7 +69,10 @@ never purged. Upload links store only a token SHA-256 with parent, expiry,
 maximum files, usage and revocation. `crew_settings` is a singleton holding
 `storage_limit_bytes` (default 5 GiB). Reviews snapshot the task's active
 attachments as `[{id, sha256}]`. Optional review `options` freeze keyed alternative
-bodies; `option_decisions` records each approved/rejected choice. Tasks have
+bodies. Reviews also freeze the optional `recipient` display name and the
+`selection` mode. A pick-one review can approve one option. Existing reviews
+and requests that omit the mode use pick-any. The `option_decisions` field
+records the decision and feedback for each choice. Tasks have
 server-managed `held_since` for stable hold age on open tasks. See [Attachments](crew.md#attachments).
 
 Responsibility does not enforce write isolation. Work clients have the reader's
