@@ -2703,6 +2703,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   assert.ok(atA.every(([w,h])=>w>=44&&h>=44),'option header targets are at least 44 px');
   // Each block copies only its own text; "Copied" keeps the button in place.
   const copyLinkedIn=optA.getByRole('button',{name:'Copy A · Markup · LinkedIn',exact:true});
+  assert.equal(await copyLinkedIn.innerText(),'','channel Copy uses only its icon');
   await copyLinkedIn.scrollIntoViewIfNeeded();
   const before=await copyLinkedIn.boundingBox();
   await copyLinkedIn.click();
@@ -2765,6 +2766,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await page.setViewportSize({width:1440,height:1000});
   await roA.scrollIntoViewIfNeeded();
   await checkVariantLayout(roA.locator('.crew-blocks'),2);
+  assert.equal(Math.round((await roA.locator('.crew-block-copy').first().boundingBox()).width),44,'desktop review channel Copy keeps its 44 px target');
   {const tops=await roA.locator('.crew-block').evaluateAll(bs=>bs.map(b=>Math.round(b.getBoundingClientRect().top)));
   assert.equal(tops[0],tops[1],'variants sit side by side on a desktop: '+tops);
   assert.equal(await dialog().evaluate(d=>{const b=d.querySelector('.crew-dialog-body')||d;return b.scrollWidth<=b.clientWidth+1;}),true,'no horizontal scroll on a desktop');}

@@ -165,6 +165,7 @@ export function BlockCard({
   children: ReactNode;
 }) {
   const option = useContext(BlockOptionContext);
+  const inReview = useContext(ReviewMarkupContext);
   const full = option ? (name ? `${option.label} · ${name}` : option.label) : name;
   const feedback = option?.feedback(target, name);
   return (
@@ -176,6 +177,7 @@ export function BlockCard({
         </span>
         <CopyButton
           className="crew-block-copy"
+          iconOnly={inReview}
           short
           plainText={copy}
           label={full ? t("Copy {label}", { label: full }) : t("Copy")}

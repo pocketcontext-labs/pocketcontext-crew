@@ -135,7 +135,7 @@
 }
 @media (min-width: 681px) {
   @container crew-block (min-width: 285px) {
-    :is(.crew-app, .crew-dialog) .crew-block-head button.crew-block-copy {
+    :is(.crew-app, .crew-dialog) .crew-block-head button.crew-block-copy:not(.crew-icon-button) {
       width: auto;
       padding: 0 12px;
     }
