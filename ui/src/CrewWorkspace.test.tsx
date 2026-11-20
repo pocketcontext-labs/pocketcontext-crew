@@ -1226,8 +1226,8 @@ it("shows the MCP address and connected apps when the server has MCP", async () 
   expect(
     await screen.findByText("https://crew.example/mcp"),
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Copy address" })).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Copy", description: "Copy address" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Copy", description: "Copy link" })).toBeNull();
   const apps = screen.getByRole("region", { name: "Connected apps" });
   expect(apps).toHaveTextContent(
     "They decide a review only when you ask them to in the conversation.",
@@ -1248,7 +1248,7 @@ it("gives skill instructions and no MCP details without a domain", async () => {
   expect(document.body).not.toHaveTextContent("approval decisions yourself");
   expect(document.body).not.toHaveTextContent("/mcp");
   expect(screen.queryByRole("region", { name: "Connected apps" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Copy", description: "Copy link" })).toBeNull();
 });
 
 it("shows the skill step on Home without a domain", async () => {
@@ -1265,14 +1265,14 @@ it("shows the skill step on Home without a domain", async () => {
   ).toBeInTheDocument();
 });
 
-it("labels the MCP copy button Copy address on Home's connect step", async () => {
+it("describes the MCP Copy button on Home's connect step", async () => {
   fixtures = { ...fixtures, tasks: [], reviews: [] };
   history.replaceState(null, "", "/#/home");
   render(<CrewWorkspace />);
   expect(
-    await screen.findByRole("button", { name: "Copy address" }),
+    await screen.findByRole("button", { name: "Copy", description: "Copy address" }),
   ).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Copy", description: "Copy link" })).toBeNull();
 });
 
 it("claims neither setup when the server cannot be checked", async () => {
@@ -1833,7 +1833,7 @@ async function copyFromMenu(dialog: ReturnType<typeof within>) {
   const more = dialog.getByRole("button", { name: "More actions" });
   await waitFor(() => expect(more).toBeEnabled());
   fireEvent.click(more);
-  fireEvent.click(dialog.getByRole("menuitem", { name: "Copy link" }));
+  fireEvent.click(dialog.getByRole("menuitem", { name: "Copy", description: "Copy link" }));
 }
 it("copies the server's absolute url when present", async () => {
   const writeText = mockClipboard(async () => {});
@@ -1919,7 +1919,7 @@ describe("dialog header", () => {
     history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
     render(<CrewWorkspace />);
     const dialog = within(await screen.findByRole("dialog"));
-    expect(dialog.queryByRole("button", { name: "Copy link" })).toBeNull();
+    expect(dialog.queryByRole("button", { name: "Copy", description: "Copy link" })).toBeNull();
     expect(dialog.queryByRole("button", { name: "Share as artifact" })).toBeNull();
     expect(dialog.getByRole("button", { name: "Back" })).toBeDisabled();
     const more = dialog.getByRole("button", { name: "More actions" });
@@ -1985,7 +1985,7 @@ describe("dialog header", () => {
     fireEvent.click(await screen.findByRole("button", { name: "＋ New task" }));
     const dialog = within(await screen.findByRole("dialog"));
     expect(dialog.getByRole("button", { name: "More actions" })).toBeDisabled();
-    expect(dialog.queryByRole("button", { name: "Copy link" })).toBeNull();
+    expect(dialog.queryByRole("button", { name: "Copy", description: "Copy link" })).toBeNull();
     // A new item has no list behind it: no previous/next capsule.
     expect(dialog.queryByRole("button", { name: /^Next/ })).toBeNull();
   });
@@ -3540,7 +3540,7 @@ describe("project agents and coding sessions", () => {
     expect(guide).toHaveTextContent(/Codex, Claude Code or another coding agent/);
     expect(within(guide).getAllByRole("button", { name: /Copy/ })).toHaveLength(1);
     expect(document.activeElement).toBe(within(guide).getByRole("button", { name: "Got it" }));
-    fireEvent.click(within(guide).getByRole("button", { name: "Copy session prompt for synthetic-repo" }));
+    fireEvent.click(within(guide).getByRole("button", { name: "Copy", description: "Copy session prompt for synthetic-repo" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
     // "Don't show this again" is saved on the server.
     fireEvent.click(within(guide).getByRole("checkbox", { name: "Don't show this again" }));
@@ -3579,9 +3579,9 @@ describe("project agents and coding sessions", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(within(dialog).getByText("one").tagName).toBe("STRONG");
     expect(screen.getByText("one").closest(".crew-agent-tile")).toBeNull();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Copy prompt" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Copy", description: "Copy prompt" }));
     await waitFor(() =>
-      expect(within(dialog).getByRole("button", { name: "Prompt copied" }))
+      expect(within(dialog).getByText("Prompt copied"))
         .toBeInTheDocument(),
     );
     expect(writeText).toHaveBeenLastCalledWith(session.prompt);
@@ -3735,8 +3735,8 @@ describe("project agents and coding sessions", () => {
       "Restore default",
     );
     // Copy prompt copies the session prompt of the latest revision.
-    fireEvent.click(dialog.getByRole("button", { name: "Copy prompt" }));
-    await dialog.findByRole("button", { name: "Prompt copied" });
+    fireEvent.click(dialog.getByRole("button", { name: "Copy", description: "Copy prompt" }));
+    await dialog.findByText("Prompt copied");
     expect(writeText).toHaveBeenLastCalledWith(session.prompt);
   });
   it("explains a stale session instructions revision", async () => {

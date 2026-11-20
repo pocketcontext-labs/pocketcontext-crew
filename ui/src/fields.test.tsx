@@ -277,7 +277,7 @@ describe("ClaimBanner", () => {
     expect(screen.getByText("Started 15 min ago")).toBeInTheDocument();
     expect(screen.getByText("ends in 1 h 45 m")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Claim actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Copy details" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy", description: "Copy details" }));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     expect(writeText.mock.calls[0][0]).toMatch(
       /^Claimed by Implement · Claude Code · undulating-duck\/2 · 9e017204 · Started /,
@@ -300,7 +300,7 @@ describe("ClaimBanner", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Claim actions" }));
     expect(
-      screen.getByRole("menuitem", { name: "Copy details" }),
+      screen.getByRole("menuitem", { name: "Copy", description: "Copy details" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("menuitem", { name: "Release claim" }),

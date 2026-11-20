@@ -382,7 +382,7 @@ it("copies one nonsecret setup prompt with current capability discovery", async 
     value: { writeText },
   });
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Copy setup prompt" }));
+  fireEvent.click(screen.getByRole("button", { name: "Copy", description: "Copy setup prompt" }));
   await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
   const prompt = writeText.mock.calls[0][0];
   expect(prompt).toContain("collection capabilities");
@@ -393,7 +393,7 @@ it("copies one nonsecret setup prompt with current capability discovery", async 
   expect(prompt).not.toContain("hooks.example");
   expect(crewApi.write).not.toHaveBeenCalled();
   expect(
-    screen.getByRole("button", { name: "Copy routing test prompt" }),
+    screen.getByRole("button", { name: "Copy", description: "Copy routing test prompt" }),
   ).toBeDisabled();
 });
 it("keeps role and reporting instructions outside the read-only managed block", async () => {
@@ -532,20 +532,20 @@ it("copies parent bridge setup and direct owner authorization separately without
     value: { writeText },
   });
   await open();
-  fireEvent.click(screen.getByRole("button", { name: "Copy setup prompt" }));
+  fireEvent.click(screen.getByRole("button", { name: "Copy", description: "Copy setup prompt" }));
   await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
   expect(writeText.mock.calls[0][0]).toContain("WakeParent");
   expect(writeText.mock.calls[0][0]).toContain("priority:true");
   expect(writeText.mock.calls[0][0]).toContain("owner's direct authorization");
   fireEvent.click(
-    screen.getByRole("button", { name: "Copy group authorization prompt" }),
+    screen.getByRole("button", { name: "Copy", description: "Copy group authorization prompt" }),
   );
   await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
   expect(writeText.mock.calls[1][0]).toContain("every bot in this group chat");
   expect(writeText.mock.calls[1][0]).toContain("Do not respond to other bots");
   expect(writeText.mock.calls[1][0]).toContain(`${window.location.origin}/mcp`);
   fireEvent.click(
-    screen.getByRole("button", { name: "Copy bot authorization prompt" }),
+    screen.getByRole("button", { name: "Copy", description: "Copy bot authorization prompt" }),
   );
   await waitFor(() => expect(writeText).toHaveBeenCalledTimes(3));
   expect(writeText.mock.calls[2][0]).toContain(`${window.location.origin}/mcp`);

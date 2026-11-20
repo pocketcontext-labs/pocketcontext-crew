@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Icon, type IconName } from "./Icon";
 import { copyText } from "./projectAgents";
-import { CopyGlyph, useCopyFeedback } from "./CopyFeedback";
+import { CopyGlyph, CopyIconButton, useCopyFeedback } from "./CopyFeedback";
 import { t } from "./i18n";
 
 export { Icon, type IconName } from "./Icon";
@@ -228,7 +228,20 @@ export function MoreMenu({
         >
           {groups.map((group, g) => (
             <div className="crew-menu-group" role="group" key={g}>
-              {group.map((item) => (
+              {group.map((item) => item.copy ? (
+                <CopyIconButton
+                  key={item.label}
+                  menuItem
+                  description={item.label}
+                  disabled={item.disabled}
+                  state={feedback.state}
+                  onClick={() => {
+                    const { text, onResult } = item.copy;
+                    shut();
+                    void feedback.run(() => copyText(text), (ok) => onResult(ok, text));
+                  }}
+                />
+              ) : (
                 <button
                   key={item.label}
                   type="button"
@@ -238,13 +251,7 @@ export function MoreMenu({
                   className={item.destructive ? "crew-menu-danger" : undefined}
                   onClick={() => {
                     shut();
-                    const action = item.copy;
-                    if (action) {
-                      void feedback.run(
-                        () => copyText(action.text),
-                        (ok) => action.onResult(ok, action.text),
-                      );
-                    } else item.onSelect();
+                    item.onSelect();
                   }}
                 >
                   <Icon name={item.icon} />

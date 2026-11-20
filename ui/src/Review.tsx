@@ -475,7 +475,6 @@ export function ReviewChoices({
                   {option.copy && (
                     <CopyButton
                       plainText={option.copy}
-                      iconOnly
                       label={t("Copy {label}", { label: option.label })}
                     />
                   )}

@@ -6,6 +6,10 @@ const base = process.env.CREW_TEST_URL;
 if(!base || !new URL(base).hostname.match(/^(127\.0\.0\.1|localhost)$/)) throw new Error('Synthetic loopback server required');
 const browser = await chromium.launch({headless:true});
 const page = await browser.newPage({viewport:{width:1440,height:1000}});
+// Each ordinary Copy control has the same name. The hidden description
+// identifies which value it copies when several controls share a surface.
+const copyButton=(scope,description,role='button')=>scope.getByRole(role,{name:'Copy',exact:true})
+  .filter({has:page.getByText(description,{exact:true})});
 const errors=[],outside=[],writeActions=[];
 let syntheticOwnerAuth="";
 page.on('pageerror',e=>errors.push(e.message));
@@ -40,7 +44,7 @@ const headerOneRow=async where=>{
     nav.querySelector('.crew-list-position').scrollWidth<=position.width+1;
   }
   return {stepperFits,height:box.height,mids:[...buttons,title].map(mid),right:Math.max(...buttons.map(b=>b.getBoundingClientRect().right)),width:innerWidth,
-   tall:Math.max(...buttons.map(b=>b.getBoundingClientRect().height)),nowrap:getComputedStyle(title).whiteSpace==='nowrap',labels:buttons.every(b=>!b.textContent.trim()&&b.title===b.getAttribute('aria-label'))};
+   tall:Math.max(...buttons.map(b=>b.getBoundingClientRect().height)),nowrap:getComputedStyle(title).whiteSpace==='nowrap',labels:buttons.every(b=>!b.innerText.trim()&&b.title===b.getAttribute('aria-label'))};
  });
  assert.ok(Math.max(...r.mids)-Math.min(...r.mids)<=1,`${where}: header controls share one row `+JSON.stringify(r.mids));
  assert.ok(r.height<r.tall*2,`${where}: header height is one row (${r.height} with ${r.tall} px buttons)`);
@@ -212,7 +216,7 @@ try {
  assert.equal(await dialog().locator('.crew-draft-snapshot .crew-prose').innerText(),'A synthetic draft for the owner to publish manually.');
  // A plain review keeps its copy action.
  await page.evaluate(()=>{window.__copied=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>window.__copied.push(t)}});});
- const singleCopy=dialog().getByRole('button',{name:'Copy draft text',exact:true});
+ const singleCopy=copyButton(dialog(), 'Copy draft text');
  await singleCopy.click();
  await page.waitForFunction(()=>window.__copied.length===1);
  assert.equal(await page.evaluate(()=>window.__copied[0]),'A synthetic draft for the owner to publish manually.');
@@ -483,7 +487,7 @@ try {
  assert.equal(await integration.getByRole('combobox',{name:'Dispatch path',exact:true}).inputValue(),'parent_bridge');
  // One step at a time: close the dispatcher step just used, leaving only the first incomplete one.
  await integration.getByRole('button',{name:/Choose your dispatcher/}).click();
- await integration.getByRole('button',{name:'Copy setup prompt',exact:true}).waitFor();
+ await copyButton(integration, 'Copy setup prompt').waitFor();
  assert.equal(await integration.getByLabel('Connection test progress').count(),0,'Future steps show titles only');
  await snap('crew-parent-bridge-setup');
  await page.setViewportSize({width:390,height:844});
@@ -1250,8 +1254,8 @@ try {
   const latest=await readSession();
   assert.equal(latest.revision,3,'the session reads the restored revision');
   assert.equal(latest.body,'# Synthetic browser instructions\n\nWork on **one** synthetic task.');
-  await box.getByRole('button',{name:'Copy prompt',exact:true}).click();
-  await box.getByRole('button',{name:'Prompt copied',exact:true}).waitFor();
+  await copyButton(box, 'Copy prompt').click();
+  await box.getByText('Prompt copied',{exact:true}).waitFor();
   assert.equal(await lastCopied(),latest.prompt,'Copy prompt copies the session prompt');
   // 0.27.2: Read, Edit and History keep the dialog and its buttons in place
   // (within 1px) on desktop and phone; only the area below the toolbar changes.
@@ -1985,7 +1989,7 @@ try {
   await banner.getByRole('button',{name:'Details'}).click();
   assert.equal(await details.isVisible(),true,'Details reveals tool, session and hash');
   await banner.getByRole('button',{name:'Claim actions'}).click();
-  await banner.getByRole('menuitem',{name:'Copy details'}).waitFor();
+  await copyButton(banner, 'Copy details', 'menuitem').waitFor();
   await banner.getByRole('menuitem',{name:'Release claim'}).waitFor();
   await snapView(`crew-claim-menu-${width}`);
   await page.keyboard.press('Escape');
@@ -2193,8 +2197,8 @@ try {
  // The option copies its text without its label or the reviewer's context.
  {
   await page.evaluate(()=>{window.__copied=[];Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>window.__copied.push(t)}});});
-  assert.equal(await dialog().getByRole('button',{name:'Copy draft text',exact:true}).count(),0,'no second snapshot Copy');
-  const optionCopy=dialog().getByRole('button',{name:'Copy A · Out of tokens',exact:true});
+  assert.equal(await copyButton(dialog(), 'Copy draft text').count(),0,'no second snapshot Copy');
+  const optionCopy=copyButton(dialog(), 'Copy A · Out of tokens');
   await optionCopy.scrollIntoViewIfNeeded();
   await page.mouse.move(0, 0);
   const fill=await optionCopy.evaluate(b=>getComputedStyle(b).backgroundColor);
@@ -2215,7 +2219,7 @@ try {
   await page.emulateMedia({reducedMotion:'no-preference'});
   assert.equal((await checkStyle())[3],'0.16s','the normal crossfade lasts 160ms');
   await page.emulateMedia({reducedMotion:'reduce'});
-  assert.equal(await dialog().getByRole('button',{name:'Copy Shared notebook'}).count(),0,'image options have no Copy');
+  assert.equal(await copyButton(dialog(), 'Copy Shared notebook').count(),0,'image options have no Copy');
   await snapView('crew-review-copy-390');
  }
  const tile=dialog().getByRole('listitem',{name:'Shared notebook'});
@@ -2476,7 +2480,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await page.waitForFunction(()=>{const d=document.querySelector('.crew-page-preview-frame')?.contentDocument;const i=d?[...d.images]:[];return i.length===1&&i[0].complete&&i[0].naturalWidth>0;});
   assert.equal(await frame.locator('nav.crew-back').isVisible(),false,'no Back to Crew bar inside the preview');
   const box=await sheet.boundingBox();assert.ok(box.width>=width-1&&box.height>=843,'the preview fills the window: '+JSON.stringify(box));
-  await sheet.getByRole('button',{name:'More actions'}).click();for(const item of ['Copy link',/^Open in (Safari|browser)$/])await page.getByRole('menuitem',{name:item}).waitFor();
+  await sheet.getByRole('button',{name:'More actions'}).click();await copyButton(page,'Copy link','menuitem').waitFor();await page.getByRole('menuitem',{name:/^Open in (Safari|browser)$/}).waitFor();
   await snapView('crew-page-preview-menu-'+width);await page.keyboard.press('Escape');
   await snapView('crew-page-preview-'+width);
   await sheet.getByRole('button',{name:'Back to Shared'}).click();await sheet.waitFor({state:'hidden'});
@@ -2747,7 +2751,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
    });
    assert.equal(measure.columns,columns,'variants use the available columns');
    assert.ok(measure.flows&&measure.fullWidth&&measure.headerFits,'unclipped cards and header: '+JSON.stringify(measure));
-   if(columns===1)assert.equal(measure.copyWidth,44,'phone Copy is icon-only');
+   assert.equal(measure.copyWidth,44,'Copy is 44 px at every width');
   };
   await checkVariantLayout(optA.locator('.crew-blocks'),1);
   const headerTargets=async opt=>opt.locator('.crew-pick-head button').evaluateAll(bs=>bs.map(b=>{const r=b.getBoundingClientRect();return [Math.round(r.width),Math.round(r.height)];}));
@@ -2755,7 +2759,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   assert.deepEqual(atA,atB,'Copy and actions have consistent sizes for structured and plain options');
   assert.ok(atA.every(([w,h])=>w>=44&&h>=44),'option header targets are at least 44 px');
   // Each block copies only its own text; "Copied" keeps the button in place.
-  const copyLinkedIn=optA.getByRole('button',{name:'Copy A · Markup · LinkedIn',exact:true});
+  const copyLinkedIn=copyButton(optA, 'Copy A · Markup · LinkedIn');
   assert.equal(await copyLinkedIn.innerText(),'','channel Copy uses only its icon');
   await copyLinkedIn.scrollIntoViewIfNeeded();
   const before=await copyLinkedIn.boundingBox();
@@ -2764,10 +2768,10 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   assert.equal(await copiedLast(),linkedIn,'LinkedIn Copy copies only its text');
   assert.equal(await copyLinkedIn.getAttribute('data-state'),'copied');
   assert.deepEqual(await copyLinkedIn.boundingBox(),before,'Copied keeps the button in place');
-  await optA.getByRole('button',{name:'Copy A · Markup · X',exact:true}).click();
+  await copyButton(optA, 'Copy A · Markup · X').click();
   await page.waitForFunction(()=>window.__copied.length===2);
   assert.equal(await copiedLast(),xText,'X Copy copies only its text');
-  await optB.getByRole('button',{name:'Copy B · Plain',exact:true}).click();
+  await copyButton(optB, 'Copy B · Plain').click();
   await page.waitForFunction(()=>window.__copied.length===3);
   assert.equal(await copiedLast(),'Plain option text.');
   // Counts: tabular figures; past the limit in the danger colour with "too long".
@@ -2779,7 +2783,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await reviewerNote.getByText('Kept short for the reviewer.',{exact:true}).waitFor();
   assert.equal(await dialog().getByText('Kept short for the reviewer.',{exact:true}).count(),1,'notes are shown once');
   assert.equal(await reviewerNote.getByRole('button',{name:/Copy/i}).count(),0,'reviewer notes have no Copy');
-  await optA.getByRole('button',{name:'Copy A · Markup',exact:true}).click();
+  await copyButton(optA, 'Copy A · Markup').click();
   await page.waitForFunction(()=>window.__copied.length===4);
   assert.equal(await copiedLast(),linkedIn+'\n\n'+xText,'whole-option Copy includes only paste-ready text');
   // Every control on an option card is a 44 px target, and nothing scrolls sideways.
@@ -2843,7 +2847,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   assert.equal(await dialog().getByText('Ready to paste, re:Crew at 10:30.',{exact:true}).count(),1,'prose around the blocks reads as before');
   {const r=await noteBlocks.evaluateAll(bs=>bs.map(b=>{const c=b.querySelector('.crew-block-copy').getBoundingClientRect(),k=b.getBoundingClientRect();return [Math.round(k.right-c.right),Math.round(c.width),Math.round(c.height)];}));
   assert.ok(r.every(x=>x[0]===r[0][0]&&x[0]<=12&&x[2]>=44),'Copy sits at the right edge, 44 px: '+JSON.stringify(r));}
-  await dialog().getByRole('button',{name:'Copy X',exact:true}).click();
+  await copyButton(dialog(), 'Copy X').click();
   await page.waitForFunction(()=>window.__copied.length===1);
   assert.equal(await copiedLast(),xText,'a note block copies only its text');
   await snapView('crew-note-markup-390');
@@ -2855,13 +2859,21 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   assert.equal(await dialog().locator('.crew-pick-comment').count(),0,'no feedback on a task draft');
   assert.equal(await dialog().locator('.crew-block').count(),2,'the draft shows its two variants');
   await checkVariantLayout(dialog().locator('.crew-md-box:has(.crew-blocks)'),1);
+  await page.setViewportSize({width:1440,height:1000});
+  const editorCopy=copyButton(dialog(), 'Copy LinkedIn');
+  const editorAppearance=await editorCopy.evaluate(b=>{
+    const r=b.getBoundingClientRect(), s=getComputedStyle(b);
+    return [r.width,r.height,s.borderRadius,b.innerText,b.title];
+  });
+  assert.deepEqual(editorAppearance,[44,44,'50%','','Copy'],'desktop Edit task uses the shared icon-only Copy button');
+  await page.setViewportSize({width:390,height:844});
   await snapView('crew-task-draft-markup-390');
   await page.goto(base+'/#/tasks/'+draftTask.id+'?tab=comments');await page.reload();await stubClipboard();
   const commentBlock=dialog().locator('.crew-block[data-target="copy-1"]');
   await commentBlock.waitFor();
   assert.equal(await commentBlock.locator('.crew-block-name').innerText(),'WhatsApp reply');
   assert.equal(await commentBlock.locator('.crew-block-count').innerText(),'25');
-  await commentBlock.getByRole('button',{name:'Copy WhatsApp reply',exact:true}).click();
+  await copyButton(commentBlock, 'Copy WhatsApp reply').click();
   await page.waitForFunction(()=>window.__copied.length===1);
   assert.equal(await copiedLast(),'Thanks, see you at 10:30!','a comment block copies only its text');
   await snapView('crew-comment-markup-390');

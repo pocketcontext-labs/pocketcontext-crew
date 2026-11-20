@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Icon, type IconName } from "./Icon";
 import { t } from "./i18n";
 import "./copyFeedback.css";
@@ -59,74 +59,119 @@ export function CopyGlyph({
   );
 }
 
-export function CopyControl({
-  copy,
-  label,
-  successLabel,
-  failureLabel,
-  accessibleLabel,
-  iconOnly,
+/** Menus share this button, but own the feedback so it can outlive the open menu. */
+export function CopyIconButton({
+  description,
+  state,
+  onClick,
   className = "",
   disabled,
-  onResult,
-  idleIcon,
-  title,
-  announce = false,
+  menuItem = false,
 }: {
+  description: string;
+  state: CopyState;
+  onClick: () => void;
+  className?: string;
+  disabled?: boolean;
+  menuItem?: boolean;
+}) {
+  const descriptionId = useId();
+  const name = t("Copy");
+  const hasDescription = description !== name;
+  return (
+    <button
+      type="button"
+      role={menuItem ? "menuitem" : undefined}
+      tabIndex={menuItem ? -1 : undefined}
+      className={`crew-copy-control crew-copy-icon ${className}`.trim()}
+      data-state={state || undefined}
+      aria-label={name}
+      aria-describedby={hasDescription ? descriptionId : undefined}
+      title={name}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <CopyGlyph state={state} />
+      {hasDescription && (
+        <span hidden id={descriptionId}>
+          {description}
+        </span>
+      )}
+    </button>
+  );
+}
+
+type CopyActionProps = {
   copy: () => Promise<boolean>;
   label: string;
-  successLabel?: string;
-  failureLabel?: string;
-  accessibleLabel?: string;
-  iconOnly?: boolean;
   className?: string;
   disabled?: boolean;
   onResult?: (ok: boolean) => void;
-  idleIcon?: IconName;
-  title?: string;
-  announce?: boolean;
-}) {
-  const feedback = useCopyFeedback();
-  const { state } = feedback;
-  const shown =
-    (state === "copied" && successLabel) ||
-    (state === "failed" && failureLabel) ||
-    label;
-  const name = accessibleLabel ?? shown;
+};
+
+export function CopyControl({
+  copy,
+  label,
+  className,
+  disabled,
+  onResult,
+  successLabel,
+}: CopyActionProps & { successLabel?: string }) {
+  const { state, run } = useCopyFeedback();
   return (
     <>
-      <button
-        type="button"
-        className={`crew-copy-control ${className}`.trim()}
-        data-state={state || undefined}
-        aria-label={name}
-        title={title ?? name}
+      <CopyIconButton
+        description={label}
+        className={className}
+        state={state}
         disabled={disabled}
-        onClick={() => void feedback.run(copy, onResult)}
-      >
-        <CopyGlyph state={state} idle={idleIcon} />
-        {!iconOnly && (
-          <span className="crew-copy-labels" aria-hidden="true">
-            {Array.from(new Set([label, successLabel, failureLabel])).map(
-              (text) =>
-                text ? (
-                  <span key={text} data-shown={text === shown || undefined}>
-                    {text}
-                  </span>
-                ) : null,
-            )}
-          </span>
-        )}
-      </button>
-      {announce && (
-        <span className="crew-visually-hidden" aria-live="polite">
-          {state === "copied"
-            ? t("Copied")
-            : state === "failed"
-              ? t("Not copied")
-              : ""}
-        </span>
-      )}
+        onClick={() => void run(copy, onResult)}
+      />
+      <span className="crew-visually-hidden" aria-live="polite">
+        {state === "copied"
+          ? (successLabel ?? t("Copied"))
+          : state === "failed"
+            ? t("Not copied")
+            : ""}
+      </span>
     </>
+  );
+}
+
+/** Starting a coding session or rewriting its instructions is a named workflow. */
+export function NamedCopyAction({
+  copy,
+  label,
+  successLabel,
+  accessibleLabel,
+  className = "",
+  disabled,
+  onResult,
+}: CopyActionProps & {
+  successLabel: string;
+  accessibleLabel?: string;
+}) {
+  const { state, run } = useCopyFeedback();
+  const shown = state === "copied" ? successLabel : label;
+  const name = accessibleLabel ?? shown;
+  return (
+    <button
+      type="button"
+      className={`crew-copy-control ${className}`.trim()}
+      data-state={state || undefined}
+      aria-label={name}
+      title={name}
+      disabled={disabled}
+      onClick={() => void run(copy, onResult)}
+    >
+      <CopyGlyph state={state} />
+      <span className="crew-copy-labels" aria-hidden="true">
+        {[label, successLabel].map((text) => (
+          <span key={text} data-shown={text === shown || undefined}>
+            {text}
+          </span>
+        ))}
+      </span>
+    </button>
   );
 }

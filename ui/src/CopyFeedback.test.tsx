@@ -25,8 +25,11 @@ it("holds the check for the latest successful tap and ignores an older result", 
         }),
     );
   const result = vi.fn();
-  render(<CopyControl copy={copy} label="Copy" onResult={result} />);
-  const button = screen.getByRole("button", { name: "Copy" });
+  render(<CopyControl copy={copy} label="Copy draft text" onResult={result} />);
+  const button = screen.getByRole("button", { name: "Copy", description: "Copy draft text" });
+  expect(button).toHaveAttribute("title", "Copy");
+  expect(screen.getByText("Copy draft text")).not.toBeVisible();
+  expect(button.querySelector(".crew-copy-labels")).toBeNull();
   fireEvent.click(button);
   await act(async () => { fireEvent.click(button); });
   await act(async () => finishFirst(false));

@@ -4247,7 +4247,7 @@ a.crew-logo:hover .product-brand span {
   margin: 0 -16px;
   width: calc(100% + 32px);
 }
-.crew-dialog .crew-menu button[role="menuitem"] {
+.crew-dialog .crew-menu button[role="menuitem"]:where(:not(.crew-copy-control)) {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -4263,8 +4263,8 @@ a.crew-logo:hover .product-brand span {
   white-space: normal;
   cursor: pointer;
 }
-.crew-dialog .crew-menu button[role="menuitem"]:hover:not(:disabled),
-.crew-dialog .crew-menu button[role="menuitem"]:focus-visible {
+.crew-dialog .crew-menu button[role="menuitem"]:hover:not(:disabled, .crew-copy-control),
+.crew-dialog .crew-menu button[role="menuitem"]:focus-visible:where(:not(.crew-copy-control)) {
   background: #eef2ea;
   outline: none;
 }

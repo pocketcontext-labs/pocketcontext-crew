@@ -7,7 +7,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { CopyControl } from "./CopyFeedback";
+import { CopyControl, NamedCopyAction } from "./CopyFeedback";
 import { createPortal } from "react-dom";
 import { markdownSummary } from "./markdownText";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
@@ -203,7 +203,7 @@ export default function StartSession({
     <div className="crew-session">
       <div className="crew-session-row">
         {showAgent && <AgentChip agent={agent} agents={agents ?? [agent]} />}
-        <CopyControl
+        <NamedCopyAction
           className="crew-session-copy"
           disabled={session.loading}
           accessibleLabel={t("Copy prompt for a coding agent as {name}", { name })}
@@ -349,8 +349,6 @@ function SessionGuide({
           className="crew-session-guide-copy"
           disabled={!prompt}
           label={t("Copy session prompt for {name}", { name })}
-          title={t("Copy")}
-          iconOnly
           copy={copy}
         />
       </div>

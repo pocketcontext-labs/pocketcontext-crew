@@ -61,7 +61,6 @@
   border-radius: 12px;
   background: var(--block-bg);
   color: var(--icon-ink);
-  container: crew-block / inline-size;
 }
 .crew-block-head {
   display: flex;
@@ -103,50 +102,6 @@
 .crew-block-body > :last-child,
 .crew-block-body > .crew-prose > :last-child {
   margin-bottom: 0;
-}
-/* On wider cards the labels share one grid cell, so Copy keeps its size. */
-:is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 44px;
-  height: 44px;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--icon-line);
-  border-radius: 999px;
-  background: var(--icon-fill);
-  color: var(--icon-ink);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-}
-:is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button .crew-icon {
-  width: 18px;
-  height: 18px;
-  stroke-width: 2;
-}
-.crew-block-copy .crew-copy-labels {
-  display: none;
-}
-@media (min-width: 681px) {
-  @container crew-block (min-width: 285px) {
-    :is(.crew-app, .crew-dialog) .crew-block-head button.crew-block-copy:not(.crew-icon-button) {
-      width: auto;
-      padding: 0 12px;
-    }
-    .crew-block-copy .crew-copy-labels {
-      display: grid;
-    }
-  }
-}
-:is(.crew-app, .crew-dialog) .crew-block-head button.crew-copy-button[data-state="failed"] {
-  border-color: #c98b7c;
-  color: #a14f3c;
 }
 .crew-block .crew-pick-note {
   margin-top: 10px;

@@ -237,18 +237,18 @@ it("copies only the option's paste-ready text and moves legacy snapshot prose to
       { key: "img", label: "Picture", body: "![Picture](attachment:abcdefabcdef123)" },
     ],
   });
-  expect(screen.queryByRole("button", {name:"Copy draft text"})).toBeNull();
+  expect(screen.queryByRole("button", {name: "Copy", description: "Copy draft text"})).toBeNull();
   expect(menu().find(item => item.label === "Copy text")).toBeUndefined();
   const note = screen.getByRole("complementary", { name: "Note for you" });
   expect(note).toHaveTextContent("Only the reviewer sees this.");
   expect(note).not.toHaveTextContent("Ready");
   expect(note).not.toHaveTextContent("recommended");
   expect(within(note).queryByRole("button")).toBeNull();
-  const copy = screen.getByRole("button", {name:"Copy Text A (recommended)"});
+  const copy = screen.getByRole("button", {name: "Copy", description: "Copy Text A (recommended)"});
   fireEvent.click(copy);
   expect(writeText).toHaveBeenCalledWith("Ready to post");
   await waitFor(() => expect(copy).toHaveAttribute("data-state", "copied"));
-  expect(screen.queryByRole("button", {name:"Copy Picture"})).toBeNull();
+  expect(screen.queryByRole("button", {name: "Copy", description: "Copy Picture"})).toBeNull();
 });
 it("keeps the page metadata independent of selections and each count with its option", () => {
   const { save } = decide({
@@ -294,7 +294,7 @@ it("copies from a decided review and says when the copy failed", async () => {
       note: "",
     })),
   });
-  const copy = screen.getByRole("button", { name: "Copy Draft B · X" });
+  const copy = screen.getByRole("button", { name: "Copy", description: "Copy Draft B · X" });
   fireEvent.click(copy);
   expect(writeText).toHaveBeenCalledWith("X B");
   await waitFor(() => expect(copy).toHaveAttribute("data-state", "failed"));

@@ -10,6 +10,21 @@
   background-color: var(--icon-fill);
   border-color: var(--icon-line);
 }
+:is(.crew-app, .crew-dialog) button.crew-copy-icon {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--icon-line);
+  border-radius: 50%;
+  line-height: 0;
+}
+.crew-menu-group > button.crew-copy-icon {
+  margin-inline-start: 8px;
+}
 :is(.crew-app, .crew-dialog) button.crew-copy-trigger {
   min-width: 44px;
   min-height: 44px;

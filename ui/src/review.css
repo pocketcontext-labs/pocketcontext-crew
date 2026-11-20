@@ -283,34 +283,6 @@
   font-size: 13px;
 }
 
-/* Copy (0.37.1): plain text for a chat app, at the top right of the draft
-   and of each text option. The labels share one grid cell, so "Copied"
-   never changes the button's width. */
-.crew-dialog button.crew-copy-button {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 44px;
-  min-height: 0;
-  padding: 0 12px 0 10px;
-  text-align: start;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  color: var(--icon-ink);
-}
-.crew-copy-button .crew-icon {
-  flex: none;
-  width: 18px;
-  height: 18px;
-}
-.crew-dialog button.crew-copy-button[data-state="failed"] {
-  border-color: #c98b7c;
-  color: #a14f3c;
-}
 /* The draft's Copy floats in the box's corner; the text wraps around it. */
 .crew-dialog button.crew-draft-copy {
   float: right;
@@ -415,15 +387,6 @@
     padding-inline: 20px;
   }
 }
-.crew-dialog .crew-pick-head > button.crew-copy-button {
-  display: inline-grid;
-  place-items: center;
-  width: 44px;
-  padding: 0;
-  border-radius: 50%;
-  color: var(--icon-ink);
-}
-
 .crew-task-draft {
   min-width: 0;
   margin-bottom: 18px;

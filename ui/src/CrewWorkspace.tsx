@@ -490,20 +490,15 @@ function CopyLink({
     </span>
   );
 }
-/**
- * Copy link as a header icon (0.30.0): the icon turns into a check and the
- * name into the copied label for the duration of the check.
- */
+/** The session header provides a manual fallback if the clipboard refuses the prompt. */
 function HeadCopy({
   target,
   label = t("Copy link"),
   copiedLabel = t("Link copied"),
-  icon = "link",
 }: {
   target: string;
   label?: string;
   copiedLabel?: string;
-  icon?: "link" | "copy";
 }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -512,9 +507,6 @@ function HeadCopy({
         copy={() => copyText(target)}
         label={label}
         successLabel={copiedLabel}
-        idleIcon={icon}
-        iconOnly
-        className="crew-head-button"
         onResult={(ok) => setFailed(!ok)}
       />
       {failed && (
@@ -3118,7 +3110,6 @@ export default function CrewWorkspace() {
               target={instructions.session.prompt}
               label={t("Copy prompt")}
               copiedLabel={t("Prompt copied")}
-              icon="copy"
             />
           }
           close={() => setInstructions(null)}

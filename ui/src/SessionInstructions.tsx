@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { CopyControl } from "./CopyFeedback";
+import { NamedCopyAction } from "./CopyFeedback";
 import {
   crewApi,
   val,
@@ -141,7 +141,7 @@ export default function SessionInstructions({
       </p>
       <div className="crew-session-toolbar">
         <div className="crew-session-rewrite">
-          <CopyControl
+          <NamedCopyAction
             key={session.revision}
             disabled={!session.rewrite_prompt}
             copy={() => copyText(session.rewrite_prompt)}

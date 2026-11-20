@@ -16,45 +16,18 @@ import {
 import { locale, t } from "./i18n";
 import "./blocks.css";
 
-/**
- * Copy (0.37.1): copies Markdown as plain text that pastes cleanly into a
- * chat app, inside the tap (phones refuse a clipboard write after an await).
- * The label confirms success or failure; every
- * label sits in the same grid cell, so the button never changes width.
- */
-export function CopyButton({
-  text = "",
-  plainText,
-  label,
-  className = "",
-  iconOnly = false,
-  short = false,
-}: {
-  /**
-   * Blocks: the button is only as wide as "Copy"/"Copied"; a failure shows
-   * a cross with "Copy" (and is announced), so the header keeps its room.
-   */
-  short?: boolean;
-  /** An icon button (option cards): a check when copied, a cross on failure. */
-  iconOnly?: boolean;
-  /** The Markdown to copy. */
+/** Keep the clipboard writer in the tap and convert Markdown into paste-ready text. */
+export function CopyButton({ text = "", plainText, label, className }: {
   text?: string;
-  /** Plain text to copy as it is, instead of `text`. */
   plainText?: string;
-  /** The accessible name, such as "Copy Draft A". */
   label: string;
   className?: string;
 }) {
   return (
     <CopyControl
       copy={() => copyText(plainText ?? markdownPlainText(text))}
-      label={t("Copy")}
-      successLabel={t("Copied")}
-      failureLabel={short ? undefined : t("Not copied")}
-      accessibleLabel={label}
-      className={`crew-copy-button ${iconOnly ? "crew-icon-button" : ""} ${className}`.trim()}
-      iconOnly={iconOnly}
-      announce
+      label={label}
+      className={className}
     />
   );
 }
@@ -131,7 +104,6 @@ export function BlockCard({
   children: ReactNode;
 }) {
   const option = useContext(BlockOptionContext);
-  const inReview = useContext(ReviewMarkupContext);
   const full = option ? (name ? `${option.label} · ${name}` : option.label) : name;
   const feedback = option?.feedback(target, name);
   return (
@@ -143,8 +115,6 @@ export function BlockCard({
         </span>
         <CopyButton
           className="crew-block-copy"
-          iconOnly={inReview}
-          short
           plainText={copy}
           label={full ? t("Copy {label}", { label: full }) : t("Copy")}
         />

@@ -84,7 +84,7 @@ it("copies only a block's text", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   render(<Prose>{variants}</Prose>);
-  const copy = screen.getByRole("button", { name: "Copy LinkedIn" });
+  const copy = screen.getByRole("button", { name: "Copy", description: "Copy LinkedIn" });
   fireEvent.click(copy);
   expect(writeText).toHaveBeenLastCalledWith("LinkedIn text.");
   await waitFor(() => expect(copy).toHaveAttribute("data-state", "copied"));
@@ -146,11 +146,11 @@ it("saves feedback per block into option_decisions[].feedback", () => {
   const save = decideReview(markupReview);
   // Option A: two blocks with Copy and feedback; the note is labelled.
   const a = screen.getByRole("region", { name: "Draft A" });
-  expect(within(a).getByRole("button", { name: "Copy Draft A · LinkedIn" })).toBeInTheDocument();
+  expect(within(a).getByRole("button", { name: "Copy", description: "Copy Draft A · LinkedIn" })).toBeInTheDocument();
   expect(screen.getByRole("complementary", { name: "Note for you" })).toHaveTextContent("Short on purpose.");
   // Option B: one unnamed block with the same controls.
   const b = screen.getByRole("region", { name: "Draft B" });
-  expect(within(b).getByRole("button", { name: "Copy Draft B" })).toBeInTheDocument();
+  expect(within(b).getByRole("button", { name: "Copy", description: "Copy Draft B" })).toBeInTheDocument();
   expect(within(b).getByRole("button", { name: "Actions for Draft B" })).toBeInTheDocument();
 
   fireEvent.click(within(a).getByRole("button", { name: "Actions for Draft A" }));
@@ -213,7 +213,7 @@ it("copies each variant from the option header, omitting labels and reviewer not
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   decideReview(markupReview);
   const a = screen.getByRole("region", { name: "Draft A" });
-  const copy = within(a).getByRole("button", { name: "Copy Draft A" });
+  const copy = within(a).getByRole("button", { name: "Copy", description: "Copy Draft A" });
   fireEvent.click(copy);
   expect(writeText).toHaveBeenLastCalledWith("LinkedIn A\n\nX A");
   await waitFor(() => expect(copy).toHaveAttribute("data-state","copied"));
