@@ -35,7 +35,7 @@ mandatory for changes. The server's tool schemas and collection capabilities
 are authoritative; CLI and MCP take the same JSON. Agents may create/update
 agents and buckets, assign buckets, create/update/restore notes, create/update/
 claim/claim_renew/release/comment on tasks, update session instructions (session.update),
-request/withdraw/decide review, add/archive/restore
+request/withdraw/restore/decide review, add/archive/restore
 attachments, archive and restore, and recover executions: every reader
 operation except webhook credential entry, upload-link creation and publishing,
 replacing, revoking, expiring or archiving artifacts (agents create and edit artifact drafts; the owner

@@ -300,7 +300,7 @@ wake. The task and outbox record commit atomically. A persisted governance marke
 is set at enqueue, before any worker acquires the event.
 
 Work-client task writes (`task.update`, `task.claim`, `task.comment`,
-`review.request`, `review.withdraw`, `review.decide`) need execution proof only
+`review.request`, `review.withdraw`, `review.restore`, `review.decide`) need execution proof only
 while a live execution holds the task: `dispatching` or `running` with an unexpired
 lease, or `handed_off` before its acknowledgment deadline. Stale executions are
 invalidated first. Without a live execution the write applies without proof, even
