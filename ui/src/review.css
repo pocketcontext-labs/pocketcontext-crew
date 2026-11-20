@@ -309,7 +309,7 @@
 }
 
 /* Review navigation has one list capsule and room for full-size targets. */
-.crew-dialog:has(.crew-review-body) > header.crew-dialog-head button.crew-head-button {
+.crew-record-dialog.crew-dialog:has(.crew-review-body) > header.crew-dialog-head button.crew-head-button {
   width: 44px;
   height: 44px;
   color: var(--icon-ink);
