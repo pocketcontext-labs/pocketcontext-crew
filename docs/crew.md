@@ -14,7 +14,7 @@ reporting (see [SQL reads](#bounded-read-only-sql)).
 | session_revisions | Immutable session instruction revisions of an external agent (built-in default when none) |
 | tasks          | Board status, assignment, creator attribution, labels, draft, task or note links, advisory claim and approval mode |
 | events         | Immutable changes/comments, actor and reported attribution                  |
-| reviews        | Immutable draft and attachment snapshot with monotonic decision state       |
+| reviews        | Immutable draft and attachment snapshot; decisions are final, and only a withdrawal made by archiving the task can be undone |
 | attachments    | Immutable files on a task or note: metadata, archive state; bytes in storage/ |
 | upload_links   | One-time owner upload links: parent, expiry, usage; never the token          |
 | settings       | Instance settings: storage limit (with derived usage)                       |
@@ -226,7 +226,7 @@ its outcome, who decided and when. An unknown id shows the Approvals page with a
 "Review not found" notice. Clicking an Approvals card puts its link in the address;
 closing or deciding returns to `#/approvals`, so Back does not reopen the
 dialog. A signed-out visit returns to the review after sign-in. Review reads and the
-`review.request`, `review.decide` and `review.withdraw` results include `path`
+`review.request`, `review.decide`, `review.withdraw` and `review.restore` results include `path`
 (`#/approvals/<id>`) and, with a domain, `url`; agents send the owner that `url`
 for an approval instead of building one.
 
@@ -590,7 +590,7 @@ sha256}]` on the review. Any `attachment.add`, `attachment.archive` or
 exactly like a draft edit: the review becomes `withdrawn`, the task leaves
 Needs review for In progress and goes on hold (`waiting`, hold reason
 `Review withdrawn`), its wake generation advances and nothing wakes. `review.decide` also refuses when the snapshot no longer
-matches. Approval therefore covers exactly the draft and files the owner saw.
+matches, and so does `review.restore`. Approval therefore covers exactly the draft and files the owner saw.
 
 Every decision returns the task to In progress. Request changes also makes it
 Ready and clears any hold reason, so its bot assignee wakes with
@@ -784,8 +784,8 @@ a reason code such as `execution_required` (do not retry unchanged). There is no
 
 Writes have action, optional id/expected_revision/reported_agent/reason, and data.
 Actions: agent.create/update; bucket.create/update/assign; note.create/update/restore;
-task.create/update/claim/claim_renew/release/comment; review.request/decide/withdraw; plus the
-webhook and execution operations in the [webhook guide](webhooks.md). A restore names
+task.create/update/claim/claim_renew/release/comment; review.request/decide/withdraw/restore; plus the
+webhook and execution operations in the [webhook guide](webhooks.md). A note restore names
 revision_id and creates a new note revision. Claim takes an unassigned task, or
 lets the assignee claim its own task; see [project coder agents](#project-coder-agents).
 Comments preserve task revision (unless files sent with them withdraw a pending
@@ -802,13 +802,93 @@ only way in (a status update to needs_review is refused). The reader's **Request
 approval** button is disabled with "Save a draft first." until a saved draft exists,
 and the Status field's help says why Needs review can't be picked by hand. Editing
 the draft (which puts the task on hold with hold reason `Draft edited`) or
-archiving the task withdraws its pending reviews atomically. A work client
+archiving the task withdraws its pending reviews atomically. Archiving a task
+withdraws its pending review without a decision and without a wake, and
+`review.restore` undoes exactly that; see
+[Restoring a review after an archive](#restoring-a-review-after-an-archive-0400). A work client
 requesting review with its own execution proof completes that execution
 (outcome `review_requested`); see [webhooks](webhooks.md#governed-tasks-and-atomic-execution). A
 decision (by the owner, or by a work client the owner explicitly delegated)
 requires a still-pending request and matching current draft. It moves
 the task to in_progress, never done. Closed decisions cannot be rewritten. New
 content requires a new review; historical approval never transfers to a new draft.
+
+### Restoring a review after an archive (0.40.0)
+
+`task.update` with `archived: true` on a task in Needs review does three things in
+one write: its pending review becomes `withdrawn`, the task goes from
+`needs_review` to `in_progress`, and the task is archived. The review gets a
+`review.withdraw` event whose `changes` is that write's data, so it carries
+`archived: true`. No decision is recorded, readiness and the hold reason stay as
+they were and nothing wakes. No execution is live at that point: requesting the
+review already ended the assignee's execution (completed by its own request,
+invalidated by anyone else's), and the archive invalidates any execution that is
+still recorded as active.
+
+`review.restore` is the Undo of that write. On both write routes it takes the
+review id, the review's revision and empty data (`data` accepts no fields):
+
+```json
+{"action": "review.restore", "id": "<review id>", "expected_revision": 2, "data": {}}
+```
+
+In one transaction it restores the task and makes the same review pending again.
+Two writes cannot do that: `task.update` with `archived: false` never brings a
+review back, and it reopens the task, which wakes the bot assignee of a Ready
+task (`reopened`) before a new review could be requested.
+
+It succeeds only when all of these hold:
+
+1. the review is `withdrawn`;
+2. its task is archived;
+3. the review was withdrawn by archiving that task: the review's last event is a
+   `review.withdraw` whose `changes.archived` is `true`. A review withdrawn with
+   `review.withdraw`, by a draft edit or by an attachment change stays withdrawn;
+4. it is the task's newest review and the task has no pending review;
+5. the task is `in_progress` and its `draft`, `draft_options`, `draft_selection`
+   and `draft_recipient` still equal the review's snapshot, as do its active
+   attachments (the comparison `review.decide` makes).
+
+"Last" and "newest" mean the record written last, whatever its timestamp.
+
+| | Effect |
+| --- | --- |
+| Review | `status` `pending`, revision + 1; snapshot, requester and creation time unchanged |
+| Task | `archived` false, `archived_at` and `archived_by` cleared, `status` `needs_review`, revision + 1; readiness and hold reason unchanged |
+| Wakes | none. A task with a pending review is not eligible, so there is no `reopened` wake and no `review_outcome`; the wake generation advances once, as for `review.request` |
+| Hand-off count | reset by a reader restore, like every reader task write; kept by a work-client restore |
+| Events | `review.restore` on the review (`changes: {status: "pending"}`) and on the task (`changes: {archived: false, status: "needs_review", readiness, wake_generation}`) |
+| Result | the review as `review.request` returns it, with `path` and, with a domain, `url` |
+
+A stale `expected_revision` gets the usual HTTP 409 revision conflict, which has
+no reason code. An unmet condition gets HTTP 409 with `data.reason.code`
+`review_not_restorable` and a message that names the condition, and changes
+nothing:
+
+```json
+{
+  "status": 409,
+  "message": "This review cannot be restored: its task has a newer review.",
+  "data": {
+    "reason": {
+      "code": "review_not_restorable",
+      "message": "This review cannot be restored: its task has a newer review."
+    }
+  }
+}
+```
+
+The other messages end with: `it is already pending`, `it is decided (<status>),
+not withdrawn`, `its task is not archived`, `it was not withdrawn by archiving its
+task`, `its task has a pending review`, `its task is no longer In progress
+(<status>)`, `the task draft changed after the review was requested` and `the
+task attachments changed after the review was requested`. Clients branch on the
+code, not on the text. Do not retry a refused restore unchanged.
+
+Work clients use `review.restore` only when the owner asks. An archived task has
+no live execution, so no execution proof is needed; proof that is supplied is
+still validated, as for every task write, and refused with `execution_conflict`
+because no execution can be running.
 
 ### Review evidence and alternatives (0.20.0)
 
@@ -955,7 +1035,8 @@ messages, publish posts or perform payments.
 Crew integration tests exercise authenticated read/write, compact read filters
 and projections, ranked search freshness and archive semantics, SQL allowlists
 (each excluded secret column is rejected), mutation rejection and limits, immutable history,
-conflicts and concurrent claims, archive ancestry, review invalidation, delegated
+conflicts and concurrent claims, archive ancestry, review invalidation, restoring a
+review after an archive (no wake, every refusal), delegated
 decisions on the work-client route, reader-only credential entry, generic
 REST/batch rejection and restart persistence. MCP tests cover transport
 allowlists and the work-client route. `CREW_READ_BENCH=1 go test ./internal/crewruntime

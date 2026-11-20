@@ -651,6 +651,16 @@ def cli_scenario(pc):
     assert counted['rows'] == [[1]], counted
     review = write('review.request', {}, task)
     assert review['status'] == 'pending' and review['draft'] == 'Synthetic CLI draft'
+    # Archiving the task withdraws its pending review; review.restore undoes exactly that.
+    archived = write('task.update', {'archived': True}, cli('read', {'collection': 'tasks', 'id': task['id']})['items'][0])
+    withdrawn = cli('read', {'collection': 'reviews', 'id': review['id']})['items'][0]
+    assert archived['archived'] and archived['status'] == 'in_progress' and withdrawn['status'] == 'withdrawn', (archived, withdrawn)
+    review = write('review.restore', {}, withdrawn)
+    restored = cli('read', {'collection': 'tasks', 'id': task['id']})['items'][0]
+    assert review['status'] == 'pending' and review['revision'] == withdrawn['revision'] + 1 and review['path'] == '#/approvals/' + review['id'], review
+    assert restored['status'] == 'needs_review' and not restored['archived'] and restored['readiness'] == 'ready', restored
+    refused = write('review.restore', {}, review, expect=4)
+    assert 'review_not_restorable' in refused and 'Do not retry it unchanged' in refused, refused
     # The work-client route has the reader's operations except credential entry.
     decided = write('review.decide', {'decision': 'approved'}, review)
     assert decided['status'] == 'approved' and decided['decided_by'].startswith('mcp:'), decided

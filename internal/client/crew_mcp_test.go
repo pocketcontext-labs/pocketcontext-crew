@@ -198,6 +198,24 @@ func TestCrewMCPRealWorkflowAndDelegatedApproval(t *testing.T) {
 	if dig(prior, "draft") != "Exact draft for review" || dig(prior, "status") != "approved" {
 		t.Fatal("Historical approval snapshot changed")
 	}
+	// Archiving the task withdraws its pending review; review.restore undoes
+	// exactly that through crew_write, and its refusal carries the reason code.
+	write("task.update", read("tasks", map[string]any{"id": dig(task, "id")})[0], map[string]any{"archived": true})
+	withdrawn := read("reviews", map[string]any{"id": dig(fresh, "id")})[0]
+	if dig(withdrawn, "status") != "withdrawn" {
+		t.Fatal("Archive did not withdraw the pending review", withdrawn)
+	}
+	restored := write("review.restore", withdrawn, map[string]any{})
+	if dig(restored, "id") != dig(fresh, "id") || dig(restored, "status") != "pending" || dig(restored, "path") != "#/approvals/"+dig(fresh, "id").(string) {
+		t.Fatal("MCP restore did not return the pending review", restored)
+	}
+	if back := read("tasks", map[string]any{"id": dig(task, "id")}); len(back) != 1 || dig(back[0], "status") != "needs_review" {
+		t.Fatal("MCP restore did not bring the task back to Needs review", back)
+	}
+	refusal, _ := json.Marshal(mcpCall(t, h, token, "crew_write", writeArgs("review.restore", restored, map[string]any{}), true))
+	if !bytes.Contains(refusal, []byte("review_not_restorable")) {
+		t.Fatalf("MCP refusal lacks the reason code: %s", refusal)
+	}
 }
 
 func TestCrewMCPWebhookReadinessAndIdempotency(t *testing.T) {
@@ -309,7 +327,7 @@ func TestCrewDiscoveryAndCachedEnvelopeCompatibility(t *testing.T) {
 	h := mcpTestHandler(api)
 	listed := mcpRequest(t, h, token, "tools/list", map[string]any{})
 	raw, _ := json.Marshal(listed)
-	for _, term := range []string{"capabilities", "execution.begin", "idempotency_key", "execution", "webhook_mappings", "webhook_executions", "webhook_bridges", "webhook.bridge.prepare"} {
+	for _, term := range []string{"capabilities", "execution.begin", "idempotency_key", "execution", "webhook_mappings", "webhook_executions", "webhook_bridges", "webhook.bridge.prepare", "review.request/withdraw/restore/decide"} {
 		if !bytes.Contains(raw, []byte(term)) {
 			t.Fatalf("tools/list omits %s", term)
 		}

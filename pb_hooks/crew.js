@@ -316,6 +316,10 @@ function pending(app, task) {
     { task },
   );
 }
+// Withdraws the task's pending reviews for the write b (a draft edit, an
+// archive or an attachment change). The event keeps that write's data as its
+// changes: review.restore relies on it to recognize a withdrawal made by
+// archiving the task (changes.archived === true).
 function withdraw(app, t, b, actor) {
   for (const r of pending(app, t.id)) {
     r.set("status", "withdrawn");
@@ -323,6 +327,40 @@ function withdraw(app, t, b, actor) {
     app.save(r);
     event(app, r, "review.withdraw", b, actor);
   }
+}
+// The record written last. rowid is insertion order and Crew never deletes
+// history, so neither two records in the same millisecond nor a clock that
+// stepped back can reorder them.
+function latest(app, col, filter, params) {
+  const rows = app.findRecordsByFilter(
+    "crew_" + col,
+    filter,
+    "-@rowid",
+    1,
+    0,
+    params,
+  );
+  return rows.length ? rows[0] : null;
+}
+// A decision or a restore covers exactly what the review froze: the draft, its
+// options, the selection mode and the recipient still saved on the task.
+function draftMatches(t, r) {
+  return (
+    t.getString("draft") === r.getString("draft") &&
+    (t.getString("draft_selection") || "any") ===
+      (r.getString("selection") || "any") &&
+    t.getString("draft_recipient") === r.getString("recipient") &&
+    JSON.stringify(reviewChoices.storedOptions(t, "draft_options")) ===
+      JSON.stringify(reviewChoices.storedOptions(r, "options"))
+  );
+}
+// review.restore refusals: HTTP 409 with data.reason.code review_not_restorable
+// and a message naming the condition that failed. Nothing is changed.
+function notRestorable(why) {
+  const message = "This review cannot be restored: " + why;
+  throw new ApiError(409, message, {
+    reason: new ValidationError("review_not_restorable", message),
+  });
 }
 // Fields that a projection may name, beyond the collection's non-hidden schema
 // fields. Projection only subsets the normal export, so redacted values such as
@@ -1432,13 +1470,7 @@ function write(e, isAgent) {
         if (!["approved", "changes_requested", "rejected"].includes(d.decision))
           bad("Invalid decision");
         const choices = reviewChoices.storedOptions(r, "options");
-        if (
-          t.getString("draft") !== r.getString("draft") ||
-          (t.getString("draft_selection") || "any") !== (r.getString("selection") || "any") ||
-          t.getString("draft_recipient") !== r.getString("recipient") ||
-          JSON.stringify(reviewChoices.storedOptions(t, "draft_options")) !== JSON.stringify(choices)
-        )
-          bad("Draft changed; request a new review");
+        if (!draftMatches(t, r)) bad("Draft changed; request a new review");
         if (!attachments.snapshotMatches(app, r))
           bad("Attachments changed; request a new review");
         const decisions = reviewChoices.decisions(
@@ -1483,6 +1515,78 @@ function write(e, isAgent) {
       event(app, r, b.action, b, actor);
       event(app, t, b.action, b, actor, {
         ...d,
+        readiness: t.getString("readiness"),
+        wake_generation: t.getInt("wake_generation"),
+      });
+      result = webhooks.reviewExport(app, r);
+      return;
+    }
+    // review.restore is the Undo of an archive that withdrew a pending review:
+    // one transaction un-archives the task and makes that same review pending
+    // again. Two writes could not do it, because a plain un-archive of a Ready
+    // task wakes its bot (reopened) in between.
+    if (kind === "review" && op === "restore") {
+      only(d, []);
+      const r = get(app, "reviews", b.id);
+      check(r, b);
+      const status = r.getString("status");
+      if (status !== "withdrawn")
+        notRestorable(
+          status === "pending"
+            ? "it is already pending"
+            : "it is decided (" + status + "), not withdrawn",
+        );
+      // Not active(): the task has to be archived.
+      const t = get(app, "tasks", r.getString("task"));
+      if (!t.getBool("archived")) notRestorable("its task is not archived");
+      execution.guardTaskWrite(app, t, b, isAgent);
+      const oldTask = webhooks.state(app, t);
+      // The review's last event is the withdrawal an archive recorded (see
+      // withdraw): a manual withdrawal, a draft edit or an attachment change
+      // has no archived:true, and a restore leaves review.restore here.
+      const last = latest(app, "events", "parent={:parent}", { parent: r.id });
+      const changes = last ? webhooks.json(last, "changes", null) : null;
+      if (
+        !last ||
+        last.getString("action") !== "review.withdraw" ||
+        !changes ||
+        changes.archived !== true
+      )
+        notRestorable("it was not withdrawn by archiving its task");
+      const newest = latest(app, "reviews", "task={:task}", { task: t.id });
+      if (!newest || newest.id !== r.id)
+        notRestorable("its task has a newer review");
+      if (oldTask.review) notRestorable("its task has a pending review");
+      // Archiving leaves a Needs review task In progress, and a decision on
+      // the restored review must still match its snapshot.
+      if (t.getString("status") !== "in_progress")
+        notRestorable(
+          "its task is no longer In progress (" + t.getString("status") + ")",
+        );
+      if (!draftMatches(t, r))
+        notRestorable("the task draft changed after the review was requested");
+      if (!attachments.snapshotMatches(app, r))
+        notRestorable(
+          "the task attachments changed after the review was requested",
+        );
+      r.set("status", "pending");
+      r.set("revision", r.getInt("revision") + 1);
+      app.save(r);
+      if (!isAgent) ownerTouch(t);
+      t.set("archived", false);
+      t.set("archived_at", "");
+      t.set("archived_by", "");
+      t.set("status", "needs_review");
+      t.set("revision", t.getInt("revision") + 1);
+      app.save(t);
+      // The pending review makes the task ineligible, so this never wakes: it
+      // only advances the wake generation, like review.request.
+      webhooks.transition(app, t, oldTask, {});
+      execution.invalidateStale(app, t, b, actor);
+      event(app, r, b.action, b, actor, { status: "pending" });
+      event(app, t, b.action, b, actor, {
+        archived: false,
+        status: "needs_review",
         readiness: t.getString("readiness"),
         wake_generation: t.getInt("wake_generation"),
       });
