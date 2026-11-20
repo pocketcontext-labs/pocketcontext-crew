@@ -26,8 +26,8 @@
   cursor: pointer;
 }
 .crew-sidebar nav a:hover,
-.crew-app button:hover:where(:not(.crew-copy-control)),
-.crew-dialog button:hover:where(:not(.crew-copy-control)) {
+.crew-app button:hover:where(:not(.crew-copy-control, .crew-head-button)),
+.crew-dialog button:hover:where(:not(.crew-copy-control, .crew-head-button)) {
   background: #edf2e9;
 }
 .crew-app button:disabled,
@@ -1521,7 +1521,7 @@ a.crew-logo:hover .product-brand span {
   flex-wrap: wrap;
   gap: 8px;
 }
-.crew-dialog > header h2 {
+.crew-dialog > header:not(.crew-dialog-head) h2 {
   flex: 1 1 auto;
 }
 .crew-copy-link {
@@ -4175,7 +4175,12 @@ a.crew-logo:hover .product-brand span {
     0 1px 2px #1a2c2014,
     0 6px 18px -8px #1a2c2033;
 }
-.crew-dialog > header.crew-dialog-head button.crew-head-button:hover:not(:disabled) {
+@media (hover: hover) {
+  .crew-dialog > header.crew-dialog-head button.crew-head-button:hover:not(:disabled) {
+    background: #e9eee4;
+  }
+}
+.crew-dialog > header.crew-dialog-head .crew-list-nav button.crew-head-button:active:not(:disabled) {
   background: #e9eee4;
 }
 .crew-dialog > header.crew-dialog-head button.crew-head-button:disabled {
@@ -4298,12 +4303,15 @@ a.crew-logo:hover .product-brand span {
 }
 /* Previous/next in the list a dialog was opened from, with "x of y"
    (0.32.0, iOS Mail style): one capsule after the title, on every width.
-   The position reserves the width of its last entry, so the chevrons
-   never shift as the numbers change. */
-.crew-dialog-head .crew-list-nav {
-  display: flex;
-  flex: none;
+   Reserve a separate column for the widest count in this list. When even a
+   zero-width title cannot fit everything, the count wraps at its spaces. */
+.crew-list-nav {
+  display: grid;
+  grid-template-columns: 44px minmax(min-content, max-content) 44px;
   align-items: center;
+}
+.crew-dialog-head .crew-list-nav {
+  flex: 0 1 auto;
   gap: 0;
   padding: 1px;
   border-radius: 999px;
@@ -4320,13 +4328,12 @@ a.crew-logo:hover .product-brand span {
 .crew-list-position {
   display: inline-grid;
   place-items: center;
-  flex: none;
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: #233a28;
+  color: var(--icon-ink);
   text-align: center;
-  white-space: nowrap;
+  line-height: 1.15;
 }
 .crew-list-position::before,
 .crew-list-position > span {
@@ -4354,10 +4361,6 @@ a.crew-logo:hover .product-brand span {
     width: 32px;
     height: 32px;
   }
-  .crew-dialog > header.crew-dialog-head .crew-list-nav button.crew-head-button {
-    width: 28px;
-    height: 30px;
-  }
   .crew-list-position {
     font-size: 13px;
   }
@@ -4370,9 +4373,6 @@ a.crew-logo:hover .product-brand span {
   }
   .crew-dialog-head .crew-trail-nav {
     gap: 2px;
-  }
-  .crew-dialog > header.crew-dialog-head .crew-list-nav button.crew-head-button {
-    width: 26px;
   }
   .crew-list-position {
     font-size: 12px;
@@ -4403,32 +4403,8 @@ a.crew-logo:hover .product-brand span {
   .crew-record-dialog .crew-dialog-head .crew-trail-nav {
     gap: 0;
   }
-  /* Two full touch targets share a grid row. The visible count can use
-     their inner space without intercepting taps on either chevron. */
-  .crew-record-dialog .crew-dialog-head .crew-list-nav {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(44px, 1fr));
-  }
-  .crew-record-dialog .crew-list-nav .crew-head-button:first-child {
-    grid-area: 1 / 1;
-    justify-self: start;
-  }
-  .crew-record-dialog .crew-list-nav .crew-head-button:last-child {
-    grid-area: 1 / 2;
-    justify-self: end;
-  }
   .crew-record-dialog .crew-list-position {
-    grid-area: 1 / 1 / 2 / 3;
-    justify-self: center;
-    margin-inline: 20px;
     font-size: 12px;
-    pointer-events: none;
-  }
-  .crew-record-dialog .crew-list-nav .crew-head-button:first-child .crew-icon {
-    transform: translateX(-9px);
-  }
-  .crew-record-dialog .crew-list-nav .crew-head-button:last-child .crew-icon {
-    transform: translateX(9px);
   }
   .crew-record-dialog .crew-dialog-head h2:lang(it) {
     font-size: 13px;

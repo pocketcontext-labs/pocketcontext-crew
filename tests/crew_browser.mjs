@@ -29,13 +29,22 @@ const edit=()=>dialog().getByRole('tab',{name:'Edit',exact:true}).click();
 const headerOneRow=async where=>{
  const r=await dialog().locator('header.crew-dialog-head').evaluate(h=>{
   const box=h.getBoundingClientRect();const mid=e=>{const b=e.getBoundingClientRect();return b.top+b.height/2;};
-  // Buttons hidden at this width (list previous/next on phones) don't count.
+  // Measure the controls rendered in this header.
   const buttons=[...h.querySelectorAll('button')].filter(b=>b.getClientRects().length);const title=h.querySelector('h2');
-  return {height:box.height,mids:[...buttons,title].map(mid),right:Math.max(...buttons.map(b=>b.getBoundingClientRect().right)),width:innerWidth,
+  const nav=h.querySelector('.crew-list-nav:not(.crew-list-nav-hidden)');
+  let stepperFits=true;
+  if(nav){
+   const [prev,position,next]=[...nav.children].map(el=>el.getBoundingClientRect());
+   stepperFits=prev.width>=44&&prev.height>=44&&next.width>=44&&next.height>=44&&
+    prev.right<=position.left+.5&&position.right<=next.left+.5&&
+    nav.querySelector('.crew-list-position').scrollWidth<=position.width+1;
+  }
+  return {stepperFits,height:box.height,mids:[...buttons,title].map(mid),right:Math.max(...buttons.map(b=>b.getBoundingClientRect().right)),width:innerWidth,
    tall:Math.max(...buttons.map(b=>b.getBoundingClientRect().height)),nowrap:getComputedStyle(title).whiteSpace==='nowrap',labels:buttons.every(b=>!b.textContent.trim()&&b.title===b.getAttribute('aria-label'))};
  });
  assert.ok(Math.max(...r.mids)-Math.min(...r.mids)<=1,`${where}: header controls share one row `+JSON.stringify(r.mids));
  assert.ok(r.height<r.tall*2,`${where}: header height is one row (${r.height} with ${r.tall} px buttons)`);
+ assert.ok(r.stepperFits,`${where}: the full count sits between two separate 44 px targets`);
  assert.ok(r.right<=r.width,`${where}: close stays on screen`);
  assert.ok(r.nowrap&&r.labels,`${where}: an ellipsized title and icon-only named buttons`);
 };

@@ -40,9 +40,7 @@
 /* Previous/next through the Shared list on the focused artifact (0.35.0):
    the dialog header's capsule, at the end of the card header. */
 .crew-artifact .crew-list-nav {
-  display: flex;
   flex: none;
-  align-items: center;
   margin-left: auto;
   padding: 1px;
   border-radius: 999px;
@@ -52,14 +50,17 @@
 .crew-artifact .crew-list-nav button.crew-head-button {
   display: inline-grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #233a28;
+  color: var(--icon-ink);
   cursor: pointer;
+}
+.crew-artifact .crew-list-nav .crew-icon {
+  stroke-width: 2;
 }
 /* Hover only where a pointer hovers: a tap on iOS must not leave it painted. */
 @media (hover: hover) {
