@@ -621,10 +621,10 @@ const de: Record<string, string> = {
     "Schreib ihn hier und speichere. Eine Änderung am Entwurf zieht eine offene Freigabeanfrage dafür zurück.",
   "Request approval": "Freigabe anfragen",
   "What does Request approval do?": "Was bewirkt Freigabe anfragen?",
-  "Puts a snapshot of the exact saved draft in Approvals and moves the task to Needs review. Nothing leaves Crew.":
-    "Legt einen Schnappschuss des genau gespeicherten Entwurfs unter Freigaben ab und setzt die Aufgabe auf Wartet auf Freigabe. Nichts verlässt Crew.",
-  "Save the draft first. If it changes afterwards, request approval again: an earlier approval doesn't carry over.":
-    "Speichere zuerst den Entwurf. Ändert er sich danach, frage die Freigabe erneut an: Eine frühere Freigabe gilt nicht weiter.",
+  "Saves the submitted text and options in Approvals and moves the task to Needs review.":
+    "Speichert den eingereichten Text und die Optionen unter Freigaben und setzt die Aufgabe auf Wartet auf Freigabe.",
+  "Save a draft or add options for the reviewer. If you change the draft later, request approval again.":
+    "Speichere einen Entwurf oder füge Optionen zur Auswahl hinzu. Wenn du den Entwurf später änderst, frage die Freigabe erneut an.",
   "Reason for change": "Grund der Änderung",
   "Why give a reason for change?":
     "Warum einen Grund für die Änderung angeben?",

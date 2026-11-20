@@ -280,10 +280,10 @@ function glossaryEntries() {
       name: t("Request approval"),
       question: t("What does Request approval do?"),
       what: t(
-        "Puts a snapshot of the exact saved draft in Approvals and moves the task to Needs review. Nothing leaves Crew.",
+        "Saves the submitted text and options in Approvals and moves the task to Needs review.",
       ),
       action: t(
-        "Save the draft first. If it changes afterwards, request approval again: an earlier approval doesn't carry over.",
+        "Save a draft or add options for the reviewer. If you change the draft later, request approval again.",
       ),
     },
     reason: {

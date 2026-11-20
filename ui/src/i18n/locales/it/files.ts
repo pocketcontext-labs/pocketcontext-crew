@@ -618,10 +618,10 @@ const it: Record<string, string> = {
     "Scrivila qui e salva. Modificare una bozza ritira l'eventuale approvazione in sospeso.",
   "Request approval": "Richiedi approvazione",
   "What does Request approval do?": "Cosa fa Richiedi approvazione?",
-  "Puts a snapshot of the exact saved draft in Approvals and moves the task to Needs review. Nothing leaves Crew.":
-    "Mette in Approvazioni un'istantanea della bozza salvata esatta e sposta l'attività In revisione. Nulla esce da Crew.",
-  "Save the draft first. If it changes afterwards, request approval again: an earlier approval doesn't carry over.":
-    "Salva prima la bozza. Se cambia in seguito, richiedi di nuovo l'approvazione: un'approvazione precedente non vale più.",
+  "Saves the submitted text and options in Approvals and moves the task to Needs review.":
+    "Salva il testo e le opzioni in Approvazioni e sposta l’attività in revisione.",
+  "Save a draft or add options for the reviewer. If you change the draft later, request approval again.":
+    "Salva una bozza o aggiungi opzioni tra cui scegliere. Se modifichi la bozza in seguito, richiedi di nuovo l’approvazione.",
   "Reason for change": "Motivo della modifica",
   "Why give a reason for change?": "Perché indicare un motivo della modifica?",
   "A short remark kept in this item's history, saying why you changed it.":

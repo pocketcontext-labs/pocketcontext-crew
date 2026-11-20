@@ -193,19 +193,19 @@ changes ask first (staying adds no history entry), and a step never saves or
 decides. A horizontal swipe no longer steps; the file viewer keeps its own swipe
 between files.
 
-A pending review's decision footer is pinned to the bottom and compact (since
-0.32.0, at most a quarter of a 390×844 phone screen): a one-line "Add a note…" field
-that grows upward while focused, then "Approve N selected" (or "Approve draft" for a
-review without options) beside Request changes. The buttons stay put when the note
-opens, when More opens or closes and from one review to the next. The draft and its
-options scroll above the footer.
+The Review draft header shows the task title and the list position. Use browser
+Back and Forward to retrace review history. The row below the title shows the
+status, recipient when supplied, and channel and count when available. The
+explainer can be hidden and reopened from More.
 
-For pick-any reviews (the default), each option is a card with a checkbox and
-a feedback icon, under "Options · pick any" (or "Text · pick any" and
-"Images · pick any" when some options are a single image, which show as tiles with a
-feedback badge). Checking an option, or tapping its feedback icon (also on an option
-left unchecked), opens a one-line "Feedback on …" field under it. Approve needs at
-least one checked option. The reader records every option in `option_decisions` on
+The decision footer keeps the note field, Approve and Request changes on screen
+as you scroll. With options, the cards hold the submitted alternatives. Their
+Copy actions copy the reply text. Reviewer notes appear separately. For text
+options, open the card menu to leave feedback on the option or a specific block.
+
+Pick-any reviews use checkboxes and show “Approve N selected”. Pick-one reviews
+use radios and the Approve button names the selected option. Reviews without
+options show “Approve draft”. The reader records every option in `option_decisions` on
 Approve and on Request changes: a checked option as `approved`, an unchecked one as
 `rejected`, each with its feedback as `note` (empty stays empty); Reject records
 every option as rejected, keeping the feedback. The decided review shows the same
