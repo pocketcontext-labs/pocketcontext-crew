@@ -2150,6 +2150,10 @@ try {
  assert.equal(await dialog().getByRole('button',{name:'Reject',exact:true}).count(),0,'Reject is not on the main screen');
  const pick=dialog().getByRole('checkbox',{name:'A · Out of tokens'});
  await pick.check();
+ assert.ok(await pick.evaluate(el=>{
+  const tick=getComputedStyle(el,'::after');
+  return tick.content!=='none'&&parseFloat(tick.borderRightWidth)>0&&getComputedStyle(el).backgroundImage==='none';
+ }),'the selected checkbox draws a tick without loading a CSP-blocked image');
  await dialog().getByRole('textbox',{name:'Feedback on A · Out of tokens'}).fill('Shorten the hook');
  await optionFeedback('B · One human, many agents');
  await dialog().getByRole('textbox',{name:'Feedback on B · One human, many agents'}).waitFor();
