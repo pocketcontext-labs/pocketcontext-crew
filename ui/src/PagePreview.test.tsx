@@ -66,7 +66,7 @@ describe("PagePreview", () => {
     const more = () =>
       fireEvent.click(screen.getByRole("button", { name: "More actions" }));
     more();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Copy", description: "Copy link" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy link" }));
     expect(writeText).toHaveBeenCalledWith(url);
     expect(await screen.findByRole("status")).toHaveTextContent("Link copied");
     more();

@@ -6,9 +6,9 @@ const base = process.env.CREW_TEST_URL;
 if(!base || !new URL(base).hostname.match(/^(127\.0\.0\.1|localhost)$/)) throw new Error('Synthetic loopback server required');
 const browser = await chromium.launch({headless:true});
 const page = await browser.newPage({viewport:{width:1440,height:1000}});
-// Each ordinary Copy control has the same name. The hidden description
+// Each inline Copy control has the same name. The hidden description
 // identifies which value it copies when several controls share a surface.
-const copyButton=(scope,description,role='button')=>scope.getByRole(role,{name:'Copy',exact:true})
+const copyButton=(scope,description)=>scope.getByRole('button',{name:'Copy',exact:true})
   .filter({has:page.getByText(description,{exact:true})});
 const errors=[],outside=[],writeActions=[];
 let syntheticOwnerAuth="";
@@ -1989,7 +1989,7 @@ try {
   await banner.getByRole('button',{name:'Details'}).click();
   assert.equal(await details.isVisible(),true,'Details reveals tool, session and hash');
   await banner.getByRole('button',{name:'Claim actions'}).click();
-  await copyButton(banner, 'Copy details', 'menuitem').waitFor();
+  await banner.getByRole('menuitem', {name:'Copy details',exact:true}).waitFor();
   await banner.getByRole('menuitem',{name:'Release claim'}).waitFor();
   await snapView(`crew-claim-menu-${width}`);
   await page.keyboard.press('Escape');
@@ -2245,6 +2245,17 @@ try {
  const items=await menu.getByRole('menuitem').evaluateAll(xs=>xs.map(x=>[x.textContent,x.className]));
  assert.ok(['Add note','Copy link'].every(l=>items.some(i=>i[0]===l)),'Add note and Copy link are in More: '+JSON.stringify(items));
  assert.deepEqual(items.at(-1),['Reject','crew-menu-danger'],'Reject is last, in red');
+ const copyRow=await menu.getByRole('menuitem',{name:'Copy link',exact:true}).evaluate(row=>{
+  const text=row.lastElementChild, icon=row.querySelector('svg'), neighbor=row.previousElementSibling;
+  const box=el=>el.getBoundingClientRect();
+  return {label:text.innerText, height:box(row).height, width:box(row).width, neighborWidth:box(neighbor).width,
+   size:[box(icon).width,box(icon).height], ink:getComputedStyle(icon).color, aligned:box(text).left===box(neighbor.lastElementChild).left};
+ });
+ assert.equal(copyRow.label,'Copy link');
+ assert.ok(copyRow.height>=44 && copyRow.width===copyRow.neighborWidth && copyRow.aligned,'Copy shares its neighbors’ full-width row and label alignment');
+ assert.deepEqual(copyRow.size,[24,24]);
+ assert.equal(copyRow.ink,'rgb(47, 58, 47)');
+
  assert.deepEqual(keep(await footer()),keep(rest),'the actions stay put while More is open');
  await snapView('crew-review-menu-390');
  await menu.getByRole('menuitem',{name:'Add note'}).click();
@@ -2480,7 +2491,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await page.waitForFunction(()=>{const d=document.querySelector('.crew-page-preview-frame')?.contentDocument;const i=d?[...d.images]:[];return i.length===1&&i[0].complete&&i[0].naturalWidth>0;});
   assert.equal(await frame.locator('nav.crew-back').isVisible(),false,'no Back to Crew bar inside the preview');
   const box=await sheet.boundingBox();assert.ok(box.width>=width-1&&box.height>=843,'the preview fills the window: '+JSON.stringify(box));
-  await sheet.getByRole('button',{name:'More actions'}).click();await copyButton(page,'Copy link','menuitem').waitFor();await page.getByRole('menuitem',{name:/^Open in (Safari|browser)$/}).waitFor();
+  await sheet.getByRole('button',{name:'More actions'}).click();await page.getByRole('menuitem',{name:'Copy link',exact:true}).waitFor();await page.getByRole('menuitem',{name:/^Open in (Safari|browser)$/}).waitFor();
   await snapView('crew-page-preview-menu-'+width);await page.keyboard.press('Escape');
   await snapView('crew-page-preview-'+width);
   await sheet.getByRole('button',{name:'Back to Shared'}).click();await sheet.waitFor({state:'hidden'});

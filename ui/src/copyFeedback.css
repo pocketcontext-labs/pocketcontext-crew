@@ -22,9 +22,6 @@
   border-radius: 50%;
   line-height: 0;
 }
-.crew-menu-group > button.crew-copy-icon {
-  margin-inline-start: 8px;
-}
 :is(.crew-app, .crew-dialog) button.crew-copy-trigger {
   min-width: 44px;
   min-height: 44px;
@@ -34,16 +31,16 @@
   flex: none;
   color: var(--icon-ink);
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: var(--copy-glyph-size, 20px);
+  height: var(--copy-glyph-size, 20px);
 }
 .crew-copy-glyph[data-state="failed"] {
   color: var(--danger);
 }
 .crew-copy-glyph > svg.crew-icon {
   grid-area: 1 / 1;
-  width: 20px;
-  height: 20px;
+  width: var(--copy-glyph-size, 20px);
+  height: var(--copy-glyph-size, 20px);
   fill: none;
   stroke: currentColor;
   stroke-width: 2;

@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Icon, type IconName } from "./Icon";
 import { copyText } from "./projectAgents";
-import { CopyGlyph, CopyIconButton, useCopyFeedback } from "./CopyFeedback";
+import { CopyGlyph, useCopyFeedback } from "./CopyFeedback";
 import { t } from "./i18n";
 
 export { Icon, type IconName } from "./Icon";
@@ -228,20 +228,7 @@ export function MoreMenu({
         >
           {groups.map((group, g) => (
             <div className="crew-menu-group" role="group" key={g}>
-              {group.map((item) => item.copy ? (
-                <CopyIconButton
-                  key={item.label}
-                  menuItem
-                  description={item.label}
-                  disabled={item.disabled}
-                  state={feedback.state}
-                  onClick={() => {
-                    const { text, onResult } = item.copy;
-                    shut();
-                    void feedback.run(() => copyText(text), (ok) => onResult(ok, text));
-                  }}
-                />
-              ) : (
+              {group.map((item) => (
                 <button
                   key={item.label}
                   type="button"
@@ -251,10 +238,15 @@ export function MoreMenu({
                   className={item.destructive ? "crew-menu-danger" : undefined}
                   onClick={() => {
                     shut();
-                    item.onSelect();
+                    if (item.copy) {
+                      const { text, onResult } = item.copy;
+                      void feedback.run(() => copyText(text), (ok) => onResult(ok, text));
+                    } else {
+                      item.onSelect();
+                    }
                   }}
                 >
-                  <Icon name={item.icon} />
+                  {item.copy ? <CopyGlyph state={feedback.state} /> : <Icon name={item.icon} />}
                   <span>{item.label}</span>
                 </button>
               ))}

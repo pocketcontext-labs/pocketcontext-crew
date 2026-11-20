@@ -277,7 +277,7 @@
   padding: 0;
   border: 0;
 }
-.crew-app .crew-popover-menu button {
+.crew-app dialog.crew-popover-menu button {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -295,7 +295,11 @@
   cursor: pointer;
   touch-action: manipulation;
 }
-.crew-app .crew-popover-menu button:hover:not(:disabled),
+@media (hover: hover) {
+  .crew-app .crew-popover-menu button:hover:not(:disabled) {
+    background: #eef2ea;
+  }
+}
 .crew-app .crew-popover-menu button:focus-visible {
   background: #eef2ea;
   outline: none;
@@ -308,9 +312,14 @@
   cursor: default;
 }
 .crew-popover-icon {
+  --copy-glyph-size: 24px;
   display: inline-grid;
   place-items: center;
-  color: #2d4538;
+  color: var(--icon-ink);
+}
+.crew-popover-icon > svg {
+  width: 24px;
+  height: 24px;
 }
 
 /* Home's + → Shared page: a short form; centred on wide screens. */

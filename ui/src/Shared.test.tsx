@@ -227,7 +227,7 @@ describe("Shared", () => {
     expect(frame).toHaveAttribute("title", "Live page");
     fireEvent.click(screen.getByRole("button", { name: "More actions" }));
     expect(
-      screen.getByRole("menuitem", { name: "Copy", description: "Copy link" }),
+      screen.getByRole("menuitem", { name: "Copy link" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("menuitem", { name: /^Open in (Safari|browser)$/ }),

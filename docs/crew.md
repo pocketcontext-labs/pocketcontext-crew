@@ -894,10 +894,11 @@ fenced code are text. Anything else (other names, other attributes, `[labels]`,
 `:text` and `::leaf` directives) is not interpreted and shows as its source text.
 The server parser is `pb_hooks/crew_markup.js`; it and the reader share the fixtures
 in `tests/fixtures/review_markup.json`. The same blocks render in note bodies,
-task drafts and comments. Each clipboard button shows the same round 44 px Copy
-icon and briefly confirms success with a check. Its accessible description
-identifies the text or link it copies. The coding-session and instruction-rewrite
-actions keep their workflow labels.
+task drafts and comments. Inline Copy buttons show a round 44 px icon. Each has an
+accessible description identifying the text or link it copies. In a menu, a
+Copy action shows the icon beside its label. After copying, the menu closes
+and its trigger briefly shows the same confirmation check as an inline button.
+Coding-session and instruction-rewrite actions carry their workflow labels.
 
 The task description holds the owner's request, sources and constraints. Save
 paste-ready work in the task draft, alternatives in its draft options and progress

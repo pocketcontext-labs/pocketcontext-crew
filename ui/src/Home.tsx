@@ -420,10 +420,10 @@ function CodingAgentRow(props: AgentRowProps) {
             ? t("Preparing the prompt…")
             : t("Copy prompt for coding agent"),
           disabled: session.loading,
-          icon: <CopyGlyph state="" />,
+          icon: <CopyGlyph state={menuCopy.state} />,
           onSelect: () => void menuCopy.run(session.start),
         },
-        { label: t("How coding sessions work"), onSelect: session.openGuide },
+        { label: t("How coding sessions work"), icon: icons.notes, onSelect: session.openGuide },
       ]}
     >
       {session.guide}
@@ -515,8 +515,8 @@ function AgentRowView({
           anchor={menu}
           onClose={() => setMenu(null)}
           items={[
-            { label: t("Open agent"), onSelect: open },
-            { label: t("Show tasks"), onSelect: showTasks },
+            { label: t("Open agent"), icon: icons.agent, onSelect: open },
+            { label: t("Show tasks"), icon: icons.tasks, onSelect: showTasks },
             ...extra,
           ]}
         />

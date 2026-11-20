@@ -4247,7 +4247,8 @@ a.crew-logo:hover .product-brand span {
   margin: 0 -16px;
   width: calc(100% + 32px);
 }
-.crew-dialog .crew-menu button[role="menuitem"]:where(:not(.crew-copy-control)) {
+.crew-dialog .crew-menu button[role="menuitem"] {
+  --copy-glyph-size: 24px;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -4263,8 +4264,15 @@ a.crew-logo:hover .product-brand span {
   white-space: normal;
   cursor: pointer;
 }
-.crew-dialog .crew-menu button[role="menuitem"]:hover:not(:disabled, .crew-copy-control),
-.crew-dialog .crew-menu button[role="menuitem"]:focus-visible:where(:not(.crew-copy-control)) {
+@media (hover: hover) {
+  .crew-dialog .crew-menu button[role="menuitem"]:hover:not(:disabled) {
+    background: #eef2ea;
+  }
+}
+.crew-dialog .crew-menu button[role="menuitem"]:active:not(:disabled) {
+  background: #e1e9db;
+}
+.crew-dialog .crew-menu button[role="menuitem"]:focus-visible {
   background: #eef2ea;
   outline: none;
 }
@@ -4275,8 +4283,13 @@ a.crew-logo:hover .product-brand span {
 .crew-dialog .crew-menu button.crew-menu-danger {
   color: #b3261e;
 }
-.crew-menu .crew-icon {
+.crew-menu button > .crew-icon {
   flex: none;
+  width: 24px;
+  height: 24px;
+}
+.crew-menu button:where(:not(:disabled, .crew-menu-danger)) > .crew-icon {
+  color: var(--icon-ink);
 }
 @media (max-width: 680px) {
   .crew-dialog > header.crew-dialog-head {

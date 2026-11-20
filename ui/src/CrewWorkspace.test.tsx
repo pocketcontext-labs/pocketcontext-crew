@@ -1833,7 +1833,7 @@ async function copyFromMenu(dialog: ReturnType<typeof within>) {
   const more = dialog.getByRole("button", { name: "More actions" });
   await waitFor(() => expect(more).toBeEnabled());
   fireEvent.click(more);
-  fireEvent.click(dialog.getByRole("menuitem", { name: "Copy", description: "Copy link" }));
+  fireEvent.click(dialog.getByRole("menuitem", { name: "Copy link" }));
 }
 it("copies the server's absolute url when present", async () => {
   const writeText = mockClipboard(async () => {});

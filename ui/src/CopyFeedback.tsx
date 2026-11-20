@@ -59,21 +59,19 @@ export function CopyGlyph({
   );
 }
 
-/** Menus share this button, but own the feedback so it can outlive the open menu. */
-export function CopyIconButton({
+/** Inline copy controls describe their content to assistive technology. */
+function CopyIconButton({
   description,
   state,
   onClick,
   className = "",
   disabled,
-  menuItem = false,
 }: {
   description: string;
   state: CopyState;
   onClick: () => void;
   className?: string;
   disabled?: boolean;
-  menuItem?: boolean;
 }) {
   const descriptionId = useId();
   const name = t("Copy");
@@ -81,8 +79,6 @@ export function CopyIconButton({
   return (
     <button
       type="button"
-      role={menuItem ? "menuitem" : undefined}
-      tabIndex={menuItem ? -1 : undefined}
       className={`crew-copy-control crew-copy-icon ${className}`.trim()}
       data-state={state || undefined}
       aria-label={name}
