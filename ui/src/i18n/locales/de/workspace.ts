@@ -6,6 +6,7 @@ const de: Record<string, string> = {
   Home: "Start",
   Tasks: "Aufgaben",
   Notes: "Notizen",
+  Approval: "Freigabe",
   Approvals: "Freigaben",
   Shared: "Geteilt",
   Agents: "Agenten",

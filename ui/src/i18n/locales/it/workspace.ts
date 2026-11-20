@@ -6,6 +6,7 @@ const it: Record<string, string> = {
   Home: "Home",
   Tasks: "Attività",
   Notes: "Note",
+  Approval: "Approvazione",
   Approvals: "Approvazioni",
   Shared: "Condivise",
   Agents: "Agenti",

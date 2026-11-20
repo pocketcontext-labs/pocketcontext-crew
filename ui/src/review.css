@@ -46,13 +46,8 @@
 }
 /* Pick any (0.32.0, the approved mockup): checkbox cards with a feedback
    icon, one-line feedback under the card, image options as tiles. */
-.crew-pick-heading {
-  margin: 1rem 0 0.5rem;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #6a7d63;
+.crew-review-options .crew-pick-heading {
+  margin-bottom: 7px;
 }
 .crew-pick-head {
   display: flex;
@@ -309,14 +304,15 @@
   margin: -14px -14px 8px 12px;
 }
 
-/* Review navigation has one list capsule and room for full-size targets. */
-.crew-record-dialog.crew-dialog:has(.crew-review-body) > header.crew-dialog-head button.crew-head-button {
-  width: 44px;
-  height: 44px;
-  color: var(--icon-ink);
+/* Leave the full task title and its label together under the metadata. */
+.crew-review-body > .crew-note-bucket {
+  text-transform: uppercase;
 }
-.crew-dialog:has(.crew-review-body) > header .crew-head-button .crew-icon {
-  stroke-width: 2;
+.crew-review-body > .crew-review-meta {
+  margin-bottom: 12px;
+}
+.crew-review-content .crew-md-preview {
+  min-height: 0;
 }
 .crew-dialog .crew-review-meta {
   flex-direction: row;
@@ -376,9 +372,6 @@
 @media (max-width: 680px) {
   .crew-option-channel {
     display: none;
-  }
-  .crew-dialog:has(.crew-review-body) .crew-list-nav {
-    order: -1;
   }
 }
 

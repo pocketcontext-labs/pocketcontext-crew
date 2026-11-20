@@ -2089,9 +2089,10 @@ try {
  await dialog().locator('.crew-review-bar').waitFor();
  await headerOneRow('stepping review 390');
  const header=dialog().locator('header.crew-dialog-head');
- assert.equal(await header.locator('.crew-trail-nav').count(),0,'reviews use the browser for history navigation');
- assert.deepEqual(await header.evaluate(h=>[...h.children].map(c=>['crew-list-nav','crew-head-pill','crew-head-close'].find(k=>c.classList.contains(k))||c.tagName)),['H2','crew-list-nav','crew-head-pill','crew-head-close'],'the compact header shows the task title, list controls, More and close');
+ assert.deepEqual(await header.evaluate(h=>[...h.children].map(c=>['crew-trail-nav','crew-list-nav','crew-head-pill','crew-head-close'].find(k=>c.classList.contains(k))||c.tagName)),['crew-trail-nav','H2','crew-list-nav','crew-head-pill','crew-head-close'],'approval uses the same header as a note');
+ assert.equal(await header.locator('h2').innerText(),'Approval');
  assert.equal(await header.locator('.crew-head-pill button').count(),1,'only More sits between the list capsule and close');
+ assert.ok(await header.locator('button').evaluateAll(bs=>bs.every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44;})),'all approval header buttons have 44 px targets');
  const position=()=>header.locator('.crew-list-position').innerText();
  const next=dialog().getByRole('button',{name:'Next review (J)'}),prev=dialog().getByRole('button',{name:'Previous review (K)'});
  assert.equal(await position(),`1 of ${n}`);
@@ -2108,10 +2109,11 @@ try {
  assert.equal(hash(),at,'a swipe does not step');
  await touch.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch.detach();}
  // Next through the whole list: one history entry each, "x of y", fixed chrome.
- const seen=[hash()];const titles=[await header.locator('h2').innerText()];
+ const bodyTitle=dialog().locator('.crew-read-title');
+ const seen=[hash()];const titles=[await bodyTitle.innerText()];
  for(let i=1;i<n;i++){
   await next.click();await page.waitForFunction(h=>location.hash!==h,seen.at(-1));
-  seen.push(hash());titles.push(await header.locator('h2').innerText());
+  seen.push(hash());titles.push(await bodyTitle.innerText());
   assert.equal(await position(),`${i+1} of ${n}`);
   assert.deepEqual(await chrome(),chromeAt,'back/forward, the list capsule, More and close stay put');
  }
@@ -2128,6 +2130,10 @@ try {
   assert.equal(await page.locator('dialog[open]').count(),1,'Back keeps the dialog open on the previous item');
   assert.equal(await position(),`${n-1} of ${n}`);
   await page.goForward();await page.waitForFunction(h=>location.hash===h,seen.at(-1));
+  await header.getByRole('button',{name:'Back',exact:true}).click();
+  await page.waitForFunction(h=>location.hash===h,seen.at(-2));
+  await header.getByRole('button',{name:'Forward',exact:true}).click();
+  await page.waitForFunction(h=>location.hash===h,seen.at(-1));
  }
  // To the review with options, with the list buttons.
  const firstAt=titles.indexOf('Synthetic step first');assert.ok(firstAt>=0,'the options review was shown');

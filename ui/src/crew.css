@@ -1669,7 +1669,9 @@ a.crew-logo:hover .product-brand span {
   margin-bottom: 7px;
 }
 .crew-md-label label,
-.crew-md-label .crew-md-name {
+.crew-md-label .crew-md-name,
+.crew-pick-heading {
+  margin: 0;
   font-size: 13px;
   font-weight: 650;
 }
@@ -4299,7 +4301,7 @@ a.crew-logo:hover .product-brand span {
 }
 /* Previous/next in the list a dialog was opened from, with "x of y"
    (0.32.0, iOS Mail style): one capsule after the title, on every width.
-   The position has a fixed width per list (set inline), so the chevrons
+   The position reserves the width of its last entry, so the chevrons
    never shift as the numbers change. */
 .crew-dialog-head .crew-list-nav {
   display: flex;
@@ -4319,6 +4321,8 @@ a.crew-logo:hover .product-brand span {
   visibility: hidden;
 }
 .crew-list-position {
+  display: inline-grid;
+  place-items: center;
   flex: none;
   font-size: 14px;
   font-weight: 600;
@@ -4326,6 +4330,14 @@ a.crew-logo:hover .product-brand span {
   color: #233a28;
   text-align: center;
   white-space: nowrap;
+}
+.crew-list-position::before,
+.crew-list-position > span {
+  grid-area: 1 / 1;
+}
+.crew-list-position::before {
+  content: attr(data-reserve);
+  visibility: hidden;
 }
 /* Phones: slightly smaller circles so back/forward, the title, the list
    capsule, More and close stay on one row at 320 px and up. */
@@ -4367,6 +4379,56 @@ a.crew-logo:hover .product-brand span {
   }
   .crew-list-position {
     font-size: 12px;
+  }
+}
+/* Record details share the same targets, even as a link changes record kind. */
+.crew-dialog.crew-record-dialog > header.crew-dialog-head button.crew-head-button {
+  width: 44px;
+  height: 44px;
+}
+.crew-record-dialog > header.crew-dialog-head .crew-head-button:not(:disabled) {
+  color: var(--icon-ink);
+}
+.crew-record-dialog > header .crew-head-button .crew-icon {
+  stroke-width: 2;
+}
+@media (max-width: 520px) {
+  .crew-record-dialog > header.crew-dialog-head {
+    gap: 1px;
+    padding-inline: 3px;
+  }
+  .crew-record-dialog .crew-dialog-head .crew-trail-nav {
+    gap: 0;
+  }
+  /* Two full touch targets share a grid row. The visible count can use
+     their inner space without intercepting taps on either chevron. */
+  .crew-record-dialog .crew-dialog-head .crew-list-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(44px, 1fr));
+  }
+  .crew-record-dialog .crew-list-nav .crew-head-button:first-child {
+    grid-area: 1 / 1;
+    justify-self: start;
+  }
+  .crew-record-dialog .crew-list-nav .crew-head-button:last-child {
+    grid-area: 1 / 2;
+    justify-self: end;
+  }
+  .crew-record-dialog .crew-list-position {
+    grid-area: 1 / 1 / 2 / 3;
+    justify-self: center;
+    margin-inline: 20px;
+    font-size: 12px;
+    pointer-events: none;
+  }
+  .crew-record-dialog .crew-list-nav .crew-head-button:first-child .crew-icon {
+    transform: translateX(-9px);
+  }
+  .crew-record-dialog .crew-list-nav .crew-head-button:last-child .crew-icon {
+    transform: translateX(9px);
+  }
+  .crew-record-dialog .crew-dialog-head h2:lang(it) {
+    font-size: 13px;
   }
 }
 /* Stepping feedback on the body only; the header never moves. */

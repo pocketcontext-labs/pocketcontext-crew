@@ -370,13 +370,15 @@ export function ListNavCluster({
   /** Keeps the slot only: invisible, unfocusable and out of the accessibility tree. */
   hidden?: boolean;
 }) {
-  const digits = String(Math.max(count, 1)).length;
+  // Tabular numerals keep every position as wide as the last one in this locale.
+  const last = Math.max(count, 1);
+  const widestPosition = t("{i} of {count}", { i: last, count: last });
   const texts = listNavTexts(noun, index + 1, count);
   if (hidden)
     return (
       <div className="crew-list-nav crew-list-nav-hidden" aria-hidden="true">
         <HeadButton icon="up" label="" disabled />
-        <span className="crew-list-position" style={{ width: `${digits * 2 + 3}ch` }} />
+        <span className="crew-list-position" data-reserve={widestPosition} />
         <HeadButton icon="down" label="" disabled />
       </div>
     );
@@ -391,9 +393,9 @@ export function ListNavCluster({
       <span
         className="crew-list-position"
         aria-hidden="true"
-        style={{ width: `${digits * 2 + 3}ch` }}
+        data-reserve={widestPosition}
       >
-        {t("{i} of {count}", { i: index + 1, count })}
+        <span>{t("{i} of {count}", { i: index + 1, count })}</span>
       </span>
       <HeadButton
         icon="down"

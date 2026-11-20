@@ -502,8 +502,11 @@ describe("review links (#/approvals/<id>)", () => {
     history.replaceState(null, "", "/#/approvals/review000000001");
     render(<CrewWorkspace />);
     const dialog = within(await screen.findByRole("dialog"));
-    expect(dialog.getByRole("heading", { name: "Launch post" })).toBeTruthy();
-    expect(dialog.queryByRole("group", { name: "Link history" })).toBeNull();
+    expect(dialog.getByRole("heading", { name: "Approval", level: 2 })).toBeVisible();
+    expect(dialog.getByRole("group", { name: "Link history" })).toBeVisible();
+    expect(dialog.getByText("Approvals", { exact: true })).toBeVisible();
+    expect(dialog.getByRole("heading", { name: "Launch post", level: 3 })).toBeVisible();
+    expect(dialog.queryByRole("tablist")).toBeNull();
     for (const name of ["Approve draft", "Request changes"])
       expect(dialog.getByRole("button", { name })).toBeEnabled();
     // Reject is a secondary action: last in the More menu, in red (0.32.0).

@@ -46,6 +46,7 @@ import { itemPath, reviewHash } from "./itemLink";
 import "./review.css";
 import AutoTextarea from "./AutoTextarea";
 import PlainRefs from "./PlainRefs";
+import { ReadTitle, ReadField } from "./ReadFields";
 import { locale, t } from "./i18n";
 import { followTrail } from "./trail";
 
@@ -144,11 +145,12 @@ export function ReviewContent({
             </div>
           )}
           {notes.length > 0 && (
-            <aside className="crew-block-note" aria-label={t("Note for you")}>
-              <h3 className="crew-block-note-label">{t("Note for you")}</h3>
-              {notes.map((note, i) => (
-                <Prose key={i}>{note}</Prose>
-              ))}
+            <aside aria-label={t("Note for you")}>
+              <ReadField label={t("Note for you")}>
+                {notes.map((note, i) => (
+                  <Prose key={i}>{note}</Prose>
+                ))}
+              </ReadField>
             </aside>
           )}
           {children}
@@ -729,6 +731,7 @@ export function ReviewDecision({
   }, [setMenu, row, task, pending, busy]);
   return (
     <div className="crew-dialog-body crew-review-body">
+      <span className="crew-note-bucket">{t("Approvals")}</span>
       <div className="crew-review-meta">
         <span className={pending ? "crew-human" : "crew-pill"}>
           {reviewStatusText(val(row, "status"))}
@@ -747,6 +750,7 @@ export function ReviewDecision({
           </span>
         )}
       </div>
+      {val(task, "title") && <ReadTitle title={val(task, "title")} />}
       {(showHelp ?? autoHelp) && (
         <aside className="crew-review-help" ref={helpPanel} tabIndex={-1}>
           <p>

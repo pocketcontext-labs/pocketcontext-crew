@@ -43,6 +43,7 @@ import { taskBrief } from "./reviewMarkup";
 import { ExcerptContent } from "./ExcerptContent";
 import { ReviewChoices, ReviewContent, ReviewDecision } from "./Review";
 import MarkdownField from "./MarkdownField";
+import { ReadTitle, ReadField } from "./ReadFields";
 import TaskDraft, { draftFields, makeEditorOptions, savedOptions, updateOption, removeOption, type WorkingDraft } from "./TaskDraft";
 import { decisionSummary, objects, reviewOptions } from "./reviews";
 import { strandedWakes } from "./wakes";
@@ -3137,7 +3138,7 @@ export default function CrewWorkspace() {
       {dialog && (
         <Modal
           record={!!dialog.row}
-          nav={dialog.kind === "review" ? false : dialog.row ? <TrailNav /> : <NavCluster />}
+          nav={dialog.row ? <TrailNav /> : <NavCluster />}
           listNav={
             dialog.row
               ? {
@@ -3153,7 +3154,7 @@ export default function CrewWorkspace() {
           }
           title={
             dialog.kind === "review"
-              ? val([...data.tasks, ...archived.tasks].find(task => task.id === val(dialog.row, "task")), "title") || t("Review draft")
+              ? t("Approval")
               : archiveNotice
                 ? dialog.kind === "note"
                   ? t("Archived note")
@@ -3947,20 +3948,10 @@ function Editor({
               <span className="crew-note-bucket">{val(buckets, "name")}</span>
             )}
             {/* Same labels and boxes as Edit, so switching views keeps everything in place. */}
-            <div className="crew-field">
-              <span>{t("Title")}</span>
-              <h3 className="crew-read-title">{title}</h3>
-            </div>
-            <div className="crew-md-field">
-              <div className="crew-md-label">
-                <span className="crew-md-name">{t("Note")}</span>
-              </div>
-              <div className="crew-md-box">
-                <div className="crew-md-preview">
-                  {body.trim() ? <Prose>{body}</Prose> : <p>{t("Nothing written yet.")}</p>}
-                </div>
-              </div>
-            </div>
+            <ReadTitle title={title} />
+            <ReadField label={t("Note")}>
+              {body.trim() ? <Prose>{body}</Prose> : <p>{t("Nothing written yet.")}</p>}
+            </ReadField>
             <RelatedItems
               data={data}
               currentId={row.id}
