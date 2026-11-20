@@ -66,7 +66,8 @@ function draftChanges(task, input) {
       const mirror = before.find((choice) => choice.body === draft);
       if (mirror) {
         const replacement = after.find((choice) => choice.key === mirror.key);
-        changes.draft = replacement ? replacement.body : "";
+        if (replacement) changes.draft = replacement.body;
+        else if (!after.some((choice) => choice.body === draft)) changes.draft = "";
       }
     }
   }

@@ -46,6 +46,11 @@ func TestTaskDraftOptionsSnapshotAndResubmission(t *testing.T) {
 	if task["status"] != "in_progress" || !reflect.DeepEqual(task["draft_options"], resubmitted["options"]) {
 		t.Fatal("recipient edit did not withdraw and retain options", task)
 	}
+	opts[0]["key"] = "renamed"
+	task = crewWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"draft_options": opts}, 200)
+	if task["draft"] != "Edited main version" {
+		t.Fatal("renaming the option discarded the mirrored draft", task)
+	}
 	task = crewWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"draft_options": opts[1:]}, 200)
 	if task["draft"] != "" {
 		t.Fatal("removed option still visible in standalone draft", task)
