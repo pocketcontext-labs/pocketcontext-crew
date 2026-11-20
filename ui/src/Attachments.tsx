@@ -1346,6 +1346,7 @@ const eventLabels: Record<string, string> = {
   "review.request": "Review requested",
   "review.decide": "Review decided",
   "review.withdraw": "Review withdrawn",
+  "review.restore": "Review restored",
   "agent.create": "Created",
   "agent.ensure": "Created",
   "agent.update": "Updated",

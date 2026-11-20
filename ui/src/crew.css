@@ -1169,6 +1169,158 @@ a.crew-logo:hover .product-brand span {
     transition: none;
   }
 }
+/* The action toast (0.40.0, the approved mockup): a compact dark pill at the
+   bottom centre, "Task archived · Undo". Over the page it clears the phone's
+   tab bar; in a dialog it hangs just above the review footer, so it never
+   covers Approve and Request changes. */
+.crew-undo-toast {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: min(440px, calc(100vw - 32px));
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 2px 2px 2px 20px;
+  border-radius: 24px;
+  background: #1f2d24;
+  color: #f4f6f0;
+  box-shadow: 0 10px 30px rgb(14 32 30 / 0.3);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  animation: crew-undo-toast-in 160ms ease-out;
+  transition: opacity 200ms ease;
+}
+.crew-phone .crew-undo-toast {
+  bottom: calc(var(--crew-tabbar-h) + 12px);
+}
+.crew-undo-toast-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 8px 0;
+  overflow-wrap: anywhere;
+}
+/* Without an action the text keeps clear of the close button. */
+.crew-undo-toast-text:has(+ .crew-undo-toast-close) {
+  padding-right: 8px;
+}
+.crew-undo-toast-dot {
+  flex: none;
+  margin-left: 12px;
+  color: #93a595;
+}
+/* 44 px targets. These rules outrank the generic button hover, so a tap on a
+   touch screen leaves no hover fill; hover applies only where a pointer hovers. */
+.crew-app .crew-undo-toast button.crew-undo-toast-action,
+.crew-app .crew-undo-toast button.crew-undo-toast-close {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  color: #f3e4b0;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.crew-app .crew-undo-toast button.crew-undo-toast-close {
+  padding: 0;
+  color: #b9c6b8;
+  font-size: 20px;
+  font-weight: 400;
+}
+@media (hover: hover) {
+  .crew-app .crew-undo-toast button.crew-undo-toast-action:hover:not(:disabled),
+  .crew-app .crew-undo-toast button.crew-undo-toast-close:hover {
+    background: rgb(255 255 255 / 0.12);
+  }
+}
+.crew-app .crew-undo-toast button.crew-undo-toast-action:active:not(:disabled),
+.crew-app .crew-undo-toast button.crew-undo-toast-close:active {
+  background: rgb(255 255 255 / 0.2);
+}
+.crew-app .crew-undo-toast button.crew-undo-toast-action:focus-visible,
+.crew-app .crew-undo-toast button.crew-undo-toast-close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -4px;
+}
+.crew-app .crew-undo-toast button.crew-undo-toast-action:disabled {
+  cursor: default;
+}
+/* A failure: the same pill in the alert colours. */
+.crew-undo-toast.crew-undo-toast-alert {
+  background: #fff6f3;
+  color: #7a2e22;
+  box-shadow:
+    0 0 0 1px #e8c8bd,
+    0 10px 30px rgb(14 32 30 / 0.18);
+}
+.crew-app .crew-undo-toast-alert button.crew-undo-toast-action,
+.crew-app .crew-undo-toast-alert button.crew-undo-toast-close {
+  color: #7a2e22;
+}
+@media (hover: hover) {
+  .crew-app .crew-undo-toast-alert button.crew-undo-toast-action:hover:not(:disabled),
+  .crew-app .crew-undo-toast-alert button.crew-undo-toast-close:hover {
+    background: rgb(145 73 57 / 0.12);
+  }
+}
+.crew-app .crew-undo-toast-alert button.crew-undo-toast-action:active:not(:disabled),
+.crew-app .crew-undo-toast-alert button.crew-undo-toast-close:active {
+  background: rgb(145 73 57 / 0.2);
+}
+@keyframes crew-undo-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+.crew-undo-toast-leaving {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .crew-undo-toast {
+    animation: none;
+    transition: none;
+  }
+}
+/* In a dialog the toast is the dialog's last child, because everything outside
+   an open modal dialog is inert: a zero-height slot pinned to the dialog's
+   bottom edge (above the review footer, which is ordered after it), with the
+   pill hanging over the content above. */
+.crew-dialog > .crew-dialog-toast {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  order: 1;
+  flex: none;
+  height: 0;
+}
+.crew-dialog > .crew-review-bar {
+  order: 2;
+}
+.crew-dialog > .crew-dialog-toast > .crew-undo-toast {
+  position: absolute;
+  bottom: 12px;
+}
+/* An editor pins its Save bar inside the body: the pill stays above it. */
+.crew-dialog:has(> .crew-dialog-body .crew-save-bar) > .crew-dialog-toast > .crew-undo-toast {
+  bottom: 84px;
+}
+/* A list step slides the dialog's content, not the toast. */
+.crew-dialog[data-swipe] > .crew-dialog-toast {
+  animation: none;
+}
 /* Long lines and code blocks scroll inside their own box, not the dialog. */
 .crew-session-dialog > * {
   min-width: 0;

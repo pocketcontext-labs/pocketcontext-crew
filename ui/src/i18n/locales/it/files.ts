@@ -823,6 +823,7 @@ const it: Record<string, string> = {
   "Review requested": "Approvazione richiesta",
   "Review decided": "Approvazione decisa",
   "Review withdrawn": "Approvazione ritirata",
+  "Review restored": "Approvazione ripristinata",
   "Responsibility changed": "Responsabilità cambiata",
   "Draft created": "Bozza creata",
   "Draft updated": "Bozza aggiornata",

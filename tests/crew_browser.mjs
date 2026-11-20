@@ -2380,6 +2380,258 @@ try {
   await dialog().getByRole('menuitem',{name:'Reject'}).click();await saved();
  }
  }
+ // Archive task from the Approval ⋯ menu (0.40.0): a normal row under Open
+ // task archives the task and withdraws its pending review in one write, with
+ // no confirmation. The detail moves to the next approval (from the last one,
+ // back to the list) and a toast offers Undo for about five seconds, which
+ // makes the same review pending again in its old place. A failed write
+ // changes nothing. Nothing of this section stays pending or archived.
+ {
+ const read=async body=>(await (await page.request.post(base+'/api/crew/read',{headers:{Authorization:syntheticOwnerAuth},data:body})).json()).items;
+ // The Approvals page lists the newest first, so the third is created first.
+ const plans={};
+ for(const name of ['three','two','one']){
+  const title='Retired plan '+name;
+  const task=await boardWrite('task.create',{title,draft:`Draft of retired plan ${name}.`});
+  const review=await boardWrite('review.request',{},task.id,task.revision);
+  plans[name]={title,task,review,link:'#/approvals/'+review.id};
+ }
+ const {one,two,three}=plans;
+ const hash=()=>page.evaluate(()=>location.hash);
+ const header=dialog().locator('header.crew-dialog-head');
+ const position=()=>header.locator('.crew-list-position').innerText();
+ const chrome=()=>header.evaluate(h=>['.crew-list-nav','.crew-head-pill','.crew-head-close'].map(s=>{const b=h.querySelector(s).getBoundingClientRect();return [b.x,b.y,b.width,b.height].map(Math.round);}));
+ const cards=()=>page.locator('.crew-review-card').evaluateAll(cs=>cs.map(c=>c.getAttribute('aria-label')));
+ const shows=title=>dialog().getByRole('heading',{name:title,exact:true}).waitFor();
+ const toast=page.locator('.crew-undo-toast');
+ const settle=()=>toast.evaluate(t=>Promise.all(t.getAnimations().map(a=>a.finished)).then(()=>null));
+ const pushes=()=>page.evaluate(()=>window.__pushes);
+ // The list, freshly loaded and at rest, with history pushes counted.
+ const showList=async()=>{
+  await page.goto(base+'/#/approvals');await page.reload();
+  await page.locator('.crew-review-card').first().waitFor();await page.waitForLoadState('networkidle');
+  await page.evaluate(()=>{window.__pushes=0;const push=history.pushState.bind(history);history.pushState=(...a)=>{window.__pushes++;return push(...a);};});
+ };
+ const openMenu=async()=>{await dialog().getByRole('button',{name:'More actions'}).click();const menu=dialog().getByRole('menu',{name:'More actions'});await menu.waitFor();return menu;};
+ const archiveTask=async()=>{await (await openMenu()).getByRole('menuitem',{name:'Archive task',exact:true}).click();};
+ // The toast as shown: where it is, what covers it and what it would cover.
+ const toastBox=()=>toast.evaluate(t=>{
+  const box=e=>{const b=e.getBoundingClientRect();return {x:b.x,y:b.y,right:b.right,bottom:b.bottom,width:b.width,height:b.height};};
+  const onTop=e=>{const b=e.getBoundingClientRect();const at=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return at===e||e.contains(at);};
+  const open=t.closest('dialog[open]'),bar=open?.querySelector('.crew-review-bar'),tabs=document.querySelector('nav.crew-tabbar');
+  const undo=t.querySelector('.crew-undo-toast-action'),x=t.querySelector('.crew-undo-toast-close'),cs=getComputedStyle(t);
+  return {role:t.getAttribute('role'),text:t.innerText.replace(/\s+/g,' ').trim(),box:box(t),inDialog:!!open,dialog:open&&box(open),bar:bar&&box(bar),
+   actions:bar?[...bar.querySelectorAll('button')].map(b=>[b.textContent,box(b)]):[],tabs:tabs&&box(tabs),undo:undo&&box(undo),close:box(x),
+   onTop:onTop(x)&&(!undo||onTop(undo)),inert:!!t.closest('[inert]'),fill:cs.backgroundColor,radius:parseFloat(cs.borderTopLeftRadius),width:innerWidth,height:innerHeight};
+ });
+ const apart=(a,b)=>a.right<=b.x||b.right<=a.x||a.bottom<=b.y||b.bottom<=a.y;
+ const checkToast=(g,where)=>{
+  assert.ok(g.box.x>=0&&g.box.right<=g.width&&g.box.y>=0&&g.box.bottom<=g.height,`${where}: the toast is inside the viewport `+JSON.stringify(g.box));
+  assert.ok(g.onTop&&!g.inert,`${where}: the toast is on top and can be clicked`);
+  assert.ok(g.close.width>=44&&g.close.height>=44&&(!g.undo||(g.undo.width>=44&&g.undo.height>=44)),`${where}: 44 px targets in the toast `+JSON.stringify([g.undo,g.close]));
+  assert.ok(g.box.height<=64&&g.radius>=20,`${where}: a compact pill `+JSON.stringify([g.box.height,g.radius]));
+  const frame=g.inDialog?g.dialog:{x:0,width:g.width};
+  assert.ok(Math.abs(g.box.x+g.box.width/2-(frame.x+frame.width/2))<=1,`${where}: the toast is centred`);
+  if(g.inDialog){
+   assert.ok(g.box.bottom<=g.bar.y,`${where}: the toast sits above the review footer `+JSON.stringify([g.box,g.bar]));
+   assert.equal(g.actions.length,2,`${where}: Approve and Request changes are in the footer`);
+   for(const [name,box] of g.actions) assert.ok(apart(g.box,box),`${where}: the toast does not cover ${name}`);
+  }else if(g.tabs) assert.ok(g.box.bottom<=g.tabs.y,`${where}: the toast sits above the tab bar `+JSON.stringify([g.box,g.tabs]));
+ };
+ // Undo makes the same review pending again, at its own address and old place.
+ const undone=async(plan,place)=>{
+  const before=writeActions.length;
+  await toast.getByRole('button',{name:'Undo',exact:true}).click();
+  await shows(plan.title);await toast.waitFor({state:'hidden'});
+  assert.deepEqual(writeActions.slice(before),['review.restore'],'Undo is one write');
+  assert.equal(await hash(),plan.link,'the restored approval is at its own address');
+  assert.equal(await position(),place,'the restored approval is back in its place');
+  assert.equal(await dialog().locator('.crew-review-meta .crew-human').innerText(),'pending');
+  for(const name of ['Approve draft','Request changes']) assert.equal(await dialog().getByRole('button',{name,exact:true}).isEnabled(),true,name+' is offered again');
+ };
+ let confirms=0;const noConfirm=d=>{confirms++;void d.dismiss();};
+ page.on('dialog',noConfirm);
+ for(const [width,height] of [[390,844],[1440,1000]]){
+  await page.setViewportSize({width,height});
+  await showList();
+  assert.deepEqual(await cards(),[one,two,three].map(p=>'Review draft: '+p.title),'the three approvals of this section are the ones pending');
+  await page.getByRole('button',{name:'Review draft: '+two.title,exact:true}).click();
+  await dialog().locator('.crew-review-bar').waitFor();await shows(two.title);
+  assert.equal(await position(),'2 of 3');
+  const chromeAt=await chrome(),entry=await page.evaluate(()=>history.state);
+  assert.deepEqual(entry,{crewList:1});
+  // The menu: Archive task directly under Open task, a normal row, not red.
+  const menu=await openMenu();
+  await page.mouse.move(2,2);
+  const rows=await menu.getByRole('menuitem').evaluateAll(xs=>xs.map(x=>{
+   const icon=x.querySelector('svg'),label=x.lastElementChild,r=x.getBoundingClientRect(),i=icon.getBoundingClientRect(),cs=getComputedStyle(x);
+   return {text:x.textContent,danger:x.classList.contains('crew-menu-danger'),group:[...x.closest('.crew-menu').children].indexOf(x.parentElement),height:r.height,width:r.width,
+    label:Math.round(label.getBoundingClientRect().left),icon:[i.width,i.height],iconInk:getComputedStyle(icon).color,ink:getComputedStyle(label).color,fill:cs.backgroundColor,font:cs.fontSize+'/'+cs.fontWeight,enabled:!x.disabled};
+  }));
+  const share=await page.evaluate(()=>typeof navigator.share==='function');
+  assert.deepEqual(rows.map(r=>r.text),['Add note','Copy link','Open task','Archive task','How it works',...(share?['Share']:[]),'Reject'],`menu order at ${width}`);
+  const row=rows[3],openRow=rows[2],rejectRow=rows.at(-1);
+  assert.ok(row.height>=44,`the Archive task row is at least 44 px high at ${width}: ${row.height}`);
+  assert.deepEqual(row.icon,[24,24],'a 24 px icon');
+  assert.equal(row.iconInk,'rgb(47, 58, 47)','the icon is #2F3A2F');
+  assert.equal(row.ink,openRow.ink,'the label has the colour of Open task');
+  assert.notEqual(row.ink,rejectRow.ink,'the label is not red');
+  assert.ok(!row.danger&&rejectRow.danger&&row.group===openRow.group&&rejectRow.group===row.group+1,'Archive task is above the divider, Reject below it');
+  assert.ok(row.enabled&&row.width===openRow.width&&row.label===openRow.label&&row.font===openRow.font&&row.fill===openRow.fill,'the row looks like its neighbours at rest '+JSON.stringify([row,openRow]));
+  // Hover and press as on Open task; on a touch screen hover paints nothing.
+  const archiveRow=menu.getByRole('menuitem',{name:'Archive task',exact:true}),openTaskRow=menu.getByRole('menuitem',{name:'Open task',exact:true});
+  const fill=l=>l.evaluate(e=>getComputedStyle(e).backgroundColor);
+  if(width===390){
+   const touch=await page.context().newCDPSession(page);
+   await touch.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+   assert.equal(await page.evaluate(()=>matchMedia('(hover: hover)').matches),false,'a touch screen does not hover');
+   await archiveRow.hover();
+   assert.equal(await archiveRow.evaluate(e=>e.matches(':hover')),true);
+   assert.equal(await fill(archiveRow),row.fill,'on a touch screen :hover leaves no selected look');
+   await touch.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch.detach();
+  }else{
+   await archiveRow.hover();const hovered=await fill(archiveRow);
+   await openTaskRow.hover();
+   assert.equal(hovered,await fill(openTaskRow),'the same hover as Open task');
+   assert.notEqual(hovered,row.fill,'a pointer that hovers highlights the row');
+   const pressed=async l=>{const b=await l.boundingBox();await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();const f=await fill(l);await page.mouse.move(2,2);await page.mouse.up();return f;};
+   const press=await pressed(archiveRow);
+   assert.equal(press,await pressed(openTaskRow),'the same press as Open task');
+   assert.notEqual(press,hovered,'a press is darker than hover');
+   // Releasing away from the row is no click; drop the text the drag selected.
+   await page.evaluate(()=>getSelection().removeAllRanges());
+   await menu.waitFor();
+  }
+  await archiveRow.hover();
+  await snapView(`archive-approval-menu-${width}`);
+  await page.mouse.move(2,2);
+  if(width===390){
+   // A failed write: the approval stays with what was typed, an alert toast
+   // says so, and nothing is archived or withdrawn.
+   const note=dialog().getByRole('textbox',{name:'Decision note'});
+   await menu.getByRole('menuitem',{name:'Add note',exact:true}).click();await note.fill('Keep this thought');await note.evaluate(e=>e.blur());
+   await page.route('**/api/crew/write',route=>route.abort());
+   const tried=writeActions.length;
+   await archiveTask();
+   const failed=page.locator('.crew-undo-toast[role=alert]');
+   await failed.getByText("Couldn't archive the task. Try again.",{exact:true}).waitFor();
+   await page.unroute('**/api/crew/write');
+   await settle();
+   const g=await toastBox();
+   assert.equal(g.text,"Couldn't archive the task. Try again. ×");assert.equal(g.inDialog,true);checkToast(g,'failed archive 390');
+   assert.equal(await toast.getByRole('button',{name:'Undo'}).count(),0,'a failure offers no Undo');
+   assert.deepEqual(writeActions.slice(tried),['task.update'],'one write was tried');
+   assert.equal(await hash(),two.link,'a failure does not navigate');
+   assert.equal(await position(),'2 of 3','the list is unchanged');
+   await shows(two.title);
+   assert.equal(await note.inputValue(),'Keep this thought','what was typed stays');
+   assert.equal((await read({collection:'reviews',id:two.review.id}))[0].status,'pending','the review is still pending');
+   assert.equal((await read({collection:'tasks',id:two.task.id})).length,1,'the task is not archived');
+   await snapView('archive-approval-failed-390');
+   await failed.getByRole('button',{name:'Dismiss',exact:true}).click();await failed.waitFor({state:'hidden'});
+  }else await page.keyboard.press('Escape');
+  // Archive: exactly one write, no confirmation (even over a typed note), the
+  // next approval in the same dialog and the toast with Undo above the footer.
+  const before=writeActions.length,pushed=await pushes();
+  await archiveTask();
+  await toast.getByText('Task archived',{exact:true}).waitFor();await shows(three.title);await settle();
+  assert.deepEqual(writeActions.slice(before),['task.update'],'archiving is one write');
+  assert.equal(confirms,0,'no confirmation dialog');
+  assert.equal((await read({collection:'reviews',id:two.review.id}))[0].status,'withdrawn','the review is withdrawn, not rejected');
+  assert.equal((await read({collection:'tasks',id:two.task.id,archived:true})).length,1,'the task is archived');
+  assert.equal(await hash(),three.link,'the detail shows the next approval');
+  assert.equal(await position(),'2 of 2','the count drops by one');
+  assert.deepEqual(await chrome(),chromeAt,'the list capsule, More and close did not move');
+  assert.equal(await pushes(),pushed,'the next approval replaces the history entry');
+  assert.deepEqual(await page.evaluate(()=>history.state),entry,'the entry keeps its place above the list');
+  {const g=await toastBox();
+  assert.equal(g.role,'status');assert.equal(g.text,'Task archived · Undo ×');assert.equal(g.fill,'rgb(31, 45, 36)','a dark pill');
+  assert.equal(g.inDialog,true,'the toast is inside the open dialog');checkToast(g,'archived '+width);}
+  await snapView(`archive-approval-toast-${width}`);
+  {// Undo answers a pointer that hovers; on a touch screen :hover paints nothing.
+  const undo=toast.getByRole('button',{name:'Undo',exact:true}),look=()=>undo.evaluate(e=>[e.matches(':hover'),getComputedStyle(e).backgroundColor]);
+  const touch=width===390?await page.context().newCDPSession(page):null;
+  await touch?.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+  await undo.hover();
+  const [hovering,fill]=await look();
+  assert.equal(hovering,true);
+  if(touch) assert.equal(fill,'rgba(0, 0, 0, 0)','Undo shows no hover fill on a touch screen');
+  else assert.notEqual(fill,'rgba(0, 0, 0, 0)','Undo highlights under a pointer that hovers');
+  await touch?.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch?.detach();
+  await page.mouse.move(2,2);}
+  await undone(two,'2 of 3');
+  assert.deepEqual(await chrome(),chromeAt,'the header stays put after Undo');
+  assert.equal(await pushes(),pushed,'Undo gives the entry back');
+  // From the last approval the detail closes to the list; Undo there opens it again.
+  await dialog().getByRole('button',{name:'Next review (J)'}).click();await shows(three.title);
+  assert.equal(await position(),'3 of 3');
+  await archiveTask();
+  await dialog().waitFor({state:'hidden'});
+  await page.waitForFunction(()=>location.hash==='#/approvals');
+  await toast.getByText('Task archived',{exact:true}).waitFor();await settle();
+  await page.waitForFunction(n=>document.querySelectorAll('.crew-review-card').length===n,2);
+  assert.deepEqual(await cards(),[one,two].map(p=>'Review draft: '+p.title),'the archived approval left the list');
+  {const g=await toastBox();assert.equal(g.inDialog,false);assert.equal(g.text,'Task archived · Undo ×');checkToast(g,'archived last '+width);}
+  if(width===390) await snapView('archive-approval-list-390');
+  await undone(three,'3 of 3');
+  assert.deepEqual(await page.evaluate(()=>history.state),{crewList:1},'opened as a click on its card opens it');
+  await close();await dialog().waitFor({state:'hidden'});
+  await page.waitForFunction(()=>location.hash==='#/approvals');
+  assert.deepEqual(await cards(),[one,two,three].map(p=>'Review draft: '+p.title),'every approval is back in its place');
+ }
+ // German and Italian: the row under Open task, the toast and Undo.
+ await page.setViewportSize({width:390,height:844});
+ let prefs=(await read({collection:'settings'}))[0];
+ for(const [lang,openTask,rowName,done,undo] of [['de','Aufgabe öffnen','Aufgabe archivieren','Aufgabe archiviert','Rückgängig'],['it','Apri attività','Archivia attività','Attività archiviata','Annulla']]){
+  prefs=await boardWrite('settings.update',{language:lang},prefs.id,prefs.revision);
+  await page.goto(base+'/'+two.link);await page.reload();
+  await page.waitForFunction(l=>document.documentElement.lang===l,lang);
+  await dialog().locator('.crew-review-bar').waitFor();await shows(two.title);
+  await dialog().locator('.crew-head-pill button[aria-haspopup=menu]').click();
+  const menu=dialog().getByRole('menu');await menu.waitFor();
+  const labels=await menu.getByRole('menuitem').allInnerTexts();
+  assert.equal(labels[labels.indexOf(openTask)+1],rowName,`${lang}: the row under ${openTask}: `+labels.join(', '));
+  const fits=await menu.getByRole('menuitem',{name:rowName,exact:true}).evaluate(e=>{const r=e.getBoundingClientRect();return r.height>=44&&r.left>=0&&r.right<=innerWidth;});
+  assert.ok(fits,`${lang}: the row fits a phone`);
+  await menu.getByRole('menuitem',{name:rowName,exact:true}).click();
+  await toast.getByText(done,{exact:true}).waitFor();await shows(three.title);await settle();
+  {const g=await toastBox();assert.equal(g.text,`${done} · ${undo} ×`);checkToast(g,lang+' 390');}
+  await snapView(`archive-approval-toast-${lang}-390`);
+  await toast.getByRole('button',{name:undo,exact:true}).click();
+  await shows(two.title);await toast.waitFor({state:'hidden'});
+  assert.equal(await hash(),two.link);
+ }
+ prefs=await boardWrite('settings.update',{language:'en'},prefs.id,prefs.revision);
+ await page.reload();await page.waitForFunction(()=>document.documentElement.lang==='en');
+ // Left alone, the toast goes by itself after about five seconds; the task
+ // then waits on the Archive page, and its activity names the Undo before.
+ await showList();
+ await page.getByRole('button',{name:'Review draft: '+two.title,exact:true}).click();await shows(two.title);
+ await page.evaluate(()=>{const seen=window.__toast={};new MutationObserver(()=>{const on=!!document.querySelector('.crew-undo-toast');if(on)seen.shown??=performance.now();else if(seen.shown)seen.gone??=performance.now();}).observe(document.body,{childList:true,subtree:true});});
+ await archiveTask();
+ await toast.getByText('Task archived',{exact:true}).waitFor();
+ await page.mouse.move(2,2);
+ await toast.waitFor({state:'hidden',timeout:12000});
+ {const stayed=await page.evaluate(()=>window.__toast.gone-window.__toast.shown);
+ assert.ok(stayed>=4500&&stayed<=9000,`the toast stays about five seconds (${Math.round(stayed)} ms)`);}
+ assert.equal(await hash(),three.link,'the next approval stays open after the toast');
+ await close();await dialog().waitFor({state:'hidden'});
+ await page.goto(base+'/#/archive');await page.reload();
+ const archivedRow=page.locator('.crew-archive-row').filter({hasText:two.title});
+ await archivedRow.getByRole('button',{name:'Restore '+two.title,exact:true}).click();
+ await page.getByText('Restored. Prior approvals were not reactivated.').waitFor();
+ await page.goto(base+'/#/tasks/'+two.task.id);
+ await dialog().getByRole('tab',{name:'Activity',exact:true}).click();
+ await dialog().locator('.crew-timeline strong').filter({hasText:/^Review restored$/}).first().waitFor();
+ await close();await dialog().waitFor({state:'hidden'});
+ page.off('dialog',noConfirm);
+ assert.equal(confirms,0,'archiving never asked for confirmation');
+ // Leave nothing pending for later sections.
+ for(const plan of [one,three]){const [pending]=await read({collection:'reviews',id:plan.review.id});await boardWrite('review.decide',{decision:'rejected',note:''},pending.id,pending.revision);}
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto(base+'/#/approvals');await page.reload();
+ await page.getByRole('heading',{name:'Nothing waiting for your review'}).waitFor();
+ }
  // HTML attachments open in a sandboxed preview (0.26.0): the page's own
  // scripts and links work, but it cannot reach Crew, the network, the top
  // window, new windows or forms, in the frame or in a new tab.

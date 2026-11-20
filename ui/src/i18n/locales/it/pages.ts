@@ -250,6 +250,15 @@ const it: Record<string, string> = {
   Share: "Condividi",
   "Review draft": "Revisione bozza",
   Reject: "Rifiuta",
+  // Archive task from the Approval ⋯ menu (0.40.0): the toast, Undo and failures.
+  "Task archived": "Attività archiviata",
+  Undo: "Annulla",
+  "Couldn't archive the task. Try again.":
+    "Impossibile archiviare l'attività. Riprova.",
+  "Task restored. Its approval is no longer pending; request it again.":
+    "Attività ripristinata. La sua approvazione non è più in attesa; richiedila di nuovo.",
+  "Couldn't undo. The task is in Archive; restore it from there.":
+    "Annullamento non riuscito. L'attività è nell'Archivio; ripristinala da lì.",
   "Snapshot {id}": "Snapshot {id}",
   "This is the exact submitted draft. Approval does not send, post or publish it.":
     "Questa è esattamente la bozza inviata. L'approvazione non la invia, non la pubblica e non la posta.",

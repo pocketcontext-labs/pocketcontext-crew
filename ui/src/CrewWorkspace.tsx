@@ -58,6 +58,7 @@ import StartSession, {
   type SessionStart,
 } from "./StartSession";
 import SessionInstructions from "./SessionInstructions";
+import UndoToast, { messageToastMs, undoToastMs } from "./UndoToast";
 import {
   clearedBoard,
   commitBoardSearch,
@@ -267,6 +268,46 @@ const pushAddress = (hash: string) => {
     resetTrail();
   }
 };
+/**
+ * Where the owner lands after Archive task on an Approval detail (0.40.0).
+ *
+ * The approved mockup: the next approval in the list the detail was opened
+ * from (the Approvals page or Home's approvals waiting), in that list's
+ * order. `list` and `index` are the dialog's list and the archived approval's
+ * place in it before the archive; `pending` is the reviews still pending after
+ * it. With none left after it, the detail closes and the list shows.
+ *
+ * To return to the list every time instead, as Approve does, return undefined.
+ */
+function approvalAfterArchive(
+  list: readonly { kind: Kind; row: Row }[] | null,
+  index: number,
+  pending: readonly Row[],
+): Row | undefined {
+  if (!list || index < 0) return undefined;
+  for (const { kind, row } of list.slice(index + 1)) {
+    const next =
+      kind === "review" ? pending.find((x) => x.id === row.id) : undefined;
+    if (next) return next;
+  }
+  return undefined;
+}
+/**
+ * What a failed write says about itself: the HTTP status (0 when nothing came
+ * back from the server) and the server's reason code, if it gave one.
+ */
+function writeFailure(failure: unknown): { status: number; code: string } {
+  const f = failure as {
+    status?: unknown;
+    response?: { data?: { reason?: { code?: unknown } } };
+    data?: { reason?: { code?: unknown } };
+  } | null;
+  const code = f?.response?.data?.reason?.code ?? f?.data?.reason?.code;
+  return {
+    status: Number(f?.status) || 0,
+    code: typeof code === "string" ? code : "",
+  };
+}
 const noteSortLabels: Record<NoteSort, string> = {
   updated: "Sort: Last updated",
   created: "Sort: Newest first",
@@ -745,12 +786,18 @@ function Modal({
   actions,
   menu = [],
   record = false,
+  toast,
   children,
   close,
   onEdit,
 }: {
   /** A record dialog keeps one size, whatever it shows. */
   record?: boolean;
+  /**
+   * The workspace toast while this dialog is open: everything outside an open
+   * modal dialog is inert, so the toast is shown inside it.
+   */
+  toast?: ReactNode;
   title: string;
   /** Shown before the title, so it never moves when the title changes. */
   nav?: ReactNode;
@@ -895,6 +942,7 @@ function Modal({
       <DialogMenuContext.Provider value={setBodyMenu}>
         {children}
       </DialogMenuContext.Provider>
+      {toast && <div className="crew-dialog-toast">{toast}</div>}
     </dialog>
   );
 }
@@ -992,6 +1040,19 @@ export default function CrewWorkspace() {
     } | null>(null),
     // The toast after Start a session (0.24.0).
     [sessionStart, setSessionStart] = useState<SessionStart | null>(null),
+    // The toast after an action that asks no confirmation (0.40.0: Archive
+    // task from the Approval ⋯ menu). One at a time: a new one replaces it.
+    // `undo` names what its Undo restores. `left` is the time left on its
+    // countdown, kept with the toast because it is shown over the page or
+    // inside the open dialog and moves between them.
+    [toast, setToast] = useState<{
+      id: number;
+      tone: "status" | "alert";
+      text: string;
+      ms: number;
+      left: { current: number };
+      undo?: { review: string; task: string };
+    } | null>(null),
     // Set per hash navigation and consumed once, so data refreshes never open a dialog.
     [pendingLink, setPendingLink] = useState(() =>
       parseItemHash(location.hash),
@@ -1030,12 +1091,26 @@ export default function CrewWorkspace() {
     edited = useRef(0),
     busyRef = useRef(false),
     loadsInFlight = useRef(0),
-    loadFailed = useRef(false);
+    loadFailed = useRef(false),
+    // The records of the last successful load, for code that continues right
+    // after awaiting it (the state is still a render behind).
+    loaded = useRef<Data | null>(null),
+    // The toast's id counter, and an Undo that is running.
+    toastSeq = useRef(0),
+    undoing = useRef(false);
   const discardOk = () =>
     !edited.current || window.confirm(t("Discard your unsaved changes?"));
   // The open dialog, for the hashchange listener registered once below.
   const dialogRef = useRef(dialog);
   dialogRef.current = dialog;
+  // The page and the toast as they are now, for work that continues after a write.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+  const showToast = (next: Omit<NonNullable<typeof toast>, "id" | "left">) =>
+    setToast({ ...next, id: ++toastSeq.current, left: { current: next.ms } });
+  const dismissToast = useCallback(() => setToast(null), []);
   // A layout effect, so the reset precedes any edit to the newly shown dialog;
   // a deferred effect could run after the first change and erase it.
   useLayoutEffect(() => {
@@ -1089,7 +1164,9 @@ export default function CrewWorkspace() {
       if (ticket !== generation.current) return "stale";
       const keep = (next: Data) => (current: Data) =>
         JSON.stringify(current) === JSON.stringify(next) ? current : next;
-      setData(keep(Object.fromEntries(result)));
+      const fresh: Data = Object.fromEntries(result);
+      loaded.current = fresh;
+      setData(keep(fresh));
       setArchived(keep(Object.fromEntries(old)));
       setReady(true);
       // A background success only clears a failed load, never a save error.
@@ -1797,6 +1874,174 @@ export default function CrewWorkspace() {
     setDialog({ kind, row, source: dialog?.source });
     return "moved";
   };
+  // Archive task from the Approval detail's ⋯ menu (0.40.0): the work is no
+  // longer needed, where Reject says the draft is not good. One write: the
+  // server archives the task and withdraws its pending review together. No
+  // confirmation, no "Saved." and no inline error: a toast offers Undo, or
+  // says that nothing was archived.
+  const archiveFromApproval = async (review: Row, task: Row) => {
+    if (busyRef.current) return;
+    // The list and the place in it, before the archive shortens the list.
+    const list = dialogList,
+      index = dialogIndex,
+      source = dialog?.source;
+    setBusy(true);
+    busyRef.current = true;
+    loadFailed.current = false;
+    setError("");
+    setNotice("");
+    try {
+      let reloaded = false;
+      try {
+        await crewApi.write("task.update", { archived: true }, task);
+      } catch {
+        // The reload gives a retry the task's current revision. It also tells
+        // a write that did not happen from one whose answer was lost: only a
+        // fresh load in which the task is archived and the review no longer
+        // pending counts as archived.
+        const fresh =
+          (await load({ silent: true })) === "ok" ? loaded.current : null;
+        if (
+          !fresh ||
+          fresh.tasks.some((x) => x.id === task.id) ||
+          !fresh.reviews.some(
+            (x) => x.id === review.id && val(x, "status") !== "pending",
+          )
+        ) {
+          // Nothing was archived: the approval stays as it is, with what the
+          // owner typed.
+          showToast({
+            tone: "alert",
+            text: t("Couldn't archive the task. Try again."),
+            ms: messageToastMs,
+          });
+          return;
+        }
+        reloaded = true;
+      }
+      if (!reloaded) await load();
+      setSaves((n) => n + 1);
+      const open = dialogRef.current;
+      if (open?.kind === "review" && open.row?.id === review.id) {
+        const pendingNow = (loaded.current?.reviews ?? data.reviews).filter(
+          (x) => val(x, "status") === "pending" && val(x, "task") !== task.id,
+        );
+        const next = approvalAfterArchive(list, index, pendingNow);
+        if (next) {
+          // Replaces the archived approval's entry and keeps its state: Back
+          // never returns to it, and closing still goes to the list's own entry.
+          setAddress(reviewHash(next.id));
+          setDialog({ kind: "review", row: next, source });
+        } else closeDialog();
+      }
+      showToast({
+        tone: "status",
+        text: t("Task archived"),
+        ms: undoToastMs,
+        undo: { review: review.id, task: task.id },
+      });
+    } finally {
+      setBusy(false);
+      busyRef.current = false;
+    }
+  };
+  // Undo of that archive. review.restore un-archives the task and makes the
+  // same review pending again in one write, so no bot is woken in between;
+  // the restored approval then opens at its own address, in its old place.
+  // If the server refuses (the approval can no longer be restored safely),
+  // the task alone is restored and the owner is told. If nothing reached the
+  // server, the task stays in Archive, where it can be restored.
+  const undoArchive = async (
+    id: number,
+    archived: { review: string; task: string },
+  ) => {
+    // One Undo at a time, and none once its toast is gone or replaced.
+    if (undoing.current || busyRef.current || toastRef.current?.id !== id)
+      return;
+    undoing.current = true;
+    setBusy(true);
+    busyRef.current = true;
+    loadFailed.current = false;
+    setError("");
+    setNotice("");
+    const failed = () =>
+      showToast({
+        tone: "alert",
+        text: t("Couldn't undo. The task is in Archive; restore it from there."),
+        ms: messageToastMs,
+      });
+    // The archive changed the review's revision: restore its current row.
+    const restore = async () => {
+      const [current] = await crewApi.read("reviews", { id: archived.review });
+      return current
+        ? await crewApi.write("review.restore", {}, current)
+        : undefined;
+    };
+    try {
+      let restored: Row | undefined;
+      try {
+        try {
+          restored = await restore();
+        } catch (e) {
+          // A plain revision conflict (409 with no reason code) only means the
+          // review changed since it was read: read it again, once.
+          const { status, code } = writeFailure(e);
+          if (status !== 409 || code) throw e;
+          restored = await restore();
+        }
+      } catch (e) {
+        // Only an answer from the server (HTTP 4xx) is a refusal.
+        const { status } = writeFailure(e);
+        if (status < 400 || status > 499) return failed();
+      }
+      if (!restored) {
+        try {
+          const [task] = await crewApi.read("tasks", {
+            id: archived.task,
+            archived: true,
+          });
+          if (task) await crewApi.write("task.update", { archived: false }, task);
+        } catch {
+          return failed();
+        }
+        await load();
+        setSaves((n) => n + 1);
+        showToast({
+          tone: "status",
+          text: t(
+            "Task restored. Its approval is no longer pending; request it again.",
+          ),
+          ms: messageToastMs,
+        });
+        return;
+      }
+      // The reloaded row when there is one, else the server's answer.
+      const row =
+        ((await load()) === "ok" &&
+          loaded.current?.reviews.find((x) => x.id === restored.id)) ||
+        restored;
+      setSaves((n) => n + 1);
+      setToast(null);
+      const open = dialogRef.current;
+      if (!open)
+        // From the list: as a click on its card opens it.
+        openReviewCard(
+          row,
+          viewRef.current === "home" ? "home:approvals" : undefined,
+        );
+      else if (open.kind === "review" && open.row?.id === row.id)
+        setDialog({ ...open, row });
+      else if (discardOk()) {
+        // The detail that took its place gives the address back.
+        setAddress(reviewHash(row.id));
+        setDialog({ kind: "review", row, source: open.source });
+      }
+    } finally {
+      undoing.current = false;
+      setBusy(false);
+      busyRef.current = false;
+    }
+  };
   const listNoun = dialog?.source
     ? listSourceNoun(dialog.source)
     : view === "search" && dialog?.kind !== "review"
@@ -2126,6 +2371,24 @@ export default function CrewWorkspace() {
   const sourceForHit = (hit: SearchHit) =>
     data[hit.collection].find((row) => row.id === hit.id) ??
     archived[hit.collection].find((row) => row.id === hit.id);
+  // Shown over the page, or inside the open record dialog (see Modal).
+  const actionToast = toast && (
+    <UndoToast
+      key={toast.id}
+      text={toast.text}
+      tone={toast.tone}
+      ms={toast.ms}
+      left={toast.left}
+      busy={busy}
+      action={
+        toast.undo && {
+          label: t("Undo"),
+          run: () => void undoArchive(toast.id, toast.undo!),
+        }
+      }
+      dismiss={dismissToast}
+    />
+  );
   const globalSearch = (
     <GlobalSearch
       sourceForHit={sourceForHit}
@@ -3101,6 +3364,8 @@ export default function CrewWorkspace() {
           }}
         />
       )}
+      {/* After the session toast, so its Undo stays on top for its few seconds. */}
+      {!dialog && actionToast}
       {instructions && (
         <Modal
           title={t("Session instructions for {name}", { name: instructions.name })}
@@ -3129,6 +3394,7 @@ export default function CrewWorkspace() {
       {dialog && (
         <Modal
           record={!!dialog.row}
+          toast={actionToast}
           nav={dialog.row ? <TrailNav /> : <NavCluster />}
           listNav={
             dialog.row
@@ -3226,6 +3492,9 @@ export default function CrewWorkspace() {
             error={error}
             save={save}
             perform={perform}
+            archiveReviewTask={(review, task) =>
+              void archiveFromApproval(review, task)
+            }
             close={closeDialog}
             refresh={() => void load({ silent: true })}
             onWithdrawn={(kind, id) => void refreshDialogRow(kind, id)}
@@ -3273,6 +3542,8 @@ type EditorProps = {
     keepOpen?: boolean,
   ) => Promise<void>;
   perform: (work: () => Promise<unknown>, message?: string) => Promise<boolean>;
+  /** Archive task from a pending review's More menu (0.40.0). */
+  archiveReviewTask?: (review: Row, task: Row) => void;
   close: () => void;
   /** Background reload after a file change (card thumbnails, task status). */
   refresh?: () => void;
@@ -3331,6 +3602,7 @@ function Editor({
   error,
   save,
   perform,
+  archiveReviewTask,
   close,
   refresh,
   onWithdrawn,
@@ -3733,7 +4005,7 @@ function Editor({
   if (kind === "review" && row)
     return <ReviewDecision row={row} task={data.tasks.find(task => task.id === val(row, "task"))} busy={busy} error={error}
       attachments={item.attachments} loaded={item.loaded} Prose={Prose}
-      when={when} save={save} />;
+      when={when} save={save} archiveTask={archiveReviewTask} />;
   const bar = (action?: ReactNode) =>
     action || error ? (
       <div className="crew-save-bar">

@@ -833,6 +833,7 @@ const de: Record<string, string> = {
   "Review requested": "Freigabe angefragt",
   "Review decided": "Über Freigabe entschieden",
   "Review withdrawn": "Freigabe zurückgezogen",
+  "Review restored": "Freigabe wiederhergestellt",
   "Responsibility changed": "Zuständigkeit geändert",
   "Draft created": "Entwurf erstellt",
   "Draft updated": "Entwurf aktualisiert",

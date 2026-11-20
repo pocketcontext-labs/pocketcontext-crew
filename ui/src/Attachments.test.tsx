@@ -17,6 +17,8 @@ import {
   vi,
 } from "vitest";
 import CrewWorkspace from "./CrewWorkspace";
+import { eventSummary } from "./Attachments";
+import { resetLanguageForTests, setLanguage } from "./i18n";
 import { crewApi, type Row } from "./crewApi";
 import {
   AttachmentError,
@@ -813,6 +815,9 @@ describe("comments", () => {
       { id: "ev1", revision: 1, action: "task.comment", actor: "owner", reported_agent: "Build", body: "Looks **good**" },
       { id: "ev2", revision: 1, action: "task.update", actor: "owner", reason: "Retitled" },
       { id: "ev3", revision: 1, action: "review.request", actor: "owner" },
+      // Undo of an archive made the withdrawn review pending again (0.40.0).
+      { id: "ev4", revision: 1, action: "review.withdraw", actor: "owner" },
+      { id: "ev5", revision: 1, action: "review.restore", actor: "owner" },
     ];
     const dialog = await openTask();
     const tab = await dialog.findByRole("tab", { name: /^Comments/ });
@@ -826,9 +831,35 @@ describe("comments", () => {
     expect(dialog.getByLabelText("Add a comment")).toBeInTheDocument();
     fireEvent.click(dialog.getByRole("tab", { name: "Activity" }));
     expect(dialog.queryByLabelText("Add a comment")).toBeNull();
-    for (const label of ["Comment", "Updated", "Review requested"])
+    for (const label of [
+      "Comment",
+      "Updated",
+      "Review requested",
+      "Review withdrawn",
+      "Review restored",
+    ])
       expect(dialog.getByText(label)).toBeInTheDocument();
     expect(dialog.queryByText("task.comment")).toBeNull();
+    expect(dialog.queryByText("review.restore")).toBeNull();
+    // An action without a label of its own would read "Change".
+    expect(dialog.queryByText("Change")).toBeNull();
+  });
+  it("names review.restore in every language (0.40.0)", () => {
+    const restored: Row = {
+      id: "ev9",
+      revision: 1,
+      action: "review.restore",
+      actor: "owner:user00000000001",
+    };
+    try {
+      expect(eventSummary(restored).title).toBe("Review restored");
+      setLanguage("de");
+      expect(eventSummary(restored).title).toBe("Freigabe wiederhergestellt");
+      setLanguage("it");
+      expect(eventSummary(restored).title).toBe("Approvazione ripristinata");
+    } finally {
+      resetLanguageForTests();
+    }
   });
   it("uploads a pasted screenshot into the comment and waits for it before posting", async () => {
     let finish: (v: {

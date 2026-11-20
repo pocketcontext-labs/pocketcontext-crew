@@ -249,6 +249,15 @@ const de: Record<string, string> = {
   Share: "Teilen",
   "Review draft": "Entwurf prüfen",
   Reject: "Ablehnen",
+  // Archive task from the Approval ⋯ menu (0.40.0): the toast, Undo and failures.
+  "Task archived": "Aufgabe archiviert",
+  Undo: "Rückgängig",
+  "Couldn't archive the task. Try again.":
+    "Die Aufgabe konnte nicht archiviert werden. Versuche es erneut.",
+  "Task restored. Its approval is no longer pending; request it again.":
+    "Aufgabe wiederhergestellt. Ihre Freigabe ist nicht mehr offen; fordere sie erneut an.",
+  "Couldn't undo. The task is in Archive; restore it from there.":
+    "Rückgängig machen fehlgeschlagen. Die Aufgabe ist im Archiv; stelle sie dort wieder her.",
   "Snapshot {id}": "Snapshot {id}",
   "This is the exact submitted draft. Approval does not send, post or publish it.":
     "Das ist genau der eingereichte Entwurf. Eine Freigabe sendet, postet oder veröffentlicht ihn nicht.",

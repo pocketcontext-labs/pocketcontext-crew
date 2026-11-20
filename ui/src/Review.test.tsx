@@ -7,9 +7,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 import { ReviewContent, ReviewDecision } from "./Review";
-import { DialogMenuContext, type MenuItem } from "./DialogHeader";
+import { DialogMenuContext, MoreMenu, type MenuItem } from "./DialogHeader";
+import { resetLanguageForTests, setLanguage } from "./i18n";
 import { decisionSummary, localFilePaths, reviewFiles } from "./reviews";
 import { attachmentsApi, formatBytes, type Attachment } from "./attachmentsApi";
 import type { Row } from "./crewApi";
@@ -595,4 +597,153 @@ it("offers a one-click download for every file submitted for review", () => {
     expect.objectContaining({ id: "att000000000002", name: "brief.pdf" }),
   );
   expect(within(gallery).getByText("PDF · " + formatBytes(file("x").size))).toBeInTheDocument();
+});
+
+// 0.40.0: "Archive task" in the Approval detail's ⋯ menu: the work is no longer
+// needed, where Reject says the draft is not good.
+describe("Archive task in the More menu (0.40.0)", () => {
+  const plain: Row = { ...review, options: null };
+  const reviewTask: Row = {
+    id: "task00000000001",
+    revision: 4,
+    title: "Launch post",
+    status: "needs_review",
+  };
+  type Props = Parameters<typeof ReviewDecision>[0];
+  const base = (props: Partial<Props>): Props => ({
+    row: plain,
+    task: reviewTask,
+    busy: false,
+    error: "",
+    attachments: [],
+    loaded: true,
+    Prose,
+    when: () => "today",
+    save: vi.fn().mockResolvedValue(undefined),
+    archiveTask: vi.fn(),
+    ...props,
+  });
+  /** The menu items the review hands to the dialog header. */
+  const items = (props: Partial<Props> = {}) => {
+    let menu: MenuItem[] = [];
+    const all = base(props);
+    render(
+      <DialogMenuContext.Provider value={(next) => (menu = next)}>
+        <ReviewDecision {...all} />
+      </DialogMenuContext.Provider>,
+    );
+    return { menu: () => menu, ...all };
+  };
+  /** The review under the real More menu, as the dialog header shows it. */
+  function WithHeaderMenu(props: Props) {
+    const [menu, setMenu] = useState<MenuItem[]>([]);
+    return (
+      <DialogMenuContext.Provider value={setMenu}>
+        <MoreMenu items={menu} />
+        <ReviewDecision {...props} />
+      </DialogMenuContext.Provider>
+    );
+  }
+  afterEach(() => {
+    delete (navigator as { share?: unknown }).share;
+    resetLanguageForTests();
+  });
+  it("sits directly under Open task, above the divider and the red Reject", () => {
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    });
+    const { menu, archiveTask, save } = items();
+    expect(menu().map((x) => x.label)).toEqual([
+      "Add note",
+      "Copy link",
+      "Open task",
+      "Archive task",
+      "How it works",
+      "Share",
+      "Reject",
+    ]);
+    const archive = menu()[3];
+    // A plain row with the archive line icon: not red, not in Reject's group.
+    expect(archive).toMatchObject({ icon: "archive", disabled: false });
+    expect(archive.destructive).toBeFalsy();
+    expect(menu().filter((x) => x.destructive).map((x) => x.label)).toEqual(["Reject"]);
+    archive.onSelect!();
+    expect(archiveTask).toHaveBeenCalledTimes(1);
+    expect(archiveTask).toHaveBeenCalledWith(plain, reviewTask);
+    // Archiving is not a decision: nothing is sent as a rejection.
+    expect(save).not.toHaveBeenCalled();
+  });
+  it("shows only for a pending review whose task is loaded and not archived", () => {
+    const labels = (props: Partial<Props>) => {
+      const { menu } = items(props);
+      const found = menu().map((x) => x.label);
+      cleanup();
+      return found;
+    };
+    expect(labels({})).toContain("Archive task");
+    // A decided or withdrawn review.
+    for (const status of ["approved", "changes_requested", "rejected", "withdrawn"])
+      expect(labels({ row: { ...plain, status } })).not.toContain("Archive task");
+    // The task is not loaded, or is already archived.
+    expect(labels({ task: undefined })).not.toContain("Archive task");
+    expect(labels({ task: { ...reviewTask, archived: true } })).not.toContain("Archive task");
+    // Shown somewhere that cannot archive.
+    expect(labels({ archiveTask: undefined })).not.toContain("Archive task");
+    // The other rows are unchanged without it.
+    expect(labels({ task: undefined })).toEqual(["Add note", "Copy link", "How it works", "Reject"]);
+  });
+  it("is disabled while a write is in flight", () => {
+    const { menu } = items({ busy: true });
+    expect(menu().find((x) => x.label === "Archive task")).toMatchObject({ disabled: true });
+  });
+  it("renders as a normal icon and label row in the first group and archives on a click", async () => {
+    const props = base({});
+    render(<WithHeaderMenu {...props} />);
+    const more = screen.getByRole("button", { name: "More actions" });
+    await waitFor(() => expect(more).toBeEnabled());
+    fireEvent.click(more);
+    const menu = screen.getByRole("menu", { name: "More actions" });
+    const rows = within(menu).getAllByRole("menuitem");
+    expect(rows.map((x) => x.textContent)).toEqual([
+      "Add note",
+      "Copy link",
+      "Open task",
+      "Archive task",
+      "How it works",
+      "Reject",
+    ]);
+    const row = within(menu).getByRole("menuitem", { name: "Archive task" });
+    const groups = menu.querySelectorAll(".crew-menu-group");
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toContainElement(row);
+    expect(groups[1]).toHaveTextContent("Reject");
+    expect(row).not.toHaveClass("crew-menu-danger");
+    expect(within(menu).getByRole("menuitem", { name: "Reject" })).toHaveClass("crew-menu-danger");
+    expect(row).toBeEnabled();
+    // The same markup as its neighbours: the line icon, then the label.
+    const open = within(menu).getByRole("menuitem", { name: "Open task" });
+    expect([...row.children].map((x) => x.tagName)).toEqual([...open.children].map((x) => x.tagName));
+    expect(row.querySelector("svg.crew-icon path")).toHaveAttribute(
+      "d",
+      "M4 5h16v4H4zM6 9v10h12V9M10 13h4",
+    );
+    fireEvent.click(row);
+    expect(props.archiveTask).toHaveBeenCalledWith(plain, reviewTask);
+    // Choosing it closes the menu; nothing asks for confirmation.
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+  it("reads Aufgabe archivieren in German and Archivia attività in Italian", () => {
+    for (const [lang, label, openTask] of [
+      ["de", "Aufgabe archivieren", "Aufgabe öffnen"],
+      ["it", "Archivia attività", "Apri attività"],
+    ] as const) {
+      setLanguage(lang);
+      const { menu } = items();
+      const labels = menu().map((x) => x.label);
+      expect(labels[labels.indexOf(openTask) + 1]).toBe(label);
+      cleanup();
+    }
+  });
 });

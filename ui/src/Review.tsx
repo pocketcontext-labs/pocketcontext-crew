@@ -597,6 +597,7 @@ export function ReviewDecision({
   Prose,
   when,
   save,
+  archiveTask,
 }: {
   row: Row;
   task?: Row;
@@ -611,6 +612,11 @@ export function ReviewDecision({
     fields: Record<string, unknown>,
     row?: Row,
   ) => Promise<void>;
+  /**
+   * Archives the review's task, which withdraws this pending review (0.40.0):
+   * for work that is no longer needed, where Reject says the draft is not good.
+   */
+  archiveTask?: (review: Row, task: Row) => void;
 }) {
   // Uncontrolled: typing a note re-renders nothing, so the draft and its
   // images stay put.
@@ -672,13 +678,18 @@ export function ReviewDecision({
   };
   const submitRef = useRef(submit);
   submitRef.current = submit;
+  const archiveRef = useRef(archiveTask);
+  archiveRef.current = archiveTask;
+  const canArchive = !!archiveTask;
   useEffect(() => {
     if (copied !== "copied") return;
     const timer = window.setTimeout(() => setCopied(""), 2000);
     return () => window.clearTimeout(timer);
   }, [copied]);
   // Secondary actions live in the header's More menu (0.32.0): Add note,
-  // Copy link, Share and, last and in red, Reject.
+  // Copy link, Open task, Archive task (0.40.0: a plain row, only while the
+  // review is pending and its task is active), Share and, last and in red,
+  // Reject.
   const setMenu = useDialogMenu();
   useEffect(() => {
     if (!setMenu) return;
@@ -700,6 +711,13 @@ export function ReviewDecision({
         label: t("Open task"),
         icon: "link",
         onSelect: () => followTrail(itemPath("task", task)),
+      });
+    if (pending && task && task.archived !== true && canArchive)
+      items.push({
+        label: t("Archive task"),
+        icon: "archive",
+        disabled: busy,
+        onSelect: () => archiveRef.current?.(row, task),
       });
     items.push({
       label: t("How it works"),
@@ -729,7 +747,7 @@ export function ReviewDecision({
       });
     setMenu(items);
     return () => setMenu([]);
-  }, [setMenu, row, task, pending, busy]);
+  }, [setMenu, row, task, pending, busy, canArchive]);
   return (
     <>
       <div className="crew-dialog-body crew-review-body">
