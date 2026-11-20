@@ -1,5 +1,11 @@
 # Crew upgrades and rollback
 
+## Crew 0.39.0 to 0.39.1
+
+Replace the binary or image (`CREW_REPLACE_VERSION=0.39.0` for the
+installer) and upgrade paired clients to 0.39.1. The patch changes the reader.
+The 0.39.0 binary or image can reopen the same database for rollback.
+
 ## Crew 0.38.1 to 0.39.0
 
 1. Stop the writer and make a verified complete backup of the project and
