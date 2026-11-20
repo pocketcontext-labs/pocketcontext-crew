@@ -1685,7 +1685,6 @@ it("opens a task on its Comments tab from a ?tab=comments link", async () => {
 
 it("shows an archived task read-only and explains how to restore it", async () => {
   fixtures.tasks = [];
-  fixtures.reviews = [];
   serveArchived({ tasks: [{ ...linkedTask, archived: true }] });
   history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
   render(<CrewWorkspace />);
@@ -1704,7 +1703,9 @@ it("shows an archived task read-only and explains how to restore it", async () =
   ).toBeNull();
   expect(dialog.queryByText("Save a draft first.")).toBeNull();
   expect(dialog.queryByText("Save your draft first.")).toBeNull();
-  expect(dialog.queryByText(/Waiting for your approval/)).toBeNull();
+  fireEvent.click(dialog.getByRole("button", { name: "More actions" }));
+  const menu = within(dialog.getByRole("menu", { name: "More actions" }));
+  expect(menu.queryByRole("menuitem", { name: "Review the draft" })).toBeNull();
   fireEvent.click(dialog.getByRole("tab", { name: "Activity" }));
   expect(dialog.queryByRole("button", { name: "Add comment" })).toBeNull();
   expect(crewApi.write).not.toHaveBeenCalled();
@@ -1839,6 +1840,7 @@ describe("dialog header", () => {
 
   it("keeps Copy link in the More menu, not the header, on a task", async () => {
     fixtures.tasks = [linkedTask];
+    fixtures.reviews = [{ ...review, status: "approved" }];
     history.replaceState(null, "", "/#/tasks/launch-post-task00000000001");
     render(<CrewWorkspace />);
     const dialog = within(await screen.findByRole("dialog"));
@@ -2188,16 +2190,24 @@ describe("simple dialogs", () => {
     ).toHaveAccessibleName("What does Request approval do?");
   });
 
-  it("links directly to the pending draft outside the description", async () => {
+  it("opens the pending review from the task's More menu", async () => {
     const dialog = await openTask({});
-    expect(dialog.getByText(/Waiting for your approval/)).toBeInTheDocument();
-    expect(dialog.getByRole("link", { name: /Review draft/ })).toHaveAttribute(
-      "href",
-      `#/approvals/${review.id}`,
-    );
+    expect(dialog.queryByRole("link", { name: /review.*draft/i })).toBeNull();
+    expect(dialog.queryByText(/Waiting for your approval/)).toBeNull();
     expect(
       dialog.queryByRole("button", { name: "Request approval" }),
     ).toBeNull();
+    fireEvent.click(dialog.getByRole("button", { name: "More actions" }));
+    const menu = within(dialog.getByRole("menu", { name: "More actions" }));
+    expect(menu.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Copy link",
+      "Review the draft",
+      "Archive task",
+    ]);
+    fireEvent.click(menu.getByRole("menuitem", { name: "Review the draft" }));
+    await screen.findByRole("button", { name: "Approve draft" });
+    expect(location.hash).toBe(`#/approvals/${review.id}`);
+    expect(crewApi.write).not.toHaveBeenCalled();
   });
 });
 

@@ -2642,10 +2642,14 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
   await briefTabs.getByRole('tab',{name:'Edit'}).click();
   assert.equal(await briefField.getByRole('textbox',{name:'Description'}).inputValue(),legacyDescription,'editing preserves the full stored description');
   await briefTabs.getByRole('tab',{name:'Read'}).click();
-  const pendingReview=dialog().getByRole('link',{name:/Waiting for your approval/});
-  assert.equal(await pendingReview.getAttribute('href'),'#/approvals/'+markupReview.id);
-  await pendingReview.click();
-  await dialog().getByRole('heading',{name:'Markup review variants'}).waitFor();
+  for(const width of [390,1440]){
+   await page.setViewportSize({width,height:width===390?844:1000});
+   await page.goto(base+'/#/tasks/'+markupTask.id);
+   await dialog().getByRole('button',{name:'More actions'}).click();
+   await dialog().getByRole('menuitem',{name:'Review the draft'}).click();
+   await dialog().getByRole('heading',{name:'Markup review variants'}).waitFor();
+   assert.equal(new URL(page.url()).hash,'#/approvals/'+markupReview.id);
+  }
   await page.goto(base+'/#/tasks');await page.reload();
   const taskCard=page.locator('.crew-task-card').filter({hasText:'Markup review variants'});
   assert.ok((await taskCard.innerText()).includes('Prepare the two launch replies.'));
