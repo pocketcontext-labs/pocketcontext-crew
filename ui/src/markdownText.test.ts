@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  markdownExcerpt,
   markdownPlainText,
   markdownSummary,
   markdownText,
@@ -113,5 +114,40 @@ describe("markdownPlainText", () => {
       markdownPlainText("[a@b.co](mailto:a@b.co) or [me](mailto:me@x.io)"),
     ).toBe("a@b.co or me (me@x.io)");
     expect(markdownPlainText("")).toBe("");
+  });
+});
+
+describe("markdownExcerpt", () => {
+  const draft = [
+    "Instructions before the variants.",
+    ":::note", "For the reviewer alone.", ":::",
+    ':::copy{label="Reply"}', "A separate reply.", ":::",
+    ":::variant{channel=linkedin}", "**The opening.**", "", "The second paragraph.", ":::",
+    ":::variant{channel=x}", "Another version.", ":::",
+  ].join("\n");
+
+  it("uses only the first variant's text and keeps the labels for all paste-ready blocks", () => {
+    const { text, blocks } = markdownExcerpt(draft);
+    expect(text).toBe("The opening.\nThe second paragraph.");
+    expect(blocks.map((block) => block.label || block.channel)).toEqual(["Reply", "linkedin", "x"]);
+  });
+
+  it("falls back to copy text or the ordinary text outside notes", () => {
+    expect(markdownExcerpt(':::copy{label="Greeting"}\n**Hello**\n:::').text).toBe("Hello");
+    expect(markdownExcerpt("Intro.\n:::note\nReview this.\n:::").text).toBe("Intro.");
+    expect(markdownExcerpt(":::note\nReview this.\n:::").text).toBe("");
+  });
+
+  it("truncates the visible words and handles an unbroken string of astral characters", () => {
+    expect(markdownExcerpt(draft, 19).text).toBe("The opening.\nThe…");
+    expect(markdownExcerpt("🌎🌍🌏🌐", 3).text).toBe("🌎🌍…");
+  });
+
+  it("preserves ordinary card formatting and literal directive examples", () => {
+    expect(markdownExcerpt("# Heading\n\n**Details** [here](https://example.org)").text)
+      .toBe("Heading\nDetails here");
+    const literal = markdownExcerpt("```\n:::note\nexample\n:::\n```");
+    expect(literal.structured).toBe(false);
+    expect(literal.text).toBe(":::note\nexample\n:::");
   });
 });

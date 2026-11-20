@@ -52,7 +52,7 @@ const taskHit = (id = task.id, title = String(task.title)): SearchHit => ({
   title,
   path: `#/tasks/x-${id}`,
   excerpt: "Plan the «launch» today",
-  revision: 1,
+  revision: task.revision,
   updated: "",
   status: "in_progress",
   assigned_agent_name: "Network",
@@ -208,6 +208,19 @@ describe("live results", () => {
     const marks = [...list.querySelectorAll("mark")].map((m) => m.textContent);
     expect(marks).toEqual(["launch", "<i>netw</i>ork"]);
     expect(option(/See all results for “netw”/)).toBeTruthy();
+  });
+
+  it("uses the full source for a marked-up search hit even when the matching fragment is inside a note", async () => {
+    fixtures.notes = [{ ...note, body: ":::note\nsecret launch details\n:::\n:::variant{channel=x}\nThe public draft\n:::" }];
+    controlledSearch();
+    await ready();
+    type("launch");
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await act(async () => calls[0].resolve(result([{ ...noteHit(), excerpt: "…secret «launch» details…" }])));
+    const hit = option(/Launch voice/);
+    expect(hit).toHaveTextContent("The public draft");
+    expect(hit).not.toHaveTextContent(/secret|:::|channel=/);
+    expect(within(hit).getByText("X")).toBeVisible();
   });
 
   it("explains no matches and failures in plain words", async () => {

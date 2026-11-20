@@ -802,6 +802,16 @@ a.crew-logo:hover .product-brand span {
   line-height: 1.6;
   color: #4d6048;
 }
+.crew-excerpt-labels {
+  margin-bottom: 4px;
+}
+.crew-tags.crew-excerpt-labels .crew-chip {
+  color: var(--icon-ink);
+  background: var(--icon-fill);
+  border-color: var(--icon-line);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .crew-review-card .crew-prose {
   max-height: 230px;
   overflow: hidden;

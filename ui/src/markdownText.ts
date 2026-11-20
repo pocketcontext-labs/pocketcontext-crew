@@ -1,4 +1,4 @@
-import { stripReviewMarkup } from "./reviewMarkup";
+import { copyBlocks, parseReviewMarkup, stripReviewMarkup } from "./reviewMarkup";
 
 /**
  * Markdown to readable plain text for compact previews (agent cards, chips).
@@ -227,7 +227,40 @@ export function markdownPlainText(markdown: string): string {
     .replace(/^\n+|\n+$/g, "");
 }
 
+/** Readable card text: Markdown markers would otherwise show, and could be cut in half. */
+const cardText = (markdown: string) =>
+  markdown
+    .replace(/^```.*$/gm, "")
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+)/gm, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)\n?/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*|__|~~|`/g, "")
+    .replace(/\*(\S[^*\n]*)\*/g, "$1")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+
+/** Card previews choose from the complete parsed source before shortening it.
+ * The first variant takes precedence over separate copy blocks; context-only
+ * drafts may still have ordinary paragraphs outside their reviewer notes. */
+export function markdownExcerpt(markdown: string, limit?: number, plain = cardText) {
+  const markup = markdown.includes(":::") ? parseReviewMarkup(markdown) : null;
+  const blocks = markup ? copyBlocks(markup) : [];
+  const first = blocks.find((block) => block.kind === "variant") ?? blocks[0];
+  const structured = !!markup?.blocks.length;
+  let text = structured ? markdownText(first?.content ?? markdown) : plain(markdown);
+  if (limit && text.length > limit) {
+    // Keep whole words when possible, or whole code points for an unbroken word.
+    const chars = Array.from(text);
+    if (chars.length > limit) {
+      let end = limit - 1;
+      while (end > 0 && !/\s/u.test(chars[end])) end--;
+      text = chars.slice(0, end || limit - 1).join("").trimEnd() + "…";
+    }
+  }
+  return { text, blocks, structured };
+}
+
 /** The first block of a brief as one line, for a tooltip or a chip. */
 export function markdownSummary(markdown: string): string {
-  return markdownText(markdown).split("\n")[0] || "";
+  return markdownExcerpt(markdown, undefined, markdownText).text.split("\n")[0] || "";
 }

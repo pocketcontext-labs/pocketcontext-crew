@@ -441,6 +441,20 @@ it("opens a review from anywhere on its Approvals card, which holds no other con
     within(dialog).getByRole("button", { name: "Approve draft" }),
   ).toBeInTheDocument();
 });
+it("shows channels and the first variant on the Approvals card", async () => {
+  fixtures.reviews = [{ ...review, draft: [
+    ":::note", "Reviewer reminder", ":::",
+    ":::variant{channel=linkedin}", "First **post**", ":::",
+    ":::variant{channel=x}", "Second post", ":::",
+  ].join("\n") }];
+  history.replaceState(null, "", "/#/approvals");
+  render(<CrewWorkspace />);
+  const card = await screen.findByRole("button", { name: "Review draft: Launch post" });
+  expect(within(card).getByText("LinkedIn")).toBeVisible();
+  expect(within(card).getByText("X")).toBeVisible();
+  expect(card).toHaveTextContent("First post");
+  expect(card).not.toHaveTextContent(/:::|Reviewer reminder|Second post/);
+});
 describe("review links (#/approvals/<id>)", () => {
   const decided: Row = {
     ...review,

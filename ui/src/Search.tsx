@@ -11,6 +11,8 @@ import {
 } from "react";
 import { statuses, val, type Row } from "./crewApi";
 import { t } from "./i18n";
+import { markdownExcerpt } from "./markdownText";
+import { ExcerptContent } from "./ExcerptContent";
 import {
   failureText,
   matchNames,
@@ -41,9 +43,24 @@ const popupLimit = 10;
 const groupLimit = 5;
 const pageSize = 20;
 
-/** Server text is only ever rendered as React text and <mark>, never as HTML. */
-export function Excerpt({ text }: { text: unknown }) {
-  const parts = parseExcerpt(text);
+type SourceForHit = (hit: SearchHit) => Row | undefined;
+
+/** FTS highlights a short fragment, which can start inside a reviewer note or
+ * in the middle of a directive. Interpret the complete matching source field.
+ * Other hits keep their original, highlighted server snippets. */
+function SearchExcerpt({ hit, sourceForHit }: { hit: SearchHit; sourceForHit: SourceForHit }) {
+  const source = sourceForHit(hit);
+  if (!source || source.revision !== hit.revision) return null;
+  const parts = parseExcerpt(hit.excerpt);
+  const fragment = parts.map((part) => part.text).join("").replace(/^…|…$/g, "");
+  const fields = hit.collection === "tasks" ? ["description", "draft"] : ["body"];
+  for (const field of fields) {
+    const body = val(source, field);
+    if (!body.includes(":::") || !body.includes(fragment)) continue;
+    const excerpt = markdownExcerpt(body, 240);
+    if (excerpt.structured)
+      return <span className="crew-excerpt"><ExcerptContent excerpt={excerpt} /></span>;
+  }
   if (!parts.length) return null;
   return (
     <span className="crew-excerpt">
@@ -102,6 +119,7 @@ type Live = {
 };
 
 export function GlobalSearch({
+  sourceForHit,
   agents,
   buckets,
   pageText,
@@ -110,6 +128,7 @@ export function GlobalSearch({
   onOpenAgent,
   onOpenBucket,
 }: {
+  sourceForHit: SourceForHit;
   agents: Row[];
   buckets: Row[];
   /** The query of the Search page while it is shown, to prefill the field. */
@@ -357,7 +376,7 @@ export function GlobalSearch({
           <small>
             {option.kind === "agent"
               ? t("Agent")
-              : val(option.row, "purpose") || t("Bucket")}
+              : markdownExcerpt(val(option.row, "purpose"), undefined, String).text || t("Bucket")}
           </small>
         </div>
       );
@@ -365,7 +384,7 @@ export function GlobalSearch({
       <div key={option.key} {...props}>
         <strong>{option.hit.title || t("Untitled")}</strong>
         <small>{hitMeta(option.hit)}</small>
-        <Excerpt text={option.hit.excerpt} />
+        <SearchExcerpt hit={option.hit} sourceForHit={sourceForHit} />
       </div>
     );
   };
@@ -601,11 +620,13 @@ export function usePagedSearch(
 }
 
 function ResultList({
+  sourceForHit,
   label,
   archived,
   paged,
   onOpenHit,
 }: {
+  sourceForHit: SourceForHit;
   label: string;
   archived: boolean;
   paged: ReturnType<typeof usePagedSearch>;
@@ -649,7 +670,7 @@ function ResultList({
                 </span>
                 <strong>{hit.title || t("Untitled")}</strong>
                 <small>{hitMeta(hit)}</small>
-                <Excerpt text={hit.excerpt} />
+                <SearchExcerpt hit={hit} sourceForHit={sourceForHit} />
               </button>
             </li>
           ))}
@@ -699,6 +720,7 @@ export type SearchEntry = {
 };
 
 export function SearchPage({
+  sourceForHit,
   text,
   agents,
   buckets,
@@ -708,6 +730,7 @@ export function SearchPage({
   onOpenBucket,
   onResults,
 }: {
+  sourceForHit: SourceForHit;
   /** The address's query; null when the address is not a valid search. */
   text: string | null;
   agents: Row[];
@@ -812,7 +835,7 @@ export function SearchPage({
               <li key={row.id}>
                 <button onClick={() => onOpenBucket(row)}>
                   <strong>{val(row, "name")}</strong>
-                  <small>{val(row, "purpose") || t("Bucket")}</small>
+                  <small>{markdownExcerpt(val(row, "purpose"), undefined, String).text || t("Bucket")}</small>
                 </button>
               </li>
             ))}
@@ -822,6 +845,7 @@ export function SearchPage({
       <section aria-labelledby="search-items">
         <h2 id="search-items">{t("Tasks and notes")}</h2>
         <ResultList
+          sourceForHit={sourceForHit}
           label={t("Tasks and notes")}
           archived={false}
           paged={current}
@@ -832,6 +856,7 @@ export function SearchPage({
         <section aria-labelledby="search-archived">
           <h2 id="search-archived">{t("Archived tasks and notes")}</h2>
           <ResultList
+          sourceForHit={sourceForHit}
             label={t("Archived tasks and notes")}
             archived
             paged={old}

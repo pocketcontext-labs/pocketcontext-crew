@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PlainTitles } from "./PlainRefs";
+import { ExcerptContent } from "./ExcerptContent";
+import { markdownExcerpt } from "./markdownText";
 import { val, type Row } from "./crewApi";
 import { t, tn } from "./i18n";
 import { noteSorts, type NoteSort } from "./itemLink";
@@ -145,7 +146,7 @@ export function BucketChips({
               type="button"
               aria-pressed={isSelected}
               aria-label={tn(count, "{name}, {n} note", "{name}, {n} notes", { name })}
-              title={val(bucket, "purpose") || undefined}
+              title={markdownExcerpt(val(bucket, "purpose"), undefined, String).text || undefined}
               onClick={() => onSelect(isSelected ? "" : bucket.id)}
             >
               {name} <span className="crew-bucket-chip-count">· {count}</span>
@@ -164,12 +165,10 @@ export function BucketChips({
 export function NoteRows({
   notes,
   bucketName,
-  snippet,
   onOpen,
 }: {
   notes: Row[];
   bucketName: (id: string) => string;
-  snippet: (note: Row) => string;
   onOpen: (note: Row) => void;
 }) {
   return (
@@ -188,7 +187,7 @@ export function NoteRows({
             <RelativeTime value={val(note, "updated")} fallback={t("Just now")} />
           </span>
           <span className="crew-note-row-snippet">
-            <PlainTitles text={snippet(note)} />
+            <ExcerptContent excerpt={markdownExcerpt(val(note, "body"), 180)} resolveTitles />
           </span>
         </button>
       ))}

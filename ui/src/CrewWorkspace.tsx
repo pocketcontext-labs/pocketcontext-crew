@@ -37,7 +37,8 @@ import Home from "./Home";
 import Settings from "./Settings";
 import { loadReaderSettings } from "./sessionGuide";
 import LabelsInput from "./LabelsInput";
-import { markdownText } from "./markdownText";
+import { markdownExcerpt, markdownText } from "./markdownText";
+import { ExcerptContent } from "./ExcerptContent";
 import { ReviewChoices, ReviewContent, ReviewDecision, ReviewRequest, ReviewRequestBlocked } from "./Review";
 import { decisionSummary, objects } from "./reviews";
 import { strandedWakes } from "./wakes";
@@ -314,17 +315,6 @@ const onHold = (task: Row) => val(task, "readiness") !== "ready";
 const when = (raw: unknown) => (
   <RelativeTime value={raw as Instant} fallback={t("just now")} />
 );
-/** Readable card text: Markdown markers would otherwise show, and could be cut in half. */
-const plainPreview = (markdown: string) =>
-  markdown
-    .replace(/^```.*$/gm, "")
-    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+)/gm, "")
-    .replace(/!\[[^\]]*\]\([^)]*\)\n?/g, "")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\*\*|__|~~|`/g, "")
-    .replace(/\*(\S[^*\n]*)\*/g, "$1")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
 /**
  * On hold (with its reason on hover) or Ready; not shown for Done tasks.
  * With `onFilter` (board cards) the chip is a button that filters the board
@@ -2257,8 +2247,12 @@ export default function CrewWorkspace() {
       : view === "board" && (boardFiltered || boardSearched)
         ? [{ label: t("Clear all filters"), onClick: clearBoard }]
         : [];
+  const sourceForHit = (hit: SearchHit) =>
+    data[hit.collection].find((row) => row.id === hit.id) ??
+    archived[hit.collection].find((row) => row.id === hit.id);
   const globalSearch = (
     <GlobalSearch
+      sourceForHit={sourceForHit}
       agents={data.agents}
       buckets={data.buckets}
       pageText={view === "search" ? searchText : null}
@@ -2663,6 +2657,7 @@ export default function CrewWorkspace() {
           )}
           {view === "search" && (
             <SearchPage
+              sourceForHit={sourceForHit}
               text={searchText}
               agents={data.agents}
               buckets={data.buckets}
@@ -2754,7 +2749,7 @@ export default function CrewWorkspace() {
                       />
                     )}
                     <h3>{val(x, "title")}</h3>
-                    <p>{plainPreview(val(x, "description")).slice(0, 150)}</p>
+                    <p><ExcerptContent excerpt={markdownExcerpt(val(x, "description"), 150)} /></p>
                     {invalidAssignment(x) && (
                       <p className="crew-assignment-warning">
                         {t("Assigned agent is inactive or unavailable. Reassign this task.")}
@@ -2867,7 +2862,6 @@ export default function CrewWorkspace() {
               <NoteRows
                 notes={shownNotes}
                 bucketName={(id) => name(id, "buckets")}
-                snippet={(note) => plainPreview(val(note, "body")).slice(0, 180)}
                 onOpen={(note) => openItem("note", note)}
               />
               {!shownNotes.length && (
@@ -2971,7 +2965,7 @@ export default function CrewWorkspace() {
                         type="button"
                         className="crew-bucket-filter"
                         aria-pressed={selected}
-                        title={val(x, "purpose") || undefined}
+                        title={markdownExcerpt(val(x, "purpose"), undefined, String).text || undefined}
                         onClick={() => setBucket(selected ? "" : x.id)}
                       >
                         <span aria-hidden="true">▤</span>
@@ -3044,7 +3038,7 @@ export default function CrewWorkspace() {
                       <CardThumbnail thumb={thumbs[x.id]} token={thumbToken} />
                     )}
                     <h3>{val(x, "title")}</h3>
-                    <p>{plainPreview(val(x, "body")).slice(0, 180)}</p>
+                    <p><ExcerptContent excerpt={markdownExcerpt(val(x, "body"), 180)} /></p>
                     <small>
                       {t("Revision {n}", { n: String(x.revision) })} · {when(x.updated)}
                     </small>
@@ -3109,7 +3103,7 @@ export default function CrewWorkspace() {
                         className="crew-review-preview"
                         id={`review-preview-${x.id}`}
                       >
-                        {plainPreview(val(x, "draft")).slice(0, 600)}
+                        <ExcerptContent excerpt={markdownExcerpt(val(x, "draft"), 600)} />
                       </p>
                     </button>
                   );
@@ -3181,8 +3175,8 @@ export default function CrewWorkspace() {
                       )}
                       {/* A preview: the brief as plain text, one line per
                           block, clamped to whole lines. */}
-                      <p title={markdownText(val(x, "brief")) || undefined}>
-                        {markdownText(val(x, "brief"))}
+                      <p title={markdownExcerpt(val(x, "brief"), undefined, markdownText).text || undefined}>
+                        <ExcerptContent excerpt={markdownExcerpt(val(x, "brief"), undefined, markdownText)} />
                       </p>
                     </button>
                     {agentKind(x) === "external" && (
