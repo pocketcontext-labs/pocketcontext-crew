@@ -928,25 +928,17 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-home-start header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   margin-bottom: 14px;
 }
 .crew-home-start header h2 {
   margin: 0;
 }
-.crew-home-start header span {
+.crew-home-start header > span {
   flex: 1;
   font-size: 12px;
   color: #71806e;
-}
-.crew-app .crew-home-start header button {
-  background: none;
-  border: 0;
-  padding: 2px 6px;
-  font-size: 12px;
-  color: #61724f;
-  text-decoration: underline;
 }
 .crew-home-start ol {
   list-style: none;
