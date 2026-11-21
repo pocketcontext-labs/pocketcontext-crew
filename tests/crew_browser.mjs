@@ -2496,7 +2496,7 @@ try {
    assert.equal(await page.evaluate(()=>matchMedia('(hover: hover)').matches),false,'a touch screen does not hover');
    await archiveRow.hover();
    assert.equal(await archiveRow.evaluate(e=>e.matches(':hover')),true);
-   assert.equal(await fill(archiveRow),row.fill,'on a touch screen :hover leaves no selected look');
+   assert.equal(await fill(archiveRow),'rgba(0, 0, 0, 0)','on a touch screen the row lets the opaque menu surface show through');
    await touch.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch.detach();
   }else{
    await archiveRow.hover();const hovered=await fill(archiveRow);
