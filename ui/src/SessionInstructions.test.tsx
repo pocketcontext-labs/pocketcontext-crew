@@ -109,12 +109,13 @@ it("previews the coding workflow without changing the draft and saves only on ex
   expect(update).toHaveBeenCalledExactlyOnceWith(source.agent.id, 4, { instructions: template }, "Edited by hand");
 });
 
-it.each(["external", "bot"])("offers all five templates for a customized %s agent on older servers", (kind) => {
+it.each(["external", "bot"])("offers all workflow templates for a customized %s agent on older servers", (kind) => {
   const custom = { ...session, agent: { ...session.agent, kind }, is_default: false, body: "Custom workflow" };
   render(<SessionInstructions session={custom} initialMode="edit" onChange={() => undefined} Markdown={Markdown} />);
   const list = screen.getByRole("region", { name: "Templates" });
   expect([...list.querySelectorAll("summary")].map(row => row.textContent)).toEqual([
     "General workflow", "Coding workflow template", "Research", "Draft for approval", "Dispatcher",
+    "Market positioning", "Sales outreach", "Launch planning",
   ]);
   expect(screen.getByLabelText(/Session instructions/)).toHaveValue("Custom workflow");
 });
