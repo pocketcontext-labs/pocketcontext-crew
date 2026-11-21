@@ -4786,3 +4786,10 @@ a.crew-logo:hover .product-brand span {
 .crew-chat-instructions p { margin: 4px 0 0; color: var(--muted); }
 .crew-chat-instructions small, .crew-chat-instructions textarea, .crew-chat-instructions > p { grid-column: 1 / -1; }
 .crew-agent-no-tasks { margin: 0; font-size: 14px; }
+
+#crew-integration-settings { scroll-margin-top: 5rem; }
+#crew-integration-settings:focus {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+  border-radius: 4px;
+}

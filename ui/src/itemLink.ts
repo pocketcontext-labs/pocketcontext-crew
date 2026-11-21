@@ -486,7 +486,7 @@ export function takeLoginReturn(): string | null {
   }
 }
 
-export const connectSections = ["files"] as const;
+export const connectSections = ["files", "integration"] as const;
 export type ConnectSection = (typeof connectSections)[number];
 /** The Connect page scrolled to one section (consumed once, then dropped). */
 export const connectSectionHash = (section: ConnectSection) =>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { crewApi, val, type Row } from "./crewApi";
 import { t } from "./i18n";
+import { connectSectionHash } from "./itemLink";
 import "./agentStartup.css";
 
 type Startup = { agent: Row; config?: Row; mapping?: Row; paused: boolean };
@@ -80,7 +81,7 @@ export default function AgentStartupSettings({ agent, onConfigured }: {
       {state && <>
         {available && <p>{t("Integration: {host}", { host })}</p>}
         {mapped && <p>{t("Recipient: {reference}", { reference: mapped })}</p>}
-        {!available && <p>{state.paused ? t("Delivery is paused.") : t("Connect and enable an integration to start agents automatically.")}{" "}<a href="#/connect">{t("Open integration settings")}</a></p>}
+        {!available && <p>{state.paused ? t("Delivery is paused.") : t("Connect and enable an integration to start agents automatically.")}{" "}<a href={connectSectionHash("integration")}>{t("Open integration settings")}</a></p>}
         {choosing && available && !mapped && <div className="crew-startup-destination">
           <label className="crew-field">
             <span>{t("Recipient reference")}</span>

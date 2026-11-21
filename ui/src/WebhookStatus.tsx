@@ -307,16 +307,21 @@ export default function WebhookStatus({
   agents,
   tasks = [],
   collapsible = false,
+  reveal = false,
   mcpUrl = `${window.location.origin}/mcp`,
 }: {
   agents: Row[];
   /** Current and archived tasks, used only to tell live warnings from old ones. */
   tasks?: Row[];
   collapsible?: boolean;
+  reveal?: boolean;
   /** null when this install has no MCP endpoint to authorize bots against. */
   mcpUrl?: string | null;
 }) {
-  const [open, setOpen] = useState(!collapsible);
+  const [open, setOpen] = useState(!collapsible || reveal);
+  useEffect(() => {
+    if (reveal) setOpen(true);
+  }, [reveal]);
   const [config, setConfig] = useState<Row>();
   const [mappings, setMappings] = useState<Row[]>([]);
   const [routing, setRouting] = useState<Row>();
