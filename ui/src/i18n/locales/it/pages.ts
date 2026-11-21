@@ -2,6 +2,7 @@
 // sign-in, reviews, dialogs headers, claims and relative dates (Crew 0.36.0).
 // Includes the English values of label tables that render through t().
 const it: Record<string, string> = {
+  "＋ New draft": "＋ Nuova bozza",
   "Save a draft or add an option first.": "Prima salva una bozza o aggiungi un’opzione.",
   "Note for you": "Nota per te",
   "Text · pick one": "Testo · scegli un’opzione",

@@ -7,6 +7,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { CopyControl } from "./CopyFeedback";
 import { crewApi, val, list, type ArtifactLink, type Row } from "./crewApi";
 import {
@@ -89,6 +90,7 @@ function filterOf(state: State): SharedFilter {
 }
 
 type Props = {
+  header?: HTMLElement | null;
   notes: Row[];
   tasks: Row[];
   focus?: string;
@@ -130,7 +132,7 @@ export function expiryFrom(
   return "";
 }
 
-export default function Shared({ notes, tasks, focus, Prose }: Props) {
+export default function Shared({ header, notes, tasks, focus, Prose }: Props) {
   const phone = usePhone();
   const [creating, setCreating] = useState(false);
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -219,16 +221,13 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
 
   if (!rows)
     return <p className="crew-shared-loading">{t("Loading artifacts…")}</p>;
+  const newDraftButton = <button type="button" className="crew-primary" onClick={() => setCreating(true)}>{t("＋ New draft")}</button>;
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
   return (
     <section className="crew-shared" aria-label={t("Shared artifacts")}>
-      {rows.length > 0 && (
-        <div className="crew-shared-create">
-          <button type="button" className="crew-primary" onClick={() => setCreating(true)}>
-            {t("Create draft")}
-          </button>
-        </div>
-      )}
+      {rows.length > 0 && (header && !phone
+        ? createPortal(newDraftButton, header)
+        : <div className="crew-shared-create">{newDraftButton}</div>)}
       {rows.length > 0 && !phone && (
         // A desktop shows every status at once, like the Tasks agent row
         // (same chips); one is chosen at a time and Shared has no "All".

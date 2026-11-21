@@ -951,6 +951,7 @@ function Modal({
   );
 }
 export default function CrewWorkspace() {
+  const [sharedHeader, setSharedHeader] = useState<HTMLDivElement | null>(null);
   // Phones get the slim top bar, bottom tabs and one board column at a time.
   const phone = usePhone();
   const [view, setView] = useState<View>(() => {
@@ -2561,7 +2562,7 @@ export default function CrewWorkspace() {
         )}
         <section className="crew-content">
           {!phone && (
-          <div className="crew-heading">
+          <div className="crew-heading" ref={view === "shared" ? setSharedHeader : undefined}>
             <div>
               <p className="crew-eyebrow">{t(eyebrows[view])}</p>
               <div className="crew-title-row">
@@ -2804,6 +2805,7 @@ export default function CrewWorkspace() {
           )}
           {view === "shared" && (
             <Shared
+              header={sharedHeader}
               notes={[...data.notes, ...archived.notes]}
               tasks={[...data.tasks, ...archived.tasks]}
               focus={sharedFocusFromHash(location.hash)}

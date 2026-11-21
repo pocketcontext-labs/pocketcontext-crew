@@ -100,14 +100,14 @@ describe("Shared", () => {
     write.mockImplementation(async () => { rows.push(second); return second; });
     try {
       render(<Shared notes={[]} tasks={[]} focus={first.id} Prose={Prose} />);
-      fireEvent.click(await screen.findByRole("button", { name: "Create draft" }));
+      fireEvent.click(await screen.findByRole("button", { name: "＋ New draft" }));
       const sheet = within(screen.getByRole("dialog", { name: "New shared page" }));
       fireEvent.change(sheet.getByLabelText("Title"), { target: { value: second.title } });
       fireEvent.click(sheet.getByRole("button", { name: "Create draft" }));
       await screen.findByText(second.title);
       expect(location.hash).toBe("#/shared/" + second.id);
       expect(screen.getByText(first.title)).toBeVisible();
-      expect(screen.getByRole("button", { name: "Create draft" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "＋ New draft" })).toBeEnabled();
     } finally {
       vi.unstubAllGlobals();
       history.replaceState(null, "", "/");

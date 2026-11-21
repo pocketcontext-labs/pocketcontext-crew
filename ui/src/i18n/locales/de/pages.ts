@@ -2,6 +2,7 @@
 // sign-in, reviews, dialogs headers, claims and relative dates (Crew 0.36.0).
 // Includes the English values of label tables that render through t().
 const de: Record<string, string> = {
+  "＋ New draft": "＋ Neuer Entwurf",
   "Save a draft or add an option first.": "Speichere zuerst einen Entwurf oder füge eine Option hinzu.",
   "Note for you": "Hinweis für dich",
   "Text · pick one": "Text · eine Option auswählen",
