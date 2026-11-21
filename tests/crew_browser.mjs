@@ -2208,6 +2208,7 @@ try {
   const optionCopy=copyButton(dialog(), 'Copy A · Out of tokens');
   await optionCopy.scrollIntoViewIfNeeded();
   await page.mouse.move(0, 0);
+  await optionCopy.hover();
   const fill=await optionCopy.evaluate(b=>getComputedStyle(b).backgroundColor);
   const before=await optionCopy.boundingBox();
   assert.ok(before.height>=44&&before.width>=44,'option Copy is a 44 px target');
