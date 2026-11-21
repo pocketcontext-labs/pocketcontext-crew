@@ -61,6 +61,7 @@ export default function Home({
   ready,
   busy,
   seed,
+  starterCrewBanner,
   newTask,
   openItem,
   openReview,
@@ -75,6 +76,7 @@ export default function Home({
   ready: boolean;
   busy: boolean;
   seed: () => void;
+  starterCrewBanner: ReactNode;
   newTask: () => void;
   /** Opens an item; the source is the Home section it was opened from. */
   openItem: (kind: ItemKind, row: Row, source?: ListSource) => void;
@@ -208,6 +210,7 @@ export default function Home({
 
   return (
     <div className="crew-home">
+      {!getStarted && starterCrewBanner}
       {guideRow && (
         <div className="crew-home-guide">
           <a href={viewHashes.guide}>

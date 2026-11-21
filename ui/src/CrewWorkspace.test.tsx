@@ -312,6 +312,33 @@ it("reopens crew setup when all agents are deactivated", async () => {
   expect(await screen.findByRole("button", { name: "Set up starter crew" })).toBeVisible();
   expect(screen.getByText("0 of 4 done")).toBeVisible();
 });
+it.each(["tasks", "notes", "approvals", "shared", "agents", "archive", "settings", "guide", "connect", "search"])(
+  "offers starter setup on %s when buckets remain but every agent is inactive", async (route) => {
+    fixtures.agents = [];
+    serveArchived({ agents: [{ ...agent, archived: true }] });
+    history.replaceState(null, "", "/#/" + route);
+    render(<CrewWorkspace />);
+    expect(await screen.findByRole("button", { name: "Set up starter crew" })).toBeEnabled();
+  },
+);
+it("restores starter agents in place when their buckets already exist", async () => {
+  const roles = ["Build", "Deploy", "Design", "Learn", "Network"];
+  const inactive = roles.map((name, i) => ({ ...agent, id: "agent" + i, name, archived: true }));
+  fixtures.agents = [];
+  fixtures.buckets = inactive.map((role, i) => ({
+    ...bucket, id: "bucket" + i, name: role.name.toUpperCase(), responsible_agent: role.id,
+  }));
+  fixtures.notes = fixtures.buckets.map((b, i) => ({ id: "note" + i, revision: 1, title: "About this bucket", bucket: b.id }));
+  serveArchived({ agents: inactive });
+  vi.mocked(crewApi.write).mockImplementation(async (_action, data, row) => ({ ...row!, ...data }));
+  render(<CrewWorkspace />);
+  fireEvent.click(await screen.findByRole("button", { name: "Set up starter crew" }));
+  await screen.findByText("Your five starter agents and their buckets are ready.");
+  expect(crewApi.write).toHaveBeenCalledTimes(5);
+  for (const role of inactive) {
+    expect(crewApi.write).toHaveBeenCalledWith("agent.update", { archived: false }, role);
+  }
+});
 it("advances past a manually confirmed connection and remembers it", async () => {
   fixtures.tasks = [];
   fixtures.reviews = [];

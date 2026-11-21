@@ -2049,44 +2049,77 @@ export default function CrewWorkspace() {
       : dialog?.kind ?? "item";
   const seed = () =>
     perform(async () => {
-      for (const [n, purpose] of [
+      const readBoth = async (collection: string, fields: string[]) => {
+        const [active, archived] = await Promise.all([
+          crewApi.read(collection, { fields }),
+          crewApi.read(collection, { archived: true, fields }),
+        ]);
+        return [...active, ...archived];
+      };
+      const [agents, buckets, notes] = await Promise.all([
+        readBoth("agents", ["name", "archived"]),
+        readBoth("buckets", ["name", "purpose", "responsible_agent", "archived"]),
+        readBoth("notes", ["bucket", "title"]),
+      ]);
+      for (const [name, purpose] of [
         ["Build", "Product plans, priorities and technical decisions."],
         ["Deploy", "Release preparation and deployment decisions."],
         ["Design", "Brand, voice and visual direction."],
         ["Learn", "Research, trusted sources and useful findings."],
         ["Network", "Audience, messaging, outreach and posting voice."],
       ]) {
-        const agents = await crewApi.read("agents");
-        const agent =
-          agents.find((x) => val(x, "name") === n) ||
-          (await crewApi.write("agent.create", {
-            name: n,
-            brief: `Read relevant notes before work. Maintain ${n.toUpperCase()}; request changes elsewhere through tasks. Record progress in tasks and save durable decisions and findings only. Submit drafts for human review. The owner performs external actions.`,
-          }));
-        const buckets = await crewApi.read("buckets");
-        const b =
-          buckets.find((x) => val(x, "name") === n.toUpperCase()) ||
-          (await crewApi.write("bucket.create", {
-            name: n.toUpperCase(),
-            purpose,
-            responsible_agent: agent.id,
-          }));
-        const notes = await crewApi.read("notes");
-        if (
-          !notes.some(
-            (x) =>
-              val(x, "bucket") === b.id &&
-              val(x, "title") === "About this bucket",
-          )
-        )
+        const bucketName = name.toUpperCase();
+        let agent = agents.find((row) => val(row, "name") === name);
+        if (agent?.archived) {
+          agent = await crewApi.write("agent.update", { archived: false }, agent);
+        } else if (!agent) {
+          agent = await crewApi.write("agent.create", {
+            name,
+            brief: `Read relevant notes before work. Maintain ${bucketName}; request changes elsewhere through tasks. Record progress in tasks and save durable decisions and findings only. Submit drafts for human review. The owner performs external actions.`,
+          });
+        }
+        let bucket = buckets.find((row) => val(row, "name") === bucketName);
+        if (bucket?.archived) {
+          bucket = await crewApi.write("bucket.update", { archived: false }, bucket);
+        } else if (!bucket) {
+          bucket = await crewApi.write("bucket.create", {
+            name: bucketName, purpose, responsible_agent: agent.id,
+          });
+        }
+        // Archived notes include those hidden by an archived parent. Leave
+        // individually archived introductions alone, and keep edited ones.
+        const bucketId = bucket.id;
+        if (!notes.some((row) => val(row, "bucket") === bucketId && val(row, "title") === "About this bucket")) {
+          const ownerId = val(bucket, "responsible_agent");
+          const ownerName = ownerId === agent.id ? name : val(agents.find((row) => row.id === ownerId), "name");
+          const responsibility = ownerName ? `Responsible agent: ${ownerName}. ` : "";
           await crewApi.write("note.create", {
-            bucket: b.id,
+            bucket: bucketId,
             title: "About this bucket",
-            body: `${purpose}\n\nResponsible agent: ${n}. All agents can read this bucket. Save durable decisions and useful findings.`,
+            body: `${val(bucket, "purpose") || purpose}\n\n${responsibility}All agents can read this bucket. Save durable decisions and useful findings.`,
             links: [],
           });
+        }
       }
     }, t("Your five starter agents and their buckets are ready."));
+  const starterCrewBanner = !loading && !data.agents.length && (
+    <div className="crew-welcome">
+      <div>
+        <span className="crew-eyebrow">{t("START WITH A SMALL CREW")}</span>
+        <h2>{t("A shared brief for every agent.")}</h2>
+        <p>
+          {t("Create Build, Deploy, Design, Learn and Network with a bucket each. Edit their briefs to fit your work.")}
+        </p>
+      </div>
+      <button
+        className="crew-primary"
+        disabled={busy}
+        onClick={() => void seed()}
+      >
+        {t("Set up starter crew")}
+      </button>
+    </div>
+  );
   const archivedRow =
     dialog?.row && (dialog.kind === "task" || dialog.kind === "note")
       ? archived[`${dialog.kind}s`].find((x) => x.id === dialog.row?.id)
@@ -2590,31 +2623,7 @@ export default function CrewWorkspace() {
           {loading && view !== "guide" && (
             <p role="status">{t("Loading your workspace…")}</p>
           )}
-          {!loading &&
-            !data.agents.length &&
-            !data.buckets.length &&
-            view !== "archive" &&
-            view !== "home" &&
-            view !== "search" &&
-            view !== "guide" &&
-            view !== "settings" && (
-              <div className="crew-welcome">
-                <div>
-                  <span className="crew-eyebrow">{t("START WITH A SMALL CREW")}</span>
-                  <h2>{t("A shared brief for every agent.")}</h2>
-                  <p>
-                    {t("Create Build, Deploy, Design, Learn and Network with a bucket each. Edit their briefs to fit your work.")}
-                  </p>
-                </div>
-                <button
-                  className="crew-primary"
-                  disabled={busy}
-                  onClick={() => void seed()}
-                >
-                  {t("Set up starter crew")}
-                </button>
-              </div>
-            )}
+          {view !== "home" && starterCrewBanner}
           {showBoard && !phone && (
             <div className="crew-toolbar">
               {boardSearchField}
@@ -2749,6 +2758,7 @@ export default function CrewWorkspace() {
           )}
           {view === "home" && (
             <Home
+              starterCrewBanner={starterCrewBanner}
               data={data}
               archived={archived}
               pending={pending}
