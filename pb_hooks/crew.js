@@ -742,7 +742,7 @@ function read(e) {
         const value = r.publicExport();
         const kind = webhooks.agentKind(r);
         value.chat_start = value.archived || kind === "human" ? "" :
-          kind === "bot" && automatic.has(r.id) ? "webhook" : "manual";
+          kind === "bot" && !r.getBool("startup_disabled") && automatic.has(r.id) ? "webhook" : "manual";
         return keep ? pick(value, keep) : value;
       }
       const value =

@@ -128,7 +128,7 @@ export default function SessionInstructions({
     if (next === "edit") setText((draft) => draft ?? session.body);
     setMode(next);
   };
-  if (session.agent.kind === "bot") {
+  if (session.agent.kind === "bot" && session.revision === 0) {
     return (
       <div className="crew-dialog-body crew-session-dialog">
         <div className="crew-session-view crew-session-view-read">

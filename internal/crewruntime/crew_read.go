@@ -54,7 +54,7 @@ var crewSQLViews = func() []sqlread.View {
 	}
 	f := strings.Fields
 	return []sqlread.View{
-		{Name: "agents", Table: "crew_agents", Columns: cols(f("name brief kind"), archive)},
+		{Name: "agents", Table: "crew_agents", Columns: cols(f("name brief kind startup_disabled"), archive)},
 		{Name: "buckets", Table: "crew_buckets", Columns: cols(f("name purpose responsible_agent"), archive)},
 		{Name: "notes", Table: "crew_notes", Columns: cols(f("bucket title body links"), archive)},
 		{Name: "note_revisions", Table: "crew_note_revisions", Columns: cols(f("note title body links actor reported_agent reason"))},

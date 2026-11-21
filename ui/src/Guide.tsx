@@ -61,18 +61,6 @@ const connectFirst = (mode: HelpMode): string =>
     other: t("Connect an agent shows the steps for this Crew."),
   })[mode];
 
-/** Fills one `{name}` in translated text with a React node. */
-function withNode(text: string, name: string, node: ReactNode) {
-  const [before, after = ""] = text.split(`{${name}}`);
-  return (
-    <>
-      {before}
-      {node}
-      {after}
-    </>
-  );
-}
-
 function Entry({
   topic,
   current,
@@ -159,13 +147,7 @@ export default function Guide() {
         <ul className="crew-guide-facts">
           <li>
             <strong>{t("One agent per project.")}</strong>{" "}
-            {withNode(
-              t(
-                "Create it with {option} and name it after the project, for example pocketcontext-crew. It needs no webhook.",
-              ),
-              "option",
-              <em>{t("I start it myself")}</em>,
-            )}
+            {t("Create an agent and name it after the project. You can start it in a connected chat.")}
           </li>
           <li>
             <strong>{t("Its queue is its Ready tasks.")}</strong>{" "}

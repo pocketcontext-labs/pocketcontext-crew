@@ -197,6 +197,7 @@ const de: Record<string, string> = {
     "Beginne einen Seitenentwurf, den du über einen geheimen Link teilen kannst. Du schreibst ihn unter Geteilt und veröffentlichst ihn, wenn er fertig ist; bis dahin ist nichts öffentlich.",
   Title: "Titel",
   "Creating…": "Wird erstellt…",
+  "Start a draft. You can publish it when it’s ready.": "Erstelle einen Entwurf. Du kannst ihn veröffentlichen, sobald er fertig ist.",
   "Create draft": "Entwurf erstellen",
   "Shared page": "Geteilte Seite",
   "Bucket {name} options": "Optionen für Bucket {name}",

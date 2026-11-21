@@ -11,7 +11,8 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { CopyControl } from "./CopyFeedback";
+import { CopyControl, CopyGlyph, useCopyFeedback } from "./CopyFeedback";
+import { Icon } from "./Icon";
 import Brand from "./Brand";
 import { api } from "./api";
 import {
@@ -54,10 +55,12 @@ import {
 } from "./closedTasks";
 import StartSession, {
   SessionToast,
+  useSessionStart,
   agentInitials,
   type SessionStart,
 } from "./StartSession";
 import AgentAssignments from "./AgentAssignments";
+import AgentStartupSettings from "./AgentStartupSettings";
 import SessionInstructions from "./SessionInstructions";
 import UndoToast, { messageToastMs, undoToastMs } from "./UndoToast";
 import {
@@ -77,16 +80,12 @@ import {
 import {
   agentKind,
   canStartChat,
-  agentKindChoices,
-  agentKinds,
   agentKindSuffix,
   claimAgent,
   claimOf,
   claimLabel,
   claimTitle,
   copyText,
-  webhookConfigured,
-  type AgentKind,
 } from "./projectAgents";
 import { GlobalSearch, SearchPage, type SearchEntry } from "./Search";
 import { searchHash, searchTextFromHash, type SearchHit } from "./searchApi";
@@ -1700,6 +1699,9 @@ export default function CrewWorkspace() {
       (!viewState.heldOver || isLongHeld(x)),
   );
   const boardSearched = boardSearch.text !== "" || boardSearch.tokens.length > 0;
+  const emptyBoard = view === "board" && ready && !data.tasks.length &&
+    !boardFiltered && !boardSearched;
+  const showBoard = view === "board" && ready && !emptyBoard;
   // A label chosen (filter or search) shows its older closed tasks too, so a
   // release-0.21.0 label finds that release's work.
   const labelChosen =
@@ -2335,6 +2337,9 @@ export default function CrewWorkspace() {
     { label: t("Agent"), icon: icons.agent, onSelect: () => setDialog({ kind: "agent" }) },
     { label: t("Shared page"), icon: icons.shared, onSelect: () => setNewShared(true) },
   ];
+  const emptyMemory = view === "memory" && ready && !data.notes.length &&
+    !data.buckets.length && !noteText && !noteAgentShown;
+  const showMemory = view === "memory" && ready && !emptyMemory;
   const phoneAdd: PageAction | undefined =
     view === "home"
       ? {
@@ -2342,9 +2347,9 @@ export default function CrewWorkspace() {
           menu: { open: !!createAnchor },
           onClick: (anchor) => setCreateAnchor(anchor ?? null),
         }
-      : view === "board"
+      : showBoard
       ? { label: t("New task"), onClick: () => setDialog({ kind: "task" }) }
-      : view === "memory"
+      : showMemory
         ? {
             label: t("New note"),
             disabled: !data.buckets.length,
@@ -2354,7 +2359,7 @@ export default function CrewWorkspace() {
           ? { label: t("New agent"), onClick: () => setDialog({ kind: "agent" }) }
           : undefined;
   const phoneActions: PageAction[] =
-    view === "memory"
+    showMemory
       ? [
           { label: t("New bucket"), onClick: () => setDialog({ kind: "bucket" }) },
           ...(selectedBucket
@@ -2467,14 +2472,14 @@ export default function CrewWorkspace() {
             view={view}
             search={globalSearch}
             filter={
-              view === "board"
+              showBoard
                 ? {
                     label: t("Filters"),
                     count: boardFilterCount,
                     open: boardSheet,
                     onOpen: () => setBoardSheet(true),
                   }
-                : view === "memory"
+                : showMemory
                   ? {
                       label: t("Filter and sort"),
                       count: noteFilterCount,
@@ -2542,7 +2547,7 @@ export default function CrewWorkspace() {
                 {t("＋ New")}
               </button>
             )}
-            {view === "board" && (
+            {showBoard && (
               <button
                 className="crew-primary"
                 onClick={() => setDialog({ kind: "task" })}
@@ -2550,7 +2555,7 @@ export default function CrewWorkspace() {
                 {t("＋ New task")}
               </button>
             )}
-            {view === "memory" && (
+            {showMemory && (
               <div className="crew-actions">
                 <button onClick={() => setDialog({ kind: "bucket" })}>
                   {t("New bucket")}
@@ -2588,7 +2593,7 @@ export default function CrewWorkspace() {
           {loading && view !== "guide" && (
             <p role="status">{t("Loading your workspace…")}</p>
           )}
-          {!loading &&
+          {!loading && !emptyBoard && !emptyMemory && view !== "reviews" &&
             !data.agents.length &&
             !data.buckets.length &&
             view !== "archive" &&
@@ -2613,7 +2618,7 @@ export default function CrewWorkspace() {
                 </button>
               </div>
             )}
-          {view === "board" && !phone && (
+          {showBoard && !phone && (
             <div className="crew-toolbar">
               {boardSearchField}
               {assignmentSelect}
@@ -2661,8 +2666,8 @@ export default function CrewWorkspace() {
               </div>
             </div>
           )}
-          {view === "board" && !phone && data.agents.length > 0 && agentRow}
-          {view === "board" && phone && boardSheet && (
+          {showBoard && !phone && data.agents.length > 0 && agentRow}
+          {showBoard && phone && boardSheet && (
             <Sheet title={t("Filters")} className="crew-filter-sheet" onClose={() => setBoardSheet(false)}>
               {boardSearchField}
               <div className="crew-sheet-section crew-sheet-field">
@@ -2731,7 +2736,7 @@ export default function CrewWorkspace() {
               </button>
             </div>
           )}
-          {view === "board" && phone && (
+          {showBoard && phone && (
             <ColumnSwitcher
               columns={boardColumns.map(({ status, label, tasks }) => ({
                 status,
@@ -2819,7 +2824,17 @@ export default function CrewWorkspace() {
               onSectionShown={sectionShown}
             />
           )}
-          {view === "board" && (
+          {emptyBoard && (
+            <section className="crew-board-empty" aria-labelledby="crew-first-task">
+              <span className="crew-board-empty-icon" aria-hidden="true">{icons.tasks}</span>
+              <h2 id="crew-first-task">{archived.tasks.length ? t("No active tasks") : t("No tasks yet")}</h2>
+              <p>{t("Start with a title. You can assign the task to an agent later.")}</p>
+              <button className="crew-primary" onClick={() => setDialog({ kind: "task" })}>
+                {archived.tasks.length ? t("New task") : t("Create your first task")}
+              </button>
+            </section>
+          )}
+          {showBoard && (
             <div className={phone ? "crew-board crew-board-phone" : "crew-board"}>
               {boardColumns
                 .filter((c) => !phone || c.status === shownColumn)
@@ -2976,7 +2991,17 @@ export default function CrewWorkspace() {
               })}
             </div>
           )}
-          {view === "memory" && phone && (
+          {emptyMemory && (
+            <section className="crew-board-empty" aria-labelledby="crew-first-bucket">
+              <span className="crew-board-empty-icon" aria-hidden="true">{icons.notes}</span>
+              <h2 id="crew-first-bucket">{t("No notes yet")}</h2>
+              <p>{t("Notes live in buckets. Create a bucket first, then add notes to it.")}</p>
+              <button className="crew-primary" onClick={() => setDialog({ kind: "bucket" })}>
+                {t("New bucket")}
+              </button>
+            </section>
+          )}
+          {showMemory && phone && (
             <>
               <ColumnSwitcher
                 className="crew-bucket-switcher"
@@ -3066,7 +3091,7 @@ export default function CrewWorkspace() {
               )}
             </>
           )}
-          {view === "memory" && !phone && (
+          {showMemory && !phone && (
             <>
               <div className="crew-section-title crew-section-title-first">
                 <h2>{t("Buckets")}</h2>
@@ -3218,7 +3243,7 @@ export default function CrewWorkspace() {
           )}
           {view === "reviews" && (
             <>
-              <div className="crew-review-list">
+              {pending.length > 0 && <div className="crew-review-list">
                 {pending.map((x) => {
                   const title =
                     val(
@@ -3248,16 +3273,16 @@ export default function CrewWorkspace() {
                     </button>
                   );
                 })}
-              </div>
-              {!pending.length && (
-                <Empty
-                  title={t("Nothing waiting for your review")}
-                  action={<a href={viewHashes.board}>{t("Go to Tasks")}</a>}
-                >
-                  {t("Drafts sent for approval will appear here. Your approval does not perform the external action.")}
-                </Empty>
+              </div>}
+              {ready && !pending.length && (
+                <section className="crew-board-empty" aria-labelledby="crew-no-approvals">
+                  <span className="crew-board-empty-icon" aria-hidden="true">{icons.approvals}</span>
+                  <h2 id="crew-no-approvals">{t("Nothing waiting for your review")}</h2>
+                  <p>{t("Drafts sent for approval will appear here.")}</p>
+                  <a className="crew-button-link crew-primary" href={viewHashes.board}>{t("Go to Tasks")}</a>
+                </section>
               )}
-              <details className="crew-history-list">
+              {data.reviews.length > pending.length && <details className="crew-history-list">
                 <summary>
                   {t("Past decisions ({n})", { n: data.reviews.length - pending.length })}
                 </summary>
@@ -3274,7 +3299,7 @@ export default function CrewWorkspace() {
                       <span>{reviewStatusLabel(val(x, "status"))}</span>
                     </button>
                   ))}
-              </details>
+              </details>}
             </>
           )}
           {view === "agents" && (
@@ -3494,6 +3519,11 @@ export default function CrewWorkspace() {
               void archiveFromApproval(review, task)
             }
             close={closeDialog}
+            onAgentConfigured={(updated) => {
+              setDialog((open) => open?.kind === "agent" && open.row?.id === updated.id
+                ? { ...open, row: updated } : open);
+              void load({ silent: true });
+            }}
             refresh={() => void load({ silent: true })}
             onWithdrawn={(kind, id) => void refreshDialogRow(kind, id)}
             refreshRow={() => {
@@ -3543,6 +3573,7 @@ type EditorProps = {
   /** Archive task from a pending review's More menu (0.40.0). */
   archiveReviewTask?: (review: Row, task: Row) => void;
   close: () => void;
+  onAgentConfigured: (agent: Row) => void;
   /** Background reload after a file change (card thumbnails, task status). */
   refresh?: () => void;
   /** A file change withdrew this item's pending approval. */
@@ -3581,10 +3612,32 @@ function formValues(kind: Kind, row: Row | undefined, data: Data) {
     waitingReason: val(row, "waiting_reason"),
     // JSON, so the form compares and restores the exact chips.
     labels: JSON.stringify(list(row, "labels")),
-    // How an agent is started; a new one's default follows the webhook setup.
-    agentKind: agentKind(row) as string,
+    agentKind: row ? agentKind(row) : "external",
   };
 }
+function ChatInstructions({ agent }: { agent: Row }) {
+  const [result, setResult] = useState<SessionStart>();
+  const session = useSessionStart(agent, setResult);
+  const { state, run } = useCopyFeedback();
+  const name = val(agent, "name");
+  return (
+    <section className="crew-chat-instructions">
+      <div>
+        <h3>{t("Manual start")}</h3>
+        <p>{t("Paste the instructions into a chat connected to Crew.")}</p>
+      </div>
+      <button type="button" className="crew-copy-control crew-copy-icon"
+        aria-label={t("Copy instructions for {name}", { name })} title={t("Copy instructions for {name}", { name })}
+        onClick={() => void run(session.start)} disabled={session.loading}><CopyGlyph state={state} /></button>
+      {state === "copied" && <small role="status">{t("Instructions copied")}</small>}
+      {result?.state === "manual" && <textarea aria-label={t("Session prompt for {name}", { name })}
+        readOnly value={result.prompt} onFocus={(e) => e.currentTarget.select()} />}
+      {result?.state === "failed" && <p role="alert">{t("Could not prepare the session prompt for {name}. Check your connection and try again.", { name })}</p>}
+      {session.guide}
+    </section>
+  );
+}
+
 function Editor({
   kind,
   row,
@@ -3605,6 +3658,7 @@ function Editor({
   refresh,
   onWithdrawn,
   refreshRow,
+  onAgentConfigured,
 }: EditorProps) {
   const readOnly = !!archiveNotice;
   const root = useRef<HTMLDivElement>(null);
@@ -3699,24 +3753,8 @@ function Editor({
     [readiness, setReadiness] = useState(start.readiness),
     [waitingReason, setWaitingReason] = useState(start.waitingReason),
     [labels, setLabels] = useState(start.labels),
-    [agentKindValue, setAgentKind] = useState(start.agentKind),
-    agentKindTouched = useRef(false);
-  // A new agent is started manually unless the webhook integration is set up;
-  // until that is known, or if it can't be read, it is a webhook bot.
-  useEffect(() => {
-    if (kind !== "agent" || row) return;
-    let alive = true;
-    void crewApi.read("webhook_configs").then(
-      (configs) => {
-        if (alive && !agentKindTouched.current && !webhookConfigured(configs))
-          setAgentKind("external");
-      },
-      () => undefined,
-    );
-    return () => {
-      alive = false;
-    };
-  }, [kind, row]);
+    [agentKindValue, setAgentKind] = useState<string>(start.agentKind);
+  const [profileOpen, setProfileOpen] = useState(!row);
   // Files: an existing task or note's attachments, or files staged for a new one.
   const itemKind = kind === "task" || kind === "note" ? kind : null;
   const parent =
@@ -3969,9 +4007,7 @@ function Editor({
             : {
                 name: title,
                 brief: body,
-                ...(!row || agentKindValue !== initial.agentKind
-                  ? { kind: agentKindValue }
-                  : {}),
+                ...(!row ? { kind: agentKindValue } : {}),
               };
     if (!row && itemKind && staged.staged.length) {
       // One atomic request: the item, its files and resolved placeholders.
@@ -4122,6 +4158,57 @@ function Editor({
       staged.stage(named);
     }
   };
+  if (kind === "agent") {
+    const formId = `${hintId}-agent-profile`;
+    const briefLabel = agentKindValue === "human" ? t("Role description") : t("Agent brief");
+    return (
+      <div className="crew-dialog-body crew-agent-editor" ref={root}>
+        {readOnly && <p className="crew-notice" role="status">{archiveNotice}</p>}
+        <form id={formId} onSubmit={submit}>
+          {!row && <fieldset className="crew-assignee-kind">
+            <legend>{t("Who will receive assignments?")}</legend>
+            {(["external", "human"] as const).map((type) => (
+              <label key={type}>
+                <input type="radio" name="assignee-type" checked={agentKindValue === type}
+                  onChange={() => setAgentKind(type)} />
+                {type === "human" ? t("Person") : t("Agent")}
+              </label>
+            ))}
+          </fieldset>}
+          <div className="crew-agent-profile">
+            <fieldset className="crew-form-fields" disabled={readOnly}>
+              <AutoTextField label={t("Name")} required maxLength={200} value={title} onValue={setTitle} />
+            </fieldset>
+            <button type="button" className="crew-profile-toggle" aria-expanded={profileOpen}
+              aria-controls={`${formId}-brief`} onClick={() => setProfileOpen(!profileOpen)}>
+              <strong>{briefLabel}</strong>
+              <span className="crew-profile-chevron" aria-hidden="true"><Icon name="forward" /></span>
+            </button>
+            {!profileOpen && body.trim() && <p className="crew-brief-summary">{markdownExcerpt(body, 180, markdownText).text}</p>}
+            <fieldset className="crew-form-fields" id={`${formId}-brief`} hidden={!profileOpen} disabled={readOnly}>
+              <MarkdownField label={briefLabel} className="crew-long-text" value={body}
+                help={!readOnly && agentKindValue !== "human" ? <Help topic="brief" /> : undefined} onChange={setBody} />
+            </fieldset>
+            {row && !readOnly && dirty && <Field label={t("Reason for change")} help="reason">
+              <AutoTextarea value={reason} onValue={setReason} placeholder={t("Optional: what changed and why?")} />
+            </Field>}
+          </div>
+        </form>
+        {row && !readOnly && canStartChat(row) && (
+          <div className="crew-agent-startup" onChange={(event) => event.stopPropagation()}>
+            <ChatInstructions agent={row} />
+            <AgentStartupSettings agent={row} onConfigured={onAgentConfigured} />
+          </div>
+        )}
+        {row && !readOnly && <div onChange={(event) => event.stopPropagation()}>
+          <AgentAssignments agent={row} />
+        </div>}
+        {more}
+        {bar(!readOnly && <button className="crew-primary" type="submit" form={formId}
+          disabled={busy || !title.trim() || (!!row && !dirty)}>{agentKindValue === "human" ? t("Save person") : t("Save agent")}</button>)}
+      </div>
+    );
+  }
   const approval = approvalLine(row);
   return (
     <AttachmentsProvider
@@ -4258,40 +4345,6 @@ function Editor({
               value={title}
               onValue={setTitle}
             />
-            {kind === "agent" && (
-              <fieldset className="crew-agent-start">
-                <legend>
-                  {t("How is it started?")}
-                  {!readOnly && <Help topic="agent-start" />}
-                </legend>
-                {agentKinds.map((key: AgentKind) => (
-                  <div key={key} className="crew-agent-start-option">
-                    <label>
-                      <input
-                        type="radio"
-                        name="agent-kind"
-                        value={key}
-                        checked={agentKindValue === key}
-                        // A click on the already chosen option is a choice too.
-                        onClick={() => {
-                          agentKindTouched.current = true;
-                        }}
-                        onChange={() => {
-                          agentKindTouched.current = true;
-                          setAgentKind(key);
-                        }}
-                      />
-                      {t(agentKindChoices[key])}
-                    </label>
-                    {key === "external" && agentKindValue === "external" && (
-                      <small className="crew-agent-start-hint">
-                        {t("Name it after the project, e.g. pocketcontext-crew. Start sessions from its card.")}
-                      </small>
-                    )}
-                  </div>
-                ))}
-              </fieldset>
-            )}
             {!(kind === "note" && row) &&
               (kind === "note" || kind === "bucket" || kind === "task") && (
               <Field
@@ -4364,17 +4417,7 @@ function Editor({
                 status={inlineStatus("body")}
               />
             ) : (
-              // Briefs and purposes are Markdown (0.24.0): Read and Edit like a
-              // task description, opening in Read when there is text.
-              <MarkdownField
-                label={kind === "agent" ? t("Agent brief") : t("Purpose")}
-                help={
-                  kind === "agent" && help("brief") ? <Help topic="brief" /> : undefined
-                }
-                className={kind === "agent" ? "crew-long-text" : ""}
-                value={body}
-                onChange={setBody}
-              />
+              <MarkdownField label={t("Purpose")} value={body} onChange={setBody} />
             )}
             {kind === "task" && (
               <>
@@ -4526,11 +4569,6 @@ function Editor({
                 />
               </Field>
             )}
-            {kind === "agent" && (
-              <p className="crew-footnote">
-                {t("Include its bucket, handoff rules and when to update notes. Agent names are reported attribution, not verified identities.")}
-              </p>
-            )}
             {kind === "bucket" && (
               <p className="crew-footnote">
                 {t("Responsibility is a convention, not a permission. Archiving this bucket hides its notes and stops writes until restored.")}
@@ -4538,7 +4576,6 @@ function Editor({
             )}
           </fieldset>
           {filesSection}
-          {kind === "agent" && row && !readOnly && canStartChat(row) && <AgentAssignments key={row.id} agent={row} />}
           {kind !== "note" && more}
           {bar(
             !readOnly && (
@@ -4554,7 +4591,6 @@ function Editor({
                       task: t("Save task"),
                       note: t("Save note"),
                       bucket: t("Save bucket"),
-                      agent: t("Save agent"),
                       review: t("Save review"),
                     }[kind]}
               </button>

@@ -29,7 +29,8 @@ LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js', '1801000000
                     '1801500000_crew_session_instructions.js', '1801600000_crew_artifact_lifecycle.js',
                     '1801700000_crew_task_release_labels.js', '1801800000_crew_session_guide_setting.js',
                     '1801900000_crew_reader_preferences.js', '1802000000_crew_hidden_help.js',
-                    '1802100000_crew_review_selection.js', '1802200000_crew_task_draft_options.js'}
+                    '1802100000_crew_review_selection.js', '1802200000_crew_task_draft_options.js',
+                    '1802300000_crew_agent_startup.js'}
 
 
 def settled(operation, *args):
@@ -136,8 +137,8 @@ def rehearse(target, previous, root):
     assert settings['storage_limit_bytes'] == 5 * 1024 ** 3 and settings['storage_used_bytes'] == len(payload), settings
     # 0.18.0: the existing agent became a bot; tasks start without a claim and
     # its own assignee can claim one with a lease.
-    agents = data('read', json.dumps({'collection': 'agents', 'fields': ['name', 'kind']}))['items']
-    assert agents == [{'id': agent['id'], 'revision': agent['revision'], 'name': 'Build', 'kind': 'bot'}], agents
+    agents = data('read', json.dumps({'collection': 'agents', 'fields': ['name', 'kind', 'startup_disabled']}))['items']
+    assert agents == [{'id': agent['id'], 'revision': agent['revision'], 'name': 'Build', 'kind': 'bot', 'startup_disabled': False}], agents
     ticket = data('write', json.dumps({'action': 'task.create', 'reported_agent': 'Synthetic upgrade',
                                        'data': {'title': 'Upgrade ticket', 'assigned_agent': agent['id'], 'readiness': 'ready'}}))
     assert ticket['claim_state'] == '' and ticket['claimed_by'] == '' and ticket['claim_until'] == '', ticket

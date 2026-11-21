@@ -198,6 +198,7 @@ const it: Record<string, string> = {
     "Inizia una bozza di pagina da condividere con un link segreto. La scrivi in Condivise e la pubblichi quando è pronta; fino ad allora niente è pubblico.",
   Title: "Titolo",
   "Creating…": "Creazione…",
+  "Start a draft. You can publish it when it’s ready.": "Inizia con una bozza. Puoi pubblicarla quando è pronta.",
   "Create draft": "Crea bozza",
   "Shared page": "Pagina condivisa",
   "Bucket {name} options": "Opzioni del bucket {name}",

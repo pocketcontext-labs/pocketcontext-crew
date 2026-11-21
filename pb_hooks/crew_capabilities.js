@@ -466,6 +466,12 @@ function document() {
     { revision: "mapping; 0 for creation" },
   );
   op(
+    "webhook.startup.update",
+    { enabled: bool, bot_ref: str, config_revision: num, mapping_revision: num },
+    ["enabled", "mapping_revision"],
+    { revision: "agent", description: "Choose whether assigned tasks wake this agent. Enabling requires a live integration, its current config_revision and the recipient bot_ref. Existing recipient references and other agents' routes are preserved." },
+  );
+  op(
     "webhook.instructions.sync",
     {
       instruction_revision: num,
@@ -901,6 +907,7 @@ function document() {
   const fields = {
     agents: {
       ...agent,
+      startup_disabled: bool,
       chat_start: {
         enum: ["manual", "webhook", ""],
         description: "Effective startup mode for a chat-capable agent; empty for people and inactive agents.",

@@ -246,7 +246,7 @@ function exportRevision(app, row) {
 // session.update: data {agent, instructions | restore_revision |
 // restore_default}, expected_revision = the current revision (0 while no
 // revision was saved). Appends one immutable revision and one agent event.
-// Only external agents have session instructions.
+// External agents and automatically started agents with saved chat instructions can edit them.
 function update(app, b, actor, event) {
   const d = b.data || {};
   for (const k of Object.keys(d))
@@ -258,7 +258,8 @@ function update(app, b, actor, event) {
       throw new BadRequestError("Unsupported field: " + k);
   if (b.id) throw new BadRequestError("Name the agent in data.agent, not id");
   const agent = findAgent(app, d.agent);
-  if ((agent.getString("kind") || "bot") !== "external")
+  if (agent.getString("kind") !== "external" &&
+      !((agent.getString("kind") || "bot") === "bot" && latest(app, agent.id)))
     throw new BadRequestError(
       "Session instructions are only for agents you start yourself (kind external)",
     );

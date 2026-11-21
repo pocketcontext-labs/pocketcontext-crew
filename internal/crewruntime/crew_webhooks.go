@@ -350,7 +350,7 @@ func webhookEligible(app core.App, d, c *core.Record) bool {
 	if payload["event_type"] == "webhook.test" {
 		return !r.GetBool("paused")
 	}
-	if r.GetBool("paused") || !c.GetBool("enabled") {
+	if r.GetBool("paused") || !c.GetBool("enabled") || agent.GetBool("startup_disabled") {
 		return false
 	}
 	mapping, err := app.FindFirstRecordByFilter("crew_webhook_mappings", "agent = {:agent}", dbx.Params{"agent": d.GetString("agent")})

@@ -1,0 +1,41 @@
+.crew-startup-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-weight: 600;
+}
+.crew-startup-toggle input[role="switch"] {
+  appearance: none;
+  flex: none;
+  width: 42px;
+  height: 24px;
+  border: 1px solid #899487;
+  border-radius: 20px;
+  padding: 2px;
+  margin: 0;
+  background: #e5e9e2;
+  cursor: pointer;
+}
+.crew-startup-toggle input[role="switch"]::before {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #546452;
+}
+.crew-startup-toggle input[role="switch"]:checked {
+  background: #347547;
+  border-color: #347547;
+}
+.crew-startup-toggle input[role="switch"]:checked::before {
+  transform: translateX(17px);
+  background: white;
+}
+.crew-startup-toggle input[role="switch"]:disabled {
+  opacity: .55;
+  cursor: default;
+}
+.crew-startup-destination { display: grid; gap: 8px; }

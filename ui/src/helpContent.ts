@@ -310,10 +310,10 @@ function glossaryEntries() {
       name: t("How an agent is started"),
       question: t("How is an agent started?"),
       what: t(
-        "Webhook (bot): Crew wakes it over a webhook when a Ready task can be worked on. I start it myself: a project agent, such as one per code repository, whose coding sessions you start in Codex or Claude Code; it has no webhook. Person: someone who does the work by hand.",
+        "Start an agent in a connected chat by copying its instructions. To wake it automatically for ready tasks, connect an integration and enable automatic startup for that agent.",
       ),
       action: t(
-        "For a project agent, name it after the project, for example pocketcontext-crew, then use Start a session on its card.",
+        "Open the agent to see its instructions and startup settings.",
       ),
     },
     claim: {

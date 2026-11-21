@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { crewApi, statuses, val, type Row } from "./crewApi";
-import { claimOf, copyText } from "./projectAgents";
+import { canStartChat, claimOf, copyText } from "./projectAgents";
 import { CopyControl } from "./CopyFeedback";
 import { itemPath, itemTabPath } from "./itemLink";
 import { followLink } from "./trail";
@@ -52,6 +52,7 @@ export default function AgentAssignments({ agent }: { agent: Row }) {
       "I choose task {id}. Read its current state and claim it before starting.",
       { id: selected },
     );
+  if (loaded && !tasks.length) return <p className="crew-agent-no-tasks">{t("No assigned tasks")}</p>;
   return (
     <section className="crew-agent-assignments">
       <h3>{t("Assigned tasks")}</h3>
@@ -61,8 +62,6 @@ export default function AgentAssignments({ agent }: { agent: Row }) {
         </button>
       ) : !loaded ? (
         <p>{t("Loading assigned tasks…")}</p>
-      ) : !tasks.length ? (
-        <p>{t("No assigned tasks")}</p>
       ) : null}
       {tasks.map((task) => {
         const claim = claimOf(task);
@@ -70,7 +69,7 @@ export default function AgentAssignments({ agent }: { agent: Row }) {
           val(task, "webhook_holder") ||
           (claim.state === "live" ? claim.by : "");
         const ready = task.readiness === "ready";
-        const available = ready && (task.status === "todo" || task.status === "in_progress") && !holder;
+        const available = canStartChat(agent) && ready && (task.status === "todo" || task.status === "in_progress") && !holder;
         const path = itemTabPath(itemPath("task", task), "comments");
         return (
           <article key={task.id}>

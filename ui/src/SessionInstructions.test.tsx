@@ -67,9 +67,16 @@ it("keeps the same view buttons in every view and the draft across views", async
   expect(screen.getByLabelText(/Session instructions/)).toHaveValue("Synthetic body");
 });
 
-it("shows a webhook agent's instructions read-only", () => {
+it("shows a webhook agent without saved revisions read-only", () => {
   const bot = { ...session, agent: { ...session.agent, kind: "bot" } };
   render(<SessionInstructions session={bot} onChange={() => undefined} Markdown={Markdown} />);
   expect(screen.getByText(session.instructions)).toBeVisible();
   expect(screen.queryByRole("button")).toBeNull();
+});
+
+it("keeps saved chat instructions editable after enabling a webhook", () => {
+  const converted = { ...session, agent: { ...session.agent, kind: "bot" }, revision: 2 };
+  render(<SessionInstructions session={converted} onChange={() => undefined} Markdown={Markdown} />);
+  expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "History" })).toBeVisible();
 });

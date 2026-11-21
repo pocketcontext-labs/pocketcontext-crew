@@ -276,7 +276,7 @@ function route(app, t) {
   if (!eligible(s) || rt.getBool("paused")) return null;
   const id = s.assigned || rt.getString("triage_agent");
   // An external or human assignee is never woken, even with a mapping.
-  if (!botAgent(app, id)) return null;
+  if (!botAgent(app, id) || get(app, "agents", id).getBool("startup_disabled")) return null;
   const config = activeDispatcher(app),
     mapping = mappingFor(app, id);
   if (!config || !mapping || !mapping.getString("bot_ref")) return null;
@@ -751,6 +751,65 @@ function invalidateAgent(app, agent, b, actor) {
   if (routing(app).getString("triage_agent") === agent)
     invalidateTriage(app, b, actor);
 }
+// Configure this recipient without changing the shared dispatcher. Keep its
+// provider reference even while personal task wakes are off; the dispatcher
+// may still use the same mapping to route tasks for other agents.
+function updateStartup(app, b, actor, isAgent) {
+  const d = b.data || {};
+  only(d, ["enabled", "mapping_revision", "config_revision", "bot_ref"]);
+  const agent = get(app, "agents", b.id);
+  check(agent, b.expected_revision);
+  if (agent.getBool("archived") || agentKind(agent) === "human")
+    bad("Choose an active agent");
+  if (typeof d.enabled !== "boolean") bad("enabled must be true or false");
+  const mapping = mappingFor(app, agent.id);
+  if (d.mapping_revision !== (mapping ? mapping.getInt("revision") : 0))
+    conflict("Recipient mapping changed; reload settings");
+  const saved = mapping ? mapping.getString("bot_ref") : "";
+  const kind = agentKind(agent);
+  if (d.enabled) {
+    const config = activeDispatcher(app);
+    if (!config || routing(app).getBool("paused"))
+      conflict("Connect and enable an integration before enabling automatic startup");
+    check(config, d.config_revision);
+    if (typeof d.bot_ref !== "string" || !d.bot_ref.trim() ||
+        d.bot_ref.length > 500 || /[\r\n]/.test(d.bot_ref))
+      bad("A recipient reference is required");
+    if (saved && d.bot_ref.trim() !== saved)
+      conflict("Change the recipient in integration settings");
+    if (saved && kind === "bot" && !agent.getBool("startup_disabled"))
+      return { ...agent.publicExport(), chat_start: d.enabled ? "webhook" : "manual" };
+  } else if (agent.getBool("startup_disabled") || !saved || kind !== "bot") {
+    return { ...agent.publicExport(), chat_start: d.enabled ? "webhook" : "manual" };
+  }
+  if (d.enabled && kind === "external") {
+    const sessions = require(`${__hooks}/crew_session.js`);
+    // Keep even an unsaved external default when a role starts automatically.
+    if (!sessions.describe(app, agent.id).revision)
+      sessions.update(app, {
+        expected_revision: 0, reported_agent: b.reported_agent,
+        reason: "Preserve the existing chat instructions when enabling automatic startup",
+        data: { agent: agent.id, restore_default: true },
+      }, actor, (db, row, action, envelope, by, changes) =>
+        audit(db, row, { ...envelope, action }, by, changes));
+    agent.set("kind", "bot");
+  }
+  agent.set("startup_disabled", !d.enabled);
+  agent.set("revision", agent.getInt("revision") + 1);
+  app.save(agent);
+  if (d.enabled && !saved) {
+    handle(app, {
+      action: "webhook.mapping.update",
+      expected_revision: d.mapping_revision,
+      reported_agent: b.reported_agent,
+      data: { agent: agent.id, bot_ref: d.bot_ref },
+    }, actor, isAgent);
+  } else {
+    invalidateAgent(app, agent.id, b, actor);
+  }
+  audit(app, agent, b, actor, { startup_disabled: !d.enabled, kind: agentKind(agent) });
+  return { ...agent.publicExport(), chat_start: d.enabled ? "webhook" : "manual" };
+}
 function handle(app, b, actor, isAgent) {
   const d = b.data || {};
   if (b.action.startsWith("webhook.bridge."))
@@ -768,6 +827,7 @@ function handle(app, b, actor, isAgent) {
     app,
     b,
     () => {
+      if (b.action === "webhook.startup.update") return updateStartup(app, b, actor, isAgent);
       if (b.action === "agent.ensure") {
         only(d, ["name", "brief", "agent", "kind"]);
         if (d.kind !== undefined && !AGENT_KINDS.includes(d.kind))

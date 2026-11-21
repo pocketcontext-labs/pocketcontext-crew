@@ -4,6 +4,9 @@
 // delivery states, history labels, link states, help topics); they are listed
 // here too.
 const it: Record<string, string> = {
+  "Create an agent and name it after the project. You can start it in a connected chat.": "Crea un agente con il nome del progetto. Puoi avviarlo in una chat collegata.",
+  "Start an agent in a connected chat by copying its instructions. To wake it automatically for ready tasks, connect an integration and enable automatic startup for that agent.": "Copia le istruzioni in una chat collegata per avviare un agente. Per avviarlo automaticamente quando le attività sono pronte, collega un’integrazione e attiva l’avvio automatico per quell’agente.",
+  "Open the agent to see its instructions and startup settings.": "Apri l’agente per vedere le istruzioni e le impostazioni di avvio.",
   // Wake-up setup (WebhookStatus)
   "Unknown delivery status": "Stato di consegna sconosciuto",
   Complete: "Completato",

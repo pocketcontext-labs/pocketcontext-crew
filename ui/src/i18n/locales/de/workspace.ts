@@ -1,6 +1,15 @@
 // German strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const de: Record<string, string> = {
+  "Who will receive assignments?": "Wer erhält die Aufgaben?",
+  "Role description": "Rollenbeschreibung",
+  "Save person": "Person speichern",
+  "Manual start": "Manueller Start",
+  "Paste the instructions into a chat connected to Crew.": "Füge die Anweisungen in einen mit Crew verbundenen Chat ein.",
+  "No active tasks": "Keine aktiven Aufgaben",
+  "No tasks yet": "Noch keine Aufgaben",
+  "Start with a title. You can assign the task to an agent later.": "Gib der Aufgabe einen Titel. Du kannst sie später einem Agenten zuweisen.",
+  "Create your first task": "Erste Aufgabe erstellen",
   "Loading assigned tasks…": "Zugewiesene Aufgaben werden geladen…",
   "Copy task choice": "Aufgabenauswahl kopieren",
   "Paste this choice into your Crew-connected chat.": "Füge diese Auswahl in deinen mit Crew verbundenen Chat ein.",
@@ -259,6 +268,7 @@ const de: Record<string, string> = {
   "Review draft: {title}": "Entwurf prüfen: {title}",
   "Nothing waiting for your review": "Nichts wartet auf deine Freigabe",
   "Go to Tasks": "Zu den Aufgaben",
+  "Drafts sent for approval will appear here.": "Hier erscheinen Entwürfe, die zur Freigabe eingereicht wurden.",
   "Drafts sent for approval will appear here. Your approval does not perform the external action.":
     "Zur Freigabe geschickte Entwürfe erscheinen hier. Deine Freigabe führt die externe Aktion nicht aus.",
   "Past decisions ({n})": "Frühere Entscheidungen ({n})",

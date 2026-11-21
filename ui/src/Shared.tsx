@@ -16,6 +16,8 @@ import {
   sharedHash,
   type SharedFilter,
 } from "./itemLink";
+import NewSharedPage from "./NewSharedPage";
+import { icons } from "./MobileChrome";
 import ColumnSwitcher from "./ColumnSwitcher";
 import { usePhone } from "./usePhone";
 import AutoTextarea from "./AutoTextarea";
@@ -128,6 +130,7 @@ export function expiryFrom(
 
 export default function Shared({ notes, tasks, focus, Prose }: Props) {
   const phone = usePhone();
+  const [creating, setCreating] = useState(false);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [links, setLinks] = useState<Record<string, ArtifactLink>>({});
   const [error, setError] = useState("");
@@ -269,17 +272,19 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
           {error}
         </p>
       )}
-      {!rows.length && (
-        <div className="crew-empty">
-          <span aria-hidden="true">↗</span>
-          <h3>{t("Nothing shared yet")}</h3>
-          <p>
-            {t(
-              "Open a note and choose Share as artifact, or ask an agent to make an artifact from your notes.",
-            )}
-          </p>
-        </div>
+      {!rows.length && !error && (
+        <section className="crew-board-empty" aria-labelledby="crew-first-shared">
+          <span className="crew-board-empty-icon" aria-hidden="true">{icons.shared}</span>
+          <h2 id="crew-first-shared">{t("Nothing shared yet")}</h2>
+          <p>{t("Start a draft. You can publish it when it’s ready.")}</p>
+          <button className="crew-primary" onClick={() => setCreating(true)}>{t("Create draft")}</button>
+        </section>
       )}
+      {creating && <NewSharedPage onClose={() => setCreating(false)} onCreated={id => {
+        setCreating(false);
+        location.hash = "#/shared/" + id;
+        void load();
+      }} />}
       {rows.length > 0 && !shown.length && (
         <p className="crew-shared-none">{t("No artifacts with this status.")}</p>
       )}

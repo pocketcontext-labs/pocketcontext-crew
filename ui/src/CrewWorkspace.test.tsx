@@ -106,6 +106,37 @@ async function openPage(name: string | RegExp) {
   fireEvent.click(link);
   await waitFor(() => expect(link).toHaveAttribute("aria-current", "page"));
 }
+describe("empty Tasks board", () => {
+  it.each(["desktop", "phone"])("opens the first task from the only creation action on %s", async (layout) => {
+    fixtures.tasks = [];
+    fixtures.reviews = [];
+    fixtures.agents = [];
+    fixtures.buckets = [];
+    if (layout === "phone")
+      vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(max-width: 680px)" }));
+    try {
+      render(<CrewWorkspace />);
+      const empty = await screen.findByRole("region", { name: "No tasks yet" });
+      expect(screen.queryByRole("searchbox", { name: "Search tasks" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Filters|New task|Set up starter crew/ })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /^To do/ })).toBeNull();
+      fireEvent.click(within(empty).getByRole("button", { name: "Create your first task" }));
+      expect(within(await screen.findByRole("dialog")).getByLabelText("Hold")).toHaveValue("waiting");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("preserves filters with zero matches and shows the empty state after clearing", async () => {
+    fixtures.tasks = [];
+    history.replaceState(null, "", "/#/tasks?label=sample");
+    render(<CrewWorkspace />);
+    fireEvent.click(await screen.findByRole("button", { name: "Clear all" }));
+    await screen.findByRole("button", { name: "Create your first task" });
+    expect(location.hash).toBe("#/tasks");
+  });
+});
+
 it("opens the page named by the address and titles it", async () => {
   history.replaceState(null, "", "/#/approvals");
   render(<CrewWorkspace />);
@@ -429,6 +460,7 @@ it("sizes a long agent brief once its dialog is shown, and on rewrap", async () 
     const dialog = within(await screen.findByRole("dialog"));
     const field = dialog.getByLabelText("Agent brief") as HTMLTextAreaElement;
     expect(field.style.height).toBe("auto");
+    fireEvent.click(dialog.getByRole("button", { name: "Agent brief" }));
     // A non-empty brief opens in Read; Edit shows the growing editor.
     expect(field).not.toBeVisible();
     fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
@@ -3357,19 +3389,10 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(screen.getByRole("button", { name: /New agent/ }));
     return within(screen.getByRole("dialog"));
   }
-  it("starts a new agent manually when no webhook is set up, and saves its kind", async () => {
+  it("creates a manual agent even when an integration is connected", async () => {
+    fixtures.webhook_configs = [{ id: "config", revision: 1, scope: "global", enabled: true }];
     const dialog = await openNewAgent();
-    const group = within(dialog.getByRole("group", { name: /How is it started/ }));
-    await waitFor(() =>
-      expect(
-        group.getByRole("radio", { name: "I start it myself (no webhook)" }),
-      ).toBeChecked(),
-    );
-    expect(
-      group.getByText(
-        "Name it after the project, e.g. pocketcontext-crew. Start sessions from its card.",
-      ),
-    ).toBeInTheDocument();
+    expect(dialog.getByRole("radio", { name: "Agent" })).toBeChecked();
     fireEvent.change(dialog.getByLabelText("Name"), {
       target: { value: "another-repo" },
     });
@@ -3383,22 +3406,13 @@ describe("project agents and coding sessions", () => {
       ),
     );
   });
-  it("defaults to a webhook bot once the integration is set up, and offers Person", async () => {
-    fixtures.webhook_configs = [
-      { id: "integration", revision: 1, scope: "global", url_configured: true },
-    ];
+  it("creates a person separately from startup configuration", async () => {
     const dialog = await openNewAgent();
-    await waitFor(() =>
-      expect(crewApi.read).toHaveBeenCalledWith("webhook_configs"),
-    );
-    const group = within(dialog.getByRole("group", { name: /How is it started/ }));
-    expect(group.getByRole("radio", { name: "Webhook (bot)" })).toBeChecked();
-    expect(group.queryByText(/Name it after the project/)).toBeNull();
-    fireEvent.click(group.getByRole("radio", { name: "Person" }));
+    fireEvent.click(dialog.getByRole("radio", { name: "Person" }));
     fireEvent.change(dialog.getByLabelText("Name"), {
       target: { value: "Editor" },
     });
-    fireEvent.click(dialog.getByRole("button", { name: "Save agent" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Save person" }));
     await waitFor(() =>
       expect(crewApi.write).toHaveBeenCalledWith(
         "agent.create",
@@ -3408,18 +3422,14 @@ describe("project agents and coding sessions", () => {
       ),
     );
   });
-  it("keeps the owner's choice when the webhook setup arrives later", async () => {
-    let answer: (rows: Row[]) => void = () => undefined;
-    vi.mocked(crewApi.read).mockImplementation((c, f = {}) =>
-      c === "webhook_configs"
-        ? new Promise((resolve) => (answer = resolve))
-        : Promise.resolve(f.archived ? [] : fixtures[c] || []),
-    );
-    const dialog = await openNewAgent();
-    const group = within(dialog.getByRole("group", { name: /How is it started/ }));
-    fireEvent.click(group.getByRole("radio", { name: "Webhook (bot)" }));
-    await act(async () => answer([]));
-    expect(group.getByRole("radio", { name: "Webhook (bot)" })).toBeChecked();
+  it("keeps startup settings out of an existing person's profile", async () => {
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click((await screen.findByRole("heading", { name: "Reviewer" })).closest("button")!);
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByLabelText("Name")).toHaveValue("Reviewer");
+    expect(dialog.queryByText("Manual start")).toBeNull();
+    expect(dialog.queryByText("Automatic startup")).toBeNull();
   });
   it("shows the agent brief as Markdown in Read and edits it in Edit", async () => {
     fixtures.agents = [{ ...fixtures.agents[0], brief: "## Rules\n\n- Work on `main`" }];
@@ -3429,49 +3439,53 @@ describe("project agents and coding sessions", () => {
       (await screen.findByRole("heading", { name: "Network" })).closest("button")!,
     );
     const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByLabelText("Name")).toHaveValue("Network");
+    fireEvent.click(dialog.getByRole("button", { name: "Agent brief" }));
     expect(dialog.getByText("Markdown supported")).toBeInTheDocument();
     expect(dialog.getByRole("tab", { name: "Read" })).toHaveAttribute("aria-selected", "true");
     expect(dialog.getByRole("heading", { name: "Rules" })).toBeInTheDocument();
     fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
     expect(dialog.getByLabelText("Agent brief")).toBeVisible();
   });
-  it("changes an existing agent's kind and sends kind only when it changed", async () => {
+  it("uses the saved session instructions and preserves kind on a profile edit", async () => {
+    vi.spyOn(crewApi, "session").mockResolvedValue(session);
+    const copied = mockClipboard(async () => undefined);
     history.replaceState(null, "", "/#/agents");
     render(<CrewWorkspace />);
-    fireEvent.click(
-      (await screen.findByRole("heading", { name: "Network" })).closest("button")!,
-    );
-    let dialog = within(screen.getByRole("dialog"));
-    expect(dialog.getByRole("radio", { name: "Webhook (bot)" })).toBeChecked();
-    fireEvent.change(dialog.getByLabelText("Agent brief"), {
-      target: { value: "New brief" },
-    });
+    fireEvent.click((await screen.findByRole("heading", { name: "Network" })).closest("button")!);
+    const dialog = within(screen.getByRole("dialog"));
+    fireEvent.click(dialog.getByRole("button", { name: "Copy instructions for Network" }));
+    await waitFor(() => expect(copied).toHaveBeenCalledWith(session.prompt));
+    expect(crewApi.write).not.toHaveBeenCalled();
+    fireEvent.click(dialog.getByRole("button", { name: "Agent brief" }));
+    fireEvent.change(dialog.getByLabelText("Agent brief"), { target: { value: "New brief" } });
     fireEvent.click(dialog.getByRole("button", { name: "Save agent" }));
     await waitFor(() =>
       expect(crewApi.write).toHaveBeenLastCalledWith(
-        "agent.update",
-        { name: "Network", brief: "New brief" },
-        expect.objectContaining({ id: agent.id }),
-        "",
+        "agent.update", { name: "Network", brief: "New brief" },
+        expect.objectContaining({ id: agent.id }), "",
       ),
     );
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    fireEvent.click(
-      screen.getByRole("heading", { name: "Network" }).closest("button")!,
-    );
-    dialog = within(screen.getByRole("dialog"));
-    fireEvent.click(
-      dialog.getByRole("radio", { name: "I start it myself (no webhook)" }),
-    );
+  });
+  it("keeps unsaved profile edits and saves against the revision returned by startup settings", async () => {
+    fixtures.webhook_configs = [{ id: "config", revision: 3, scope: "global", enabled: true, receiver_host: "runtime.example" }];
+    fixtures.webhook_mappings = [];
+    const configured = { ...project, revision: project.revision + 1, kind: "bot" };
+    vi.mocked(crewApi.write).mockImplementation(async (action) =>
+      action === "webhook.startup.update" ? configured : { ...configured, revision: configured.revision + 1 });
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click((await screen.findByRole("heading", { name: "synthetic-repo" })).closest("button")!);
+    const dialog = within(screen.getByRole("dialog"));
+    fireEvent.change(dialog.getByLabelText("Name"), { target: { value: "Renamed" } });
+    fireEvent.change(await dialog.findByRole("textbox", { name: /Recipient reference/ }), { target: { value: "synthetic" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Turn on automatic startup" }));
+    await waitFor(() => expect(crewApi.write).toHaveBeenCalledWith("webhook.startup.update",
+      expect.objectContaining({ enabled: true }), expect.objectContaining({ revision: project.revision })));
+    expect(dialog.getByLabelText("Name")).toHaveValue("Renamed");
     fireEvent.click(dialog.getByRole("button", { name: "Save agent" }));
-    await waitFor(() =>
-      expect(crewApi.write).toHaveBeenLastCalledWith(
-        "agent.update",
-        expect.objectContaining({ kind: "external" }),
-        expect.objectContaining({ id: agent.id }),
-        "",
-      ),
-    );
+    await waitFor(() => expect(crewApi.write).toHaveBeenCalledWith("agent.update",
+      { name: "Renamed", brief: project.brief }, configured, ""));
   });
   it("shows matching copy controls for manual and webhook agents and excludes people", async () => {
     fixtures.agents = [{ ...agent, chat_start: "webhook" }, project, person];

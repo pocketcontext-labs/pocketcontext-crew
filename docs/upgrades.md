@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Upcoming per-agent automatic startup
+
+Before replacing the binary or image, take a complete backup of the database,
+configuration and storage. The migration `1802300000_crew_agent_startup.js`
+adds `startup_disabled` to agents, initially false. Existing webhook mappings
+retain their routing behavior. To roll back, restore the complete pre-upgrade
+backup with the previous binary or image. Previous versions do not honor
+per-agent startup preferences.
+
 ## Crew 0.39.1 to 0.40.0
 
 Replace the binary or image (`CREW_REPLACE_VERSION=0.39.1` for the installer)

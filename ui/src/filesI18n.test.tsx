@@ -32,7 +32,7 @@ describe("files and help translations", () => {
     expect(
       screen.getByText("Agenten müssen zuerst verbunden werden."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Ich starte ihn selbst").tagName).toBe("EM");
+    expect(screen.getByText(/Erstelle einen Agenten und benenne ihn/)).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Aufgaben öffnen" }),
     ).toBeInTheDocument();
@@ -80,9 +80,9 @@ describe("files and help translations", () => {
       /^Agents must be connected first\. Connect an agent shows the steps for this Crew\.$/,
     );
     expect(
-      screen.getByText("I start it myself").closest("li"),
+      screen.getByText("One agent per project.").closest("li"),
     ).toHaveTextContent(
-      /^One agent per project\. Create it with I start it myself and name it after the project, for example pocketcontext-crew\. It needs no webhook\.$/,
+      /^One agent per project\. Create an agent and name it after the project\. You can start it in a connected chat\.$/,
     );
   });
 });
