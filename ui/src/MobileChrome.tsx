@@ -358,6 +358,20 @@ export function MobileTopBar({
       </a>
       <h1>{title}</h1>
       <div className="crew-mactions">
+        {add && (
+          <button
+            type="button"
+            className="crew-micon crew-madd"
+            aria-label={add.label}
+            title={add.label}
+            disabled={add.disabled}
+            aria-haspopup={add.menu ? "dialog" : undefined}
+            aria-expanded={add.menu ? add.menu.open : undefined}
+            onClick={(e) => add.onClick(e.currentTarget)}
+          >
+            {icons.plus}
+          </button>
+        )}
         {search}
         {filter && (
           <button
@@ -382,20 +396,6 @@ export function MobileTopBar({
                 {filter.count}
               </b>
             )}
-          </button>
-        )}
-        {add && (
-          <button
-            type="button"
-            className="crew-micon crew-madd"
-            aria-label={add.label}
-            title={add.label}
-            disabled={add.disabled}
-            aria-haspopup={add.menu ? "dialog" : undefined}
-            aria-expanded={add.menu ? add.menu.open : undefined}
-            onClick={(e) => add.onClick(e.currentTarget)}
-          >
-            {icons.plus}
           </button>
         )}
         <button
