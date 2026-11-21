@@ -313,7 +313,10 @@ export default function Home({
       </section>
       {agents.length > 0 && (
         <section className="crew-home-section" aria-label={t("Agents")}>
-          <h2>{t("Agents")}</h2>
+          <div className="crew-title-row">
+            <h2>{t("Agents")}</h2>
+            <Help topic="tapping-an-agent" />
+          </div>
           <ul className="crew-home-agents">
             {agents.map((agent) => (
               <AgentRow

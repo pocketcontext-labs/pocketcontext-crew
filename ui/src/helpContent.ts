@@ -142,6 +142,12 @@ function glossaryEntries() {
         "Do the current step. Don't show this again hides this list.",
       ),
     },
+    "tapping-an-agent": {
+      name: t("Tapping an agent"),
+      question: t("How do I change what tapping an agent does?"),
+      what: t("Tapping an agent can open its profile or show its tasks."),
+      action: t("In Settings → Tapping an agent, choose All agents to set the default, or choose an agent by name to give it a different action."),
+    },
     "needs-you": {
       name: t("Needs you"),
       question: t("What goes under Needs you?"),

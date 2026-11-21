@@ -1,5 +1,8 @@
 // German for Settings, Home, the phone chrome and Start a session (0.36.0).
 const de: Record<string, string> = {
+  "How do I change what tapping an agent does?": "Wie ändere ich die Aktion beim Antippen eines Agenten?",
+  "Tapping an agent can open its profile or show its tasks.": "Beim Antippen eines Agenten kannst du sein Profil oder seine Aufgaben öffnen.",
+  "In Settings → Tapping an agent, choose All agents to set the default, or choose an agent by name to give it a different action.": "Wähle in den Einstellungen unter „Agenten antippen“ den Eintrag „Alle Agenten“, um die Standardaktion festzulegen. Wähle einen einzelnen Agenten, um ihm eine andere Aktion zuzuweisen.",
   "Start in a chat": "In einem Chat starten",
   "Use in another chat": "In einem anderen Chat verwenden",
   "Use {name} in a chat": "{name} in einem Chat verwenden",
