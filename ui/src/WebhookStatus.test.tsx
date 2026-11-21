@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import WebhookStatus from "./WebhookStatus";
@@ -144,6 +145,40 @@ it("selects one dispatcher via global configuration without updating credentials
   );
   expect(crewApi.write).toHaveBeenCalledTimes(1);
 });
+it("promotes only the selected active manual agent when choosing the first dispatcher", async () => {
+  config.agent = "";
+  const manual = { id: "repo", name: "Build", kind: "external", revision: 7 };
+  const roster = [
+    manual,
+    { ...manual, id: "learn", name: "Learn" },
+    { ...manual, id: "person", name: "Reviewer", kind: "human" },
+    { ...manual, id: "archived", name: "Archived", archived: true },
+  ];
+  const reloadAgents = vi.fn();
+  const { rerender } = render(<WebhookStatus agents={roster} onAgentsChanged={reloadAgents} />);
+  const choice = await screen.findByRole("combobox", { name: "Crew dispatcher" });
+  await waitFor(() => expect(choice).toBeEnabled());
+  expect(within(choice).getAllByRole("option").map(o => o.textContent)).toEqual(["Choose an agent", "Build", "Learn"]);
+  expect(screen.getByText(/Choosing a manually started agent/)).toBeVisible();
+  vi.mocked(crewApi.write).mockImplementationOnce(async () => {
+    fixtures.webhook_configs = [{ ...config, agent: "repo", revision: 5 }];
+    return fixtures.webhook_configs[0];
+  });
+  fireEvent.change(choice, { target: { value: "repo" } });
+  await waitFor(() => expect(reloadAgents).toHaveBeenCalledOnce());
+  expect(crewApi.write).toHaveBeenCalledExactlyOnceWith(
+    "webhook.integration.update", { agent: "repo", promote_external_revision: 7 },
+    config, "", { idempotency_key: expect.any(String) },
+  );
+  rerender(<WebhookStatus agents={[{ ...manual, kind: "bot", revision: 8 }, ...roster.slice(1)]} onAgentsChanged={reloadAgents} />);
+  await waitFor(() => expect(screen.queryByText(/Choosing a manually started agent/)).toBeNull());
+  const step = screen.getByRole("button", { name: /Choose your dispatcher/ });
+  if (step.getAttribute("aria-expanded") === "false") fireEvent.click(step);
+  const saved = screen.getByRole("combobox", { name: "Crew dispatcher" });
+  expect(saved).toHaveValue("repo");
+  expect(within(saved).queryByRole("option", { name: "Learn" })).toBeNull();
+});
+
 it("creates a recipient mapping with an explicit zero revision", async () => {
   await open();
   const reference = screen.getByLabelText("Grok Bot reference for Learn");

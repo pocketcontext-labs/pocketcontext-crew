@@ -12,7 +12,7 @@ import Help, { HelpField } from "./Help";
 import type { HelpTopic } from "./helpContent";
 import { t, tn } from "./i18n";
 import { itemPath } from "./itemLink";
-import { copyText, isBot } from "./projectAgents";
+import { agentKind, canStartChat, copyText, isBot } from "./projectAgents";
 import { AutoTextField } from "./AutoTextarea";
 import { isClosed } from "./closedTasks";
 import { RelativeTime } from "./relativeTime";
@@ -305,6 +305,7 @@ function Blockers({ items }: { items: Blocker[] }) {
 // Only explicitly named safe fields are rendered; credentials and raw errors are never serialized.
 export default function WebhookStatus({
   agents,
+  onAgentsChanged,
   tasks = [],
   collapsible = false,
   focusSetup = false,
@@ -312,6 +313,7 @@ export default function WebhookStatus({
   mcpUrl = `${window.location.origin}/mcp`,
 }: {
   agents: Row[];
+  onAgentsChanged?: () => void;
   /** Current and archived tasks, used only to tell live warnings from old ones. */
   tasks?: Row[];
   collapsible?: boolean;
@@ -593,6 +595,18 @@ export default function WebhookStatus({
   // Only webhook bots are dispatched, mapped or woken; agents started manually
   // and people never need a bot mapping.
   const activeAgents = agents.filter((a) => !a.archived && isBot(a));
+  const dispatcherChoices = val(config, "agent") ? activeAgents : agents.filter(canStartChat);
+  async function selectDispatcher(id: string) {
+    const selected = dispatcherChoices.find((agent) => agent.id === id);
+    const promote = selected && agentKind(selected) === "external";
+    await mutate(
+      "webhook.integration.update",
+      promote ? { agent: id, promote_external_revision: selected.revision } : { agent: id },
+      config,
+      t("Dispatcher changed. Connect its routine before enabling delivery."),
+    );
+    if (promote) onAgentsChanged?.();
+  }
   const currentAgent = activeAgents.find((a) => a.id === val(config, "agent"));
   const synced =
     !!config &&
@@ -951,28 +965,17 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               <p>{t("Do this once per bot, including the dispatcher. Then return here to configure routing and authorize the bots. Each new task wake loads the latest saved instructions.")}</p>
             </div>
             <Step {...stepProps(1)} title={t("Choose your dispatcher")}>
-              <p>
-                {t(
-                  "Use an existing bot. It keeps its main job and also routes Crew notifications.",
-                )}
-              </p>
+              <p>{dispatcherChoices.some((a) => agentKind(a) === "external")
+                ? t("Choosing a manually started agent as your first dispatcher makes it a webhook bot. You can still start it in a chat. Delivery stays off until you enable it.")
+                : t("Use an existing bot. It keeps its main job and also routes Crew notifications.")}</p>
               <HelpField label={t("Crew dispatcher")} topic="dispatcher">
                 <select
                   value={val(config, "agent")}
                   disabled={blocked}
-                  onChange={(e) =>
-                    void mutate(
-                      "webhook.integration.update",
-                      { agent: e.target.value },
-                      config,
-                      t(
-                        "Dispatcher changed. Connect its routine before enabling delivery.",
-                      ),
-                    )
-                  }
+                  onChange={(e) => void selectDispatcher(e.target.value)}
                 >
                   <option value="">{t("Choose an agent")}</option>
-                  {activeAgents.map((a) => (
+                  {dispatcherChoices.map((a) => (
                     <option key={a.id} value={a.id}>
                       {val(a, "name")}
                     </option>

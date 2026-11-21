@@ -1040,6 +1040,7 @@ function handle(app, b, actor, isAgent) {
       } else if (b.action === "webhook.integration.update") {
         only(d, [
           "agent",
+          "promote_external_revision",
           "instructions",
           "subscriptions",
           "role_instructions",
@@ -1057,6 +1058,18 @@ function handle(app, b, actor, isAgent) {
             c.set("sync_status", "unverified");
             changed = true;
           }
+        }
+        if (d.promote_external_revision !== undefined) {
+          if (!d.agent || c.getString("agent") || c.getBool("enabled"))
+            conflict("Choose a manual agent only during initial dispatcher setup");
+          const agent = get(app, "agents", d.agent);
+          check(agent, d.promote_external_revision);
+          if (agent.getBool("archived") || agentKind(agent) !== "external")
+            bad("Choose an active manual agent");
+          agent.set("kind", "bot");
+          agent.set("revision", agent.getInt("revision") + 1);
+          app.save(agent);
+          audit(app, agent, b, actor, { kind: "bot" });
         }
         if (d.agent !== undefined && d.agent !== c.getString("agent")) {
           if (d.agent && !botAgent(app, d.agent))

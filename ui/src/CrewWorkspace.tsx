@@ -2827,6 +2827,7 @@ export default function CrewWorkspace() {
           )}
           {view === "connect" && (
             <Connect
+              onAgentsChanged={() => void load({ silent: true })}
               agents={[...data.agents, ...archived.agents]}
               tasks={[...data.tasks, ...archived.tasks]}
               notes={[...data.notes, ...archived.notes]}

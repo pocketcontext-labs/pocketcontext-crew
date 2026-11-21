@@ -97,6 +97,8 @@ const de: Record<string, string> = {
   "Choose your dispatcher": "Dispatcher wählen",
   "Use an existing bot. It keeps its main job and also routes Crew notifications.":
     "Nutze einen vorhandenen Bot. Er behält seine Hauptaufgabe und leitet zusätzlich Crew-Benachrichtigungen weiter.",
+  "Choosing a manually started agent as your first dispatcher makes it a webhook bot. You can still start it in a chat. Delivery stays off until you enable it.":
+    "Wenn du einen manuell gestarteten Agenten als ersten Dispatcher auswählst, wird er zum Webhook-Bot. Du kannst ihn weiterhin in einem Chat starten. Die Zustellung bleibt ausgeschaltet, bis du sie aktivierst.",
   "Crew dispatcher": "Crew-Dispatcher",
   "Dispatcher changed. Connect its routine before enabling delivery.":
     "Dispatcher geändert. Verbinde seine Routine, bevor du die Zustellung aktivierst.",

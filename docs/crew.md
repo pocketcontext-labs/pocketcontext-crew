@@ -1063,7 +1063,9 @@ an optional `kind` (default `bot`; agent.ensure applies it only when it creates 
 agent). Only bots are routed: Crew never wakes an external or human agent, even when
 it has a leftover mapping. `webhook.mapping.update` for a non-bot is HTTP 400
 (clearing a leftover mapping with an empty `bot_ref` stays possible), and the
-dispatcher and triage agent must be bots. Changing a bot to another kind cancels its
+dispatcher and triage agent must be bots. During first setup you can select an active
+manual agent as dispatcher and convert it to a bot. Delivery stays off until you
+finish setup, test the routine and enable delivery. Changing a bot to another kind cancels its
 queued wakes like deactivation and, if it was the dispatcher, disables the
 integration. Setup checks that look for mapped agents ignore non-bots.
 

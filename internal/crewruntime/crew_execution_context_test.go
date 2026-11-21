@@ -90,8 +90,13 @@ func TestBeginCapabilitiesDescribeAgentContext(t *testing.T) {
 }
 
 func TestBeginTwoWakesLoadSuccessiveSavedWorkflowRevisions(t *testing.T) {
-	a, config, _, first := webhookFixture(t)
-	id := config.GetString("agent")
+	a := newTestApp(t)
+	agent := webhookOperation(t, a, "agent.create", "", 0, map[string]any{"name": "Manual dispatcher", "kind": "external", "brief": "Synthetic private role"}, "")
+	id := agent["id"].(string)
+	const original = "Summarize the assigned task in one paragraph."
+	const edited = "Summarize the assigned task in three bullet points."
+	sessionUpdate(t, a, true, 0, map[string]any{"agent": id, "instructions": original}, "", 200)
+	_, _, task, first := configureWebhookFixture(t, a, agent, true)
 	assertWorkflow := func(run map[string]any, workflow string, revision float64) {
 		t.Helper()
 		ctx, ok := run["agent_context"].(map[string]any)
@@ -99,10 +104,28 @@ func TestBeginTwoWakesLoadSuccessiveSavedWorkflowRevisions(t *testing.T) {
 			t.Fatalf("wanted agent %v with workflow %q revision %v, got %v", id, workflow, revision, ctx)
 		}
 	}
-	const original = "Summarize the assigned task in one paragraph."
-	const edited = "Summarize the assigned task in three bullet points."
-	sessionUpdate(t, a, true, 0, map[string]any{"agent": id, "instructions": original}, "", 200)
-	assertWorkflow(beginSelf(t, a, first, "first-wake-worker"), original, 1)
+	receiveWake := func(eventID, worker string) map[string]any {
+		t.Helper()
+		payload := deliverToMock(t, a, eventID)
+		raw, _ := json.Marshal(payload)
+		for _, private := range []string{"agent_context", "Synthetic private role", original, edited, "synthetic-bearer"} {
+			if strings.Contains(string(raw), private) {
+				t.Fatal("mock receiver got private data", private)
+			}
+		}
+		return map[string]any{"event_id": payload["event_id"], "epoch": payload["epoch"], "generation": payload["wake_generation"], "role": "dispatcher", "worker_id": worker}
+	}
+	firstRequest := receiveWake(first.GetString("event_id"), "first-wake-worker")
+	run := executionOperation(t, a, "execution.begin", "", 0, firstRequest, "first-wake-worker", false, 200)
+	assertWorkflow(run, original, 1)
+	result := executionOperation(t, a, "execution.complete", run["id"].(string), int(run["revision"].(float64)), map[string]any{"worker_id": "first-wake-worker", "fence": run["fence"], "outcome": "completed", "mark_done": true, "task_revision": task.GetInt("revision")}, "first-complete", false, 200)
+	if result["state"] != "completed" {
+		t.Fatal(result)
+	}
+	replay := executionOperation(t, a, "execution.begin", "", 0, firstRequest, "first-wake-worker", false, 200)
+	if replay["next_step"] != "reconcile" || replay["agent_context"] != nil || replay["execution"] != nil {
+		t.Fatal("replay unexpectedly authorized more work", replay)
+	}
 
 	sessionUpdate(t, a, true, 1, map[string]any{"agent": id, "instructions": edited}, "", 200)
 	next := newTask(t, a, map[string]any{"title": "Second assignment", "assigned_agent": id, "readiness": "ready"})
@@ -110,5 +133,13 @@ func TestBeginTwoWakesLoadSuccessiveSavedWorkflowRevisions(t *testing.T) {
 	if len(deliveries) != 1 || deliveries[0].GetString("event_id") == first.GetString("event_id") {
 		t.Fatal("expected a distinct wake for the second assignment")
 	}
-	assertWorkflow(beginSelf(t, a, deliveries[0], "second-wake-worker"), edited, 2)
+	secondRequest := receiveWake(deliveries[0].GetString("event_id"), "second-wake-worker")
+	second := executionOperation(t, a, "execution.begin", "", 0, secondRequest, "second-wake-worker", false, 200)
+	assertWorkflow(second, edited, 2)
+	executionOperation(t, a, "execution.complete", second["id"].(string), int(second["revision"].(float64)), map[string]any{"worker_id": "second-wake-worker", "fence": second["fence"], "outcome": "completed", "mark_done": true, "task_revision": next["revision"]}, "second-complete", false, 200)
+	for _, taskID := range []string{task.Id, next["id"].(string)} {
+		if saved := apiWebhookRecord(t, a, "tasks", taskID); saved.GetString("status") != "done" {
+			t.Fatal("mock wake did not finish task", taskID)
+		}
+	}
 }

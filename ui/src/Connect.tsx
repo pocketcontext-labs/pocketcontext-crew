@@ -188,6 +188,7 @@ function LocalSteps() {
 
 export default function Connect({
   agents,
+  onAgentsChanged,
   tasks,
   notes = [],
   connection,
@@ -196,6 +197,7 @@ export default function Connect({
   onSectionShown,
 }: {
   agents: Row[];
+  onAgentsChanged?: () => void;
   tasks: Row[];
   notes?: Row[];
   connection: ConnectionState;
@@ -242,6 +244,7 @@ export default function Connect({
       </p>
       <WebhookStatus
         agents={agents}
+        onAgentsChanged={onAgentsChanged}
         tasks={tasks}
         collapsible
         focusSetup={section === "integration"}

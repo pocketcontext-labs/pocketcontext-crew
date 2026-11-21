@@ -40,29 +40,76 @@ func webhookOperation(t *testing.T, a *testApp, action, id string, revision int,
 	}
 	return a.request(t, "POST", route, a.token, string(raw), 200)
 }
+
+// Run one delivery through the real dispatcher against a local mock transport.
+func deliverToMock(t *testing.T, a *testApp, expectedEvent string) map[string]any {
+	t.Helper()
+	var received map[string]any
+	dispatcher := newWebhookDispatcher(a.app)
+	dispatcher.client = &http.Client{Transport: webhookRoundTrip(func(r *http.Request) (*http.Response, error) {
+		if received != nil || r.Header.Get("Authorization") != "Bearer synthetic-bearer" {
+			t.Fatal("unexpected extra delivery or missing receiver credentials")
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatal(err)
+		}
+		return &http.Response{StatusCode: http.StatusAccepted, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
+	})}
+	if err := dispatcher.tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if received["event_id"] != expectedEvent {
+		t.Fatal("mock receiver did not receive expected event", received)
+	}
+	return received
+}
+
 func webhookFixture(t *testing.T) (*testApp, *core.Record, *core.Record, *core.Record) {
 	t.Helper()
 	a := newTestApp(t)
 	agent := webhookOperation(t, a, "agent.ensure", "", 0, map[string]any{"name": "Synthetic webhook agent"}, "ensure")
+	return configureWebhookFixture(t, a, agent, false)
+}
+
+func configureWebhookFixture(t *testing.T, a *testApp, agent map[string]any, promoteManual bool) (*testApp, *core.Record, *core.Record, *core.Record) {
+	t.Helper()
 	configs, err := a.app.FindRecordsByFilter("crew_webhook_configs", "scope='global'", "", 1, 0)
 	if err != nil || len(configs) != 1 {
 		t.Fatal("global config missing", err)
 	}
 	global := configs[0]
-	c := webhookOperation(t, a, "webhook.integration.update", global.Id, global.GetInt("revision"), map[string]any{"agent": agent["id"]}, "")
+	dispatcher := map[string]any{"agent": agent["id"]}
+	if promoteManual {
+		crewWrite(t, a, false, "webhook.integration.update", global.Id, global.GetInt("revision"), dispatcher, 400)
+		dispatcher["promote_external_revision"] = 0
+		crewWrite(t, a, false, "webhook.integration.update", global.Id, global.GetInt("revision"), dispatcher, 409)
+		dispatcher["promote_external_revision"] = agent["revision"]
+	}
+	c := webhookOperation(t, a, "webhook.integration.update", global.Id, global.GetInt("revision"), dispatcher, "")
 	webhookOperation(t, a, "webhook.mapping.update", "", 0, map[string]any{"agent": agent["id"], "bot_ref": "synthetic-bot"}, "")
 	global, _ = a.app.FindRecordById("crew_webhook_configs", global.Id)
 	c["revision"] = float64(global.GetInt("revision"))
 	c = webhookOperation(t, a, "webhook.credentials.update", global.Id, int(c["revision"].(float64)), map[string]any{"url": "https://93.184.216.34/receiver", "secret": "synthetic-bearer"}, "")
 	c = webhookOperation(t, a, "webhook.instructions.sync", global.Id, int(c["revision"].(float64)), map[string]any{"instruction_revision": c["instruction_revision"], "routine_ref": "synthetic-routine", "status": "reported"}, "")
 	test := webhookOperation(t, a, "webhook.test", global.Id, int(c["revision"].(float64)), map[string]any{}, "fixture-test")
+	if promoteManual {
+		deliverToMock(t, a, test["event_id"].(string))
+	}
 	global, _ = a.app.FindRecordById("crew_webhook_configs", global.Id)
 	c = webhookOperation(t, a, "webhook.runtime.report", global.Id, global.GetInt("revision"), map[string]any{"event_id": test["event_id"], "context": "webhook", "native_handoff": true, "execution_protocol": true}, "fixture-runtime")
 	webhookOperation(t, a, "execution.test_ack", "", 0, map[string]any{"event_id": test["event_id"], "epoch": test["epoch"]}, "fixture-ack")
-	testDelivery, _ := a.app.FindRecordById("crew_webhook_deliveries", test["id"].(string))
-	testDelivery.Set("state", "accepted")
-	if err := a.app.Save(testDelivery); err != nil {
-		t.Fatal(err)
+	if !promoteManual {
+		testDelivery, _ := a.app.FindRecordById("crew_webhook_deliveries", test["id"].(string))
+		testDelivery.Set("state", "accepted")
+		if err := a.app.Save(testDelivery); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if promoteManual {
+		pending := newTask(t, a, map[string]any{"title": "Before enable", "assigned_agent": agent["id"], "readiness": "ready"})
+		if c["enabled"] == true || len(apiWebhookDeliveries(t, a, pending["id"].(string))) != 0 {
+			t.Fatal("setup or test acknowledgement enabled ordinary work")
+		}
 	}
 	c = webhookOperation(t, a, "webhook.enable", global.Id, int(c["revision"].(float64)), map[string]any{}, "")
 	task := webhookOperation(t, a, "task.create", "", 0, map[string]any{"title": "Synthetic actionable task", "assigned_agent": agent["id"], "readiness": "ready"}, "")

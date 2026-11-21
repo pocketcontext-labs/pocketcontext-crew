@@ -95,6 +95,8 @@ const it: Record<string, string> = {
   "Choose your dispatcher": "Scegli il dispatcher",
   "Use an existing bot. It keeps its main job and also routes Crew notifications.":
     "Usa un bot esistente. Mantiene il suo compito principale e smista anche le notifiche di Crew.",
+  "Choosing a manually started agent as your first dispatcher makes it a webhook bot. You can still start it in a chat. Delivery stays off until you enable it.":
+    "Se scegli un agente con avvio manuale come primo dispatcher, diventa un bot webhook. Puoi ancora avviarlo in una chat. L’invio resta disattivato finché non lo abiliti.",
   "Crew dispatcher": "Dispatcher di Crew",
   "Dispatcher changed. Connect its routine before enabling delivery.":
     "Dispatcher cambiato. Collega la sua routine prima di attivare la consegna.",

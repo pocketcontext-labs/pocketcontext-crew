@@ -5,7 +5,9 @@ One application-wide webhook wakes its routine; explicit mappings identify the
 other Grok Bots. One shared MCP connection supplies notes, tasks and coordination.
 Agent names and worker handles are attribution and coordination, not identities.
 
-Only agents of kind `bot` (the default) take part: the dispatcher, the triage agent
+When setting up the first dispatcher, you can select an active manual agent. Crew converts that agent to a bot when you confirm the selection. Delivery stays off while you configure and test its routine.
+
+Only agents of kind `bot` take part in delivery: the dispatcher, the triage agent
 and every mapped recipient must be bots, `webhook.mapping.update` for an `external`
 or `human` agent is HTTP 400 (an empty `bot_ref` may still clear a leftover mapping),
 and routing never wakes a non-bot, even with a mapping. Setup checks ignore non-bots,
@@ -48,7 +50,7 @@ MCP, not independently authenticated provider attestations.
 Open Agents → Grok Bot integration. Reuse the existing configuration; no extra
 bot, MCP connection or per-agent webhook credential is needed.
 
-1. Choose an existing agent as dispatcher and the parent bridge for Grok routines
+1. Choose the first dispatcher from your active bots or manual agents, then select the parent bridge for Grok routines
    that expose `WakeParent` rather than native bot messaging.
 2. Copy the setup prompt into that bot's Grok chat. It discovers actual bots,
    saves confirmed mappings, applies Crew's managed instructions to the existing

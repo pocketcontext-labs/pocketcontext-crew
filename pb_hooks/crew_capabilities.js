@@ -446,6 +446,7 @@ function document() {
     "webhook.integration.update",
     {
       agent: str,
+      promote_external_revision: { ...num, description: "Explicitly promote the selected active manual agent during initial dispatcher setup, guarded by its current revision." },
       dispatch_mode: { enum: ["native", "parent_bridge"] },
       instructions: str,
       role_instructions: str,
