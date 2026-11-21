@@ -649,9 +649,14 @@ a.crew-logo:hover .product-brand span {
   border-radius: 4px;
   padding: 2px 8px;
 }
+.crew-column:has(> .crew-column-empty) {
+  display: flex;
+  flex-direction: column;
+}
 .crew-column-empty {
+  margin-block: auto;
   text-align: center;
-  padding: 70px 0;
+  padding: 12px 0;
   color: #737d69;
   font-size: 11px;
 }
