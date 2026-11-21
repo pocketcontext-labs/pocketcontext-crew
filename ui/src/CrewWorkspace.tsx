@@ -3665,13 +3665,16 @@ function ChatInstructions({ agent, open }: { agent: Row; open: (view: Instructio
   const { state, run } = useCopyFeedback();
   return (
     <section className="crew-chat-instructions">
-      <div>
-        <h3>{t("Manual start")}</h3>
-        <p>{t("Paste the instructions into a chat connected to Crew.")}</p>
-      </div>
-      <button type="button" className="crew-copy-control crew-copy-icon"
-        aria-label={t("Copy instructions for {name}", { name })} title={t("Copy instructions for {name}", { name })}
-        onClick={() => void run(session.start)} disabled={session.loading}><CopyGlyph state={state} /></button>
+      <button type="button" className="crew-manual-copy-row"
+        aria-label={t("Copy instructions for {name}", { name })}
+        title={t("Copy instructions for {name}", { name })}
+        onClick={() => void run(session.start)} disabled={session.loading}>
+        <span>
+          <strong>{t("Manual start")}</strong>
+          <span className="crew-manual-copy-hint">{t("Paste the instructions into a chat connected to Crew.")}</span>
+        </span>
+        <span className="crew-manual-copy-icon" aria-hidden="true"><CopyGlyph state={state} /></span>
+      </button>
       {state === "copied" && <small role="status">{t("Instructions copied")}</small>}
       {result?.state === "manual" && <textarea aria-label={t("Session prompt for {name}", { name })}
         readOnly value={result.prompt} onFocus={(e) => e.currentTarget.select()} />}

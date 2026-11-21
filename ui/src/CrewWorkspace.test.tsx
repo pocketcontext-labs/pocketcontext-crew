@@ -3488,8 +3488,10 @@ describe("project agents and coding sessions", () => {
     render(<CrewWorkspace />);
     fireEvent.click((await screen.findByRole("heading", { name: "Network" })).closest("button")!);
     const dialog = within(screen.getByRole("dialog"));
-    fireEvent.click(dialog.getByRole("button", { name: "Copy instructions for Network" }));
+    const copy = dialog.getByRole("button", { name: "Copy instructions for Network" });
+    fireEvent.click(within(copy).getByText("Manual start"));
     await waitFor(() => expect(copied).toHaveBeenCalledWith(session.prompt));
+    expect(copy.querySelector(".crew-copy-glyph")).toHaveAttribute("data-state", "copied");
     expect(crewApi.write).not.toHaveBeenCalled();
     fireEvent.change(dialog.getByLabelText("Agent brief"), { target: { value: "New brief" } });
     fireEvent.click(dialog.getByRole("button", { name: "Save agent" }));
@@ -3501,6 +3503,7 @@ describe("project agents and coding sessions", () => {
     );
   });
   it("opens a fresh bot's instruction editor and revision history without discarding profile edits", async () => {
+    const copied = mockClipboard(async () => undefined);
     const botSession = { ...session, agent: { id: agent.id, name: "Network", kind: "bot" } };
     vi.spyOn(crewApi, "session").mockResolvedValue(botSession);
     const update = vi.spyOn(crewApi, "updateSession").mockResolvedValue({
@@ -3527,6 +3530,7 @@ describe("project agents and coding sessions", () => {
     instructions = within(await screen.findByRole("dialog", { name: "Session instructions for Network" }));
     expect(instructions.getByRole("button", { name: "History" })).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => expect(crewApi.read).toHaveBeenCalledWith("session_revisions", { parent: agent.id }));
+    expect(copied).not.toHaveBeenCalled();
     fireEvent.click(instructions.getByRole("button", { name: "Close dialog" }));
     expect(profile.getByLabelText("Name")).toHaveValue("Unsaved name");
     expect(crewApi.write).not.toHaveBeenCalled();

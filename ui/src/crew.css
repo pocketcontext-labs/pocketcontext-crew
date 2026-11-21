@@ -4815,7 +4815,29 @@ a.crew-logo:hover .product-brand span {
 .crew-agent-startup { display: grid; gap: 12px; }
 .crew-agent-startup > section { margin: 0; padding: 14px 16px; min-width: 0; }
 .crew-agent-startup h3, .crew-agent-editor .crew-agent-assignments h3 { margin: 0; font-size: 16px; }
-.crew-chat-instructions { display: grid; grid-template-columns: minmax(0,1fr) 44px; align-items: center; gap: 6px 12px; }
+.crew-chat-instructions { display: grid; gap: 6px; }
+.crew-dialog button.crew-manual-copy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+}
+.crew-manual-copy-hint { display: block; margin-top: 4px; color: var(--muted); }
+.crew-manual-copy-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  box-sizing: border-box;
+  border: 1px solid var(--icon-line);
+  border-radius: 50%;
+  background: var(--icon-fill);
+}
 .crew-chat-instructions p { margin: 4px 0 0; color: var(--muted); }
 .crew-chat-instructions small, .crew-chat-instructions textarea, .crew-chat-instructions > p { grid-column: 1 / -1; }
 .crew-agent-no-tasks { margin: 0; font-size: 14px; }
