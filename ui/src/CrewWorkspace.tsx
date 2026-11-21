@@ -197,16 +197,16 @@ import { NoteRows, NotesFilterSheet } from "./NotesMobile";
 import { t, tn } from "./i18n";
 // Page names, eyebrows and sort and filter labels below stay English in their
 // tables and are translated where they render: t(label).
-const nav: [View, string, string][] = [
-  ["home", "Home", "⌂"],
-  ["board", "Tasks", "▦"],
-  ["memory", "Notes", "▤"],
-  ["reviews", "Approvals", "✓"],
-  ["shared", "Shared", "↗"],
-  ["agents", "Agents", "◎"],
-  ["archive", "Archive", "↶"],
+const nav: [View, string, ReactNode][] = [
+  ["home", "Home", icons.home],
+  ["board", "Tasks", icons.tasks],
+  ["memory", "Notes", icons.notes],
+  ["reviews", "Approvals", icons.approvals],
+  ["shared", "Shared", icons.shared],
+  ["agents", "Agents", icons.agent],
+  ["archive", "Archive", <Icon name="archive" />],
 ];
-const pages: [View, string, string][] = [
+const pages: [View, string, ReactNode][] = [
   ...nav,
   ["connect", "Connect an agent", "⇄"],
   ["guide", "Guide", "?"],
@@ -2463,7 +2463,7 @@ export default function CrewWorkspace() {
               href={viewHashes[key]}
               aria-current={view === key ? "page" : undefined}
             >
-              <span aria-hidden="true">{key === "home" ? icons.home : icon}</span>
+              <span aria-hidden="true">{icon}</span>
               {t(label)}
               {key === "reviews" && pending.length > 0 && (
                 <b>{pending.length}</b>
@@ -2491,10 +2491,8 @@ export default function CrewWorkspace() {
             href={viewHashes.settings}
             aria-current={view === "settings" ? "page" : undefined}
           >
-            Settings
+            {t("Settings")}
           </a>
-          <span />
-          {t("One owner. One shared context.")}
           <button onClick={() => api.logout()}>{t("Sign out")}</button>
         </div>
       </aside>

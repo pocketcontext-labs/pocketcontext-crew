@@ -146,6 +146,8 @@ a.crew-logo:hover .product-brand span {
   padding: 0 6px;
 }
 .crew-sidebar-bottom {
+  padding-top: 12px;
+  border-top: 1px solid #dce2d8;
   margin-top: auto;
   font-size: 10px;
   color: #6b7866;
@@ -154,8 +156,8 @@ a.crew-logo:hover .product-brand span {
   display: block;
   border: 0;
   background: transparent;
-  padding: 10px 0;
-  margin-top: 12px;
+  padding: 8px 13px;
+  margin-top: 6px;
   font-size: 12px;
 }
 .crew-sidebar-bottom > span {
@@ -1600,10 +1602,12 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-sidebar-link {
   display: block;
-  margin-bottom: 14px;
+  padding: 7px 13px;
+  border-radius: 7px;
   font-size: 13px;
   color: #52654f;
 }
+.crew-sidebar-link:hover, .crew-sidebar-link[aria-current] { background: #e7edde; }
 .crew-sidebar-link[aria-current] {
   font-weight: 650;
   color: #2b4c32;
