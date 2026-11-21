@@ -806,6 +806,10 @@ function write(e, isAgent) {
     bad("Invalid attribution");
   const d = b.data || {};
   if (typeof d !== "object" || Array.isArray(d)) bad("data must be an object");
+  if (isAgent && (
+    (["task.create", "task.update"].includes(b.action) && d.status === "done") ||
+    (b.action === "execution.complete" && d.mark_done === true)
+  )) throw new ForbiddenError("Only the owner can mark a task Done. Submit a draft for review.");
   // Owner-browser-only, like webhook credentials: refused before idempotency.
   if (isAgent && b.action === "upload_link.create")
     throw new ForbiddenError("Create upload links in the owner UI");

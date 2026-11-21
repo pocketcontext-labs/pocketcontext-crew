@@ -87,9 +87,11 @@ class ProtocolTests(unittest.TestCase):
         self.assertIn("Updated workflow", self.sim.model.call_args.args[1])
         begin, comment, complete = self.sim._write.call_args_list
         self.assertEqual(begin.args[2]["role"], "recipient")
-        self.assertEqual(comment.args[2], {"body": "pong from the specialist"})
+        self.assertEqual(comment.args[1], "task.update")
+        self.assertEqual(comment.args[2], {"draft": "pong from the specialist"})
         self.assertEqual(comment.kwargs["proof"], proof)
-        self.assertEqual(complete.args[2]["fence"], 2)
+        self.assertEqual(complete.args[1], "review.request")
+        self.assertEqual(complete.kwargs["proof"], proof)
         self.send.assert_not_called()
 
 

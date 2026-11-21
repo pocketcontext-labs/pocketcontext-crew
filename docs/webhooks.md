@@ -431,9 +431,7 @@ A recipient may start before this report; the late report must not replace its l
 
 Renew during long work. Include proof on task writes and review requests. Use a
 stable key for proof-bearing comments so a lost response cannot create a second
-pong. Complete through `execution.complete`; `mark_done:true` plus task_revision
-commits task completion and execution outcome together. The holder's own
-`review.request` completes the execution instead (outcome `review_requested`).
+pong. Save the result in the task draft and submit a fenced `review.request` to finish the execution (outcome `review_requested`). Only the owner marks the task Done.
 Other review, on-hold and reassignment changes invalidate previous authority
 (a hold records outcome `put_on_hold`); later eligible work uses a new generation.
 

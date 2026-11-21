@@ -277,12 +277,12 @@ class Protocol:
         log(role, f"Loaded workflow revision {ctx['revision']} for {ctx['name']}.\n{ctx['workflow']}")
         proof = run["execution"]
         completion = {"worker_id": proof["worker_id"], "fence": proof["fence"]}
-        comment = "pong"
+        comment = ':::copy{label="Routing check"}\n\npong\n\n:::'
         if self.model:
             try:
                 comment = self.model(role,
-                    f"Your local adapter acquired this synthetic task. It will post your answer and complete it. "
-                    f"Write only your answer, at most 20000 characters. To decline, start with STOP: and say why."
+                    f"Your local adapter acquired this synthetic task. It will save your answer in Draft for review and request owner review. "
+                    "Write paste-ready deliverables in separate :::copy{label=\"Descriptive label\"} blocks, each closed by ::: on its own line. Return Markdown, at most 20000 characters. To decline, start with STOP: and say why."
                     f"\n{ctx['execution_guidance']}\nBrief: {ctx['brief']}\n"
                     f"Instructions: {ctx['workflow']}\nTask: {task['title']}\n{task.get('description', '')}").strip()
                 if not comment or len(comment) > 20000:
@@ -293,8 +293,6 @@ class Protocol:
                 self._write(role, "execution.complete", {**completion, "outcome": "failed"},
                             record=run, event=event)
                 raise
-        task = self._write(role, "task.comment", {"body": comment}, record=task, proof=proof, event=event)
-        self._write(role, "execution.complete", {
-            **completion, "outcome": "completed", "mark_done": True, "task_revision": task["revision"],
-        }, record=run, event=event)
-        log(role, f"Completed {task['id']} using workflow revision {ctx['revision']}.\n{comment}")
+        task = self._write(role, "task.update", {"draft": comment}, record=task, proof=proof, event=event)
+        self._write(role, "review.request", {}, record=task, proof=proof, event=event)
+        log(role, f"Submitted {task['id']} for owner review using workflow revision {ctx['revision']}.")
