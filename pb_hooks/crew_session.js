@@ -9,14 +9,34 @@
 const LEASE_HOURS = 2;
 const LEASE_MS = LEASE_HOURS * 3600 * 1000;
 
+const sessionIdentity = "Use a unique reported_agent for this chat: reuse its session ID, or generate a UUID once and keep it for all claim and renewal writes.";
+
+const shortDefault = [
+  "Follow the agent brief and the owner’s instructions. Read your bucket, relevant notes, and current assignments, including tasks on hold and the last saved step.",
+  "Use the Ready task the owner already selected, or ask them to choose one. Recheck its assignment, readiness, revision and holder, then use task.claim before starting. If another worker holds it, report the holder and stop.",
+  sessionIdentity,
+  "Record decisions, outcomes and the next step on the task. Renew long-running claims with task.claim_renew, release unfinished work with task.release, and obtain the owner’s approval for external actions.",
+].join("\n\n");
+
 function prompt(name) {
   return [
     "You are " + name + " in PocketContext Crew.",
-    "Use my authenticated Crew connection. If it is missing, ask me to connect the Crew MCP endpoint in this chat and sign in, then stop.",
-    'Read crew_read {"collection":"session","agent":' + JSON.stringify(name) + '}, your bucket and relevant notes. Read your current assignments with fields title, status, readiness, last_saved_step, claim_state, claimed_by and webhook_holder.',
-    "Show what is on hold and what is ready. Let me choose a ready task by title. Claim it with task.claim before working. If it is held, report the holder. Opening this chat only reads context.",
-    "Follow the saved instructions and my approvals. When leaving, save the outcome and next step on the task if they have changed.",
+    "Use my authenticated Crew MCP connection (crew_read/crew_write) or paired pocketcontext-crew CLI (read/write). If neither is available, explain how to connect Crew in this chat or pair the CLI and stop.",
+    'Read the session with {"collection":"session","agent":' + JSON.stringify(name) + '}. Follow its instructions and brief. Read your bucket, relevant notes and assignments with title, status, readiness, last_saved_step, claim_state, claimed_by and webhook_holder.',
+    "If I already selected a Ready task by ID or title, recheck and claim that task. Otherwise show the assignments and wait for my choice. Opening the chat only reads context. Use task.claim before work; report any existing holder.",
+    sessionIdentity,
+    "Before leaving, save the outcome and next step if they changed.",
   ].join("\n");
+}
+
+function codingTemplate(name) {
+  return [
+    "# Coding workflow for " + name,
+    shortDefault,
+    "Read the selected task’s comments and attachments. Confirm the repository and requested scope, then read its contributor instructions and test requirements.",
+    "Implement the requested change and run the required tests. Record what changed, the test results, and any remaining work on the task.",
+    "Use the owner’s specified review process. Obtain separate authorization for a push, release or deployment. Report a release only after it succeeds, and close the task only when its completion requirements are met.",
+  ].join("\n\n");
 }
 
 // Single-quote a value for a POSIX shell argument.
@@ -39,8 +59,8 @@ function sessionCommand(name) {
   return "sh -c " + shellQuote(script) + " sh " + shellQuote(name);
 }
 
-// The built-in default instructions body (everything above the agent brief).
-function defaultBody(name) {
+// Historical project template for default revisions stored without a text snapshot.
+function legacyCodingBody(name) {
   const q = JSON.stringify(name);
   const lines = [
     "# Crew session instructions for " + name,
@@ -167,15 +187,12 @@ function editedBy(row) {
   return actor;
 }
 
-// Revision rows written before bot histories were supported always referred
-// to the external agent's project-coding template.
-function templateKind(row, agent) {
-  return row ? row.getString("template_kind") || "external" :
-    (agent.getString("kind") || "bot") === "bot" ? "bot" : "external";
-}
-
-function template(kind, name) {
-  if (kind === "external") return defaultBody(name);
+// Older default revisions stored only their template family. Keep rendering
+// those versions for history and explicit restores without rewriting any rows.
+function revisionBody(row, name) {
+  const text = row.getString("instructions");
+  if (text || !row.getBool("is_default")) return text;
+  if (row.getString("template_kind") !== "bot") return legacyCodingBody(name);
   return [
     "Use the agent brief below to continue the role in this chat.",
     "Read the current assignments and their latest comments. Ask the owner to select a Ready task, then use task.claim with its revision, the assigned agent and a unique session name as reported_agent.",
@@ -208,7 +225,7 @@ function describe(app, ref) {
   const name = agent.getString("name");
   const row = latest(app, agent.id);
   const body = !row || row.getBool("is_default")
-    ? template(templateKind(row, agent), name)
+    ? shortDefault
     : row.getString("instructions");
   const revision = row ? row.getInt("revision") : 0;
   return {
@@ -218,6 +235,7 @@ function describe(app, ref) {
       kind: agent.getString("kind") || "bot",
     },
     prompt: prompt(name),
+    coding_template: codingTemplate(name),
     instructions: compose(body, agent.getString("brief")),
     lease_hours: LEASE_HOURS,
     body,
@@ -242,7 +260,7 @@ function exportRevision(app, row) {
         .findRecordById("crew_agents", row.getString("agent"))
         .getString("name");
     } catch (_) {}
-    out.instructions = template(templateKind(row), name);
+    out.instructions = revisionBody(row, name);
   }
   return out;
 }
@@ -281,7 +299,6 @@ function update(app, b, actor, event) {
   const revision = current ? current.getInt("revision") : 0;
   if (b.expected_revision !== revision)
     throw new ApiError(409, "Revision conflict; reread and reassess", {});
-  let family = templateKind(current, agent);
   let text = "",
     isDefault = false;
   const changes = { revision: revision + 1 };
@@ -307,15 +324,17 @@ function update(app, b, actor, event) {
       { agent: agent.id, revision: d.restore_revision },
     );
     if (!rows.length) throw new NotFoundError("Revision not found");
-    family = templateKind(rows[0]);
-    isDefault = rows[0].getBool("is_default");
-    text = isDefault ? "" : rows[0].getString("instructions");
+    text = revisionBody(rows[0], agent.getString("name"));
+    // A restored historical template becomes explicit text when it differs
+    // from today's default. The restored content always matches the preview.
+    isDefault = rows[0].getBool("is_default") && text === shortDefault;
     changes.mode = "restore";
     changes.restored_from = d.restore_revision;
   } else {
     if (d.restore_default !== true)
       throw new BadRequestError("restore_default must be true");
     isDefault = true;
+    text = shortDefault;
     changes.mode = "default";
   }
   changes.is_default = isDefault;
@@ -323,7 +342,6 @@ function update(app, b, actor, event) {
   r.set("agent", agent.id);
   r.set("instructions", text);
   r.set("is_default", isDefault);
-  r.set("template_kind", family);
   r.set("actor", actor);
   r.set("reported_agent", b.reported_agent || "");
   r.set("reason", b.reason || "");
@@ -333,20 +351,8 @@ function update(app, b, actor, event) {
   return describe(app, agent.id);
 }
 
-// Record the current default before switching startup kinds. Existing saved
-// instructions already carry their template through the change.
-function preserveDefault(app, agent, b, actor, event) {
-  if (latest(app, agent.id)) return;
-  update(app, {
-    expected_revision: 0, reported_agent: b.reported_agent,
-    reason: "Preserve chat instructions when changing agent kind",
-    data: { agent: agent.id, restore_default: true },
-  }, actor, event);
-}
-
 module.exports = {
   describe,
-  preserveDefault,
   update,
   exportRevision,
   findAgent,

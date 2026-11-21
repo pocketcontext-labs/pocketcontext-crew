@@ -1,6 +1,9 @@
 // German strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const de: Record<string, string> = {
+  "Coding workflow template": "Vorlage für Entwicklungsaufgaben",
+  "Use this template to replace the text in the editor. Save creates a new revision.": "Die Vorlage ersetzt den Text im Editor. Beim Speichern entsteht eine neue Revision.",
+  "Use template in editor": "Vorlage im Editor verwenden",
   "Read instructions": "Anweisungen lesen",
   "Who will receive assignments?": "Wer erhält die Aufgaben?",
   "Role description": "Rollenbeschreibung",

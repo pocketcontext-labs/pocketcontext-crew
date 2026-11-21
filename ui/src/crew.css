@@ -124,10 +124,14 @@ a.crew-logo:hover .product-brand span {
   color: #52654f;
 }
 .crew-sidebar nav a > span {
+  display: grid;
+  place-items: center;
+  flex: none;
   width: 18px;
   font-size: 19px;
   line-height: 1;
 }
+.crew-sidebar nav a > span svg { width: 18px; height: 18px; }
 .crew-sidebar nav a[aria-current] {
   background: #dfe8d6;
   color: #2b4c32;
@@ -1452,6 +1456,22 @@ a.crew-logo:hover .product-brand span {
   grid-template-rows: auto minmax(160px, 1fr) auto auto;
   gap: 6px;
 }
+.crew-session-editor:has(.crew-coding-template) {
+  grid-template-rows: auto auto minmax(160px, 1fr) auto auto;
+}
+.crew-coding-template {
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.crew-coding-template summary {
+  min-height: 44px;
+  padding: 11px 0;
+  cursor: pointer;
+  font-weight: 550;
+}
+.crew-coding-template p { margin-top: 0; }
+.crew-coding-preview { margin-top: 12px; overflow-wrap: anywhere; }
 .crew-session-editor label small {
   font-weight: normal;
   color: #77806a;

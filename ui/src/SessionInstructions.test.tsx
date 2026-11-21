@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { AgentSession } from "./crewApi";
+import { crewApi, type AgentSession } from "./crewApi";
 import SessionInstructions from "./SessionInstructions";
 
 const session: AgentSession = {
@@ -79,4 +79,32 @@ it("keeps saved chat instructions editable after enabling a webhook", () => {
   render(<SessionInstructions session={converted} onChange={() => undefined} Markdown={Markdown} />);
   expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
   expect(screen.getByRole("button", { name: "History" })).toBeVisible();
+});
+
+it("previews the coding workflow without changing the draft and saves only on explicit submission", async () => {
+  const template = "## Implementation steps\n\nReview tests with the owner.";
+  const source = { ...session, coding_template: template, body: "Saved role instructions", revision: 4 };
+  const update = vi.spyOn(crewApi, "updateSession").mockResolvedValue({
+    ...source, body: template, instructions: template + "\n\nAgent brief", revision: 5,
+  });
+  const changed = vi.fn();
+  render(<SessionInstructions session={source} initialMode="edit" onChange={changed} Markdown={Markdown} />);
+  const editor = screen.getByLabelText(/Session instructions/);
+  fireEvent.change(editor, { target: { value: "Unsaved draft" } });
+  fireEvent.click(screen.getByText("Coding workflow template"));
+  expect(screen.getByText(/Review tests with the owner/)).toBeVisible();
+  expect(editor).toHaveValue("Unsaved draft");
+  expect(update).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Use template in editor" }));
+  expect(editor).toHaveFocus();
+  expect(editor).toHaveValue(template);
+  expect(update).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect(screen.getByLabelText(/Session instructions/)).toHaveValue(source.body);
+  fireEvent.click(screen.getByText("Coding workflow template"));
+  fireEvent.click(screen.getByRole("button", { name: "Use template in editor" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(changed).toHaveBeenCalledWith(expect.objectContaining({ revision: 5 })));
+  expect(update).toHaveBeenCalledExactlyOnceWith(source.agent.id, 4, { instructions: template }, "Edited by hand");
 });

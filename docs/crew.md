@@ -1070,25 +1070,18 @@ integration. Setup checks that look for mapped agents ignore non-bots.
 **Session instructions.** `crew_read {collection: "session", agent: "<ID or exact
 name>"}` (also CLI `read` and `/api/crew/read`) returns one object:
 `{agent: {id, name, kind}, prompt, instructions, lease_hours: 2, body, revision,
-is_default, edited_by, edited_at, reason, rewrite_prompt}`. `prompt` is the
+is_default, edited_by, edited_at, reason, rewrite_prompt, coding_template}`. `prompt` is the
 stable text copied from the agent card. It identifies the Crew agent and directs the
 chat to read current context using the owner's authenticated Crew connection.
 
 `instructions` is the instructions `body` followed by the agent's brief under
 `## Agent brief`. The body is the latest saved revision, or Crew's built-in default
-(`pb_hooks/crew_session.js`) while none is saved or after Restore default. The
-default tells the session to build a session
-name once with one shell command (`$CREW_SESSION`, else
-`<name> · <tool> · <session id 8>` from
-`CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID`)
-and use it as reported_agent; list the agent's Ready To do tasks; claim one only when
-the owner picks it; plan and wait for the owner's approval in the session (that
-approval is the review); implement and release per the repository's AGENTS.md;
-close with `Released in <version>: <what changed>, commit <sha>`, then one
-task.update with `status: "done"`, the label `release-<version>` added to `labels`, `review_mode: "in_session"`
-and `approved_by` (the owner's name if known, else `owner`); set Won't do
-(`wont_do`) with a comment when the owner decides not to do a task; or release
-with a hold reason when stopping early. An unknown agent is HTTP 404.
+(`pb_hooks/crew_session.js`) while none is saved or after Restore default. Every agent starts with the same short handoff. Use an authenticated CLI or MCP
+connection to read the brief and assignments. Claim a Ready task once the owner
+selects it, work within the approved scope, and record the outcome and next step.
+The optional `coding_template` adds repository-specific planning, testing and
+delivery guidance. In **Manual start → Read instructions → Edit**, preview the
+template, use it in the editor, and save to create a revision for this agent. An unknown agent is HTTP 404.
 
 **Editable session instructions (0.21.0).** Session instructions are saved in
 Crew per agent, for both manual and automatic startup, with immutable revisions in
@@ -1096,9 +1089,9 @@ Crew per agent, for both manual and automatic startup, with immutable revisions 
 reported_agent, reason). Only the body is stored: the agent brief stays on the
 agent and is appended when the session reads its instructions, so editing the
 brief never creates an instructions revision. `revision` is 0 until the first save;
-the built-in default then applies. A Restore default revision stores `is_default`
-with empty text, so it follows the built-in template of the running release
-(reads of that revision show the built-in text). Saved text keeps the agent name it
+the built-in default then applies. A Restore default revision follows the current built-in instructions. Its history
+entry keeps the template text used at the time. Restoring an older revision brings
+back the text shown in its history entry. Saved text keeps the agent name it
 was written with if the agent is renamed.
 
 `session.update` (reader `/api/crew/write` and work-client `/api/crew/agent-write`;

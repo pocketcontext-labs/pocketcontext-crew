@@ -685,7 +685,7 @@ def cli_session_scenario(cli, write):
     assert project['kind'] == 'external', project
     session = cli('read', {'collection': 'session', 'agent': 'synthetic-cli-project'})
     assert '"collection":"session","agent":"synthetic-cli-project"' in session['prompt']
-    assert 'task.claim' in session['prompt'] and 'sign in, then stop' in session['prompt']
+    assert 'task.claim' in session['prompt'] and 'pair the CLI and stop' in session['prompt']
     assert session['agent'] == {'id': project['id'], 'name': 'synthetic-cli-project', 'kind': 'external'} and session['lease_hours'] == 2
     assert session['instructions'].endswith('## Agent brief\n\nSynthetic project brief.'), session['instructions'][-200:]
     assert 'HTTP 404' in cli('read', {'collection': 'session', 'agent': 'synthetic-missing'}, expect=1)
@@ -714,7 +714,8 @@ def cli_session_instructions_scenario(cli, write, project, session):
     """0.21.0: an agent reads and rewrites session instructions with expected_revision."""
     assert session['revision'] == 0 and session['is_default'] is True and session['edited_by'] == '', session
     default = session['body']
-    assert '## 1. Session name' in default and '## Agent brief' not in default
+    assert 'generate a UUID once' in default and '## Agent brief' not in default
+    assert 'Coding workflow' in session['coding_template'] and session['coding_template'] != default
     assert session['instructions'] == default + '\n\n## Agent brief\n\nSynthetic project brief.'
     assert '(revision 0)' in session['rewrite_prompt'] and 'session.update' in session['rewrite_prompt']
     who = 'synthetic-cli-project · Claude Code · s/9 · dddddddd'

@@ -33,6 +33,8 @@ export type AgentSession = {
   /** The full session instructions, Markdown: the body, then the agent brief. */
   instructions: string;
   lease_hours: number;
+  /** Optional editable coding workflow, supplied separately from the saved instructions and brief. */
+  coding_template?: string;
   /** The editable instructions body of the current revision. */
   body: string;
   /** The current revision; 0 while the built-in default was never changed. */
@@ -239,6 +241,7 @@ function parseSession(
     edited_by: text(session.edited_by),
     edited_at: text(session.edited_at),
     rewrite_prompt: text(session.rewrite_prompt),
+    coding_template: text(session.coding_template),
   };
 }
 export const statuses = [

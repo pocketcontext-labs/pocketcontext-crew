@@ -109,6 +109,7 @@ it("reads one agent's session prompt as a single object", async () => {
     edited_by: "",
     edited_at: "",
     rewrite_prompt: "",
+    coding_template: "",
   });
   expect(send).toHaveBeenCalledWith("/api/crew/read", {
     method: "POST",
@@ -133,6 +134,7 @@ it("saves session instructions against the revision shown", async () => {
     edited_by: "owner",
     edited_at: "2026-11-12 10:00:00.000Z",
     rewrite_prompt: "Rewrite (revision 4)",
+    coding_template: "Review and test the requested changes.",
   };
   const send = vi.spyOn(pb, "send").mockResolvedValue(saved);
   expect(

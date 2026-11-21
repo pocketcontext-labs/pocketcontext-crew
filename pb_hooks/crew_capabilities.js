@@ -228,6 +228,7 @@ function document() {
     properties: {
       agent: object({ id: str, name: str, kind: str }, ["id", "name", "kind"]),
       prompt: str,
+      coding_template: { type: "string", description: "Optional editable coding workflow. Use session.update to save it as the active body after owner approval." },
       instructions: {
         type: "string",
         description:
@@ -264,6 +265,7 @@ function document() {
     required: [
       "agent",
       "prompt",
+      "coding_template",
       "instructions",
       "lease_hours",
       "body",

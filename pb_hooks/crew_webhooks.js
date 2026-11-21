@@ -782,12 +782,7 @@ function updateStartup(app, b, actor, isAgent) {
   } else if (agent.getBool("startup_disabled") || !saved || kind !== "bot") {
     return { ...agent.publicExport(), chat_start: d.enabled ? "webhook" : "manual" };
   }
-  if (d.enabled && kind === "external") {
-    const sessions = require(`${__hooks}/crew_session.js`);
-    sessions.preserveDefault(app, agent, b, actor, (db, row, action, envelope, by, changes) =>
-      audit(db, row, { ...envelope, action }, by, changes));
-    agent.set("kind", "bot");
-  }
+  if (d.enabled && kind === "external") agent.set("kind", "bot");
   agent.set("startup_disabled", !d.enabled);
   agent.set("revision", agent.getInt("revision") + 1);
   app.save(agent);

@@ -1205,13 +1205,12 @@ try {
   assert.equal(await pageOverflows(),false,`Agents horizontal overflow at ${width}`);
   await showInstructions.click();
   const instructions=page.getByRole('dialog',{name:'Session instructions for synthetic-repo'});
-  await instructions.getByRole('heading',{name:'1. Session name'}).waitFor();
+  await instructions.getByRole('heading',{name:'Agent brief'}).waitFor();
   assert.equal(await instructions.evaluate(d=>{const b=d.getBoundingClientRect();const top=document.elementFromPoint(b.left+b.width/2,b.top+Math.min(b.height/2,200));return d.contains(top);}),true,`the instructions are on top at ${width}`);
   assert.equal(await instructions.evaluate(d=>d.scrollWidth<=d.clientWidth+1),true,`no sideways scroll in the instructions at ${width}`);
   // Long instructions scroll inside the view; the dialog itself never scrolls.
-  assert.equal(await instructions.locator('.crew-session-view').evaluate(v=>v.scrollHeight>v.clientHeight&&getComputedStyle(v).overflowY==='auto'),true,`the instructions scroll inside at ${width}`);
+  assert.equal(await instructions.locator('.crew-session-view').evaluate(v=>v.scrollHeight<=v.clientHeight+1||getComputedStyle(v).overflowY==='auto'),true,`the instructions scroll inside at ${width}`);
   assert.equal(await instructions.evaluate(d=>d.scrollHeight<=d.clientHeight+1),true,`the dialog itself does not scroll at ${width}`);
-  assert.equal(await instructions.locator('pre').first().evaluate(p=>p.scrollWidth>p.clientWidth&&getComputedStyle(p).overflowX==='auto'),true,`the shell command scrolls in its own box at ${width}`);
   assert.equal(await pageOverflows(),false,`Agents horizontal overflow with instructions at ${width}`);
   if(width===1024) await snapView('crew-session-instructions-1024');
   await instructions.getByRole('button',{name:'Close dialog'}).click();
@@ -1237,7 +1236,7 @@ try {
   assert.ok(rewrite.startsWith('Rewrite the Crew session instructions for agent "synthetic-repo" (revision 0).')&&rewrite.includes('expected_revision 0')&&rewrite.includes('session.update'),rewrite);
   await box.getByRole('button',{name:'Edit',exact:true}).click();
   const field=box.getByLabel(/Session instructions/);
-  assert.ok((await field.inputValue()).includes('## 1. Session name'),'the editor opens on the current body');
+  assert.equal(await field.inputValue(),(await readSession()).body,'the editor opens on the current body');
   await field.fill('# Synthetic browser instructions\n\nWork on **one** synthetic task.');
   await box.getByRole('button',{name:'Save',exact:true}).click();
   await box.getByText(/^Revision 1 · edited by owner, /).waitFor();
@@ -1246,7 +1245,7 @@ try {
   if(process.env.CREW_SCREENSHOTS) await snapView('crew-session-instructions-edited');
   await box.getByRole('button',{name:'Restore default'}).click();
   await box.getByText(/^Revision 2 · edited by owner, .* · built-in default$/).waitFor();
-  await box.getByRole('heading',{name:'1. Session name'}).waitFor();
+  await box.getByRole('heading',{name:'Agent brief'}).waitFor();
   await box.getByRole('button',{name:'History'}).click();
   await box.getByText(/^Revision 1 · owner · /).waitFor();
   assert.equal(await box.getByRole('button',{name:'Restore revision 2'}).count(),0,'the current revision has no Restore');

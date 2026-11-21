@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { NamedCopyAction } from "./CopyFeedback";
 import {
   crewApi,
@@ -71,6 +71,8 @@ export default function SessionInstructions({
   // Manual fallback belongs to the revision whose prompt failed to copy.
   const [failedRevision, setFailedRevision] = useState<number | null>(null);
   const editorId = useId();
+  const editor = useRef<HTMLTextAreaElement>(null);
+  const templatePreview = useRef<HTMLDetailsElement>(null);
   const agent = session.agent.id;
   const name = session.agent.name;
 
@@ -131,6 +133,7 @@ export default function SessionInstructions({
     setMode(next);
   };
   const draft = text ?? session.body;
+  const codingTemplate = session.coding_template;
   return (
     <div className="crew-dialog-body crew-session-dialog">
       <p className="crew-session-hint">
@@ -246,11 +249,24 @@ export default function SessionInstructions({
               if (draft.trim()) void save({ instructions: draft }, "Edited by hand");
             }}
           >
+            {codingTemplate && (
+              <details ref={templatePreview} className="crew-coding-template">
+                <summary>{t("Coding workflow template")}</summary>
+                <p>{t("Use this template to replace the text in the editor. Save creates a new revision.")}</p>
+                <button type="button" disabled={busy || draft === codingTemplate} onClick={() => {
+                  setText(codingTemplate);
+                  if (templatePreview.current) templatePreview.current.open = false;
+                  editor.current?.focus();
+                }}>{t("Use template in editor")}</button>
+                <div className="crew-coding-preview"><Markdown>{codingTemplate}</Markdown></div>
+              </details>
+            )}
             <label htmlFor={editorId}>
               {t("Session instructions")} <small>{t("Markdown supported")}</small>
             </label>
             <textarea
               id={editorId}
+              ref={editor}
               value={draft}
               required
               onChange={(e) => setText(e.target.value)}

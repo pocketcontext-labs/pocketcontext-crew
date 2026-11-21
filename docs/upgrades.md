@@ -9,9 +9,10 @@ retain their routing behavior. To roll back, restore the complete pre-upgrade
 backup with the previous binary or image. Previous versions do not honor
 per-agent startup preferences.
 
-Migration `1802400000_crew_session_templates.js` records the default template
-for new instruction revisions. Existing histories retain their project-agent
-default. Use the same complete backup for rollback.
+Migration `1802400000_crew_session_templates.js` identifies older project and bot
+templates in revision history. All agents now start with the same short
+instructions. Explicitly saved bodies are preserved. Restoring a historical
+version uses its recorded text, and Restore default selects the short workflow. Use the same complete backup for rollback.
 
 ## Crew 0.39.1 to 0.40.0
 

@@ -35,7 +35,7 @@ func TestSessionInstructionsRevisions(t *testing.T) {
 	id := agent["id"].(string)
 	initial := readSession(t, a, "synthetic-repo")
 	defaultBody, _ := initial["body"].(string)
-	if initial["revision"] != float64(0) || initial["is_default"] != true || initial["edited_by"] != "" || !strings.Contains(defaultBody, "## 1. Session name") || strings.Contains(defaultBody, "## Agent brief") {
+	if initial["revision"] != float64(0) || initial["is_default"] != true || initial["edited_by"] != "" || !strings.Contains(defaultBody, "generate a UUID once") || strings.Contains(defaultBody, "## Agent brief") {
 		t.Fatal("default session", initial)
 	}
 	if initial["instructions"] != defaultBody+"\n\n## Agent brief\n\nSynthetic brief." {
@@ -182,6 +182,7 @@ func TestLegacySessionRevisionKeepsProjectTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 	row.Set("template_kind", "")
+	row.Set("instructions", "")
 	if err := a.app.Save(row); err != nil {
 		t.Fatal(err)
 	}
@@ -190,11 +191,43 @@ func TestLegacySessionRevisionKeepsProjectTemplate(t *testing.T) {
 		t.Fatal(got)
 	}
 	history := crewItems(t, crewPost(t, a, "/api/crew/read", map[string]any{"collection": "session_revisions", "parent": id}, 200))
-	if history[0]["instructions"] != before {
-		t.Fatal(history)
+	legacy := history[0]["instructions"].(string)
+	if !strings.Contains(legacy, "## 1. Session name") || legacy == before {
+		t.Fatal("historical project template was replaced", history)
 	}
 	sessionUpdate(t, a, true, 1, map[string]any{"agent": id, "instructions": "Custom text"}, "", 200)
 	if saved := sessionUpdate(t, a, true, 2, map[string]any{"agent": id, "restore_default": true}, "", 200); saved["body"] != before {
 		t.Fatal(saved)
+	}
+	restored := sessionUpdate(t, a, true, 3, map[string]any{"agent": id, "restore_revision": 1}, "", 200)
+	if restored["body"] != legacy || restored["is_default"] != false {
+		t.Fatal("restoring a historical template did not restore its preview")
+	}
+}
+
+func TestSameShortDefaultAndOptionalCodingPreset(t *testing.T) {
+	a := newTestApp(t)
+	var shared string
+	for _, kind := range []string{"external", "bot"} {
+		agent := crewWrite(t, a, false, "agent.create", "", 0, map[string]any{"name": "Synthetic " + kind, "kind": kind}, 200)
+		id := agent["id"].(string)
+		session := readSession(t, a, id)
+		body := session["body"].(string)
+		coding := session["coding_template"].(string)
+		if shared != "" && body != shared {
+			t.Fatal("default differs by agent kind")
+		}
+		shared = body
+		if strings.Contains(body, "repository") || strings.Contains(body, "deploy") || !strings.Contains(coding, "separate authorization") || strings.Contains(coding, "## Agent brief") {
+			t.Fatal("coding instructions leaked into the default or preset contract changed")
+		}
+		selected := sessionUpdate(t, a, true, 0, map[string]any{"agent": id, "instructions": coding}, "", 200)
+		if selected["is_default"] != false || selected["body"] != coding {
+			t.Fatal("preset not saved as custom instructions")
+		}
+		reset := sessionUpdate(t, a, true, 1, map[string]any{"agent": id, "restore_default": true}, "", 200)
+		if reset["body"] != shared || reset["is_default"] != true {
+			t.Fatal("restoring the short default failed")
+		}
 	}
 }

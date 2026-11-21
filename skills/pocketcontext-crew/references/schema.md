@@ -55,7 +55,7 @@ updates, comments and attachment writes renew it. `task.release` (claimer, owner
 or anyone after expiry; optional readiness and waiting_reason) ends it and sets
 In progress back to To do. Done or Won't do ends it. The session collection
 (`{"collection":"session","agent":NAME}`) returns `{agent, prompt, instructions,
-lease_hours, body, revision, is_default, edited_by, edited_at, rewrite_prompt}`:
+lease_hours, body, revision, is_default, edited_by, edited_at, rewrite_prompt, coding_template}`:
 instructions is body plus the agent brief. Active bot and external agents have editable
 instructions: `session.update` data {agent, instructions | restore_revision |
 restore_default:true} with top-level expected_revision = revision (0 for the

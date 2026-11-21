@@ -277,7 +277,7 @@ func TestSessionInstructionsRead(t *testing.T) {
 		raw, _ := json.Marshal(map[string]any{"collection": "session", "agent": ref})
 		got := a.request(t, "POST", "/api/crew/read", a.token, string(raw), 200)
 		prompt := got["prompt"].(string)
-		for _, want := range []string{"You are synthetic-repo in PocketContext Crew.", "authenticated Crew connection", "sign in, then stop", `"collection":"session","agent":"synthetic-repo"`, "relevant notes", "last_saved_step", "ready task by title", "task.claim", "save the outcome and next step"} {
+		for _, want := range []string{"You are synthetic-repo in PocketContext Crew.", "authenticated Crew MCP connection", "paired pocketcontext-crew CLI", "pair the CLI and stop", `"collection":"session","agent":"synthetic-repo"`, "relevant notes", "last_saved_step", "already selected a Ready task by ID or title", "task.claim", "generate a UUID once", "save the outcome and next step"} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("session prompt lacks %q: %s", want, prompt)
 			}
@@ -289,7 +289,7 @@ func TestSessionInstructionsRead(t *testing.T) {
 		if strings.Contains(strings.ToLower(instructions), "zellij") {
 			t.Fatal("session instructions include terminal pane metadata")
 		}
-		for _, part := range []string{"## Agent brief\n\nSynthetic brief: run the synthetic tests.", "CREW_SESSION", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "task.claim_renew", "task.release", "already_claimed", "Released in <version>", "never force-push", "Never set Done without the owner's explicit approval"} {
+		for _, part := range []string{"## Agent brief\n\nSynthetic brief: run the synthetic tests.", "unique reported_agent", "task.claim_renew", "task.release", "approval for external actions"} {
 			if !strings.Contains(instructions, part) {
 				t.Fatalf("instructions lack %q", part)
 			}

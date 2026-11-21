@@ -2463,7 +2463,7 @@ export default function CrewWorkspace() {
               href={viewHashes[key]}
               aria-current={view === key ? "page" : undefined}
             >
-              <span aria-hidden="true">{icon}</span>
+              <span aria-hidden="true">{key === "home" ? icons.home : icon}</span>
               {t(label)}
               {key === "reviews" && pending.length > 0 && (
                 <b>{pending.length}</b>

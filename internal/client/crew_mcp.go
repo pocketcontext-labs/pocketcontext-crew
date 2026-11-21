@@ -24,7 +24,7 @@ type crewRead struct {
 	Readiness        string   `json:"readiness,omitempty" jsonschema:"Tasks only: on_hold (stored and returned as waiting) or ready."`
 	Label            string   `json:"label,omitempty" jsonschema:"Tasks only: tasks carrying this exact label."`
 	ChangedSince     string   `json:"changed_since,omitempty" jsonschema:"RFC3339 timestamp; records updated at or after it."`
-	Agent            string   `json:"agent,omitempty" jsonschema:"session only: agent ID or exact name. Returns {agent {id,name,kind}, prompt, instructions, lease_hours, body, revision, is_default, edited_by, edited_at, rewrite_prompt}."`
+	Agent            string   `json:"agent,omitempty" jsonschema:"session only: agent ID or exact name. Returns {agent {id,name,kind}, prompt, instructions, lease_hours, body, revision, is_default, edited_by, edited_at, rewrite_prompt, coding_template}."`
 	ClaimState       *string  `json:"claim_state,omitempty" jsonschema:"Tasks only: live, expired or empty string (no claim)."`
 	Overdue          bool     `json:"overdue,omitempty" jsonschema:"webhook_bridges only: true lists parent wakes past their deadline without a parent receipt, for active tasks that are not done or won't do at their current wake generation that their recipient did not create. History only; never retry a wake from it."`
 }

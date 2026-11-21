@@ -1198,8 +1198,6 @@ function write(e, isAgent) {
         values = { ...values, kind: "bot" };
       const oldKind =
         kind === "agent" && op !== "create" ? r.getString("kind") || "bot" : "";
-      if (oldKind && oldKind !== "human" && values.kind && values.kind !== oldKind && !r.getBool("archived"))
-        session.preserveDefault(app, r, b, actor, event);
       if (kind === "task" && op !== "create") {
         if (values.status !== undefined && pending(app, r.id).length)
           bad(
