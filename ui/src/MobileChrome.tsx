@@ -531,11 +531,11 @@ const tabs: [View, string, keyof typeof icons][] = [
   ["reviews", "Approvals", "approvals"],
 ];
 const moreLinks: [View, string][] = [
-  ["shared", "Shared"],
   ["agents", "Agents"],
+  ["connect", "Connect an agent"],
+  ["shared", "Shared"],
   ["archive", "Archive"],
   ["settings", "Settings"],
-  ["connect", "Connect an agent"],
   ["guide", "Guide"],
 ];
 

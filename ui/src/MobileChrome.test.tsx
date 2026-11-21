@@ -254,15 +254,14 @@ describe("phone chrome", () => {
     await screen.findByText("Write the launch post");
     fireEvent.click(tabs().getByRole("button", { name: "More" }));
     const more = sheet("More");
-    for (const name of [
-      "Shared",
+    expect(more.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Agents",
+      "Connect an agent",
+      "Shared",
       "Archive",
       "Settings",
-      "Connect an agent",
       "Guide",
-    ])
-      expect(more.getByRole("link", { name })).toBeTruthy();
+    ]);
     // Since 0.36.0 Sign out is in Settings.
     expect(more.queryByRole("button", { name: "Sign out" })).toBeNull();
     fireEvent.click(more.getByRole("link", { name: "Agents" }));
