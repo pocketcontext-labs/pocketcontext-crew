@@ -583,3 +583,7 @@ Supported complete restore rotates the epoch and pauses delivery; normal restart
 preserve it. Backups must include the private webhook key through the documented
 native or hosted process. Fence the old writer before restoration. Re-enable and
 catch up explicitly only after recovery and setup verification.
+
+## Rehearse all six steps locally
+
+The [Grok simulator skill](../skills/crew-grok-simulator/SKILL.md) starts a dedicated development reader and two local chats. Scripted mode exercises the real Crew setup and execution APIs without a model account. Coding-agent mode uses the locally authenticated Codex CLI. The simulator's loopback receiver is available only to an explicitly opted-in local UI development server.

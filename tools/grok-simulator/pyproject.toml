@@ -1,0 +1,6 @@
+[project]
+name = "crew-grok-simulator"
+version = "0.1.0"
+description = "Two-chat local receiver for PocketContext Crew webhook development"
+requires-python = ">=3.11"
+dependencies = []

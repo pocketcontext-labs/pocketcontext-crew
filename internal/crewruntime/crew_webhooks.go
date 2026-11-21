@@ -35,6 +35,13 @@ import (
 const webhookKeyStore = "crew.webhook.keypath"
 const webhookURLStore = "crew.webhook.baseurl"
 
+const webhookSimulatorStore = "crew.webhook.dev-simulator"
+const webhookSimulatorURL = "http://127.0.0.1:57991/webhook"
+
+func isWebhookSimulator(app core.App, raw string) bool {
+	return raw == webhookSimulatorURL && app.Store().Get(webhookSimulatorStore) == true
+}
+
 var webhookKeyMu sync.Mutex
 
 func configureWebhookRuntime(app core.App, p *Project, domain string) {
@@ -204,7 +211,10 @@ func webhookResolve(ctx context.Context, host string) ([]netip.Addr, error) {
 	return ips, nil
 }
 
-func webhookValidateEndpoint(raw string) error {
+func webhookValidateEndpoint(app core.App, raw string) error {
+	if isWebhookSimulator(app, raw) {
+		return nil
+	}
 	u, err := webhookParseEndpoint(raw)
 	if err != nil {
 		return err
@@ -494,7 +504,9 @@ func (w *webhookDispatcher) tick(ctx context.Context) error {
 }
 
 func (w *webhookDispatcher) send(ctx context.Context, d, c *core.Record) (int, string, string) {
-	if _, err := webhookParseEndpoint(c.GetString("url")); err != nil {
+	destination := c.GetString("url")
+	simulator := isWebhookSimulator(w.app, destination)
+	if _, err := webhookParseEndpoint(destination); err != nil && !simulator {
 		return 0, "", "invalid_destination"
 	}
 	credential, err := webhookUnseal(w.app, c.GetString("secret_ciphertext"))
@@ -508,13 +520,22 @@ func (w *webhookDispatcher) send(ctx context.Context, d, c *core.Record) (int, s
 	if len(payload) > 8192 {
 		return 0, "", "payload_too_large"
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.GetString("url"), bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, destination, bytes.NewReader(payload))
 	if err != nil {
 		return 0, "", "invalid_destination"
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+credential)
-	resp, err := w.client.Do(req)
+	client := w.client
+	if simulator {
+		// The exact literal URL names a local mock. Keep proxying and redirects
+		// off, just as on the public transport, and never reuse a connection.
+		client = &http.Client{
+			Transport: &http.Transport{DisableKeepAlives: true},
+			Timeout:   client.Timeout, CheckRedirect: client.CheckRedirect,
+		}
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, "", "transport_error"
 	}

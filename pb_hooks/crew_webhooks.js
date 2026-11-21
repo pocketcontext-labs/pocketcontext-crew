@@ -512,9 +512,9 @@ function clearCommentWake(app, t) {
 function maxBotHandoffs(app) {
   return routing(app).getInt("max_bot_handoffs") || DEFAULT_MAX_BOT_HANDOFFS;
 }
-function validateEndpoint(url) {
+function validateEndpoint(app, url) {
   try {
-    $pocketcontext.webhookValidateEndpoint(url);
+    $pocketcontext.webhookValidateEndpoint(app, url);
   } catch (_) {
     bad(
       "Receiver must be a reachable public HTTPS URL without credentials or fragments",
@@ -532,7 +532,7 @@ function validateConfig(app, d) {
   if (d.url !== undefined) {
     if (typeof d.url !== "string" || d.url.length > 4096)
       bad("Invalid receiver URL");
-    validateEndpoint(d.url);
+    validateEndpoint(app, d.url);
   }
   if (d.adapter !== undefined && d.adapter !== "crew-v1")
     bad("Unsupported adapter; only crew-v1 conforming receivers are supported");
@@ -733,7 +733,7 @@ function requireReady(app, c) {
   if (!c.getString("url") || !c.getString("secret_ciphertext"))
     bad("Enter receiver URL and credential in the owner UI");
   credentialReady(app, c.getString("secret_ciphertext"));
-  validateEndpoint(c.getString("url"));
+  validateEndpoint(app, c.getString("url"));
 }
 function invalidateAgent(app, agent, b, actor) {
   for (const t of rows(

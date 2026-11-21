@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Grok simulator · Crew</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p>PocketContext Crew</p>
+        <h1>Grok simulator</h1>
+        <div class="mode-controls">
+          <label for="mode">Mode</label>
+          <select id="mode" aria-describedby="mode-help" disabled>
+            <option value="scripted">Scripted</option>
+            <option value="coding-agent">Coding agent</option>
+          </select>
+          <p id="mode-help">
+            Coding agent uses your authenticated Codex CLI and consumes model
+            quota when it responds.
+          </p>
+        </div>
+      </header>
+      <details>
+        <summary>Webhook credentials</summary>
+        <p>
+          Paste these into the webhook settings of your local Crew instance.
+        </p>
+        <label
+          >Receiver URL <input id="url" readonly /><button
+            type="button"
+            data-copy="url"
+          >
+            Copy URL
+          </button></label
+        >
+        <label
+          >Bearer secret <input id="secret" type="password" readonly /><button
+            type="button"
+            data-copy="secret"
+          >
+            Copy secret
+          </button></label
+        >
+      </details>
+      <p role="status" id="status"></p>
+      <div id="chats"></div>
+    </main>
+    <template id="chat"
+      ><section>
+        <div class="heading">
+          <p></p>
+          <h2></h2>
+        </div>
+        <ol aria-live="polite"></ol>
+        <form>
+          <label
+            >Message<textarea
+              rows="3"
+              required
+              maxlength="8000"
+            ></textarea></label
+          ><button>Send message</button>
+        </form>
+      </section></template
+    >
+  </body>
+</html>

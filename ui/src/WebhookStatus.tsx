@@ -681,7 +681,12 @@ export default function WebhookStatus({
 7. Do not enable delivery, test, send bot messages, replay tasks or perform work from this setup request. Report readiness and exact remaining blockers.
 
 Fetch the current canonical managed block from the global configuration's instructions field. Setup uses the full capabilities; wake runs read only crew_read {collection:"capabilities", id:"execution"} and skip it when they already hold the payload's capabilities_digest. The runtime must stop if execution.begin cannot establish authority; never fall back to ordinary task writes.`;
-  const authorizationPrompt = `I authorize this bot to use my Crew instance at ${mcpUrl} through our shared MCP connection for explicitly tagged setup diagnostics and work assigned to its Crew agent. This authorization is subject to my existing task and human-review rules. It does not authorize other Crew instances, production changes, external actions or unrelated bot messages.
+  const localSimulator = import.meta.env.DEV && import.meta.env.VITE_CREW_GROK_SIMULATOR === "1" &&
+    window.location.hostname === "127.0.0.1" && !mcpUrl;
+  const authorizationTarget = localSimulator
+    ? window.location.origin + " through the local Crew CLI"
+    : mcpUrl + " through our shared MCP connection";
+  const authorizationPrompt = `I authorize this bot to use my Crew instance at ${authorizationTarget} for explicitly tagged setup diagnostics and work assigned to its Crew agent. This authorization is subject to my existing task and human-review rules. It does not authorize other Crew instances, production changes, external actions or unrelated bot messages.
 
 For a setup diagnostic, verify the connected instance, use Crew's current capability contract, and record only your own receipt and acknowledgment. Distinguish an automatically started turn from a human follow-up. Do no task work during a diagnostic and do not send acknowledgment loops. If the instance or recipient is ambiguous, stop and report the issue.`;
   // The owner posts this once in a Grok group with every bot: each bot reads the
@@ -1079,7 +1084,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
                   );
                 })}
               </ul>
-              {mcpUrl && (
+              {(mcpUrl || localSimulator) && (
                 <div>
                   <h4 className="crew-prompt-step">
                     {t("Then: paste once into a Grok group with all your bots")}

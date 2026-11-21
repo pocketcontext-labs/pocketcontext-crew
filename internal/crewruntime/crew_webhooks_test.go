@@ -3,6 +3,7 @@ package crewruntime
 import (
 	"context"
 	"encoding/json"
+	"github.com/pocketcontext-labs/pocketcontext-core/appserver"
 	"github.com/pocketcontext-labs/pocketcontext-core/atomicfile"
 	"io"
 	"net/http"
@@ -150,7 +151,57 @@ func TestAgentChatStartReflectsRouting(t *testing.T) {
 	checkStart(mapped, "manual")
 }
 
+func TestWebhookSimulatorOnlyInOptedInLocalUIDev(t *testing.T) {
+	a := newTestApp(t)
+	project := &Project{Cache: t.TempDir()}
+	configs, err := a.app.FindCollectionByNameOrId("crew_webhook_configs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := core.NewRecord(configs)
+	config.Set("url", webhookSimulatorURL)
+	const upstream = "http://127.0.0.1:5173"
+	for _, tc := range []struct {
+		name, optIn string
+		options     appserver.ServeOptions
+		allowed     bool
+	}{
+		{"normal", "1", appserver.ServeOptions{}, false},
+		{"absent opt-in", "", appserver.ServeOptions{UIDev: upstream}, false},
+		{"hosted", "1", appserver.ServeOptions{UIDev: upstream, Hosted: true}, false},
+		{"public UI dev", "1", appserver.ServeOptions{UIDev: upstream, PublicUIDev: true}, false},
+		{"public domain", "1", appserver.ServeOptions{UIDev: upstream, HTTPSDomain: "example.org"}, false},
+		{"local simulation", "1", appserver.ServeOptions{UIDev: upstream}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("POCKETCONTEXT_CREW_DEV_WEBHOOK_SIMULATOR", tc.optIn)
+			if err := Hooks().PreRegister(a.app, project, tc.options); err != nil {
+				t.Fatal(err)
+			}
+			if got := webhookValidateEndpoint(a.app, webhookSimulatorURL) == nil; got != tc.allowed {
+				t.Fatalf("simulator allowed = %v, want %v", got, tc.allowed)
+			}
+			// A previously stored simulator endpoint must be rejected on a
+			// normal serve before even opening its credential.
+			_, _, reason := newWebhookDispatcher(a.app).send(context.Background(), nil, config)
+			want := "invalid_destination"
+			if tc.allowed {
+				want = "credential_unavailable"
+			}
+			if reason != want {
+				t.Fatalf("dispatch check = %q, want %q", reason, want)
+			}
+			for _, endpoint := range []string{"http://127.0.0.1:57991/other", webhookSimulatorURL + "?key=x", "http://127.0.0.1:57992/webhook", "http://localhost:57991/webhook", "https://127.0.0.1:57991/webhook"} {
+				if err := webhookValidateEndpoint(a.app, endpoint); err == nil {
+					t.Fatalf("allowed alternative endpoint %s", endpoint)
+				}
+			}
+		})
+	}
+}
+
 func TestWebhookDestinationSecurity(t *testing.T) {
+	a := newTestApp(t)
 	for _, s := range []string{"127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.100.100.200", "0.0.0.0", "224.0.0.1", "240.1.1.1", "192.0.2.1", "198.18.1.1", "::1", "::ffff:127.0.0.1", "fe80::1", "fc00::1", "64:ff9b::a00:1", "2002:7f00:1::"} {
 		if webhookPublicIP(netip.MustParseAddr(s)) {
 			t.Errorf("accepted private/reserved %s", s)
@@ -162,7 +213,7 @@ func TestWebhookDestinationSecurity(t *testing.T) {
 		}
 	}
 	for _, s := range []string{"http://example.com", "https://u:p@example.com", "https://example.com/#x", "https://example.com/?key=secret", "https://127.0.0.1", "https://[::ffff:127.0.0.1]"} {
-		if webhookValidateEndpoint(s) == nil {
+		if webhookValidateEndpoint(a.app, s) == nil {
 			t.Errorf("accepted unsafe endpoint %s", s)
 		}
 	}

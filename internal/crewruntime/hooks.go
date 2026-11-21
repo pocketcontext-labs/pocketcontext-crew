@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"ganigeorgiev.com/pocketbase/pocketbase/apis"
 	"ganigeorgiev.com/pocketbase/pocketbase/core"
@@ -33,6 +34,7 @@ func Hooks() appserver.Hooks {
 		},
 		PreRegister: func(app core.App, p *Project, opts appserver.ServeOptions) error {
 			configureWebhookRuntime(app, p, opts.HTTPSDomain)
+			app.Store().Set(webhookSimulatorStore, opts.UIDev != "" && !opts.Hosted && !opts.PublicUIDev && opts.HTTPSDomain == "" && os.Getenv("POCKETCONTEXT_CREW_DEV_WEBHOOK_SIMULATOR") == "1")
 			return nil
 		},
 		Register: func(app core.App, _ appserver.RegisterContext) error {
