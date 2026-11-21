@@ -93,7 +93,7 @@ main{{max-width:30rem;margin:9vh auto;padding:1.6rem;background:#fffefb;border:1
 h1{{font-size:1.65rem}}input,button{{display:block;width:100%;font:inherit;border-radius:8px;padding:.7rem;margin:.5rem 0 1rem}}
 button{{background:#29553d;color:white;border:0;cursor:pointer}}p{{line-height:1.45}}</style></head>
 <body><main><small>PocketContext Crew</small><h1>{title}</h1>{content}</main>
-<script nonce="{nonce}">{script}</script></body></html>"""
+<script data-cfasync="false" nonce="{nonce}">{script}</script></body></html>"""
     return web.Response(
         text=document,
         content_type="text/html",
@@ -177,7 +177,7 @@ class Gateway:
         return app
 
     async def headers(self, request, response):
-        response.headers["Cache-Control"] = "no-store"
+        response.headers["Cache-Control"] = "no-store, no-transform"
         response.headers["X-Crew-Rehearsal-Gateway"] = "1"
         # Origin-only referrers keep handoff tickets out of subsequent requests.
         # Chromium sends Origin: null on native form POSTs under "no-referrer".
