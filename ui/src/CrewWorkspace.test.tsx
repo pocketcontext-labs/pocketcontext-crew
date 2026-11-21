@@ -308,7 +308,7 @@ it("guides a new owner from step one even with a previous workspace confirmation
   history.replaceState(null, "", "/");
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Get started" });
-  expect(screen.getByText("0 of 4 done")).toBeInTheDocument();
+  expect(screen.getByText("0 of 5 done")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Set up starter crew" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "I've connected it" })).toBeNull();
   expect(
@@ -325,7 +325,7 @@ it("reopens crew setup when all agents are deactivated", async () => {
   history.replaceState(null, "", "/");
   render(<CrewWorkspace />);
   expect(await screen.findByRole("button", { name: "Set up starter crew" })).toBeVisible();
-  expect(screen.getByText("0 of 4 done")).toBeVisible();
+  expect(screen.getByText("0 of 5 done")).toBeVisible();
 });
 it.each(["tasks", "notes", "approvals", "shared", "agents", "archive", "settings", "guide", "connect", "search"])(
   "offers starter setup on %s when buckets remain but every agent is inactive", async (route) => {
@@ -370,13 +370,30 @@ it("counts agent activity as connected and lists what needs the owner", async ()
   history.replaceState(null, "", "/");
   render(<CrewWorkspace />);
   await screen.findByText("Draft waiting for your approval");
-  expect(screen.getByText("3 of 4 done")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Open Approvals" })).toBeTruthy();
+  expect(screen.getByText("2 of 5 done")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Open Tasks" })).toBeTruthy();
   fireEvent.click(screen.getByText("Draft waiting for your approval"));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
 });
+it("requires a Ready assignment and a separate prompt handoff before review", async () => {
+  localStorage.clear();
+  localStorage.setItem("pocketcontext.crew.agent_connected." + agent.id, "1");
+  fixtures.reviews = [];
+  fixtures.tasks = [{ ...task, readiness: "ready", assigned_agent: "" }];
+  history.replaceState(null, "", "/");
+  const first = render(<CrewWorkspace />);
+  expect(await screen.findByRole("link", { name: "Open Tasks" })).toBeVisible();
+  first.unmount();
+  fixtures.tasks = [{ ...task, readiness: "ready", status: "todo" }];
+  render(<CrewWorkspace />);
+  expect(await screen.findByText(/paste it into a chat connected to Crew/)).toHaveTextContent(task.title as string);
+  fireEvent.click(screen.getByRole("button", { name: "I've pasted and sent the prompt" }));
+  expect(await screen.findByRole("link", { name: "Open Approvals" })).toBeVisible();
+});
 it("hides Get started once finished or dismissed", async () => {
   localStorage.clear();
+  fixtures.tasks = [{ ...task, readiness: "ready" }];
+  localStorage.setItem("pocketcontext.crew.prompt_pasted." + agent.id, "1");
   fixtures.reviews = [{ ...review, status: "approved" }];
   history.replaceState(null, "", "/");
   render(<CrewWorkspace />);

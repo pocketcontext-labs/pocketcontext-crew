@@ -91,6 +91,7 @@ export default function Home({
 }) {
   const guideRow = useHelpShown(helpIds.homeGuideRow);
   const [confirmedAgents, setConfirmedAgents] = useState<string[]>([]);
+  const [pastedFor, setPastedFor] = useState("");
   const getStarted = useHelpShown(helpIds.homeGetStarted);
   const { agentTap } = useReaderSettings();
   if (!ready) return null;
@@ -102,6 +103,11 @@ export default function Home({
   );
   const agentSeen =
     allTasks.some((x) => val(x, "created_by_agent")) || data.reviews.length > 0;
+  const readyTasks = data.tasks.filter((task) => task.readiness === "ready" &&
+    activeAgents.some((agent) => agent.id === task.assigned_agent));
+  const firstTask = readyTasks.find((task) => task.status === "todo") ?? readyTasks[0];
+  const assignee = activeAgents.find((agent) => agent.id === firstTask?.assigned_agent);
+  const pasteKey = "pocketcontext.crew.prompt_pasted." + assignee?.id;
   const steps: { title: string; done: boolean; body: ReactNode }[] = [
     {
       title: t("Create your crew"),
@@ -168,18 +174,27 @@ export default function Home({
     },
     {
       title: t("Give your crew a first task"),
-      done: allTasks.length > 0,
+      done: Boolean(firstTask),
       body: (
         <>
           <p>
             {t(
-              "Describe a piece of work and assign it to an agent. It appears on the Tasks board.",
+              "Create a task or open an existing one. Assign it to an agent, set readiness to Ready, and save.",
             )}
           </p>
+          {data.tasks.length > 0 && <a href={viewHashes.board}>{t("Open Tasks")}</a>}
           <button className="crew-primary" onClick={newTask}>
             {t("＋ New task")}
           </button>
         </>
+      ),
+    },
+    {
+      title: t("Start the agent in a chat"),
+      done: Boolean(assignee && (pastedFor === assignee.id || stored(pasteKey))),
+      body: assignee && firstTask && (
+        <PromptHandoff key={assignee.id} agent={assignee} task={firstTask} notify={onStartSession}
+          confirm={() => { remember(pasteKey); setPastedFor(assignee.id); }} />
       ),
     },
     {
@@ -363,6 +378,21 @@ export default function Home({
       )}
     </div>
   );
+}
+
+function PromptHandoff({ agent, task, notify, confirm }: {
+  agent: Row;
+  task: Row;
+  notify: (start: SessionStart) => void;
+  confirm: () => void;
+}) {
+  const session = useSessionStart(agent, notify);
+  return <>
+    <p>{t("Copy the prompt for {name}, paste it into a chat connected to Crew, and send it. Then ask the agent to work on “{task}”.", { name: val(agent, "name"), task: val(task, "title") })}</p>
+    <button className="crew-primary" disabled={session.loading} onClick={() => void session.start()}>{t("Copy instructions for {name}", { name: val(agent, "name") })}</button>
+    <button onClick={confirm}>{t("I've pasted and sent the prompt")}</button>
+    {session.guide}
+  </>;
 }
 
 /**

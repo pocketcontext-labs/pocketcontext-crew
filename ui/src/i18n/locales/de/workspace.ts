@@ -1,6 +1,11 @@
 // German strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const de: Record<string, string> = {
+  "Create a task or open an existing one. Assign it to an agent, set readiness to Ready, and save.": "Erstelle eine Aufgabe oder öffne eine vorhandene. Weise sie einem Agenten zu, setze sie auf Bereit und speichere sie.",
+  "Start the agent in a chat": "Agenten im Chat starten",
+  "Copy the prompt for {name}, paste it into a chat connected to Crew, and send it. Then ask the agent to work on “{task}”.": "Kopiere den Prompt für {name}, füge ihn in einen mit Crew verbundenen Chat ein und sende ihn. Bitte den Agenten dann, „{task}“ zu bearbeiten.",
+  "I've pasted and sent the prompt": "Ich habe den Prompt eingefügt und gesendet",
+  "Open Tasks": "Aufgaben öffnen",
   "Describe the agent’s role, the work it owns, and who it serves.": "Beschreibe die Rolle des Agenten, seine Aufgaben und seine Zielgruppe.",
   "For example, Sell handles outreach to founders. Put repeatable steps in Session instructions.": "Sell kümmert sich zum Beispiel um den Kontakt zu Gründern. Wiederkehrende Schritte gehören in die Sitzungsanweisungen.",
   "What belongs in session instructions?": "Was gehört in die Sitzungsanweisungen?",
