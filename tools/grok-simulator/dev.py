@@ -103,7 +103,7 @@ def launch_hosted(options, state, binary, node, env, children):
     vite_url = f"http://127.0.0.1:{vite_port}"
     vite = start([node, "node_modules/vite/bin/vite.js", "--port", str(vite_port), "--strictPort"],
                  {**env, "POCKETCONTEXT_DEV_PUBLIC_DOMAIN": options.public_domain,
-                  "VITE_CREW_GROK_SIMULATOR": "1"}, ROOT / "ui")
+                  "VITE_CREW_GROK_SIMULATOR": "0" if options.crew_only else "1"}, ROOT / "ui")
     wait_ready(vite, vite_url)
     serve = [str(binary), "--db", str(db), "serve", "--headless", "--mcp",
              "--hosted", "--domain", options.public_domain, "--public-ui-dev",
@@ -112,23 +112,30 @@ def launch_hosted(options, state, binary, node, env, children):
         serve.append("--hosted-init")
     backend = start(serve, backend_env)
     wait_ready(backend, f"http://127.0.0.1:{crew_port}/up")
-    for name, kind in PARTICIPANTS:
-        subprocess.run([str(binary), "--db", str(db), "write", "-"], cwd=ROOT,
-                       env=project_env, text=True, stdout=subprocess.PIPE, check=True,
-                       input=json.dumps({"action": "agent.ensure", "data": {"name": name, "kind": kind},
-                                         "idempotency_key": f"simulator-provision-{kind}",
-                                         "reported_agent": "Mobile rehearsal setup"}))
-    # Crew first writes its portable database on flush. The simulator binds
-    # its saved chats to that file before it accepts any requests.
-    subprocess.run([str(binary), "--db", str(db), "flush"], env=project_env,
-                   check=True, stdout=subprocess.PIPE)
-    runner_env = {**project_env, "CREW_SIMULATOR_CREW_ORIGIN": origin,
-                  "CREW_SIMULATOR_RECEIVER_URL": f"http://127.0.0.1:{receiver_port}/webhook",
-                  "CODEX_HOME": env.get("CODEX_HOME", str(Path.home() / ".codex"))}
-    runner = start([sys.executable, str(Path(__file__).with_name("server.py")),
-                    "--db", str(db), "--binary", str(binary), "--mode", options.mode,
-                    "--port", str(receiver_port), "--state-dir", str(state / "runner")], runner_env)
-    wait_ready(runner, f"http://127.0.0.1:{receiver_port}/")
+    if not options.crew_only:
+        participants = () if env.get("CREW_SIMULATOR_EMPTY_CREW") == "1" else PARTICIPANTS
+        for name, kind in participants:
+            subprocess.run([str(binary), "--db", str(db), "write", "-"], cwd=ROOT,
+                           env=project_env, text=True, stdout=subprocess.PIPE, check=True,
+                           input=json.dumps({"action": "agent.ensure", "data": {"name": name, "kind": kind},
+                                             "idempotency_key": f"simulator-provision-{kind}",
+                                             "reported_agent": "Mobile rehearsal setup"}))
+        # Crew first writes its portable database on flush. The simulator binds
+        # its saved chats to that file before it accepts any requests.
+        subprocess.run([str(binary), "--db", str(db), "flush"], env=project_env,
+                       check=True, stdout=subprocess.PIPE)
+        runner_env = {**project_env, "CREW_SIMULATOR_CREW_ORIGIN": origin,
+                      "CREW_SIMULATOR_RECEIVER_URL": f"http://127.0.0.1:{receiver_port}/webhook",
+                      "CODEX_HOME": env.get("CODEX_HOME", str(Path.home() / ".codex"))}
+        runner = start([sys.executable, str(Path(__file__).with_name("server.py")),
+                        "--db", str(db), "--binary", str(binary), "--mode", options.mode,
+                        "--port", str(receiver_port), "--state-dir", str(state / "runner")], runner_env)
+        wait_ready(runner, f"http://127.0.0.1:{receiver_port}/")
+    if options.crew_only:
+        print(f"Crew: {origin}/", flush=True)
+        if options.open:
+            webbrowser.open(origin)
+        return
     gateway = start([sys.executable, str(Path(__file__).with_name("gateway.py")), "--crew-host",
                      options.public_domain, "--sim-host", options.sim_host, "--owner-email",
                      backend_env["POCKETCONTEXT_OWNER_EMAIL"], "--port", str(gateway_port)], env)
@@ -145,7 +152,8 @@ def launch_hosted(options, state, binary, node, env, children):
     print(f"Crew: {origin}/\nChats: {sim_origin}/\nGateway upstream: 127.0.0.1:{gateway_port}", flush=True)
     if options.open:
         webbrowser.open(origin)
-        webbrowser.open(sim_origin)
+        if not options.crew_only:
+            webbrowser.open(sim_origin)
 
 
 def main():
@@ -157,7 +165,10 @@ def main():
     parser.add_argument("--binary", type=Path, default=ROOT / "bin/pocketcontext-crew", help="Crew executable from this checkout")
     parser.add_argument("--public-domain", type=hostname, help="Hosted rehearsal Crew HTTPS hostname")
     parser.add_argument("--sim-host", type=hostname, help="Hosted rehearsal simulator HTTPS hostname")
+    parser.add_argument("--crew-only", action="store_true", help="Serve hosted Crew without starting the Grok simulator")
     options = parser.parse_args()
+    if options.crew_only and not options.public_domain:
+        parser.error("--crew-only requires --public-domain")
     if bool(options.public_domain) != bool(options.sim_host) or (options.public_domain and options.public_domain == options.sim_host):
         parser.error("Provide two distinct hostnames with --public-domain and --sim-host")
     os.umask(0o077)
