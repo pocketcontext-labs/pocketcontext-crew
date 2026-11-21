@@ -416,7 +416,7 @@ export function SessionToast({
       {start.session && (
         <div className="crew-toast-actions">
           <button type="button" aria-haspopup="dialog" onClick={view}>
-            {t("Read session instructions")}
+            {t("Show startup prompt")}
           </button>
         </div>
       )}

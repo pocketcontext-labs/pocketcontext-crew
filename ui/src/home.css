@@ -132,8 +132,8 @@
   text-align: left;
   touch-action: manipulation;
 }
-.crew-home-agents > li:focus-within,
-.crew-home-agents > li:active {
+.crew-home-agents > li:has(> .crew-home-agent:focus-visible),
+.crew-home-agents > li:has(> .crew-home-agent:active) {
   background: #f3f5ef;
 }
 .crew-home-agent .crew-avatar {
@@ -209,7 +209,7 @@
 }
 @media (hover: hover) {
   .crew-home-tiles a:hover,
-  .crew-home-agents > li:hover { background: #f3f5ef; }
+  .crew-home-agents > li:has(> .crew-home-agent:hover) { background: #f3f5ef; }
   .crew-app button.crew-home-agent:hover { background: transparent; }
 }
 @media (min-width: 760px) {

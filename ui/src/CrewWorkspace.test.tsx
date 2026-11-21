@@ -3691,7 +3691,12 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(menu.getByRole("button", { name: "How to continue in a chat" }));
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(within(toast).getByRole("button", { name: "Read session instructions" }));
+    fireEvent.click(within(toast).getByRole("button", { name: "Show startup prompt" }));
+    const preview = within(screen.getByRole("dialog", { name: "Startup prompt for synthetic-repo" }));
+    expect(preview.getByText((_, element) => element?.tagName === "PRE" && element.textContent === session.prompt)).toBeVisible();
+    fireEvent.click(preview.getByRole("button", { name: "Copy again" }));
+    expect(writeText).toHaveBeenLastCalledWith(session.prompt);
+    fireEvent.click(preview.getByRole("button", { name: "Read session instructions" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Session instructions for synthetic-repo",
     });
@@ -3812,8 +3817,9 @@ describe("project agents and coding sessions", () => {
       await screen.findByRole("button", { name: "Copy instructions for synthetic-repo" }),
     );
     fireEvent.click(
-      within(await screen.findByRole("status")).getByRole("button", { name: "Read session instructions" }),
+      within(await screen.findByRole("status")).getByRole("button", { name: "Show startup prompt" }),
     );
+    fireEvent.click(screen.getByRole("button", { name: "Read session instructions" }));
     const dialog = within(
       await screen.findByRole("dialog", { name: "Session instructions for synthetic-repo" }),
     );
@@ -3868,8 +3874,9 @@ describe("project agents and coding sessions", () => {
       await screen.findByRole("button", { name: "Copy instructions for synthetic-repo" }),
     );
     fireEvent.click(
-      within(await screen.findByRole("status")).getByRole("button", { name: "Read session instructions" }),
+      within(await screen.findByRole("status")).getByRole("button", { name: "Show startup prompt" }),
     );
+    fireEvent.click(screen.getByRole("button", { name: "Read session instructions" }));
     const dialog = within(
       await screen.findByRole("dialog", { name: "Session instructions for synthetic-repo" }),
     );

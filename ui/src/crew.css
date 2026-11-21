@@ -4079,6 +4079,7 @@ a.crew-logo:hover .product-brand span {
   position: relative;
   margin: 0 18px;
 }
+.crew-startup-preview pre,
 .crew-session-guide-prompt pre {
   margin: 0;
   padding: 10px 54px 10px 12px;

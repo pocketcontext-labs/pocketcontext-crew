@@ -1,6 +1,10 @@
 // German strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const de: Record<string, string> = {
+  "Show startup prompt": "Startprompt anzeigen",
+  "Startup prompt for {name}": "Startprompt für {name}",
+  "Copy again": "Erneut kopieren",
+  "Could not load session instructions.": "Sitzungsanweisungen konnten nicht geladen werden.",
   "Copy startup prompt": "Startprompt kopieren",
   "Startup prompt copied. Paste it into your agent chat.": "Startprompt kopiert. Füge ihn in deinen Agentenchat ein.",
   "Read session instructions": "Sitzungsanweisungen lesen",

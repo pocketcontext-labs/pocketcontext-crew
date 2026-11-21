@@ -11,7 +11,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { CopyControl, CopyGlyph, useCopyFeedback } from "./CopyFeedback";
+import { NamedCopyAction, CopyControl, CopyGlyph, useCopyFeedback } from "./CopyFeedback";
 import { Icon } from "./Icon";
 import Brand from "./Brand";
 import { api } from "./api";
@@ -1041,6 +1041,7 @@ export default function CrewWorkspace() {
     } | null>(null),
     [instructions, setInstructions] = useState<InstructionsView | null>(null),
     // The toast after Start a session (0.24.0).
+    [promptPreview, setPromptPreview] = useState<SessionStart | null>(null),
     [sessionStart, setSessionStart] = useState<SessionStart | null>(null),
     // The toast after an action that asks no confirmation (0.40.0: Archive
     // task from the Approval ⋯ menu). One at a time: a new one replaces it.
@@ -3396,17 +3397,32 @@ export default function CrewWorkspace() {
           start={sessionStart}
           dismiss={dismissSessionStart}
           view={() => {
-            const { name, session } = sessionStart;
+            setPromptPreview(sessionStart);
             setSessionStart(null);
-            void session?.then(
-              (next) => setInstructions({ name, session: next }),
-              () => undefined,
-            );
           }}
         />
       )}
       {/* After the session toast, so its Undo stays on top for its few seconds. */}
       {!dialog && actionToast}
+      {promptPreview && (
+        <Modal hideEmptyMenu title={t("Startup prompt for {name}", { name: promptPreview.name })}
+          close={() => setPromptPreview(null)} onEdit={() => undefined}>
+          <div className="crew-dialog-body crew-startup-preview">
+            <pre>{promptPreview.prompt}</pre>
+            <div className="crew-actions">
+              <NamedCopyAction label={t("Copy again")} successLabel={t("Copied")}
+                copy={() => copyText(promptPreview.prompt)} />
+              <button type="button" onClick={() => {
+                const { name, session } = promptPreview;
+                void session?.then(next => {
+                  setPromptPreview(null);
+                  setInstructions({ name, session: next });
+                }, () => setError(t("Could not load session instructions.")));
+              }}>{t("Read session instructions")}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {instructions && (
         <Modal
           hideEmptyMenu
