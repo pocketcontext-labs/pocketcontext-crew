@@ -90,6 +90,30 @@ describe("Shared", () => {
     );
   });
 
+  it.each(["desktop", "phone"])("creates another draft from a populated Shared page on %s", async layout => {
+    if (layout === "phone") asPhone();
+    const first = { id: "art000000000001", revision: 1, title: "First draft", body: "One", status: "draft" };
+    const second = { ...first, id: "art000000000002", title: "Second draft", body: "" };
+    const rows = [first];
+    read.mockImplementation(only(rows));
+    artifactLinks.mockResolvedValue([]);
+    write.mockImplementation(async () => { rows.push(second); return second; });
+    try {
+      render(<Shared notes={[]} tasks={[]} focus={first.id} Prose={Prose} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Create draft" }));
+      const sheet = within(screen.getByRole("dialog", { name: "New shared page" }));
+      fireEvent.change(sheet.getByLabelText("Title"), { target: { value: second.title } });
+      fireEvent.click(sheet.getByRole("button", { name: "Create draft" }));
+      await screen.findByText(second.title);
+      expect(location.hash).toBe("#/shared/" + second.id);
+      expect(screen.getByText(first.title)).toBeVisible();
+      expect(screen.getByRole("button", { name: "Create draft" })).toBeEnabled();
+    } finally {
+      vi.unstubAllGlobals();
+      history.replaceState(null, "", "/");
+    }
+  });
+
   it("opens a new empty draft focused from Home's + ready to write", async () => {
     read.mockImplementation(
       only([
@@ -160,7 +184,8 @@ describe("Shared", () => {
     expect(open).toHaveAttribute("href", "https://crew.example.com/a/t");
     expect(open).toHaveAttribute("target", "_blank");
     expect(open).toHaveAttribute("rel", "noopener noreferrer");
-    expect(open).toHaveTextContent("Open");
+    expect(open).toHaveAttribute("title", "Open");
+    expect(open.querySelector("svg")).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Update content (same link)" }),
     );

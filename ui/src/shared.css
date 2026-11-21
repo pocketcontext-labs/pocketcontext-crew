@@ -132,14 +132,17 @@
 .crew-app a.crew-artifact-open {
   display: inline-flex;
   align-items: center;
-  font: inherit;
-  border: 1px solid #dce2d8;
-  background: #fffefb;
-  padding: 9px 14px;
-  border-radius: 7px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  border: 1px solid #cfd3cc;
+  background: #f0f1ed;
+  border-radius: 50%;
   color: #2d4538;
   text-decoration: none;
 }
+.crew-artifact-open svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .crew-app a.crew-artifact-open:hover {
   background: #edf2e9;
 }
@@ -324,4 +327,10 @@
   align-items: center;
   gap: 8px;
   font-weight: 600;
+}
+
+.crew-shared-create {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
 }

@@ -16,6 +16,7 @@ import {
   sharedHash,
   type SharedFilter,
 } from "./itemLink";
+import { Icon } from "./Icon";
 import MarkdownField from "./MarkdownField";
 import NewSharedPage from "./NewSharedPage";
 import { icons } from "./MobileChrome";
@@ -221,6 +222,13 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
   return (
     <section className="crew-shared" aria-label={t("Shared artifacts")}>
+      {rows.length > 0 && (
+        <div className="crew-shared-create">
+          <button type="button" className="crew-primary" onClick={() => setCreating(true)}>
+            {t("Create draft")}
+          </button>
+        </div>
+      )}
       {rows.length > 0 && !phone && (
         // A desktop shows every status at once, like the Tasks agent row
         // (same chips); one is chosen at a time and Shared has no "All".
@@ -283,6 +291,7 @@ export default function Shared({ notes, tasks, focus, Prose }: Props) {
       )}
       {creating && <NewSharedPage onClose={() => setCreating(false)} onCreated={id => {
         setCreating(false);
+        setChosen("drafts");
         location.hash = "#/shared/" + id;
         void load();
       }} />}
@@ -514,6 +523,7 @@ function ArtifactCard({
               Back, so there it opens in the in-app preview instead. */}
           <a
             className="crew-artifact-open"
+            title={t("Open")}
             href={url}
             target="_blank"
             rel="noopener noreferrer"
@@ -524,7 +534,7 @@ function ArtifactCard({
               setPreviewing(true);
             }}
           >
-            {t("Open")}
+            <Icon name="external" />
           </a>
           {previewing && (
             <PagePreview
