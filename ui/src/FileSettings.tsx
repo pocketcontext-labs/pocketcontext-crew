@@ -249,7 +249,7 @@ export default function FileSettings({
                 aria-describedby="crew-storage-note"
               />
             </label>
-            <button type="submit" disabled={busy === "limit"}>
+            <button className="crew-primary" type="submit" disabled={busy === "limit"}>
               {t("Save limit")}
             </button>
           </form>

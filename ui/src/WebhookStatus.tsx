@@ -894,7 +894,7 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
   }
   if (!open)
     return loading ? null : (
-      <button ref={setupTarget} className="crew-integration-target" type="button" onClick={() => setOpen(true)}>
+      <button ref={setupTarget} className="crew-primary crew-integration-target" type="button" onClick={() => setOpen(true)}>
         {t("Set up automatic wake-ups")}
       </button>
     );
