@@ -4137,7 +4137,7 @@ a.crew-logo:hover .product-brand span {
   box-sizing: border-box;
   border: 1px solid var(--icon-line);
   border-radius: 50%;
-  background: var(--icon-fill);
+  background: var(--button-surface);
   width: var(--agent-action-column);
   height: var(--agent-action-column);
   min-width: var(--agent-action-column);
@@ -4899,7 +4899,7 @@ a.crew-logo:hover .product-brand span {
   box-sizing: border-box;
   border: 1px solid var(--icon-line);
   border-radius: 50%;
-  background: var(--icon-fill);
+  background: var(--button-surface);
 }
 .crew-chat-instructions p { margin: 4px 0 0; color: var(--muted); }
 .crew-chat-instructions small, .crew-chat-instructions textarea, .crew-chat-instructions > p { grid-column: 1 / -1; }
