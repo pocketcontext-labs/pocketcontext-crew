@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { crewApi, type AgentSession } from "./crewApi";
 import SessionInstructions from "./SessionInstructions";
@@ -95,7 +95,7 @@ it("previews the coding workflow without changing the draft and saves only on ex
   expect(screen.getByText(/Review tests with the owner/)).toBeVisible();
   expect(editor).toHaveValue("Unsaved draft");
   expect(update).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Use template in editor" }));
+  fireEvent.click(within(screen.getByText("Coding workflow template").closest("details")!).getByRole("button", { name: "Use template in editor" }));
   expect(editor).toHaveFocus();
   expect(editor).toHaveValue(template);
   expect(update).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ it("previews the coding workflow without changing the draft and saves only on ex
   fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   expect(screen.getByLabelText(/Session instructions/)).toHaveValue(source.body);
   fireEvent.click(screen.getByText("Coding workflow template"));
-  fireEvent.click(screen.getByRole("button", { name: "Use template in editor" }));
+  fireEvent.click(within(screen.getByText("Coding workflow template").closest("details")!).getByRole("button", { name: "Use template in editor" }));
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(changed).toHaveBeenCalledWith(expect.objectContaining({ revision: 5 })));
   expect(update).toHaveBeenCalledExactlyOnceWith(source.agent.id, 4, { instructions: template }, "Edited by hand");

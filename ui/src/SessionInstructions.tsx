@@ -72,7 +72,7 @@ export default function SessionInstructions({
   const [failedRevision, setFailedRevision] = useState<number | null>(null);
   const editorId = useId();
   const editor = useRef<HTMLTextAreaElement>(null);
-  const templatePreview = useRef<HTMLDetailsElement>(null);
+  const templateListId = useId();
   const agent = session.agent.id;
   const name = session.agent.name;
 
@@ -133,7 +133,10 @@ export default function SessionInstructions({
     setMode(next);
   };
   const draft = text ?? session.body;
-  const codingTemplate = session.coding_template;
+  const templates = [
+    { label: t("General workflow"), body: session.general_template ?? (session.is_default ? session.body : undefined) },
+    { label: t("Coding workflow template"), body: session.coding_template },
+  ];
   return (
     <div className="crew-dialog-body crew-session-dialog">
       {mode !== "edit" && <p className="crew-footnote crew-session-revision">
@@ -259,18 +262,26 @@ export default function SessionInstructions({
                 {t("Cancel")}
               </button>
             </div>
-            {codingTemplate && (
-              <details ref={templatePreview} className="crew-coding-template">
-                <summary>{t("Coding workflow template")}</summary>
-                <p>{t("Use this template to replace the text in the editor. Save creates a new revision.")}</p>
-                <button type="button" disabled={busy || draft === codingTemplate} onClick={() => {
-                  setText(codingTemplate);
-                  if (templatePreview.current) templatePreview.current.open = false;
-                  editor.current?.focus();
-                }}>{t("Use template in editor")}</button>
-                <div className="crew-coding-preview"><Markdown>{codingTemplate}</Markdown></div>
-              </details>
-            )}
+            <section aria-label={t("Templates")} className="crew-template-list">
+              <strong>{t("Templates")}</strong>
+              {templates.map(({ label, body }) => body && (
+                <details key={label} name={templateListId} className="crew-coding-template">
+                  <summary>{label}</summary>
+                  <div className="crew-coding-preview"><Markdown>{body}</Markdown></div>
+                  <button
+                    type="button"
+                    disabled={busy || draft === body}
+                    onClick={(event) => {
+                      setText(body);
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                      editor.current?.focus();
+                    }}
+                  >
+                    {t("Use template in editor")}
+                  </button>
+                </details>
+              ))}
+            </section>
           </form>
         )}
         {mode === "history" && (

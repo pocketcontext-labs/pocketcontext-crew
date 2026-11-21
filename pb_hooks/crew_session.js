@@ -253,6 +253,7 @@ function describe(app, ref) {
       kind: agent.getString("kind") || "bot",
     },
     prompt: prompt(name),
+    general_template: shortDefault,
     coding_template: codingTemplate(name),
     instructions: compose(body, agent.getString("brief")),
     lease_hours: LEASE_HOURS,

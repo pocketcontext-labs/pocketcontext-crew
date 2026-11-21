@@ -34,6 +34,7 @@ export type AgentSession = {
   instructions: string;
   lease_hours: number;
   /** Optional editable coding workflow, supplied separately from the saved instructions and brief. */
+  general_template?: string;
   coding_template?: string;
   /** The editable instructions body of the current revision. */
   body: string;
@@ -241,6 +242,7 @@ function parseSession(
     edited_by: text(session.edited_by),
     edited_at: text(session.edited_at),
     rewrite_prompt: text(session.rewrite_prompt),
+    general_template: session.general_template,
     coding_template: text(session.coding_template),
   };
 }

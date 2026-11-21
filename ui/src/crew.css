@@ -1480,7 +1480,8 @@ a.crew-logo:hover .product-brand span {
   grid-template-rows: auto minmax(160px, 1fr) auto;
   gap: 6px;
 }
-.crew-session-editor:has(.crew-coding-template) {
+.crew-template-list { display: grid; gap: 6px; }
+.crew-session-editor:has(.crew-template-list) {
   grid-template-rows: auto minmax(160px, 1fr) auto auto;
 }
 .crew-coding-template {
