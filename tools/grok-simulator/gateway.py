@@ -386,6 +386,10 @@ class Gateway:
             "Origin"
         ) != origin:
             raise web.HTTPForbidden(text="Same-origin request required.")
+        # Crew's consent UI authenticates its decision with a bearer token and omits cookies.
+        if (host == self.crew and path == "/oauth/authorize" and request.method == "POST"
+                and not websocket and request.headers.get("Authorization", "").startswith("Bearer ")):
+            return await self.proxy(request, host, False, None)
         if request.path.startswith(BASE + "/"):
             return await self.gate(request, host, self.session(request, host))
         if request.path == "/webhook":

@@ -99,6 +99,15 @@ class GatewayTests(IsolatedAsyncioTestCase):
         self.assertEqual((await self.request("POST", "/api/crew/write")).status, 403)
         self.assertEqual((await self.request("POST", "/mcp", host=SIM)).status, 403)
 
+    async def test_consent_uses_bearer_without_gateway_cookie(self):
+        headers = {"Authorization": "Bearer synthetic"}
+        route = "/oauth/authorize"
+        result = await self.request("POST", route, headers=headers, origin="https://" + CREW)
+        self.assertEqual(result.status, 200)
+        self.assertEqual((await result.json())["auth"], headers["Authorization"])
+        self.assertEqual((await self.request("POST", route, headers=headers)).status, 403)
+        self.assertEqual((await self.request("POST", route, origin="https://" + CREW)).status, 401)
+
     def cookie(self, response, name):
         item = response.cookies[name]
         self.assertTrue(item["secure"])
