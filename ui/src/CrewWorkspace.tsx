@@ -951,6 +951,7 @@ function Modal({
   );
 }
 export default function CrewWorkspace() {
+  const [sharedMobileHeader, setSharedMobileHeader] = useState<HTMLSpanElement | null>(null);
   const [sharedHeader, setSharedHeader] = useState<HTMLDivElement | null>(null);
   // Phones get the slim top bar, bottom tabs and one board column at a time.
   const phone = usePhone();
@@ -1608,7 +1609,7 @@ export default function CrewWorkspace() {
     fields: Record<string, unknown>,
     row?: Row,
     reason = "",
-    keepOpen = false,
+    keepOpen: boolean | "requestApproval" = false,
   ) => {
     const editsAtSave = edited.current;
     // A changed draft withdraws a pending approval; say so, as file changes do.
@@ -1630,10 +1631,17 @@ export default function CrewWorkspace() {
             open?.row?.id === updated.id ? { ...open, row: updated } : open,
           );
         }
+        if (keepOpen === "requestApproval") {
+          try {
+            await crewApi.write("review.request", {}, updated, "");
+          } catch (error) {
+            throw new Error(t("Task saved. Approval request failed.") + " " + (error instanceof Error ? error.message : ""));
+          }
+        }
       },
-      withdraws ? `${t("Saved.")} ${withdrawnNoticeText()}` : t("Saved."),
+      keepOpen === "requestApproval" ? t("Approval requested.") : withdraws ? `${t("Saved.")} ${withdrawnNoticeText()}` : t("Saved."),
     );
-    if (saved && !keepOpen) closeDialog();
+    if (saved && keepOpen !== true) closeDialog();
   };
   // After a file change withdrew an approval the task has a new revision; the
   // open form takes it so its next save does not conflict.
@@ -2528,6 +2536,7 @@ export default function CrewWorkspace() {
                   : undefined
             }
             add={phoneAdd}
+            addSlot={view === "shared" && <span ref={setSharedMobileHeader} style={{ display: "contents" }} />}
             description={descriptions[view]}
             help={titleHelp}
             actions={phoneActions}
@@ -2810,7 +2819,7 @@ export default function CrewWorkspace() {
           )}
           {view === "shared" && (
             <Shared
-              header={sharedHeader}
+              header={sharedMobileHeader ?? sharedHeader}
               notes={[...data.notes, ...archived.notes]}
               tasks={[...data.tasks, ...archived.tasks]}
               focus={sharedFocusFromHash(location.hash)}
@@ -3408,9 +3417,6 @@ export default function CrewWorkspace() {
         <Modal hideEmptyMenu nav={false} title={t("Startup prompt for {name}", { name: promptPreview.name })}
           close={() => setPromptPreview(null)} onEdit={() => undefined}>
           <div className="crew-dialog-body crew-startup-preview">
-            <pre>{promptPreview.prompt.split("\n").map((line, index) => (
-              <span key={index}>{index > 0 ? "\n" : ""}{line}</span>
-            ))}</pre>
             <div className="crew-actions">
               <NamedCopyAction label={t("Copy again")} successLabel={t("Copied")}
                 copy={() => copyText(promptPreview.prompt)} />
@@ -3422,6 +3428,11 @@ export default function CrewWorkspace() {
                 }, () => setError(t("Could not load session instructions.")));
               }}>{t("Read session instructions")}</button>
             </div>
+            <div className="crew-prompt-text">
+              {promptPreview.prompt.split(/\n+/).map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </div>
           </div>
         </Modal>
       )}
@@ -3429,7 +3440,7 @@ export default function CrewWorkspace() {
         <Modal
           hideEmptyMenu
           title={t("Session instructions for {name}", { name: instructions.name })}
-          nav={<NavCluster />}
+          nav={false}
           actions={
             <HeadCopy
               target={instructions.session.prompt}
@@ -3612,7 +3623,7 @@ type EditorProps = {
     fields: Record<string, unknown>,
     row?: Row,
     reason?: string,
-    keepOpen?: boolean,
+    keepOpen?: boolean | "requestApproval",
   ) => Promise<void>;
   perform: (work: () => Promise<unknown>, message?: string) => Promise<boolean>;
   /** Archive task from a pending review's More menu (0.40.0). */
@@ -3690,25 +3701,24 @@ function ChatInstructions({ agent, open }: { agent: Row; open: (view: Instructio
   return (
     <section className="crew-chat-instructions">
       <button type="button" className="crew-manual-copy-row"
-        aria-label={t("Copy instructions for {name}", { name })}
-        title={t("Copy instructions for {name}", { name })}
+        aria-label={t("Copy startup prompt")}
         onClick={() => void run(session.start)} disabled={session.loading}>
         <span>
-          <strong>{t("Manual start")}</strong>
-          <span className="crew-manual-copy-hint">{t("Paste the instructions into a chat connected to Crew.")}</span>
+          <strong>{t("Copy startup prompt")}</strong>
+          <span className="crew-manual-copy-hint" role="status">
+            {state === "copied"
+              ? t("Startup prompt copied. Paste it into your agent chat.")
+              : t("Paste the instructions into a chat connected to Crew.")}
+          </span>
         </span>
         <span className="crew-manual-copy-icon" aria-hidden="true"><CopyGlyph state={state} /></span>
       </button>
-      {state === "copied" && <small role="status">{t("Instructions copied")}</small>}
       {result?.state === "manual" && <textarea aria-label={t("Session prompt for {name}", { name })}
         readOnly value={result.prompt} onFocus={(e) => e.currentTarget.select()} />}
       {result?.state === "failed" && <p role="alert">{t("Could not prepare the session prompt for {name}. Check your connection and try again.", { name })}</p>}
       <div className="crew-instruction-actions">
         <button type="button" aria-haspopup="dialog" disabled={!!request} onClick={() => setRequest("read")}>
-          {t("Read instructions")}
-        </button>
-        <button type="button" aria-haspopup="dialog" disabled={!!request} onClick={() => setRequest("history")}>
-          {t("Revision history")}
+          {t("Read session instructions")}
         </button>
       </div>
       {readError && <p role="alert">{t("Could not prepare the session prompt for {name}. Check your connection and try again.", { name })}</p>}
@@ -4061,7 +4071,7 @@ function Editor({
     draftSelection !== initial.draftSelection || current.draftRecipient !== initial.draftRecipient;
   const reviewChanged = draft !== initial.draft || reviewSettingsChanged;
   const onlyLinksChanged = changed.length === 1 && changed[0] === "links";
-  const submit = (e: FormEvent) => {
+  const submit = (e: FormEvent, requestReview = false) => {
     e.preventDefault();
     if (readOnly || inlineUploads > 0) return;
     const fields =
@@ -4125,7 +4135,7 @@ function Editor({
       return;
     }
     const keepOpen = kind === "task" && !!row && (options.length > 0 || !!draftRecipient.trim() || reviewSettingsChanged);
-    void save(`${kind}.${row ? "update" : "create"}`, fields, row, reason, keepOpen);
+    void save(`${kind}.${row ? "update" : "create"}`, fields, row, reason, requestReview ? "requestApproval" : keepOpen);
   };
   if (kind === "review" && row)
     return <ReviewDecision row={row} task={data.tasks.find(task => task.id === val(row, "task"))} busy={busy} error={error}
@@ -4185,16 +4195,17 @@ function Editor({
     </button>
   );
   const brief = kind === "task" ? taskBrief(body) : undefined;
-  const whyBlocked = draft !== initial.draft ? t("Save your draft first.")
-    : dirty ? t("Save your task changes first.")
-    : !draft.trim() && !options.length ? t("Save a draft or add an option first.") : "";
+  const whyBlocked = !draft.trim() && !options.length ? t("Write a draft or add a review option first.") : "";
   const requestApproval = row && !readOnly && !reviewPending && (
     <div className="crew-review-actions">
-      <button type="button" className="crew-review-submit"
+      <button type="button" className="crew-review-submit crew-primary"
         disabled={busy || inlineUploads > 0 || !!whyBlocked}
         aria-describedby={whyBlocked ? `${hintId}-request` : undefined}
-        onClick={() => void save("review.request", {}, row)}>
-        {t("Request approval")}
+        onClick={(event) => {
+          if (!dirty) void save("review.request", {}, row);
+          else if (event.currentTarget.form?.reportValidity()) submit(event, true);
+        }}>
+        {dirty ? t("Save and request approval") : t("Request approval")}
       </button>
       <Help topic="send-for-approval" />
       {whyBlocked && <span id={`${hintId}-request`} className="crew-review-hint">{whyBlocked}</span>}

@@ -10,7 +10,7 @@ import {
 import { CopyControl, CopyGlyph, useCopyFeedback } from "./CopyFeedback";
 import { createPortal } from "react-dom";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
-import { copyText, chatActionLabel } from "./projectAgents";
+import { copyText } from "./projectAgents";
 import { icons, PopoverMenu, type MenuItem } from "./MobileChrome";
 import { boardAgentHash } from "./itemLink";
 import { useSessionGuideOff } from "./sessionGuide";
@@ -140,9 +140,9 @@ export function agentMenuItems(open: () => void, showTasks: () => void, chat: Me
   ];
 }
 
-export function chatMenuItems(agent: Row, loading: boolean, icon: MenuItem["icon"], copy: () => void, guide: () => void): MenuItem[] {
+export function chatMenuItems(loading: boolean, icon: MenuItem["icon"], copy: () => void, guide: () => void): MenuItem[] {
   return [
-    { label: loading ? t("Preparing the prompt…") : chatActionLabel(agent), icon, disabled: loading, onSelect: copy },
+    { label: loading ? t("Preparing the prompt…") : t("Copy startup prompt"), icon, disabled: loading, onSelect: copy },
     { label: t("How to continue in a chat"), icon: icons.notes, onSelect: guide },
   ];
 }
@@ -157,7 +157,7 @@ export default function StartSession({ agent, onStart, openAgent }: {
   const session = useSessionStart(agent, onStart);
   const { state, run } = useCopyFeedback();
   const [menu, setMenu] = useState<HTMLElement | null>(null);
-  const label = chatActionLabel(agent);
+  const label = t("Copy startup prompt");
   const copy = () => void run(session.start);
   return (
     <div className="crew-session">
@@ -167,8 +167,8 @@ export default function StartSession({ agent, onStart, openAgent }: {
         {icons.more}
       </button>
       <button type="button" className="crew-session-row"
-        aria-label={t("Copy instructions for {name}", { name })}
-        title={t("Copy instructions for {name}", { name })}
+        aria-label={t("Copy startup prompt for {name}", { name })}
+        title={t("Copy startup prompt for {name}", { name })}
         data-state={state || undefined} disabled={session.loading} onClick={copy}>
         <span>
           <strong>{label}</strong>
@@ -182,7 +182,7 @@ export default function StartSession({ agent, onStart, openAgent }: {
       </button>
       {menu && <PopoverMenu label={name} anchor={menu} onClose={() => setMenu(null)}
         items={agentMenuItems(openAgent, () => { location.hash = boardAgentHash(agent.id); },
-          chatMenuItems(agent, session.loading, <CopyGlyph state={state} />, copy, session.openGuide))} />}
+          chatMenuItems(session.loading, <CopyGlyph state={state} />, copy, session.openGuide))} />}
       {session.guide}
     </div>
   );

@@ -5,7 +5,7 @@
 // here too.
 const de: Record<string, string> = {
   "First setup: start each Grok bot in a chat": "Ersteinrichtung: Jeden Grok-Bot im Chat starten",
-  "Open Agents and copy the prompt beside “Start in a chat” on the matching Crew agent. If automatic startup is already on, use “Use in another chat”. Paste the prompt into that bot’s own Grok chat so it reads its Crew name, brief and saved instructions.": "Öffne die Agenten und kopiere beim passenden Crew-Agenten den Prompt neben „In einem Chat starten“. Ist der automatische Start bereits aktiv, verwende „In einem anderen Chat verwenden“. Füge den Prompt in den eigenen Grok-Chat dieses Bots ein, damit er seinen Crew-Namen, sein Briefing und seine gespeicherten Anweisungen liest.",
+  "Open Agents and choose “Copy startup prompt” on the matching Crew agent. Paste the prompt into that bot’s own Grok chat so it reads its Crew name, brief and saved instructions.": "Öffne Agenten und wähle beim passenden Crew-Agenten „Startprompt kopieren“. Füge den Prompt in den Grok-Chat des Bots ein, damit er seinen Crew-Namen, sein Briefing und seine gespeicherten Anweisungen liest.",
   "Open Agents": "Agenten öffnen",
   "Do this once per bot, including the dispatcher. Then return here to configure routing and authorize the bots. Each new task wake loads the latest saved instructions.": "Führe das einmal für jeden Bot aus, auch für den Dispatcher. Kehre dann hierher zurück, um das Routing einzurichten und die Bots zu autorisieren. Bei jedem neuen Aufgabenstart werden die aktuellen gespeicherten Anweisungen geladen.",
   "Create an agent and name it after the project. You can start it in a connected chat.": "Erstelle einen Agenten und benenne ihn nach dem Projekt. Du kannst ihn in einem verbundenen Chat starten.",

@@ -35,11 +35,48 @@
   gap: 0.35rem;
   margin: 0.75rem 0;
 }
+.crew-review-request {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
 .crew-review-request details {
-  margin: 0.75rem 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--block-line);
+  border-radius: 8px;
 }
 .crew-review-request summary {
   cursor: pointer;
+}
+.crew-review-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  align-items: start;
+  gap: 14px;
+  margin-block: 14px;
+}
+.crew-review-settings-fields label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.crew-review-settings-fields .crew-review-hint {
+  margin: 6px 0 0;
+}
+.crew-review-add-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--block-line);
+  padding-top: 12px;
+}
+.crew-review-add-option .crew-review-hint {
+  flex: 1 1 16rem;
+  margin: 0;
 }
 .crew-review-content .crew-alert code {
   overflow-wrap: anywhere;

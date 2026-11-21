@@ -99,15 +99,24 @@ describe("Shared", () => {
     artifactLinks.mockResolvedValue([]);
     write.mockImplementation(async () => { rows.push(second); return second; });
     try {
-      render(<Shared notes={[]} tasks={[]} focus={first.id} Prose={Prose} />);
-      fireEvent.click(await screen.findByRole("button", { name: "＋ New draft" }));
+      const header = document.createElement("header");
+      document.body.appendChild(header);
+      render(<Shared header={header} notes={[]} tasks={[]} focus={first.id} Prose={Prose} />);
+      const label = layout === "phone" ? "New draft" : "＋ New draft";
+      const add = await within(header).findByRole("button", { name: label });
+      if (layout === "phone") {
+        expect(add).toHaveClass("crew-micon", "crew-madd");
+        expect(add.textContent).toBe("");
+      }
+      fireEvent.click(add);
       const sheet = within(screen.getByRole("dialog", { name: "New shared page" }));
       fireEvent.change(sheet.getByLabelText("Title"), { target: { value: second.title } });
       fireEvent.click(sheet.getByRole("button", { name: "Create draft" }));
       await screen.findByText(second.title);
       expect(location.hash).toBe("#/shared/" + second.id);
       expect(screen.getByText(first.title)).toBeVisible();
-      expect(screen.getByRole("button", { name: "＋ New draft" })).toBeEnabled();
+      expect(within(header).getByRole("button", { name: label })).toBeEnabled();
+      header.remove();
     } finally {
       vi.unstubAllGlobals();
       history.replaceState(null, "", "/");

@@ -103,6 +103,9 @@ export default function Home({
   );
   const agentSeen =
     allTasks.some((x) => val(x, "created_by_agent")) || data.reviews.length > 0;
+  const reviewed = data.reviews.some((review) =>
+    ["approved", "changes_requested", "rejected"].includes(val(review, "status")),
+  );
   const readyTasks = data.tasks.filter((task) => task.readiness === "ready" &&
     activeAgents.some((agent) => agent.id === task.assigned_agent));
   const firstTask = readyTasks.find((task) => task.status === "todo") ?? readyTasks[0];
@@ -176,7 +179,7 @@ export default function Home({
     },
     {
       title: t("Give your crew a first task"),
-      done: Boolean(firstTask),
+      done: reviewed || Boolean(firstTask),
       body: (
         <>
           <p>
@@ -184,16 +187,18 @@ export default function Home({
               "Create a task or open an existing one. Assign it to an agent, set readiness to Ready, and save.",
             )}
           </p>
-          {data.tasks.length > 0 && <a href={viewHashes.board}>{t("Open Tasks")}</a>}
-          <button className="crew-primary" onClick={newTask}>
-            {t("＋ New task")}
-          </button>
+          <div className="crew-onboarding-actions">
+            <button className="crew-primary" onClick={newTask}>
+              {t("＋ New task")}
+            </button>
+            {data.tasks.length > 0 && <a href={viewHashes.board}>{t("Open Tasks")}</a>}
+          </div>
         </>
       ),
     },
     {
       title: t("Start the agent in a chat"),
-      done: Boolean(assignee && (pastedFor === assignee.id || stored(pasteKey))),
+      done: reviewed || Boolean(assignee && (pastedFor === assignee.id || stored(pasteKey))),
       body: assignee && firstTask && (
         <PromptHandoff key={assignee.id} agent={assignee} task={firstTask} notify={onStartSession}
           confirm={() => { remember(pasteKey); setPastedFor(assignee.id); }} />
@@ -201,7 +206,7 @@ export default function Home({
     },
     {
       title: t("Review the first draft"),
-      done: data.reviews.some((x) => val(x, "status") !== "pending"),
+      done: reviewed,
       body: (
         <>
           <p>
@@ -460,7 +465,7 @@ function SessionAgentRow(props: AgentRowProps) {
       copyPrompt={() => void rowCopy.run(session.start)}
       copyIcon={<CopyGlyph state={rowCopy.state} />}
       moreIcon={<CopyGlyph state={menuCopy.state} idle="more" />}
-      extra={chatMenuItems(props.agent, session.loading, <CopyGlyph state={menuCopy.state} />,
+      extra={chatMenuItems(session.loading, <CopyGlyph state={menuCopy.state} />,
         () => void menuCopy.run(session.start), session.openGuide)}
     >
       {session.guide}
@@ -538,8 +543,8 @@ function AgentRowView({
         <button
           type="button"
           className="crew-copy-control crew-copy-icon"
-          aria-label={t("Copy instructions for {name}", { name })}
-          title={t("Copy instructions for {name}", { name })}
+          aria-label={t("Copy startup prompt for {name}", { name })}
+          title={t("Copy startup prompt for {name}", { name })}
           disabled={preparing}
           onClick={copyPrompt}
         >

@@ -2,6 +2,13 @@
 // sign-in, reviews, dialogs headers, claims and relative dates (Crew 0.36.0).
 // Includes the English values of label tables that render through t().
 const it: Record<string, string> = {
+  "Approval requested.": "Approvazione richiesta.",
+  "Task saved. Approval request failed.": "Attività salvata. Richiesta di approvazione non riuscita.",
+  "Save and request approval": "Salva e richiedi approvazione",
+  "Write a draft or add a review option first.": "Scrivi una bozza o aggiungi prima un’opzione.",
+  "Add options when you want the reviewer to choose between drafts. For a single draft, skip this step.": "Aggiungi opzioni quando vuoi far scegliere tra più bozze. Per una sola bozza puoi saltare questo passaggio.",
+  "Who will read the finished draft? For example, a new teammate. This field describes the audience only.": "Chi leggerà la bozza finale? Per esempio, un nuovo membro del team. Questo campo indica solo il pubblico previsto.",
+  "New draft": "Nuova bozza",
   "＋ New draft": "＋ Nuova bozza",
   "Save a draft or add an option first.": "Prima salva una bozza o aggiungi un’opzione.",
   "Note for you": "Nota per te",

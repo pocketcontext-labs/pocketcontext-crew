@@ -8,6 +8,7 @@ const it: Record<string, string> = {
   "Use in another chat": "Usa in un’altra chat",
   "Use {name} in a chat": "Usa {name} in una chat",
   "How to continue in a chat": "Come continuare in una chat",
+  "Copy startup prompt for {name}": "Copia il prompt di avvio per {name}",
   "Copy instructions for {name}": "Copia le istruzioni per {name}",
   "Started automatically · webhook": "Avvio automatico · webhook",
   "Instructions copied": "Istruzioni copiate",

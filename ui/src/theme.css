@@ -58,7 +58,7 @@
 }
 
 :is(button, .crew-button-link, a.crew-copy-icon):where(
-  :not(.crew-sidebar-account button, .crew-primary, .primary-button, .crew-madd, .crew-sheet-done, .crew-help-button, :hover, :active, [aria-pressed="true"], [aria-selected="true"], [aria-current]:not([aria-current="false"]))
+  :not(.login-link, .crew-md-tabs button, .crew-claim-banner-toggle, .crew-sidebar-account button, .crew-primary, .primary-button, .crew-madd, .crew-sheet-done, .crew-help-button, :hover, :active, [aria-pressed="true"], [aria-selected="true"], [aria-current]:not([aria-current="false"]))
 ) {
   background-color: var(--button-surface) !important;
   color: var(--button-foreground, var(--button-ink)) !important;

@@ -221,11 +221,15 @@ export default function Shared({ header, notes, tasks, focus, Prose }: Props) {
 
   if (!rows)
     return <p className="crew-shared-loading">{t("Loading artifacts…")}</p>;
-  const newDraftButton = <button type="button" className="crew-primary" onClick={() => setCreating(true)}>{t("＋ New draft")}</button>;
+  const newDraftButton = phone ? (
+    <button type="button" className="crew-micon crew-madd" aria-label={t("New draft")} title={t("New draft")} onClick={() => setCreating(true)}>
+      {icons.plus}
+    </button>
+  ) : <button type="button" className="crew-primary" onClick={() => setCreating(true)}>{t("＋ New draft")}</button>;
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
   return (
     <section className="crew-shared" aria-label={t("Shared artifacts")}>
-      {rows.length > 0 && (header && !phone
+      {rows.length > 0 && (header
         ? createPortal(newDraftButton, header)
         : <div className="crew-shared-create">{newDraftButton}</div>)}
       {rows.length > 0 && !phone && (

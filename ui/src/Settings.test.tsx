@@ -414,9 +414,9 @@ describe("Home agent rows", () => {
     expect(agents.getByRole("button", { name: /^Lernen/ })).toHaveTextContent("Manual start");
     expect(agents.getByRole("button", { name: /^Implement/ })).toHaveTextContent("Manual start");
     expect(agents.getByRole("button", { name: /^Reviewer/ })).toHaveTextContent("Person");
-    expect(agents.queryByRole("button", { name: "Copy instructions for Reviewer" })).toBeNull();
-    expect(agents.getAllByRole("button", { name: /^Copy instructions for / })).toHaveLength(3);
-    const copy = agents.getByRole("button", { name: "Copy instructions for Bauen" });
+    expect(agents.queryByRole("button", { name: "Copy startup prompt for Reviewer" })).toBeNull();
+    expect(agents.getAllByRole("button", { name: /^Copy startup prompt for / })).toHaveLength(3);
+    const copy = agents.getByRole("button", { name: "Copy startup prompt for Bauen" });
     await waitFor(() => expect(copy).toBeEnabled());
     fireEvent.click(copy);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(session.prompt));
@@ -426,7 +426,7 @@ describe("Home agent rows", () => {
     expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Open agent",
       "Show tasks",
-      "Start in a chat",
+      "Copy startup prompt",
       "How to continue in a chat",
     ]);
   });

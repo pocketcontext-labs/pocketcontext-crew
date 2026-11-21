@@ -1,5 +1,6 @@
 import {
   useState,
+  useId,
   type ComponentProps,
   type ReactNode,
   type SetStateAction,
@@ -179,6 +180,7 @@ function OptionEditor({
 export default function TaskDraft(props: TaskDraftProps) {
   const { draft, options, readOnly, files } = props;
   const [contextOpen, setContextOpen] = useState(Boolean(draft));
+  const recipientHint = useId();
   const hasOptions = options.length > 0;
   const mirrored = !!mirroredOption(props);
   const add = (
@@ -260,38 +262,45 @@ export default function TaskDraft(props: TaskDraftProps) {
       )}
       {!readOnly && (
         <div className="crew-review-request">
-          {hasOptions && add}
           <details>
             <summary>
               {hasOptions
                 ? t("Review settings")
                 : t("Review alternatives (optional)")}
             </summary>
-            <label className="crew-option-note">
-              {t("Recipient (optional)")}
-              <input
-                maxLength={200}
-                value={props.recipient}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.preventDefault();
-                }}
-                onChange={(e) => props.setRecipient(e.target.value)}
-              />
-            </label>
-            {hasOptions ? (
-              <label>
-                {t("Selection")}
-                <select
-                  value={props.selection}
-                  onChange={(e) => props.setSelection(e.target.value)}
-                >
-                  <option value="any">{t("Pick any")}</option>
-                  <option value="one">{t("Pick one")}</option>
-                </select>
-              </label>
-            ) : (
-              add
-            )}
+            <div className="crew-review-settings-fields">
+              <div>
+                <label className="crew-option-note">
+                  {t("Recipient (optional)")}
+                  <input
+                    aria-describedby={recipientHint}
+                    maxLength={200}
+                    value={props.recipient}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.preventDefault();
+                    }}
+                    onChange={(e) => props.setRecipient(e.target.value)}
+                  />
+                </label>
+                <p className="crew-review-hint" id={recipientHint}>{t("Who will read the finished draft? For example, a new teammate. This field describes the audience only.")}</p>
+              </div>
+              {hasOptions && (
+                <label>
+                  {t("Selection")}
+                  <select
+                    value={props.selection}
+                    onChange={(e) => props.setSelection(e.target.value)}
+                  >
+                    <option value="any">{t("Pick any")}</option>
+                    <option value="one">{t("Pick one")}</option>
+                  </select>
+                </label>
+              )}
+            </div>
+            <div className="crew-review-add-option">
+              <p className="crew-review-hint">{t("Add options when you want the reviewer to choose between drafts. For a single draft, skip this step.")}</p>
+              {add}
+            </div>
           </details>
           {props.pending && props.dirtyReview && (
             <p className="crew-review-hint" role="status">

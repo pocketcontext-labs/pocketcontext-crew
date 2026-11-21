@@ -330,6 +330,7 @@ export function MobileTopBar({
   search,
   filter,
   add,
+  addSlot,
   description,
   help,
   actions = [],
@@ -341,6 +342,7 @@ export function MobileTopBar({
   search: ReactNode;
   filter?: { label: string; count: number; open: boolean; onOpen: () => void };
   add?: PageAction;
+  addSlot?: ReactNode;
   description: string;
   help?: HelpTopic;
   actions?: PageAction[];
@@ -358,6 +360,7 @@ export function MobileTopBar({
       </a>
       <h1>{title}</h1>
       <div className="crew-mactions">
+        {addSlot}
         {add && (
           <button
             type="button"

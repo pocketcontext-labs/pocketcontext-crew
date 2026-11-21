@@ -18,8 +18,6 @@ export const isBot = (agent: Row | undefined) => agentKind(agent) === "bot";
 /** Existing external roles are owner-started in Crew's single-owner agent directory. */
 export const canStartChat = (agent: Row | undefined) =>
   !!agent && !agent.archived && agentKind(agent) !== "human";
-export const chatActionLabel = (agent: Row) =>
-  agent.chat_start === "webhook" ? t("Use in another chat") : t("Start in a chat");
 // The tables below hold English, translated with t() where they render
 // (catalog: pages.ts lists every value).
 export const agentKindChoices: Record<AgentKind, string> = {
