@@ -4775,26 +4775,7 @@ a.crew-logo:hover .product-brand span {
   background: var(--block-bg);
 }
 .crew-agent-editor .crew-agent-profile { padding: 12px 16px; }
-.crew-brief-summary { margin: 0; color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.crew-dialog .crew-profile-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 12px;
-  min-height: 44px;
-  padding: 8px 0;
-  background: transparent;
-  color: var(--text);
-  border: 0;
-  text-align: left;
-}
-.crew-profile-toggle strong, .crew-profile-toggle small { display: block; overflow-wrap: anywhere; }
-.crew-profile-toggle strong { font-size: 16px; }
-.crew-profile-toggle small, .crew-agent-editor .crew-agent-no-tasks { color: var(--muted); }
-.crew-profile-chevron { display: flex; flex: none; transform: rotate(90deg); }
-.crew-profile-chevron svg { fill: none; stroke: currentColor; stroke-width: 1.8; }
-.crew-profile-toggle[aria-expanded="true"] .crew-profile-chevron { transform: rotate(-90deg); }
+.crew-agent-editor .crew-agent-no-tasks { color: var(--muted); }
 .crew-assignee-kind { display: flex; gap: 20px; margin: 0 0 12px; padding: 0; border: 0; }
 .crew-assignee-kind legend { font-weight: 600; }
 .crew-assignee-kind label { display: inline-flex; min-height: 44px; align-items: center; gap: 8px; }

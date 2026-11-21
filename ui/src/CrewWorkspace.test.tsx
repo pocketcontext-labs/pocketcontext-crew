@@ -470,7 +470,6 @@ it("sizes a long agent brief once its dialog is shown, and on rewrap", async () 
     const dialog = within(await screen.findByRole("dialog"));
     const field = dialog.getByLabelText("Agent brief") as HTMLTextAreaElement;
     expect(field.style.height).toBe("auto");
-    fireEvent.click(dialog.getByRole("button", { name: "Agent brief" }));
     // A non-empty brief opens in Read; Edit shows the growing editor.
     expect(field).not.toBeVisible();
     fireEvent.click(dialog.getByRole("tab", { name: "Edit" }));
@@ -3450,7 +3449,6 @@ describe("project agents and coding sessions", () => {
     );
     const dialog = within(screen.getByRole("dialog"));
     expect(dialog.getByLabelText("Name")).toHaveValue("Network");
-    fireEvent.click(dialog.getByRole("button", { name: "Agent brief" }));
     expect(dialog.getByText("Markdown supported")).toBeInTheDocument();
     expect(dialog.getByRole("tab", { name: "Read" })).toHaveAttribute("aria-selected", "true");
     expect(dialog.getByRole("heading", { name: "Rules" })).toBeInTheDocument();
@@ -3467,7 +3465,6 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(dialog.getByRole("button", { name: "Copy instructions for Network" }));
     await waitFor(() => expect(copied).toHaveBeenCalledWith(session.prompt));
     expect(crewApi.write).not.toHaveBeenCalled();
-    fireEvent.click(dialog.getByRole("button", { name: "Agent brief" }));
     fireEvent.change(dialog.getByLabelText("Agent brief"), { target: { value: "New brief" } });
     fireEvent.click(dialog.getByRole("button", { name: "Save agent" }));
     await waitFor(() =>

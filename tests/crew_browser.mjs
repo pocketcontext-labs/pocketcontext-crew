@@ -1114,7 +1114,6 @@ try {
  await page.locator('.crew-agent-card').filter({hasText:'Network'}).click();
  const longBrief=Array.from({length:45},(_,i)=>`Synthetic brief line ${i+1}`).join('\n');
  const briefEdit=()=>dialog().getByRole('tablist',{name:'Agent brief view'}).getByRole('tab',{name:'Edit',exact:true});
- await dialog().getByRole('button',{name:'Agent brief',exact:true}).click();
  await briefEdit().click();
  await dialog().getByLabel('Agent brief',{exact:true}).fill(longBrief);
  await dialog().getByRole('button',{name:'Save agent'}).click();await saved();
@@ -1125,7 +1124,6 @@ try {
  await snapView('crew-agents-1280');
  await networkCard.click();
  // A filled-in brief opens in Read (rendered Markdown); Edit shows the source.
- await dialog().getByRole('button',{name:'Agent brief',exact:true}).click();
  await dialog().locator('.crew-md-preview').getByText('Synthetic brief line 1',{exact:false}).first().waitFor();
  await briefEdit().click();
  const briefField=dialog().getByLabel('Agent brief',{exact:true});

@@ -3755,7 +3755,6 @@ function Editor({
     [waitingReason, setWaitingReason] = useState(start.waitingReason),
     [labels, setLabels] = useState(start.labels),
     [agentKindValue, setAgentKind] = useState<string>(start.agentKind);
-  const [profileOpen, setProfileOpen] = useState(!row);
   // Files: an existing task or note's attachments, or files staged for a new one.
   const itemKind = kind === "task" || kind === "note" ? kind : null;
   const parent =
@@ -4180,13 +4179,7 @@ function Editor({
             <fieldset className="crew-form-fields" disabled={readOnly}>
               <AutoTextField label={t("Name")} required maxLength={200} value={title} onValue={setTitle} />
             </fieldset>
-            <button type="button" className="crew-profile-toggle" aria-expanded={profileOpen}
-              aria-controls={`${formId}-brief`} onClick={() => setProfileOpen(!profileOpen)}>
-              <strong>{briefLabel}</strong>
-              <span className="crew-profile-chevron" aria-hidden="true"><Icon name="forward" /></span>
-            </button>
-            {!profileOpen && body.trim() && <p className="crew-brief-summary">{markdownExcerpt(body, 180, markdownText).text}</p>}
-            <fieldset className="crew-form-fields" id={`${formId}-brief`} hidden={!profileOpen} disabled={readOnly}>
+            <fieldset className="crew-form-fields" disabled={readOnly}>
               <MarkdownField label={briefLabel} className="crew-long-text" value={body}
                 help={!readOnly && agentKindValue !== "human" ? <Help topic="brief" /> : undefined} onChange={setBody} />
             </fieldset>
