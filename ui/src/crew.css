@@ -1565,6 +1565,22 @@ a.crew-logo:hover .product-brand span {
 .crew-connect code {
   margin-bottom: 8px;
 }
+.crew-connect-address {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 14px;
+  background: #fffefb;
+  border: 1px solid #dce2d8;
+  border-radius: 8px;
+}
+.crew-connect .crew-connect-address code {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 0.875rem;
+}
 .crew-connect-optional {
   margin: 32px 0 4px;
   font-size: 18px;

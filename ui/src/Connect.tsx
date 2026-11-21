@@ -109,8 +109,10 @@ function RemoteSteps({
             <Help topic="mcp" />
           </div>
           <p>{t("Use it wherever your platform asks for an MCP server.")}</p>
-          <code>{url}</code>
-          {copyEndpoint}
+          <div className="crew-connect-address">
+            <code>{url}</code>
+            {copyEndpoint}
+          </div>
         </li>
         <li>
           <h2>{t("Approve the connection")}</h2>
