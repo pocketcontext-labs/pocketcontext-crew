@@ -546,7 +546,13 @@ try {
     assert.ok(info.natural>0,`${name} header mark renders at ${width}`);
     assert.equal(Math.round(info.w),width<=680?28:34,`${name} header mark keeps its size at ${width}`);
     assert.match(await page.locator(width<=680?'.crew-mlogo':'.crew-sidebar .crew-logo').getAttribute('aria-label'),/^Crew\b/,`${name} home link is named Crew at ${width}`);}
-   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`${name} horizontal overflow at ${width}`);
+   const overflow = await page.evaluate(() => {
+    if (document.documentElement.scrollWidth <= innerWidth + 1) return [];
+    const elements = [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > innerWidth + 1)
+      .map(e => [e.tagName, e.className, Math.round(e.getBoundingClientRect().right)]).slice(0, 12);
+    return [document.documentElement.scrollWidth, ...elements];
+   });
+   assert.deepEqual(overflow, [], `${name} horizontal overflow at ${width}: ${JSON.stringify(overflow)}`);
    if(width<=680){await topBarOneRow(name+' '+width);await tabBarCheck(name+' '+width);
     // Intro text and page help live in the page menu, not on the screen.
     assert.equal(await page.locator('.crew-heading').count(),0,`no page heading block at ${width}`);
