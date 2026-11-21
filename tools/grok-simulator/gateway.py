@@ -44,6 +44,16 @@ HOP = {
     "via",
 }
 SAFE = {"GET", "HEAD"}
+# These endpoints authenticate native clients through Crew OAuth.
+CLIENT_ROUTES = {
+    "/mcp": {"POST", "GET", "DELETE"},
+    "/.well-known/oauth-protected-resource": SAFE,
+    "/.well-known/oauth-protected-resource/mcp": SAFE,
+    "/.well-known/oauth-authorization-server": SAFE,
+    "/oauth/register": {"POST"},
+    "/oauth/token": {"POST"},
+    "/oauth/revoke": {"POST"},
+}
 
 
 @dataclass
@@ -205,7 +215,7 @@ class Gateway:
         cookie(response, SESSION, key, ttl)
 
     def login_done(self, login, flow):
-        target = "/"
+        target = flow.get("authorize") or "/"
         request_id = flow.get("sso")
         if request_id:
             pending = self.requests.get(request_id)
@@ -367,6 +377,11 @@ class Gateway:
             raise web.HTTPMisdirectedRequest()
         origin = "https://" + host
         websocket = request.headers.get("Upgrade", "").lower() == "websocket"
+        path = request.rel_url.raw_path
+        if host == self.crew and not websocket and request.method in CLIENT_ROUTES.get(path, ()):
+            if "Origin" in request.headers and request.headers["Origin"] != origin:
+                raise web.HTTPForbidden(text="Same-origin request required.")
+            return await self.proxy(request, host, False, None)
         if (request.method not in SAFE or websocket) and request.headers.get(
             "Origin"
         ) != origin:
@@ -377,6 +392,11 @@ class Gateway:
             raise web.HTTPNotFound()
         grant = self.session(request, host)
         if not grant:
+            if host == self.crew and path == "/oauth/authorize" and request.method == "GET" and not websocket:
+                response = login_form()
+                flow = {"authorize": "/oauth/authorize?" + request.rel_url.raw_query_string}
+                cookie(response, FLOW, self.flows.put(flow, 600), 600)
+                return response
             if request.path == "/" and request.method == "GET" and not websocket:
                 raise web.HTTPSeeOther(BASE + "/login")
             raise web.HTTPUnauthorized()

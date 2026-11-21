@@ -89,6 +89,16 @@ class GatewayTests(IsolatedAsyncioTestCase):
             method, path, headers=headers, allow_redirects=False, **kwargs
         )
 
+    async def test_native_client_uses_crew_oauth(self):
+        response = await self.request("POST", "/mcp", headers={"Authorization": "Bearer synthetic"})
+        self.assertEqual(response.status, 200)
+        self.assertEqual((await response.json())["auth"], "Bearer synthetic")
+        self.assertEqual((await self.request("GET", "/.well-known/oauth-authorization-server")).status, 200)
+        self.assertEqual((await self.request("POST", "/oauth/token")).status, 200)
+        self.assertEqual((await self.request("POST", "/mcp", origin="https://other.example")).status, 403)
+        self.assertEqual((await self.request("POST", "/api/crew/write")).status, 403)
+        self.assertEqual((await self.request("POST", "/mcp", host=SIM)).status, 403)
+
     def cookie(self, response, name):
         item = response.cookies[name]
         self.assertTrue(item["secure"])
