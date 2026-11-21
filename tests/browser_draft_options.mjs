@@ -59,7 +59,7 @@ export async function editTaskOptions(page, base, write) {
   await dialog.getByRole('tablist', { name: 'Option 1 draft view' }).getByRole('tab', { name: 'Edit' }).click();
   const revisedMain = '### Main release schedule\n\nShip the synthetic example on Monday.';
   await dialog.getByRole('textbox', { name: 'Option 1 draft', exact: true }).fill(revisedMain);
-  assert.ok(await dialog.getByRole('button', { name: 'Request approval', exact: true }).isDisabled());
+  assert.ok(await dialog.getByRole('button', { name: 'Save and request approval', exact: true }).isEnabled());
   const updatedTask = await clickWrite('Save task', 'task.update');
   assert.equal(updatedTask.draft, revisedMain, 'editing the main option keeps the matching task draft in sync');
   await dialog.getByRole('tablist', { name: 'Option 1 draft view' }).getByRole('tab', { name: 'Read' }).click();

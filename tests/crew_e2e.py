@@ -466,9 +466,9 @@ def scenario(pc):
     assert review['draft'] == 'Draft one' and review['status'] == 'pending'
     task = current('tasks', task)
     assert task['status'] == 'needs_review'
-    write('task.update', {'status': 'done'}, task, expected=400)
+    write('task.update', {'status': 'done'}, task, expected=403)
     write('task.update', {'status': 'todo'}, task, expected=400)
-    write('task.update', {'draft': 'Attempted review bypass', 'status': 'done'}, task, expected=400)
+    write('task.update', {'draft': 'Attempted review bypass', 'status': 'done'}, task, expected=403)
     assert current('tasks', task)['draft'] == 'Draft one'
     assert current('reviews', review)['status'] == 'pending'
     write('review.request', record=task, expected=409)
@@ -483,7 +483,7 @@ def scenario(pc):
     assert current('tasks', task)['status'] != 'done', 'Approval must not complete external action'
     write('review.decide', {'decision': 'rejected'}, approved, agent=False, expected=400)
     task = current('tasks', task)
-    task = write('task.update', {'status': 'done'}, task)
+    task = write('task.update', {'status': 'done'}, task, agent=False)
     assert task['status'] == 'done'
 
     # Archive closes a pending review and restoring does not revive it.
@@ -589,7 +589,7 @@ def scenario(pc):
     held = write('task.update', {'readiness': 'on_hold'}, ready)
     assert held['readiness'] == 'waiting' and held['wake_generation'] == ready['wake_generation'] + 1, held
     ready = write('task.update', {'readiness': 'ready'}, held)
-    done = write('task.update', {'status': 'done'}, ready)
+    done = write('task.update', {'status': 'done'}, ready, agent=False)
     assert done['wake_generation'] == ready['wake_generation'] + 1
     reopened = write('task.update', {'status': 'todo'}, done)
     assert reopened['wake_generation'] == done['wake_generation'] + 1
@@ -685,7 +685,7 @@ def cli_session_scenario(cli, write):
     assert project['kind'] == 'external', project
     session = cli('read', {'collection': 'session', 'agent': 'synthetic-cli-project'})
     assert '"collection":"session","agent":"synthetic-cli-project"' in session['prompt']
-    assert 'task.claim' in session['prompt'] and 'pair the CLI and stop' in session['prompt']
+    assert 'task.claim' in session['prompt'] and "If you cannot verify" in session['prompt']
     assert session['agent'] == {'id': project['id'], 'name': 'synthetic-cli-project', 'kind': 'external'} and session['lease_hours'] == 2
     assert session['instructions'].endswith('## Agent brief\n\nSynthetic project brief.'), session['instructions'][-200:]
     assert 'HTTP 404' in cli('read', {'collection': 'session', 'agent': 'synthetic-missing'}, expect=1)
@@ -754,25 +754,15 @@ def cli_release_scenario(cli, write, project):
     claimed = write('task.claim', {'assigned_agent': project['id']}, ticket, reported_agent=session)
     refused = write('task.update', {'review_mode': 'in_session'}, claimed, expect=1, reported_agent=session)
     assert 'requires status done' in refused, refused
-    refused = write('task.update', {'status': 'done', 'release': '0.19.0'}, claimed, expect=1, reported_agent=session)
+    refused = write('task.update', {'release': '0.19.0'}, claimed, expect=1, reported_agent=session)
     assert 'release_field_removed' in refused, refused
-    closed = write('task.update', {'status': 'done', 'labels': ['release-0.19.0'], 'review_mode': 'in_session',
-                                   'approved_by': 'Synthetic Owner'}, claimed, reported_agent=session)
-    assert (closed['status'], closed['labels'], closed['review_mode'], closed['approved_by'], closed['claim_state']) == \
-        ('done', ['release-0.19.0'], 'in_session', 'Synthetic Owner', ''), closed
-    assert 'release' not in closed, closed
-    assert closed['approved_at'], closed
-    shipped = cli('read', {'collection': 'tasks', 'label': 'release-0.19.0', 'fields': ['title', 'approved_at']})['items']
-    assert [t['title'] for t in shipped] == ['Synthetic release ticket'] and shipped[0]['approved_at'] == closed['approved_at'], shipped
-    dropped = write('task.create', {'title': 'Synthetic dropped ticket', 'assigned_agent': project['id']})
-    dropped = write('task.update', {'status': 'wont_do'}, dropped, reported_agent=session)
-    closed_titles = {t['title'] for t in cli('read', {'collection': 'tasks', 'status': ['done', 'wont_do'], 'assigned_agent': project['id'], 'fields': ['title']})['items']}
-    assert closed_titles >= {'Synthetic release ticket', 'Synthetic dropped ticket'}, closed_titles
-    rows = cli('query', {'sql': "SELECT status, review_mode, approved_by FROM tasks WHERE id = '%s'" % closed['id']})['rows']
-    assert rows == [['done', 'in_session', 'Synthetic Owner']], rows
-    changes = [e['changes'] for e in cli('read', {'collection': 'events', 'parent': closed['id'], 'fields': ['action', 'changes']})['items']
-               if e['action'] == 'task.update']
-    assert changes and changes[0].get('approved_at') == closed['approved_at'] and changes[0].get('claim_cleared') is True, changes
+    denied = write('task.update', {'status': 'done', 'review_mode': 'in_session'}, claimed, expect=1, reported_agent=session)
+    assert 'Only the owner' in denied, denied
+    draft = write('task.update', {'draft': 'Synthetic release summary', 'labels': ['release-0.19.0']}, claimed, reported_agent=session)
+    review = write('review.request', {}, draft, reported_agent=session)
+    assert review['status'] == 'pending' and review['draft'] == draft['draft'], review
+    shipped = cli('read', {'collection': 'tasks', 'label': 'release-0.19.0', 'fields': ['id', 'status']})['items']
+    assert [(t['id'], t['status']) for t in shipped] == [(ticket['id'], 'needs_review')], shipped
 
 
 def cli_attachment_scenario(pc):

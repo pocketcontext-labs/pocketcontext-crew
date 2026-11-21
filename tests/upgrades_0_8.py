@@ -31,7 +31,7 @@ LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js', '1801000000
                     '1801900000_crew_reader_preferences.js', '1802000000_crew_hidden_help.js',
                     '1802100000_crew_review_selection.js', '1802200000_crew_task_draft_options.js',
                     '1802300000_crew_agent_startup.js', '1802400000_crew_session_templates.js',
-                    '1802500000_crew_agent_context_instructions.js'}
+                    '1802500000_crew_agent_context_instructions.js', '1802600000_crew_owner_completion.js'}
 
 
 def settled(operation, *args):
@@ -146,12 +146,11 @@ def rehearse(target, previous, root):
     claimed = data('write', json.dumps({'action': 'task.claim', 'id': ticket['id'], 'expected_revision': ticket['revision'],
                                         'reported_agent': 'Synthetic session', 'data': {'assigned_agent': 'Build'}}))
     assert claimed['claim_state'] == 'live' and claimed['claimed_by'] == 'Synthetic session', claimed
-    # 0.19.0/0.23.0: the claimed task closes with a release label and in-session
-    # approval, and the label filter finds it; Won't do is a status.
-    closed = data('write', json.dumps({'action': 'task.update', 'id': claimed['id'], 'expected_revision': claimed['revision'],
-                                       'reported_agent': 'Synthetic session',
-                                       'data': {'status': 'done', 'labels': ['release-0.19.0'], 'review_mode': 'in_session'}}))
-    assert closed['labels'] == ['release-0.19.0'] and 'release' not in closed and closed['approved_by'] == 'owner' and closed['approved_at'] and closed['claim_state'] == '', closed
+    draft = data('write', json.dumps({'action': 'task.update', 'id': claimed['id'], 'expected_revision': claimed['revision'],
+                                      'reported_agent': 'Synthetic session', 'data': {'draft': 'Synthetic delivery', 'labels': ['release-0.19.0']}}))
+    review = data('write', json.dumps({'action': 'review.request', 'id': draft['id'], 'expected_revision': draft['revision'],
+                                       'reported_agent': 'Synthetic session', 'data': {}}))
+    assert review['status'] == 'pending' and review['draft'] == draft['draft'], review
     shipped = data('read', json.dumps({'collection': 'tasks', 'label': 'release-0.19.0', 'fields': ['title']}))['items']
     assert [t['title'] for t in shipped] == ['Upgrade ticket'], shipped
     dropped = data('write', json.dumps({'action': 'task.create', 'reported_agent': 'Synthetic upgrade',

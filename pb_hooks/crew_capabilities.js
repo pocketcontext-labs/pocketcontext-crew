@@ -844,7 +844,7 @@ function document() {
       revision: "execution",
       key: true,
       description:
-        "Ends running work. When your own review.request already completed this execution (outcome_code review_requested), the same worker/fence gets the record back with already_completed:true and no revision check; mark_done is refused.",
+        "Only the owner can mark tasks Done. Agents submit drafts with review.request. Ends running work. When your own review.request already completed this execution (outcome_code review_requested), the same worker/fence gets the record back with already_completed:true and no revision check; mark_done is refused.",
     },
   );
   op(

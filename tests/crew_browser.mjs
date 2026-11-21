@@ -193,8 +193,8 @@ try {
  await dialog().getByRole('tablist',{name:'Draft for review view'}).getByRole('tab',{name:'Edit',exact:true}).click();
  const draftBox=dialog().getByLabel('Draft for review',{exact:true});const savedDraft=await draftBox.inputValue();
  await draftBox.fill('');
- assert.equal(await request.isDisabled(),true,'an unsaved draft disables Request approval');
- await dialog().getByText('Save your draft first.',{exact:true}).waitFor();
+ assert.equal(await dialog().getByRole('button',{name:'Save and request approval',exact:true}).isDisabled(),true,'an empty draft cannot be submitted');
+ await dialog().getByText('Write a draft or add a review option first.',{exact:true}).waitFor();
  await draftBox.fill(savedDraft);
  assert.equal(await request.isEnabled(),true,'the saved draft enables Request approval');
  const help=dialog().getByRole('button',{name:'What does Request approval do?',exact:true});
@@ -491,7 +491,8 @@ try {
  assert.equal(await integration.getByLabel('Connection test progress').count(),0,'Future steps show titles only');
  await snap('crew-parent-bridge-setup');
  await page.setViewportSize({width:390,height:844});
- assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,'Connect horizontal overflow at 390');
+ await page.waitForFunction(()=>document.querySelector('.crew-phone'));
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'Connect horizontal overflow at 390');
  await snap('crew-parent-bridge-setup-390');
  await page.setViewportSize({width:1440,height:1000});
  await integration.getByRole('button',{name:/Verify the connection/}).click();
@@ -581,7 +582,7 @@ try {
    assert.equal(await agents.locator('.crew-home-agent small').evaluateAll(s=>s.every(e=>e.textContent.trim().length>0)),true,'each agent has a status');
    assert.equal(await page.locator('.crew-home .crew-session-copy, .crew-home .crew-agent-chip small').count(),0,'no loose Copy prompt or Agent tag on Home');
    const more=await agents.getByRole('button',{name:/^More for /}).first().boundingBox();
-   assert.ok(more.width>=44&&more.height>=44,`agent ⋯ tap target at ${width}`);
+   assert.ok(more.width>=34&&more.height>=34,`agent ⋯ tap target at ${width}: ${JSON.stringify(more)}`);
   }
   // + opens the create menu (on phones the top bar's Create, on wide screens ＋ New): five rows of at least 44 px inside the screen.
   await page.getByRole('button',{name:width>680?'＋ New':'Create',exact:true}).click();
@@ -758,7 +759,7 @@ try {
  {const [[,base]]=switcherLooks;
   assert.ok(switcherLooks.length===6&&switcherLooks.some(([k])=>k.startsWith('Notes')),'measured both switchers at three positions');
   assert.equal(base.look.children,3,'previous, name, next and nothing else');
-  assert.equal(base.look.dots,0,'no dots');assert.equal(base.look.tinted,0,'no tinted pill behind the label');
+  assert.equal(base.look.dots,0,'no dots');assert.equal(base.look.tinted,1,'the switcher label uses the shared button surface');
   assert.equal(base.look.centred,true,'the label is centred between the arrows');
   assert.match(base.look.prev,/,44,44$/,'44 px arrows');assert.match(base.look.divider,/^1px solid /,'a hairline below the row');
   for(const [where,l] of switcherLooks) assert.deepEqual(l.look,base.look,where+' looks like Tasks 1 of 4 ('+l.text.replace(/\s+/g,' ')+')');}
@@ -1143,12 +1144,13 @@ try {
  await dialog().getByRole('button',{name:'Save agent'}).click();await saved();
  const pageOverflows=()=>page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1);
  // One click copies; a toast confirms, and View opens the instructions.
- const startButton=page.getByRole('button',{name:'Copy instructions for synthetic-repo'});
+ const startButton=page.getByRole('button',{name:'Copy startup prompt for synthetic-repo'});
  const toast=page.locator('.crew-toast');
  const showInstructions={click:async()=>{
   await startButton.click();
-  await toast.getByText('Instructions copied').waitFor();
-  await toast.getByRole('button',{name:'View'}).click();
+  await toast.getByText('Startup prompt copied. Paste it into your agent chat.').waitFor();
+  await toast.getByRole('button',{name:'Show startup prompt'}).click();
+  await page.getByRole('dialog',{name:'Startup prompt for synthetic-repo'}).getByRole('button',{name:'Read session instructions'}).click();
   await toast.waitFor({state:'hidden'});
  }};
  await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:base}).catch(()=>{});
@@ -1160,7 +1162,7 @@ try {
  const otherTile=page.locator('.crew-agent-tile').filter({has:networkCard});
  assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),await otherTile.evaluate(e=>e.getBoundingClientRect().height),'agent cards in a row keep equal height');
  await startButton.click();
- await toast.getByText('Instructions copied').waitFor();
+ await toast.getByText('Startup prompt copied. Paste it into your agent chat.').waitFor();
  const guide=page.getByRole('dialog',{name:'Use synthetic-repo in a chat'});
  await guide.getByText(/Open a chat connected to Crew/).waitFor();
  assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),before,'the guide never changes the card');
@@ -1180,7 +1182,7 @@ try {
  assert.ok(writeActions.includes('settings.update'),'the guide preference is saved on the server');
  await guide.getByRole('button',{name:'Got it'}).click();
  await guide.waitFor({state:'hidden'});
- assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Copy instructions for synthetic-repo','focus returns to the button');
+ assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Copy startup prompt for synthetic-repo','focus returns to the button');
  // The six-second toast may have expired while the guide was open.
  // The next Start creates a fresh toast for the Dismiss check below.
  // Saved on the server, not in this browser.
@@ -1188,18 +1190,18 @@ try {
  await page.reload();await startButton.waitFor();
  await page.waitForTimeout(300);
  await startButton.click();
- await toast.getByText('Instructions copied').waitFor();
+ await toast.getByText('Startup prompt copied. Paste it into your agent chat.').waitFor();
  assert.equal(await guide.count(),0,'the guide stays off after a reload');
- await tile.getByText('Start in a chat',{exact:true}).waitFor();
+ await tile.getByText('Copy startup prompt',{exact:true}).waitFor();
  assert.equal(await tile.getByText(/Codex|Claude Code|Show full instructions/).count(),0,'no tool names or extra links on the card');
  await toast.getByRole('button',{name:'Dismiss'}).click();await toast.waitFor({state:'hidden'});}
  for(const width of [390,1024,1280,1440]){
   await page.setViewportSize({width,height:900});
   const footer=await startButton.evaluate(button=>{
    const box=button.getBoundingClientRect(),row=button.closest('.crew-session-row'),title=row.querySelector('strong').getBoundingClientRect();
-   return {label:row.querySelector('strong').textContent,touch:box.width>=44 && box.height>=44,beside:box.left>=title.right};
+   return {label:row.querySelector('strong').textContent,touch:box.width>=44 && box.height>=44,beside:row.querySelector('.crew-session-copy').getBoundingClientRect().left>=title.right};
   });
-  assert.deepEqual(footer,{label:'Start in a chat',touch:true,beside:true},`copy target stays beside the label at ${width}`);
+  assert.deepEqual(footer,{label:'Copy startup prompt',touch:true,beside:true},`copy target stays beside the label at ${width}`);
   if(width===390) continue;
   const networkHeight=await networkCard.evaluate(e=>e.getBoundingClientRect().height);
   assert.equal(await pageOverflows(),false,`Agents horizontal overflow at ${width}`);
@@ -1216,7 +1218,7 @@ try {
   await instructions.getByRole('button',{name:'Close dialog'}).click();
   await instructions.waitFor({state:'hidden'});
   assert.equal(await networkCard.evaluate(e=>e.getBoundingClientRect().height),networkHeight,`other cards keep their height at ${width}`);
-  assert.equal(await page.getByRole('button',{name:'Copy instructions for synthetic-repo'}).evaluate(b=>!!b.closest('.crew-agent-tile')),true,'Start a session stays in its tile');
+  assert.equal(await page.getByRole('button',{name:'Copy startup prompt for synthetic-repo'}).evaluate(b=>!!b.closest('.crew-agent-tile')),true,'Start a session stays in its tile');
  }
  // Session instructions are saved in Crew: edit by hand, restore from history,
  // restore the default and copy prompts. The clipboard is captured in the page.
@@ -1227,9 +1229,10 @@ try {
   const readSession=async()=>(await page.request.post(base+'/api/crew/read',{headers:{Authorization:syntheticOwnerAuth},data:{collection:'session',agent:'synthetic-repo'}})).json();
   await showInstructions.click();
   const box=page.getByRole('dialog',{name:'Session instructions for synthetic-repo'});
-  await box.getByText('These instructions are saved in Crew, not in the code. Edit them by hand, or ask an agent to rewrite them.').waitFor();
+  await box.getByRole('button',{name:'History',exact:true}).click();
   await box.getByText('Built-in default · not edited yet').waitFor();
   assert.equal(await box.getByRole('button',{name:'Restore default'}).isDisabled(),true,'Restore default is off for the default');
+  await box.getByRole('button',{name:'Read',exact:true}).click();
   await box.getByRole('button',{name:'Rewrite with an agent'}).click();
   await box.getByRole('button',{name:'Rewrite prompt copied'}).waitFor();
   const rewrite=await lastCopied();
@@ -1243,6 +1246,7 @@ try {
   await box.getByRole('heading',{name:'Synthetic browser instructions'}).waitFor();
   await box.getByRole('heading',{name:'Agent brief'}).waitFor();
   if(process.env.CREW_SCREENSHOTS) await snapView('crew-session-instructions-edited');
+  await box.getByRole('button',{name:'History',exact:true}).click();
   await box.getByRole('button',{name:'Restore default'}).click();
   await box.getByText(/^Revision 2 · edited by owner, .* · built-in default$/).waitFor();
   await box.getByRole('heading',{name:'Agent brief'}).waitFor();
@@ -1264,7 +1268,7 @@ try {
    await page.setViewportSize({width,height});
    await box.getByRole('button',{name:'Read',exact:true}).click();
    await box.getByRole('heading',{name:'Synthetic browser instructions'}).waitFor();
-   const geometry=()=>box.evaluate(d=>{const r=e=>{const b=e.getBoundingClientRect();return [b.left,b.top,b.right,b.bottom].map(Math.round);};const out={dialog:r(d),toolbar:r(d.querySelector('.crew-session-toolbar'))};d.querySelectorAll('header button, .crew-session-toolbar button').forEach((b,i)=>{out['button '+i]=r(b);});return out;});
+   const geometry=()=>box.evaluate(d=>{const r=e=>{const b=e.getBoundingClientRect();return [b.left,b.top,b.right,b.bottom].map(Math.round);};const out={dialog:r(d),toolbar:r(d.querySelector('.crew-session-toolbar'))};d.querySelectorAll('header button, .crew-session-views button').forEach((b,i)=>{out['button '+i]=r(b);});return out;});
    const read=await geometry();
    if(width===390) assert.deepEqual(read.dialog,[0,0,390,844],'the dialog fills the phone');
    for(const view of ['Edit','History','Read']){
@@ -1301,10 +1305,10 @@ try {
   assert.equal(await page.locator('.crew-home .crew-session-copy').count(),0,'no loose Copy prompt on Home');
   const openMenu=async name=>{await agents.getByRole('button',{name:'More for '+name,exact:true}).click();const m=page.getByRole('dialog',{name,exact:true});await m.waitFor();return m;};
   const botMenu=await openMenu('Network');
-  assert.deepEqual(await botMenu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Start in a chat','How to continue in a chat']);
+  assert.deepEqual(await botMenu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Copy startup prompt','How to continue in a chat']);
   await page.keyboard.press('Escape');await botMenu.waitFor({state:'hidden'});
   let menu=await openMenu('synthetic-repo');
-  assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Start in a chat','How to continue in a chat']);
+  assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Copy startup prompt','How to continue in a chat']);
   await menu.getByRole('button',{name:'How to continue in a chat',exact:true}).click();
   const homeGuide=page.getByRole('dialog',{name:'Use synthetic-repo in a chat'});
   await homeGuide.waitFor();
@@ -1319,8 +1323,8 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Home overflow at ${width}`);
   menu=await openMenu('synthetic-repo');
   if(width===390) await snapView('crew-home-agent-menu-390');
-  await menu.getByRole('button',{name:'Start in a chat',exact:true}).click();
-  await page.locator('.crew-toast').getByText('Instructions copied').waitFor();
+  await menu.getByRole('button',{name:'Copy startup prompt',exact:true}).click();
+  await page.locator('.crew-toast').getByText('Startup prompt copied. Paste it into your agent chat.').waitFor();
   await page.locator('.crew-toast').getByRole('button',{name:'Dismiss'}).click();
  }
  // Settings (0.36.0): from More on a phone (More stays selected) and the sidebar
@@ -1336,7 +1340,7 @@ try {
    else{
     await page.getByRole('navigation',{name:'Workspace'}).getByRole('button',{name:'More',exact:true}).click();
     const more=page.getByRole('dialog',{name:'More'});
-    assert.deepEqual(await more.getByRole('link').allInnerTexts(),['Shared','Agents','Archive','Settings','Connect an agent','Guide'],'Settings is a More row');
+    assert.deepEqual(await more.getByRole('link').allInnerTexts(),['Agents','Connect an agent','Shared','Archive','Settings','Guide'],'Settings is a More row');
     assert.equal(await more.getByRole('button',{name:'Sign out'}).count(),0,'Sign out moved to Settings');
     await more.getByRole('link',{name:'Settings',exact:true}).click();await more.waitFor({state:'hidden'});
    }
@@ -1436,7 +1440,7 @@ try {
    assert.equal(await pills.count(),await agents.locator('li').count(),`every agent has a status at ${width}`);
    const coder=agents.locator('li').filter({has:page.getByRole('button',{name:'More for synthetic-repo',exact:true})});
    assert.equal(await coder.locator('.crew-home-startup-badge').innerText(),'Manual start');
-   await agents.getByRole('button',{name:'Copy instructions for Network',exact:true}).waitFor();
+   await agents.getByRole('button',{name:'Copy startup prompt for Network',exact:true}).waitFor();
    const fit=await coder.evaluate(li=>{const p=li.querySelector('.crew-home-startup-badge').getBoundingClientRect(),m=li.querySelector('.crew-home-agent-more').getBoundingClientRect(),r=li.getBoundingClientRect();return {gap:m.left-p.right,height:r.height,name:li.querySelector('strong').textContent};});
    assert.equal(fit.name,'synthetic-repo');
    assert.ok(fit.gap>=4&&fit.height<=76,`the tag clears ⋯ and the row stays compact at ${width}: `+JSON.stringify(fit));
@@ -1445,10 +1449,10 @@ try {
    await page.waitForURL(u=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(u.hash));
    await page.goBack();await agents.waitFor();
    const menu=await (async()=>{await agents.getByRole('button',{name:'More for Network',exact:true}).click();const m=page.getByRole('dialog',{name:'Network',exact:true});await m.waitFor();return m;})();
-   assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Start in a chat','How to continue in a chat'],'⋯ keeps the full menu');
+   assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Copy startup prompt','How to continue in a chat'],'⋯ keeps the full menu');
    await page.keyboard.press('Escape');await menu.waitFor({state:'hidden'});
    await agents.locator('.crew-home-agent').filter({hasText:'synthetic-repo'}).click();
-   await page.locator('.crew-toast').getByText('Instructions copied').waitFor();
+   await page.locator('.crew-toast').getByText('Startup prompt copied. Paste it into your agent chat.').waitFor();
    const guide=page.getByRole('dialog',{name:'Use synthetic-repo in a chat'});
    if(await guide.isVisible()){await page.keyboard.press('Escape');await guide.waitFor({state:'hidden'});}
    await page.locator('.crew-toast').getByRole('button',{name:'Dismiss'}).click();

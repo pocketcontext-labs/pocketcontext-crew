@@ -126,15 +126,15 @@ func TestInSessionApproval(t *testing.T) {
 	// approved_at is never written by clients.
 	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"review_mode": "in_session"}, "session-a", 400)
 	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "wont_do", "review_mode": "in_session"}, "session-a", 400)
-	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "review_mode": "in_session", "approved_at": "2026-01-01 00:00:00.000Z"}, "session-a", 400)
-	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "review_mode": "session"}, "session-a", 400)
+	sessionWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "review_mode": "in_session", "approved_at": "2026-01-01 00:00:00.000Z"}, "session-a", 400)
+	sessionWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "review_mode": "session"}, "session-a", 400)
 	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"approved_by": "Synthetic Owner"}, "session-a", 400)
 	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"release": "0.19.0"}, "session-a", 400)
-	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"approved_by": strings.Repeat("a", 101), "status": "done", "review_mode": "in_session"}, "session-a", 400)
+	sessionWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"approved_by": strings.Repeat("a", 101), "status": "done", "review_mode": "in_session"}, "session-a", 400)
 	// The close step: Done with a release label and in-session approval in
 	// one update. approved_by defaults to owner.
 	before := time.Now().Add(-time.Second)
-	closed := sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "labels": []string{"release-0.19.0"}, "review_mode": "in_session"}, "session-a", 200)
+	closed := sessionWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "labels": []string{"release-0.19.0"}, "review_mode": "in_session"}, "session-a", 200)
 	if closed["status"] != "done" || closed["review_mode"] != "in_session" || closed["approved_by"] != "owner" || closed["claim_state"] != "" {
 		t.Fatal("in-session close", closed)
 	}

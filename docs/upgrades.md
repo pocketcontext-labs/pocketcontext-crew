@@ -1,8 +1,8 @@
 # Crew upgrades and rollback
 
-## Crew 0.41.0 to 0.42.0
+## Crew 0.41.0 to 0.42.1
 
-Back up the workspace, update the server and paired clients, and refresh the agent’s startup prompt. Check that its MCP URL matches the connection configured in your chat. This release adds no database migration. To roll back to 0.41.0, use the previous binary or image.
+Back up the workspace, update the server and paired clients, and refresh the agent’s startup prompt. Check that its MCP URL matches the connection configured in your chat. Before upgrading, finish or pause active webhook work and include the private webhook key in your complete backup. The migration installs the owner-only completion instructions, pauses delivery and cancels pending and in-flight deliveries. Sync the dispatcher and run the connection test before enabling delivery again. Reinstall the Crew skill and refresh MCP tool descriptions. To roll back, restore the complete pre-upgrade backup and matching binary or image.
 
 ## Crew 0.40.0 to 0.41.0
 

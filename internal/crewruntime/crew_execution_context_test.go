@@ -118,7 +118,7 @@ func TestBeginTwoWakesLoadSuccessiveSavedWorkflowRevisions(t *testing.T) {
 	firstRequest := receiveWake(first.GetString("event_id"), "first-wake-worker")
 	run := executionOperation(t, a, "execution.begin", "", 0, firstRequest, "first-wake-worker", false, 200)
 	assertWorkflow(run, original, 1)
-	result := executionOperation(t, a, "execution.complete", run["id"].(string), int(run["revision"].(float64)), map[string]any{"worker_id": "first-wake-worker", "fence": run["fence"], "outcome": "completed", "mark_done": true, "task_revision": task.GetInt("revision")}, "first-complete", false, 200)
+	result := executionOperation(t, a, "execution.complete", run["id"].(string), int(run["revision"].(float64)), map[string]any{"worker_id": "first-wake-worker", "fence": run["fence"], "outcome": "completed"}, "first-complete", false, 200)
 	if result["state"] != "completed" {
 		t.Fatal(result)
 	}
@@ -136,10 +136,10 @@ func TestBeginTwoWakesLoadSuccessiveSavedWorkflowRevisions(t *testing.T) {
 	secondRequest := receiveWake(deliveries[0].GetString("event_id"), "second-wake-worker")
 	second := executionOperation(t, a, "execution.begin", "", 0, secondRequest, "second-wake-worker", false, 200)
 	assertWorkflow(second, edited, 2)
-	executionOperation(t, a, "execution.complete", second["id"].(string), int(second["revision"].(float64)), map[string]any{"worker_id": "second-wake-worker", "fence": second["fence"], "outcome": "completed", "mark_done": true, "task_revision": next["revision"]}, "second-complete", false, 200)
+	executionOperation(t, a, "execution.complete", second["id"].(string), int(second["revision"].(float64)), map[string]any{"worker_id": "second-wake-worker", "fence": second["fence"], "outcome": "completed"}, "second-complete", false, 200)
 	for _, taskID := range []string{task.Id, next["id"].(string)} {
-		if saved := apiWebhookRecord(t, a, "tasks", taskID); saved.GetString("status") != "done" {
-			t.Fatal("mock wake did not finish task", taskID)
+		if saved := apiWebhookRecord(t, a, "tasks", taskID); saved.GetString("status") == "done" {
+			t.Fatal("mock wake marked task Done", taskID)
 		}
 	}
 }

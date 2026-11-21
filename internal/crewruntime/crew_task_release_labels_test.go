@@ -81,7 +81,7 @@ func TestTaskReleaseFieldIsRefusedWithLabelHint(t *testing.T) {
 	task := newTask(t, a, map[string]any{})
 	id := task["id"].(string)
 	for _, agent := range []bool{false, true} {
-		got := crewWrite(t, a, agent, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done", "release": "0.23.0"}, 400)
+		got := crewWrite(t, a, agent, "task.update", id, taskRevision(t, a, id), map[string]any{"release": "0.23.0"}, 400)
 		if !strings.Contains(stringify(got), "release_field_removed") {
 			t.Fatal("write with release not refused clearly", got)
 		}
@@ -91,7 +91,7 @@ func TestTaskReleaseFieldIsRefusedWithLabelHint(t *testing.T) {
 		t.Fatal("read with release not refused clearly", got)
 	}
 	// In-session approval with a release label still closes the task.
-	done := crewWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{
+	done := crewWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{
 		"status": "done", "labels": []string{"release-0.23.0"}, "review_mode": "in_session",
 	}, 200)
 	if done["status"] != "done" || done["review_mode"] != "in_session" || done["approved_at"] == "" {

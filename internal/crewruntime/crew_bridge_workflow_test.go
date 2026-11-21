@@ -34,9 +34,12 @@ func TestBridgeReadyTaskCompletesOnlyWithRecipientProof(t *testing.T) {
 	raw, _ := json.Marshal(comment)
 	a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
 	a.request(t, "POST", "/api/crew/agent-write", a.token, string(raw), 200)
-	run = executionOperation(t, a, "execution.complete", run["id"].(string), int(run["revision"].(float64)), map[string]any{"worker_id": "recipient", "fence": workerFence, "outcome": "completed", "mark_done": true, "task_revision": task["revision"]}, "complete", false, 200)
-	if run["state"] != "completed" || apiWebhookRecord(t, a, "tasks", task["id"].(string)).GetString("status") != "done" {
-		t.Fatal("bridge work did not complete atomically", run)
+	proof := map[string]any{"id": run["id"], "worker_id": "recipient", "fence": workerFence}
+	id := task["id"].(string)
+	updated := fencedWrite(t, a, "task.update", id, taskRevision(t, a, id), map[string]any{"draft": "Synthetic bridge draft"}, proof, "", 200)
+	review := fencedWrite(t, a, "review.request", id, int(updated["revision"].(float64)), map[string]any{}, proof, "", 200)
+	if review["status"] != "pending" || apiWebhookRecord(t, a, "tasks", id).GetString("status") != "needs_review" || apiWebhookRecord(t, a, "webhook_executions", run["id"].(string)).GetString("state") != "completed" {
+		t.Fatal("recipient failed to submit work for owner review", review)
 	}
 	comments, err := a.app.FindRecordsByFilter("crew_events", "parent={:task} && action='task.comment'", "", 0, 0, map[string]any{"task": task["id"]})
 	if err != nil || len(comments) != 1 {

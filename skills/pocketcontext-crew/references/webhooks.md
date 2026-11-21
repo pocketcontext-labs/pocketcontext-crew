@@ -239,7 +239,7 @@ Rule mapping from the protocol 3 block to the compact block:
 | dispatched only after real send, original worker/fence, sent:true, message_ref if returned    | TASK DISPATCH "Only after a real accepted send …"                          |
 | Disabled delivery, stale generation or changed assignment never authorize work                | TASK DISPATCH last sentence                                                |
 | Recipient begins before any mutation; uses task_context and proof                             | TASK RECIPIENT sentence 1                                                  |
-| Proof on writes/reviews; stable keys on fenced comments; renew; complete with mark_done       | TASK RECIPIENT sentences 2–4                                               |
+| Proof on writes/reviews; stable keys on fenced comments; renew; submit the draft with review.request       | TASK RECIPIENT sentences 2–4                                               |
 | Stop on stale/expired/duplicate/conflict; no review decisions, repeated effects or ack loops  | TASK RECIPIENT closing sentences                                           |
 | Transport, parent receipt, acquisition, completion are separate; no exactly-once              | TASK RECIPIENT final sentence                                              |
 
@@ -360,8 +360,7 @@ A recipient may start before this report; the late report must not replace its l
 
 Renew during long work. Include proof on task writes and review requests. Use a
 stable key for proof-bearing comments so a lost response cannot create a second
-pong. Complete through `execution.complete`; `mark_done:true` plus task_revision
-commits task completion and execution outcome together. The holder's own review request completes the execution instead; other review, on-hold and reassignment
+pong. Submit the finished draft with a fenced `review.request`. Only the owner marks the task Done. The holder's own review request completes the execution instead; other review, on-hold and reassignment
 changes invalidate previous authority; later eligible work uses a new generation.
 
 ## Reader comment wakes
@@ -459,7 +458,7 @@ unavailable through the compatibility metadata path.
 | execution.test_ack         | event_id, epoch; no task work                                                                                                         |
 | execution.renew            | execution id/revision; worker_id, fence; optional lease_seconds                                                                       |
 | execution.dispatched       | execution id/revision; original dispatcher worker_id/fence, sent:true, optional message_ref                                           |
-| execution.complete         | execution id/revision; worker_id/fence, completed/failed outcome; optional mark_done/task_revision                                    |
+| execution.complete         | execution id/revision; worker_id/fence, completed/failed outcome; agent completions may not mark the task Done                                    |
 | execution.recover          | execution id/revision; cancel/retry after reconciling uncertain effects; when the owner asks or work is stuck                         |
 
 The lower-level validate/acquire/start/handoff operations remain available for

@@ -1008,11 +1008,11 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-home-start li .crew-onboarding-actions a { margin: 0; }
 @media (max-width: 680px) {
-  .crew-prompt-actions {
+  .crew-onboarding-actions.crew-prompt-actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
   }
-  .crew-app .crew-prompt-actions > button {
+  .crew-app .crew-onboarding-actions.crew-prompt-actions > button {
     width: 100%;
     min-height: 44px;
     white-space: normal;

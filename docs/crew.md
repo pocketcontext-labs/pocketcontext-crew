@@ -1202,8 +1202,7 @@ chip) as one list, most recently updated first, showing tasks updated in the las
 - `task.release` (optional `readiness` and `waiting_reason`) clears the claim, sets
   an In progress task back to To do and applies the readiness. The claimer, the owner
   in the reader, or anyone after the claim expired may release; another work client
-  gets 409 `not_claimer`. Setting Done or Won't do (task.update, or
-  execution.complete with mark_done) also clears the claim.
+  gets 409 `not_claimer`. Only the owner can mark a task Done. Done and Won’t do both clear the claim. Agents save the draft and submit it with review.request.
 - Manual and webhook starts are mutually exclusive. A live chat claim blocks
   webhook acquisition. An unresolved current webhook execution blocks a chat claim.
   Owners can still edit the task. An expired claim

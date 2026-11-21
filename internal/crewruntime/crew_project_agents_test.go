@@ -227,7 +227,8 @@ func TestProjectAgentClaims(t *testing.T) {
 	// Done clears the claim.
 	sessionWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"readiness": "ready"}, "", 200)
 	sessionWrite(t, a, false, "task.claim", id, taskRevision(t, a, id), map[string]any{"assigned_agent": agent["id"]}, "session-a", 200)
-	done := sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done"}, "session-a", 200)
+	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done"}, "session-a", 403)
+	done := sessionWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done"}, "session-a", 200)
 	if done["status"] != "done" || done["claimed_by"] != "" || done["claim_until"] != "" || done["claim_state"] != "" {
 		t.Fatal("done did not clear the claim", done)
 	}

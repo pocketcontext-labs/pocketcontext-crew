@@ -129,9 +129,9 @@ func TestCommentWakeDeferredDroppedWhenTaskFinished(t *testing.T) {
 	a, _, task, first := commentFixture(t)
 	run := beginSelf(t, a, first, "finishing-worker")
 	ownerComment(t, a, task.Id, "Late note")
-	stored := apiWebhookRecord(t, a, "webhook_executions", run["id"].(string))
 	current := apiWebhookRecord(t, a, "tasks", task.Id)
-	executionOperation(t, a, "execution.complete", stored.Id, stored.GetInt("revision"), map[string]any{"worker_id": "finishing-worker", "fence": run["fence"], "outcome": "completed", "mark_done": true, "task_revision": current.GetInt("revision")}, "complete-done", false, 200)
+	executionOperation(t, a, "execution.complete", run["id"].(string), int(run["revision"].(float64)), map[string]any{"worker_id": "finishing-worker", "fence": run["fence"], "outcome": "completed", "mark_done": true, "task_revision": current.GetInt("revision")}, "complete-done", false, 403)
+	crewWrite(t, a, false, "task.update", task.Id, current.GetInt("revision"), map[string]any{"status": "done"}, 200)
 	if len(commentDeliveries(t, a, task.Id)) != 0 || apiWebhookRecord(t, a, "tasks", task.Id).GetInt("comment_wake_generation") != 0 {
 		t.Fatal("finished task woke on deferred comment")
 	}
