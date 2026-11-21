@@ -502,7 +502,7 @@ function AgentRowView({
       {copyPrompt && (
         <button
           type="button"
-          className="crew-home-agent-copy crew-copy-control crew-copy-icon"
+          className="crew-icon-button crew-copy-control crew-copy-icon"
           aria-label={t("Copy instructions for {name}", { name })}
           title={t("Copy instructions for {name}", { name })}
           disabled={preparing}
@@ -513,7 +513,7 @@ function AgentRowView({
       )}
       <button
         type="button"
-        className="crew-home-agent-more"
+        className="crew-home-agent-more crew-icon-button"
         aria-label={t("More for {name}", { name })}
         title={t("More")}
         aria-haspopup="dialog"

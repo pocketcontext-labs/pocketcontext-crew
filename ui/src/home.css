@@ -168,24 +168,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.crew-app .crew-home-agent-more {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  margin-right: 6px;
-  padding: 0;
-  border: 0;
-  border-radius: 14px;
-  background: transparent;
-  color: #4b5e4d;
-  touch-action: manipulation;
-}
-.crew-app .crew-home-agent-more:hover,
-.crew-app .crew-home-agent-more:active,
-.crew-app .crew-home-agent-more[aria-expanded="true"] {
-  background: #edf1e9;
+.crew-home-agent-more {
+  margin-inline: 6px 10px;
 }
 .crew-app .crew-home-agent:focus-visible,
 .crew-app .crew-home-agent-more:focus-visible {
@@ -219,15 +203,6 @@
   background: #edf0eb;
   color: #4b5e4d;
 }
-.crew-app button.crew-home-agent-copy.crew-copy-icon {
-  border: 0;
-  background: transparent;
-  border-radius: 14px;
-}
-.crew-app button.crew-home-agent-copy:hover {
-  background: #edf1e9;
-}
-
 /* Recent and the Needs you items: rows in one card, like the agents. */
 .crew-home-section .crew-home-list {
   gap: 0;
