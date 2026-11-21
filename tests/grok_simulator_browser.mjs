@@ -46,10 +46,17 @@ async function prompt(box, label) {
 }
 async function openWizard() {
   await reader.goto(readerOrigin + '/#/connect?section=integration');
-  const setupButton = reader.getByRole('button', {name:'Set up automatic wake-ups'});
-  await setupButton.or(reader.getByRole('heading',{name:'Grok setup'})).first().waitFor();
-  await reader.waitForLoadState('networkidle');
-  if (await setupButton.isVisible()) await setupButton.click();
+  // Only a fresh configuration needs an explicit click. After selection,
+  // Crew opens the wizard as soon as the saved configuration loads.
+  await reader.getByRole('button', {name:'Set up automatic wake-ups'}).click();
+  await reader.getByRole('heading', {name:'Grok setup'}).waitFor();
+}
+async function refreshWizard() {
+  // Navigate once and wait for Crew to apply the saved configuration.
+  // A second navigation can briefly expose the initial setup button again.
+  await reader.reload();
+  await reader.getByRole('heading', {name:'Grok setup'}).waitFor();
+  await reader.getByText('Loading integration…', {exact:true}).waitFor({state:'hidden'});
 }
 try {
   const signIn = crew('open','--no-browser').signInLink;
@@ -75,8 +82,7 @@ try {
   for (const role of ['Local dispatcher','Local specialist']) await message(role, authorization);
   await until('two authorizations', async () => (await chats.getByText(/Owner authorized this participant/).count()) === 2);
   // The simulator updated the config in another browser. Reload its current revision.
-  await reader.reload();
-  await openWizard();
+  await refreshWizard();
   const credentials = await step('Enter webhook credentials');
   await chats.getByText('Webhook credentials', {exact:true}).click();
   await credentials.getByLabel('Webhook URL', {exact:true}).fill(await chats.locator('#url').inputValue());
@@ -85,25 +91,17 @@ try {
   await credentials.getByRole('button',{name:'Save credentials'}).click();
   assert.equal((await savedCredentials).status(),200,'receiver accepted by development server');
   await until('saved credentials', () => config().secret_configured);
-  await reader.reload();
-  await openWizard();
+  await refreshWizard();
   const verify = await step('Verify the connection');
-  await until('recipient control', async () => {
-    if (await verify.getByLabel('Test recipient').isVisible()) return true;
-    await step('Verify the connection');
-    return false;
-  });
   await verify.getByLabel('Test recipient').selectOption({label:'Local specialist'});
   await verify.getByRole('button',{name:'Send test'}).click();
   await until('specialist diagnostic', () => config().setup?.can_enable);
   assert.equal(config().enabled,false);
-  await reader.reload();
-  await openWizard();
+  await refreshWizard();
   const enable = await step('Enable future notifications');
   await enable.getByRole('button',{name:'Enable delivery'}).click({timeout:60_000});
   await until('delivery', () => config().enabled);
-  await reader.reload();
-  await openWizard();
+  await refreshWizard();
   await reader.getByRole('button',{name:'Review setup',exact:true}).click();
   const routing = await step('Verify task routing (optional)');
   await message('Local dispatcher', await prompt(routing,'Read routing test prompt'));
