@@ -2628,7 +2628,7 @@ export default function CrewWorkspace() {
             </p>
           )}
           {loading && view !== "guide" && (
-            <p role="status">{t("Loading your workspace…")}</p>
+            <p className="crew-workspace-loading" role="status">{t("Loading your workspace…")}</p>
           )}
           {view !== "home" && starterCrewBanner}
           {showBoard && !phone && (

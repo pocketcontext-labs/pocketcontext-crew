@@ -276,6 +276,20 @@ it("does not ask when nothing was edited", async () => {
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(confirm).not.toHaveBeenCalled();
 });
+it("shows one loading message on Home until the workspace is ready", async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  vi.mocked(crewApi.read).mockImplementation(async (collection, filters = {}) => {
+    await gate;
+    return filters.archived ? [] : fixtures[collection] || [];
+  });
+  history.replaceState(null, "", "/#/");
+  render(<CrewWorkspace />);
+  expect(screen.getAllByText("Loading your workspace…")).toHaveLength(1);
+  release();
+  await waitFor(() => expect(screen.queryByText("Loading your workspace…")).toBeNull());
+});
+
 it("takes the brand link to Home", async () => {
   history.replaceState(null, "", "/#/agents");
   render(<CrewWorkspace />);

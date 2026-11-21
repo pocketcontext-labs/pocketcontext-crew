@@ -4943,3 +4943,22 @@ a.crew-logo:hover .product-brand span {
     height: 32px;
   }
 }
+
+.crew-workspace-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  color: var(--muted);
+}
+.crew-workspace-loading::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border: 2px solid #dce2d8;
+  border-top-color: #487d55;
+  border-radius: 50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .crew-workspace-loading::before { animation: crew-refresh-spin 900ms linear infinite; }
+}

@@ -93,7 +93,7 @@ export default function Home({
   const [connected, setConnected] = useState(() => stored(connectedKey));
   const getStarted = useHelpShown(helpIds.homeGetStarted);
   const { agentTap } = useReaderSettings();
-  if (!ready) return <p role="status">{t("Loading your workspace…")}</p>;
+  if (!ready) return null;
 
   const allTasks = [...data.tasks, ...archived.tasks];
   const agentSeen =
