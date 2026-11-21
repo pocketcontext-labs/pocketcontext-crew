@@ -4084,7 +4084,8 @@ a.crew-logo:hover .product-brand span {
   width: 100%;
 }
 @media (hover: hover) {
-  .crew-agent-tile button.crew-session-row:hover:enabled {
+  .crew-agent-tile button.crew-session-row:hover:enabled,
+  .crew-dialog button.crew-manual-copy-row:hover:enabled {
     background: #edf2e9;
   }
 }
