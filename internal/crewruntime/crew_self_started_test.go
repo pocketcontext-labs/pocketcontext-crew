@@ -156,6 +156,10 @@ func TestGovernedTriageClaimStillWakesClaimant(t *testing.T) {
 	if len(selfStartEvents(t, a, id)) != 0 {
 		t.Fatal("claim recorded as self-started")
 	}
+	if claimed.GetString("claimed_by") != "" {
+		t.Fatal("webhook triage left a chat lease behind")
+	}
+	beginSelf(t, a, wakes[1], "synthetic-assignee")
 }
 
 func TestTaskAssigneeAcceptsExactAgentName(t *testing.T) {

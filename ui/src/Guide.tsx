@@ -176,7 +176,7 @@ export default function Guide() {
           <li>
             <strong>{t("Start a session from its card.")}</strong>{" "}
             {t(
-              "Copy coding prompt copies a short prompt to paste into a new Codex or Claude Code session; the ? beside it shows the steps.",
+              "Copy the instructions from the agent card and paste them into a chat connected to Crew. Open the card menu to see the steps again.",
             )}
           </li>
           <li>

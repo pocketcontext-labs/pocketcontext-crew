@@ -259,6 +259,17 @@ function botAgent(app, id) {
     return false;
   }
 }
+// Both the card and task routing use the same effective dispatcher.
+function activeDispatcher(app) {
+  const config = globalConfig(app);
+  return config && config.getBool("enabled") && botAgent(app, config.getString("agent"))
+    ? config
+    : null;
+}
+function automaticAgents(app) {
+  if (routing(app).getBool("paused") || !activeDispatcher(app)) return new Set();
+  return new Set(rows(app, "webhook_mappings", "bot_ref!=''").map((r) => r.getString("agent")));
+}
 function route(app, t) {
   const s = state(app, t),
     rt = routing(app);
@@ -266,16 +277,9 @@ function route(app, t) {
   const id = s.assigned || rt.getString("triage_agent");
   // An external or human assignee is never woken, even with a mapping.
   if (!botAgent(app, id)) return null;
-  const config = globalConfig(app),
+  const config = activeDispatcher(app),
     mapping = mappingFor(app, id);
-  if (
-    !config ||
-    !config.getBool("enabled") ||
-    !botAgent(app, config.getString("agent")) ||
-    !mapping ||
-    !mapping.getString("bot_ref")
-  )
-    return null;
+  if (!config || !mapping || !mapping.getString("bot_ref")) return null;
   return {
     config,
     agent: id,
@@ -1332,6 +1336,7 @@ function deactivate(app, agent, b, actor) {
 }
 module.exports = {
   AGENT_KINDS,
+  automaticAgents,
   TERMINAL_STATUSES,
   terminal,
   agentKind,

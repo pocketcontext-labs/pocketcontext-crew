@@ -15,17 +15,16 @@ export const agentKind = (agent: Row | undefined): AgentKind => {
 };
 /** Only bots are woken by webhook, so only bots have bot mappings. */
 export const isBot = (agent: Row | undefined) => agentKind(agent) === "bot";
-// The three tables below hold English, translated with t() where they render
+/** Existing external roles are owner-started in Crew's single-owner agent directory. */
+export const canStartChat = (agent: Row | undefined) =>
+  !!agent && !agent.archived && agentKind(agent) !== "human";
+export const chatActionLabel = (agent: Row) =>
+  agent.chat_start === "webhook" ? t("Use in another chat") : t("Start in a chat");
+// The tables below hold English, translated with t() where they render
 // (catalog: pages.ts lists every value).
 export const agentKindChoices: Record<AgentKind, string> = {
   bot: "Webhook (bot)",
   external: "I start it myself (no webhook)",
-  human: "Person",
-};
-/** The line under the name on an agent card; bots show none. */
-export const agentKindCardLabel: Record<AgentKind, string> = {
-  bot: "",
-  external: "Started manually · no webhook",
   human: "Person",
 };
 /** The muted suffix after an agent's name in the board filter. */

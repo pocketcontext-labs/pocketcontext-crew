@@ -1036,15 +1036,18 @@ a.crew-logo:hover .product-brand span {
   color: #617c4d;
   font-size: 10px;
 }
-/* A card plus, for agents started manually, its Start a session control. */
+/* Adjacent cards share both tracks so the copy buttons line up even when text wraps. */
 .crew-agent-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  gap: 0;
   min-width: 0;
 }
+.crew-agent-tile > .crew-agent-card:only-child {
+  grid-row: span 2;
+}
 .crew-app .crew-agent-tile .crew-agent-card {
-  flex: 1;
   width: 100%;
 }
 .crew-agent-card .crew-agent-kind {
@@ -3994,6 +3997,7 @@ a.crew-logo:hover .product-brand span {
    inside one frame, so cards in the grid keep equal height. */
 .crew-agent-tile:has(> .crew-session) {
   gap: 0;
+  position: relative;
   border: 1px solid #dce2d8;
   border-radius: 7px;
   background: #fffefb;
@@ -4007,18 +4011,42 @@ a.crew-logo:hover .product-brand span {
   padding: 12px 23px;
   border-top: 1px solid #edf0e7;
 }
-/* The card footer: button and ? on one centred row, normal secondary size. */
 .crew-agent-tile .crew-session-row {
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: 12px;
+  width: 100%;
 }
-.crew-app .crew-agent-tile .crew-session-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 5px 12px;
-  font-size: 12px;
-  white-space: nowrap;
+.crew-agent-tile .crew-session-row strong {
+  display: block;
+  padding-top: 10px;
+  font-size: 15px;
+}
+.crew-agent-tile .crew-session-row p {
+  margin: 5px 0 0;
+  line-height: 1.5;
+  color: #58664f;
+}
+.crew-agent-tile .crew-session {
+  --icon-ink: #2f3a2f;
+}
+.crew-app .crew-card-more {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--icon-ink);
+}
+.crew-card-more svg {
+  width: 22px;
+  height: 22px;
 }
 /* Download beside Remove under an image, and under review files. */
 .crew-attachment-actions {
@@ -4691,3 +4719,13 @@ a.crew-logo:hover .product-brand span {
     right: calc(16px + env(safe-area-inset-right));
   }
 }
+
+.crew-agent-assignments article {
+  display: grid;
+  gap: .35rem;
+  padding-block: .65rem;
+  border-top: 1px solid var(--border);
+}
+.crew-agent-assignments p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.crew-agent-assignments label { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+.crew-agent-assignments output { overflow-wrap: anywhere; }

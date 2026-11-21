@@ -684,8 +684,8 @@ def cli_session_scenario(cli, write):
     project = write('agent.create', {'name': 'synthetic-cli-project', 'brief': 'Synthetic project brief.', 'kind': 'external'})
     assert project['kind'] == 'external', project
     session = cli('read', {'collection': 'session', 'agent': 'synthetic-cli-project'})
-    assert session['prompt'] == ('You are synthetic-cli-project in PocketContext Crew.\n'
-                                 'Read your session instructions with crew_read collection "session" agent "synthetic-cli-project" and follow them.'), session
+    assert '"collection":"session","agent":"synthetic-cli-project"' in session['prompt']
+    assert 'task.claim' in session['prompt'] and 'sign in, then stop' in session['prompt']
     assert session['agent'] == {'id': project['id'], 'name': 'synthetic-cli-project', 'kind': 'external'} and session['lease_hours'] == 2
     assert session['instructions'].endswith('## Agent brief\n\nSynthetic project brief.'), session['instructions'][-200:]
     assert 'HTTP 404' in cli('read', {'collection': 'session', 'agent': 'synthetic-missing'}, expect=1)

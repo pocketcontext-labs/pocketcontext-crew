@@ -13,6 +13,7 @@ import {
   type AgentTap,
 } from "./agentTap";
 import { val, type ConnectionState, type Row } from "./crewApi";
+import { canStartChat, chatActionLabel } from "./projectAgents";
 import { isClosed } from "./closedTasks";
 import {
   homeAgents,
@@ -410,7 +411,7 @@ function CodingAgentRow(props: AgentRowProps) {
   return (
     <AgentRowView
       {...props}
-      coding
+      coding={isCodingAgent(props.agent)}
       copyPrompt={() => void rowCopy.run(session.start)}
       copyIcon={<CopyGlyph state={rowCopy.state} />}
       moreIcon={<CopyGlyph state={menuCopy.state} idle="more" />}
@@ -418,12 +419,12 @@ function CodingAgentRow(props: AgentRowProps) {
         {
           label: session.loading
             ? t("Preparing the prompt…")
-            : t("Copy prompt for coding agent"),
+            : chatActionLabel(props.agent),
           disabled: session.loading,
           icon: <CopyGlyph state={menuCopy.state} />,
           onSelect: () => void menuCopy.run(session.start),
         },
-        { label: t("How coding sessions work"), icon: icons.notes, onSelect: session.openGuide },
+        { label: t("How to continue in a chat"), icon: icons.notes, onSelect: session.openGuide },
       ]}
     >
       {session.guide}
@@ -432,7 +433,7 @@ function CodingAgentRow(props: AgentRowProps) {
 }
 
 function AgentRow(props: AgentRowProps) {
-  return isCodingAgent(props.agent) ? (
+  return canStartChat(props.agent) ? (
     <CodingAgentRow {...props} />
   ) : (
     <AgentRowView {...props} extra={[]} />

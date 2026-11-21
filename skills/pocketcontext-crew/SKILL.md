@@ -183,16 +183,20 @@ constructing operations. Administration commands are separate from agent work.
 
 ## Project coder sessions
 
-A manually started Crew agent (kind `external`) runs in coding sessions the owner
-starts by hand; it has no bot mapping and is never woken. It can be a shared
-`Implement` agent with repository labels on tasks, or one agent per repository.
-Follow its brief: work only on the repository the owner selects, and filter tasks
-by that label. Keep one session per repository unless the owner says otherwise. Only `bot` agents (the default kind) are woken, mapped or chosen as
-dispatcher or triage. When the owner starts you with a Crew session prompt, read
-`{"collection":"session","agent":"<name>"}` (crew_read or `read`) and follow its
-instructions: build your session name once and use it as reported_agent, list the
-agent's Ready To do tasks without changing anything, and claim one
-(`task.claim` with `data.assigned_agent` = the agent) only when the owner picks it.
+When the owner pastes a Crew agent's instructions into a new chat, use the
+owner's authenticated Crew connection. If it is missing, explain how to connect
+through Crew's Connect page and wait. Read the current session by name, its
+responsible buckets, relevant notes and assigned tasks. Request task fields
+`title`, `status`, `readiness`, `last_saved_step`, `claim_state`, `claimed_by`
+and `webhook_holder`. Present the saved step and status, including tasks on
+hold. If more detail is needed, read the task and its comments.
+
+Use the agent's session name for attribution. Follow its brief and repository
+scope. When the owner chooses a ready task by title or ID, call `task.claim`
+with its revision and `data.assigned_agent` set to this agent. Wait for success
+before working, including when the agent can also start via webhook. Report the
+holder if another session or webhook already owns it. Before leaving, record
+decisions, outstanding work and the next step in a task comment if needed.
 A claim sets In progress with a 2-hour lease; your updates, comments and
 attachments renew it, `task.claim_renew` extends it, and `task.release` (optional
 readiness and waiting_reason) ends it. HTTP 409 `already_claimed` names

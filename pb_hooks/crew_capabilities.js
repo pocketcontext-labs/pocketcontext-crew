@@ -326,7 +326,7 @@ function document() {
     {
       revision: "record",
       description:
-        "Takes a task with a 2-hour advisory lease and sets In progress; claimed_by records reported_agent (your session name, attribution only). An unassigned task is assigned to assigned_agent. The task's own assignee (assigned_agent = its ID or exact name) may claim it when it is Ready and To do, or In progress with no live claim; reported_agent is then required. A live claim by anyone answers HTTP 409 already_claimed with data.claimed_by and data.claim_until, before the revision check. Never wakes anyone.",
+        "Takes a task with a 2-hour advisory lease and sets In progress; claimed_by records reported_agent (your session name, attribution only). An unassigned task is assigned to assigned_agent. The task's own assignee (assigned_agent = its ID or exact name) may claim it when Ready and To do or In progress, without a pending review or unresolved webhook execution; reported_agent is then required. A live claim by anyone answers HTTP 409 already_claimed with data.claimed_by and data.claim_until, before the revision check. A webhook holder is reported as HTTP 409 execution_required. A fenced triage assignment hands the task to the assignee webhook without a manual lease.",
     },
   );
   op("task.claim_renew", {}, [], {
@@ -883,7 +883,7 @@ function document() {
     parameters: object({ agent: str }, ["agent"]),
     result_schema: sessionResult,
     description:
-      'crew_read {collection:"session", agent:<ID or exact name>} returns one object (not items): the agent, the two-line prompt the reader copies to start a coder session, the full session instructions (the saved or built-in body plus the agent brief), the editable body with its revision, is_default, edited_by and edited_at, and the claim lease in hours. History: session_revisions with parent = the agent. Change it with session.update. Unknown agent: 404.',
+      'crew_read {collection:"session", agent:<ID or exact name>} returns one object (not items): the agent, the stable instructions the reader copies to continue the agent in an authenticated chat, the full session instructions (the saved or built-in body plus the agent brief), the editable body with its revision, is_default, edited_by and edited_at, and the claim lease in hours. History: session_revisions with parent = the agent. Change it with session.update. Unknown agent: 404.',
   };
 
   const permanentLink = {
@@ -899,7 +899,13 @@ function document() {
     },
   };
   const fields = {
-    agents: { ...agent },
+    agents: {
+      ...agent,
+      chat_start: {
+        enum: ["manual", "webhook", ""],
+        description: "Effective startup mode for a chat-capable agent; empty for people and inactive agents.",
+      },
+    },
     buckets: {
       ...bucket,
       responsible_agent_details: { type: ["object", "null"] },
@@ -933,6 +939,8 @@ function document() {
         type: "string",
         description: "Claim lease end (ISO UTC); empty without a claim",
       },
+      webhook_holder: { type: "string", description: "Request in fields: the agent holding an unresolved webhook execution, or an empty string." },
+      last_saved_step: { type: "string", description: "Request in fields: the most recent saved task comment, or an empty string." },
       claim_state: {
         enum: ["", "live", "expired"],
         description:

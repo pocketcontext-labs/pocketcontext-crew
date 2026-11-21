@@ -2920,6 +2920,8 @@ describe("board agent filter", () => {
     expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Open agent",
       "Show tasks",
+      "Start in a chat",
+      "How to continue in a chat",
     ]);
     fireEvent.click(menu.getByRole("button", { name: "Show tasks" }));
     await waitFor(() => expect(filter()).toHaveValue(agent.id));
@@ -3471,7 +3473,13 @@ describe("project agents and coding sessions", () => {
       ),
     );
   });
-  it("labels manual and person cards, leaves bot cards as they were and offers sessions only to manual agents", async () => {
+  it("shows matching copy controls for manual and webhook agents and excludes people", async () => {
+    fixtures.agents = [{ ...agent, chat_start: "webhook" }, project, person];
+    vi.spyOn(crewApi, "session").mockImplementation(async (id) => ({
+      ...session,
+      prompt: "Synthetic instructions for " + id,
+    }));
+    const clipboard = mockClipboard(async () => undefined);
     history.replaceState(null, "", "/#/agents");
     render(<CrewWorkspace />);
     const tile = async (name: string) =>
@@ -3483,20 +3491,20 @@ describe("project agents and coding sessions", () => {
     const manual = await tile("synthetic-repo");
     expect(manual.getByText("Started manually · no webhook")).toBeInTheDocument();
     expect(
-      manual.getByRole("button", { name: "Copy prompt for a coding agent as synthetic-repo" }),
+      manual.getByRole("button", { name: "Copy instructions for synthetic-repo" }),
     ).toBeInTheDocument();
     const human = await tile("Reviewer");
     expect(human.getByText("Person")).toBeInTheDocument();
-    expect(human.queryByRole("button", { name: /Start a session/ })).toBeNull();
+    expect(human.queryByRole("button", { name: /Copy instructions/ })).toBeNull();
     const bot = await tile("Network");
-    expect(bot.queryByText(/Started manually|Person/)).toBeNull();
-    expect(bot.queryByRole("button", { name: /Start a session/ })).toBeNull();
-    expect(
-      screen
-        .getByRole("heading", { name: "Network" })
-        .closest(".crew-agent-tile")!
-        .querySelector(".crew-agent-kind"),
-    ).toBeNull();
+    expect(bot.getByText("Started automatically · webhook")).toBeVisible();
+    expect(bot.getByText("Use in another chat")).toBeVisible();
+    expect(bot.getByRole("button", { name: "Copy instructions for Network" })).toHaveClass("crew-copy-icon");
+    expect(manual.getByText("Start in a chat")).toBeVisible();
+    expect(manual.getByRole("button", { name: "Copy instructions for synthetic-repo" })).toHaveClass("crew-copy-icon");
+    fireEvent.click(bot.getByRole("button", { name: "Copy instructions for Network" }));
+    await waitFor(() => expect(clipboard).toHaveBeenCalledWith("Synthetic instructions for " + agent.id));
+    expect(crewApi.write).not.toHaveBeenCalled();
   });
   it("Start a session copies the prompt in one click and confirms it in a toast", async () => {
     fixtures.settings = [{ id: "settings0000001", revision: 1, session_guide_off: false }];
@@ -3515,22 +3523,21 @@ describe("project agents and coding sessions", () => {
     const card = screen
       .getByRole("heading", { name: "synthetic-repo" })
       .closest(".crew-agent-tile") as HTMLElement;
-    const before = card.innerHTML;
     const copy = screen.getByRole("button", {
-      name: "Copy prompt for a coding agent as synthetic-repo",
+      name: "Copy instructions for synthetic-repo",
     });
     copy.focus();
     fireEvent.click(copy);
     expect(writeText).toHaveBeenCalledWith(session.prompt);
     const toast = await screen.findByRole("status");
     expect(toast).toHaveTextContent(
-      "Copied the session prompt for synthetic-repo. Paste it into a new session in your coding agent.",
+      "Instructions copied",
     );
     expect(within(toast).queryByRole("button", { name: /Undo/ })).toBeNull();
     // The first start opens the guide dialog with the prompt in full (no
     // text area) and one copy icon; the card itself does not change.
     const guide = screen.getByRole("dialog", {
-      name: "Start a coding session as synthetic-repo",
+      name: "Use synthetic-repo in a chat",
     });
     expect(copy).toHaveAttribute("data-state", "copied");
     expect(copy.querySelector(".crew-copy-glyph")).toHaveAttribute("data-state", "copied");
@@ -3538,7 +3545,7 @@ describe("project agents and coding sessions", () => {
     expect(within(guide).getByLabelText("Session prompt for synthetic-repo").textContent).toBe(
       session.prompt,
     );
-    expect(guide).toHaveTextContent(/Codex, Claude Code or another coding agent/);
+    expect(guide).toHaveTextContent(/a chat connected to Crew/);
     expect(within(guide).getAllByRole("button", { name: /Copy/ })).toHaveLength(1);
     expect(document.activeElement).toBe(within(guide).getByRole("button", { name: "Got it" }));
     fireEvent.click(within(guide).getByRole("button", { name: "Copy", description: "Copy session prompt for synthetic-repo" }));
@@ -3559,24 +3566,20 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(copy);
     await act(async () => undefined);
     expect(screen.queryByRole("dialog")).toBeNull();
-    // The ? help icon (the shared help look) opens it again; Escape and ×
-    // close it.
-    const help = within(card).getByRole("button", { name: "How to start a session as synthetic-repo" });
-    expect(help).toHaveClass("crew-help-button");
-    fireEvent.click(help);
+    // The short label and the menu survive dismissal of first-use help.
+    expect(within(card).getByText("Start in a chat")).toBeVisible();
+    fireEvent.click(within(card).getByRole("button", { name: "More for synthetic-repo" }));
+    const menu = within(screen.getByRole("dialog", { name: "synthetic-repo" }));
+    expect(menu.getByRole("button", { name: "Start in a chat" })).toBeVisible();
+    fireEvent.click(menu.getByRole("button", { name: "How to continue in a chat" }));
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(help);
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    // The label returns after its short "Copied".
-    await waitFor(() => expect(card.innerHTML).toBe(before), { timeout: 3000 });
     fireEvent.click(within(toast).getByRole("button", { name: "View" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Session instructions for synthetic-repo",
     });
     // One read when the card rendered and one per copy, none to open View.
-    expect(session$).toHaveBeenCalledTimes(4);
+    expect(session$.mock.calls.filter(([id]) => id === project.id)).toHaveLength(4);
     expect(screen.queryByRole("status")).toBeNull();
     expect(within(dialog).getByText("one").tagName).toBe("STRONG");
     expect(screen.getByText("one").closest(".crew-agent-tile")).toBeNull();
@@ -3596,21 +3599,21 @@ describe("project agents and coding sessions", () => {
     render(<CrewWorkspace />);
     await waitFor(() => expect(session$).toHaveBeenCalled());
     fireEvent.click(
-      screen.getByRole("button", { name: "Copy prompt for a coding agent as synthetic-repo" }),
+      screen.getByRole("button", { name: "Copy instructions for synthetic-repo" }),
     );
     const toast = await screen.findByRole("status");
     fireEvent.click(within(toast).getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
     const button = screen.getByRole("button", {
-      name: "Copy prompt for a coding agent as synthetic-repo",
+      name: "Copy instructions for synthetic-repo",
     });
-    expect(button).toHaveTextContent("Copied");
-    await waitFor(() => expect(button).toHaveTextContent("Copy coding prompt"), {
-      timeout: 3000,
-    });
+    expect(button).toHaveAttribute("data-state", "copied");
+    await waitFor(() => expect(button).not.toHaveAttribute("data-state"), { timeout: 3000 });
+    expect(within(button.closest(".crew-agent-tile") as HTMLElement).getByText("Start in a chat", { selector: ".crew-session-row strong" })).toBeVisible();
+
   });
-  it("copies a coding agent's prompt from its ⋯ on Home, and only for active manual agents", async () => {
+  it("copies an agent's instructions from its ⋯ on Home and excludes archived agents", async () => {
     const session$ = vi.spyOn(crewApi, "session").mockResolvedValue(session);
     const writeText = mockClipboard(async () => undefined);
     serveArchived({
@@ -3621,7 +3624,7 @@ describe("project agents and coding sessions", () => {
     const agents = within(await screen.findByRole("region", { name: "Agents" }));
     expect(agents.queryByText("old-repo")).toBeNull();
     expect(screen.queryByRole("region", { name: "Start a session" })).toBeNull();
-    // Copy prompt and its help live only in the coding agent's ⋯.
+    // On Home, instructions and help are in the row menu.
     expect(agents.queryByRole("button", { name: /Copy prompt|How to start/ })).toBeNull();
     await waitFor(() => expect(session$).toHaveBeenCalledWith(project.id));
     fireEvent.click(agents.getByRole("button", { name: "More for synthetic-repo" }));
@@ -3629,22 +3632,22 @@ describe("project agents and coding sessions", () => {
     expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Open agent",
       "Show tasks",
-      "Copy prompt for coding agent",
-      "How coding sessions work",
+      "Start in a chat",
+      "How to continue in a chat",
     ]);
-    fireEvent.click(menu.getByRole("button", { name: "Copy prompt for coding agent" }));
+    fireEvent.click(menu.getByRole("button", { name: "Start in a chat" }));
     expect(writeText).toHaveBeenCalledWith(session.prompt);
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Copied the session prompt for synthetic-repo.",
+      "Instructions copied",
     );
     expect(screen.queryByRole("dialog", { name: "synthetic-repo" })).toBeNull();
-    // A bot's ⋯ has no session actions.
+    // An unmapped bot uses the manual start wording.
     fireEvent.click(agents.getByRole("button", { name: "More for Network" }));
     expect(
       within(screen.getByRole("dialog", { name: "Network" }))
         .getAllByRole("button")
         .map((b) => b.textContent),
-    ).toEqual(["Open agent", "Show tasks"]);
+    ).toEqual(["Open agent", "Show tasks", "Start in a chat", "How to continue in a chat"]);
   });
   it("opens the session guide from a coding agent's ⋯ on Home", async () => {
     vi.spyOn(crewApi, "session").mockResolvedValue(session);
@@ -3654,11 +3657,11 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(agents.getByRole("button", { name: "More for synthetic-repo" }));
     fireEvent.click(
       within(screen.getByRole("dialog", { name: "synthetic-repo" })).getByRole("button", {
-        name: "How coding sessions work",
+        name: "How to continue in a chat",
       }),
     );
     expect(
-      await screen.findByRole("dialog", { name: "Start a coding session as synthetic-repo" }),
+      await screen.findByRole("dialog", { name: "Use synthetic-repo in a chat" }),
     ).toBeInTheDocument();
   });
   it("edits session instructions by hand, restores history and copies a rewrite prompt", async () => {
@@ -3689,7 +3692,7 @@ describe("project agents and coding sessions", () => {
     history.replaceState(null, "", "/#/agents");
     render(<CrewWorkspace />);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Copy prompt for a coding agent as synthetic-repo" }),
+      await screen.findByRole("button", { name: "Copy instructions for synthetic-repo" }),
     );
     fireEvent.click(
       within(await screen.findByRole("status")).getByRole("button", { name: "View" }),
@@ -3703,7 +3706,7 @@ describe("project agents and coding sessions", () => {
     dialog.getByText("Built-in default · not edited yet");
     expect(dialog.getByRole("button", { name: "Restore default" })).toBeDisabled();
     // The recommended path copies a prompt for an agent conversation.
-    expect(crewApi.session).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(crewApi.session).mock.calls.filter(([id]) => id === project.id)).toHaveLength(2);
     fireEvent.click(dialog.getByRole("button", { name: "Rewrite with an agent" }));
     await dialog.findByRole("button", { name: "Rewrite prompt copied" });
     expect(writeText).toHaveBeenLastCalledWith(session.rewrite_prompt);
@@ -3749,7 +3752,7 @@ describe("project agents and coding sessions", () => {
     history.replaceState(null, "", "/#/agents");
     render(<CrewWorkspace />);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Copy prompt for a coding agent as synthetic-repo" }),
+      await screen.findByRole("button", { name: "Copy instructions for synthetic-repo" }),
     );
     fireEvent.click(
       within(await screen.findByRole("status")).getByRole("button", { name: "View" }),
@@ -3775,7 +3778,7 @@ describe("project agents and coding sessions", () => {
     render(<CrewWorkspace />);
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Copy prompt for a coding agent as synthetic-repo",
+        name: "Copy instructions for synthetic-repo",
       }),
     );
     expect(
@@ -3788,7 +3791,7 @@ describe("project agents and coding sessions", () => {
     render(<CrewWorkspace />);
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Copy prompt for a coding agent as synthetic-repo",
+        name: "Copy instructions for synthetic-repo",
       }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(

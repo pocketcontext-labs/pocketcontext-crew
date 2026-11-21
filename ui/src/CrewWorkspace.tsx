@@ -57,6 +57,7 @@ import StartSession, {
   agentInitials,
   type SessionStart,
 } from "./StartSession";
+import AgentAssignments from "./AgentAssignments";
 import SessionInstructions from "./SessionInstructions";
 import UndoToast, { messageToastMs, undoToastMs } from "./UndoToast";
 import {
@@ -75,7 +76,7 @@ import {
 } from "./boardFilters";
 import {
   agentKind,
-  agentKindCardLabel,
+  canStartChat,
   agentKindChoices,
   agentKinds,
   agentKindSuffix,
@@ -3307,22 +3308,19 @@ export default function CrewWorkspace() {
                         {agentInitials(val(x, "name"), data.agents)}
                       </span>
                       <h2>{val(x, "name")}</h2>
-                      {agentKindCardLabel[agentKind(x)] && (
-                        <small className="crew-agent-kind">
-                          {t(agentKindCardLabel[agentKind(x)])}
-                        </small>
-                      )}
+                      <small className="crew-agent-kind">
+                        {agentKind(x) === "human" ? t("Person") : x.chat_start === "webhook"
+                          ? t("Started automatically · webhook") : t("Started manually · no webhook")}
+                      </small>
                       {/* A preview: the brief as plain text, one line per
                           block, clamped to whole lines. */}
                       <p title={markdownExcerpt(val(x, "brief"), undefined, markdownText).text || undefined}>
                         <ExcerptContent excerpt={markdownExcerpt(val(x, "brief"), undefined, markdownText)} />
                       </p>
                     </button>
-                    {agentKind(x) === "external" && (
+                    {canStartChat(x) && (
                       <StartSession
                         agent={x}
-                        agents={data.agents}
-                        compact
                         onStart={setSessionStart}
                       />
                     )}
@@ -4540,6 +4538,7 @@ function Editor({
             )}
           </fieldset>
           {filesSection}
+          {kind === "agent" && row && !readOnly && canStartChat(row) && <AgentAssignments key={row.id} agent={row} />}
           {kind !== "note" && more}
           {bar(
             !readOnly && (

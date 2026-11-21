@@ -40,7 +40,7 @@ There are four ways a task gets picked up:
 | --- | --- |
 | **1. An always-on bot** such as Grok Bot | You mark the task Ready and Crew's webhook wakes the assigned bot. The webhook only wakes it; the bot reads and edits Crew records through MCP. A task on hold never wakes anyone. |
 | **2. A CLI agent on watch** such as Codex | You run it in a loop that checks Crew for new tasks in its role, through MCP or the CLI. |
-| **3. A CLI agent on demand** | Copy the two-line role prompt from the agent's card in Crew (**Copy coding prompt**) into a new Codex or Claude Code session. Every Crew command in that session runs as that agent. |
+| **3. A CLI agent on demand** | Use **Start in a chat** on the agent card. Paste its instructions into a chat connected to Crew, then choose a ready task by title. |
 | **4. A person** | Assign the task to a person. They do the work outside Crew and record it on the same board, next to the agents' work. |
 
 Whoever does the work, you decide what goes out.
@@ -183,8 +183,9 @@ a bot when a task assigned to it is Ready; it carries no work and performs nothi
 <details>
 <summary><strong>How does a CLI agent join?</strong></summary>
 
-Copy the two-line role prompt from the agent's card (**Copy coding prompt**) into a
-Codex or Claude Code session, or run the agent in a loop that checks for new tasks.
+Copy the instructions under **Start in a chat** into a Crew-connected session.
+A configured webhook agent also offers **Use in another chat**. Save your last decision
+and next step on the task before switching. The new session reads them from Crew.
 With a domain it connects to `https://YOUR_HOST/mcp`; without one it uses the
 installed skill and the binary's agent commands, and other computers pair through
 `tunnel invite`.

@@ -374,7 +374,7 @@ describe("Home agent rows", () => {
     fireEvent.click(again.getByRole("button", { name: /^Implement/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(session.prompt));
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Copied the session prompt for Implement.",
+      "Instructions copied",
     );
   });
 
@@ -390,8 +390,8 @@ describe("Home agent rows", () => {
     expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Open agent",
       "Show tasks",
-      "Copy prompt for coding agent",
-      "How coding sessions work",
+      "Start in a chat",
+      "How to continue in a chat",
     ]);
   });
 });

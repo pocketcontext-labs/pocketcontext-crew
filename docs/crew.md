@@ -1071,12 +1071,8 @@ integration. Setup checks that look for mapped agents ignore non-bots.
 name>"}` (also CLI `read` and `/api/crew/read`) returns one object:
 `{agent: {id, name, kind}, prompt, instructions, lease_hours: 2, body, revision,
 is_default, edited_by, edited_at, reason, rewrite_prompt}`. `prompt` is the
-two-line paste the reader copies to start a session:
-
-```text
-You are <name> in PocketContext Crew.
-Read your session instructions with crew_read collection "session" agent "<name>" and follow them.
-```
+stable text copied from the agent card. It identifies the Crew agent and directs the
+chat to read current context using the owner's authenticated Crew connection.
 
 `instructions` is the instructions `body` followed by the agent's brief under
 `## Agent brief`. The body is the latest saved revision, or Crew's built-in default
@@ -1129,31 +1125,26 @@ text, ask what to change, show the new version and save it with
 `expected_revision` only after approval), **Edit** (a Markdown textarea with Save
 and Cancel; a stale revision explains the conflict and offers Reload latest),
 **History** (revision, who, when, with Restore) and **Restore default**. **Copy
-prompt** copies the two-line prompt, which makes the session read the latest saved
+prompt** copies the startup instructions, which makes the session read the latest saved
 revision. Since 0.27.2 Read, Edit and History are one segmented control that is
 always shown (the current view is pressed), the dialog keeps one size (pinned near
 the top on a desktop, full screen on a phone) and only the area below the toolbar
 changes and scrolls; an unsaved hand edit is kept while looking at Read or History
 until Save or Cancel.
 
-**Start a session (one click since 0.24.0; clearer since 0.25.0).** Each manually
-started agent has a copy button under its card on the Agents page (**Copy coding
-prompt** since 0.27.0, so its **?** stays on the same row); on Home (since 0.34.0)
-**Copy prompt for a coding agent** and **How coding sessions work** are in that
-agent's ⋯ menu (active manual agents only). A successful copy shows a check in
-place for 1.3 seconds. The card button also shows **Copied**. When copying
-from the menu, the check appears on the ⋯ button after the menu closes. Crew
-uses a 160 ms crossfade for the check, or an instant swap with reduced motion.
-The reader reads the
-session when the button renders, so the click copies `prompt` straight away (a
-phone refuses a clipboard write that waits for the network). A toast confirms
-"Copied the session prompt for <name>. Paste it into a new session in your coding
-agent." with **View** (opens the Session instructions dialog with the session read
-by that start) and an × to dismiss; it closes by itself after 6 seconds, shown by a
-shrinking bar, and pauses while hovered or focused. If the copy fails the toast
-shows the prompt to copy by hand and stays. The first click also opens a three-step
-guide under the button with the copied prompt, until "Don't show this again" (kept
-in that browser); the **?** beside the button opens it again.
+**Continue in another chat.** The Agents page shows **Start in a chat** for a
+manually started agent and **Use in another chat** for an agent started by
+webhook. Copy the instructions with the round button and paste them into a
+Crew-connected chat. The menu action remains available after dismissing the
+first-use help. If clipboard access fails, the reader shows the text to copy.
+
+Save decisions and the next step in a task comment before switching. The new
+chat reads current assignments, their status and the latest saved step. Pick a
+ready task by title, or open the agent detail and copy your task choice. Opening
+the chat, copying instructions and selecting a task in the reader leave its
+state unchanged. The chat must acquire the task before working. If a webhook or
+another chat already holds it, the new chat reports the holder. Tasks on hold
+remain readable.
 
 **Archive page (0.25.0).** One category at a time (Tasks, Notes, Buckets, Inactive
 agents) with counts, title search, a label (tasks) or bucket (notes) filter and sort
@@ -1219,8 +1210,9 @@ chip) as one list, most recently updated first, showing tasks updated in the las
   in the reader, or anyone after the claim expired may release; another work client
   gets 409 `not_claimer`. Setting Done or Won't do (task.update, or
   execution.complete with mark_done) also clears the claim.
-- Claims are advisory: they block no other write, owner edits included. They never
-  send a webhook; the Grok-bot execution protocol is unchanged. An expired claim
+- Manual and webhook starts are mutually exclusive. A live chat claim blocks
+  webhook acquisition. An unresolved current webhook execution blocks a chat claim.
+  Owners can still edit the task. An expired claim
   stays visible (`claim_state: "expired"`) until the task is claimed, released or
   done. Every claim, renewal and release is a task event (`task.claim`,
   `task.claim_renew`, `task.release`) with the claim in its changes.

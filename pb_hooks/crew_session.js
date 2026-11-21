@@ -10,14 +10,13 @@ const LEASE_HOURS = 2;
 const LEASE_MS = LEASE_HOURS * 3600 * 1000;
 
 function prompt(name) {
-  return (
-    "You are " +
-    name +
-    " in PocketContext Crew.\n" +
-    'Read your session instructions with crew_read collection "session" agent "' +
-    name +
-    '" and follow them.'
-  );
+  return [
+    "You are " + name + " in PocketContext Crew.",
+    "Use my authenticated Crew connection. If it is missing, ask me to connect the Crew MCP endpoint in this chat and sign in, then stop.",
+    'Read crew_read {"collection":"session","agent":' + JSON.stringify(name) + '}, your bucket and relevant notes. Read your current assignments with fields title, status, readiness, last_saved_step, claim_state, claimed_by and webhook_holder.',
+    "Show what is on hold and what is ready. Let me choose a ready task by title. Claim it with task.claim before working. If it is held, report the holder. Opening this chat only reads context.",
+    "Follow the saved instructions and my approvals. When leaving, save the outcome and next step on the task if they have changed.",
+  ].join("\n");
 }
 
 // Single-quote a value for a POSIX shell argument.
@@ -66,11 +65,9 @@ function defaultBody(name) {
     "",
     "## 2. Find work",
     "",
-    "List the To do tasks that are Ready and assigned to " +
-      name +
-      ', oldest first: crew_read {"collection":"tasks","assigned_agent":' +
-      q +
-      ',"status":"todo","readiness":"ready","fields":["title","created","claim_state","claimed_by"]}. Results come newest first, so report them in reverse. Report them and change nothing. On hold tasks are not approved for work: never take one.',
+    "Read your bucket and relevant notes. List your assignments, oldest first: crew_read " +
+      JSON.stringify({ collection: "tasks", assigned_agent: name, fields: ["title", "created", "status", "readiness", "waiting_reason", "last_saved_step", "claim_state", "claimed_by", "webhook_holder"] }) +
+      ". Follow next_offset. Show the status and last saved step for each task, including tasks on hold. Offer ready, unclaimed tasks by title and wait for the owner’s choice. Leave task state untouched until then.",
     "",
     "## 3. Claim one task",
     "",
@@ -96,7 +93,7 @@ function defaultBody(name) {
     "",
     "## 7. Blocked or stopping early",
     "",
-    'Comment on the task why, then crew_write action task.release with data {"readiness":"on_hold","waiting_reason":"<why>"}. Never leave a task In progress without a live claim.',
+    'Save the outcome, outstanding work and next step on the task if they have changed, then crew_write action task.release with data {"readiness":"on_hold","waiting_reason":"<why>"}. Never leave a task In progress without a live claim.',
     "",
     "## 8. Next",
     "",
@@ -120,7 +117,7 @@ function compose(body, brief) {
     "",
     brief && brief.trim()
       ? brief.trim()
-      : "(No brief yet. Ask the owner for the repository path and its release rules.)",
+      : "(No brief yet. Ask the owner what this agent should work on.)",
   ].join("\n");
 }
 
@@ -201,7 +198,14 @@ function describe(app, ref) {
   const agent = findAgent(app, ref);
   const name = agent.getString("name");
   const row = latest(app, agent.id);
-  const body = bodyOf(row, name);
+  const body = !row && (agent.getString("kind") || "bot") === "bot"
+    ? [
+        "Use the agent brief below to continue the role in this chat.",
+        "Read the current assignments and their latest comments. Ask the owner to select a Ready task, then use task.claim with its revision, the assigned agent and a unique session name as reported_agent.",
+        "Wait for the claim to succeed before working. If Crew reports an existing claim or webhook execution, tell the owner who holds the task.",
+        "Keep the owner’s approval authority. Before ending a session, record the outcome and next step, and release unfinished work with task.release.",
+      ].join("\n\n")
+    : bodyOf(row, name);
   const revision = row ? row.getInt("revision") : 0;
   return {
     agent: {

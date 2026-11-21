@@ -366,6 +366,7 @@ function notRestorable(why) {
 // fields. Projection only subsets the normal export, so redacted values such as
 // webhook URLs and secrets can never be selected.
 const derivedFields = {
+  agents: ["chat_start"],
   buckets: ["responsible_agent_details"],
   webhook_configs: [
     "secret_configured",
@@ -375,7 +376,7 @@ const derivedFields = {
   ],
   webhook_executions: ["waiting_overdue", "lease_expired"],
   webhook_bridges: ["overdue"],
-  tasks: ["path", "url", "claim_state"],
+  tasks: ["path", "url", "claim_state", "last_saved_step", "webhook_holder"],
   notes: ["path", "url"],
   reviews: ["path", "url"],
   session_revisions: ["edited_by"],
@@ -452,6 +453,22 @@ function actionableOverdue(app, r) {
     } catch (_) {}
   }
   return true;
+}
+// Fetch handoff context only on explicit projection. The prompt stays stable
+// while a second chat sees the most recently saved comment at read time.
+function addChatContext(app, task, value, fields) {
+  if (!fields) return;
+  if (fields.includes("webhook_holder")) {
+    const holder = execution.chatHolder(app, task);
+    value.webhook_holder = holder ? holder.name : "";
+  }
+  if (fields.includes("last_saved_step")) {
+    const step = new DynamicModel({ body: "" });
+    app.db().newQuery(
+      "SELECT COALESCE((SELECT json_extract(changes,'$.body') FROM crew_events WHERE parent={:task} AND action='task.comment' ORDER BY created DESC, rowid DESC LIMIT 1), '') AS body",
+    ).bind({ task: task.id }).one(step);
+    value.last_saved_step = step.body;
+  }
 }
 function read(e) {
   const b = e.requestInfo().body;
@@ -717,8 +734,17 @@ function read(e) {
       offset,
       params,
     );
+  const showStart = col === "agents" && (!keep || keep.includes("chat_start"));
+  const automatic = showStart ? webhooks.automaticAgents(e.app) : null;
   return e.json(200, {
     items: rows.slice(0, limit).map((r) => {
+      if (showStart) {
+        const value = r.publicExport();
+        const kind = webhooks.agentKind(r);
+        value.chat_start = value.archived || kind === "human" ? "" :
+          kind === "bot" && automatic.has(r.id) ? "webhook" : "manual";
+        return keep ? pick(value, keep) : value;
+      }
       const value =
         col === "buckets"
           ? bucketExport(e.app, r)
@@ -739,6 +765,7 @@ function read(e) {
                         : keep
                           ? r.publicExport()
                           : r;
+      if (col === "tasks") addChatContext(e.app, r, value, keep);
       return keep ? pick(value, keep) : value;
     }),
     has_more: rows.length > limit,
@@ -867,6 +894,12 @@ function write(e, isAgent) {
         );
         return;
       }
+      // Only an authenticated execution assigning an unassigned triage task
+      // can use its own webhook lease here. All chat entry points compete.
+      const triageClaim = kind === "task" && op === "claim" &&
+        !r.getString("assigned_agent") && isAgent && b.execution;
+      if (kind === "task" && op === "claim" && !triageClaim)
+        execution.guardChatClaim(app, r);
       if (op !== "create") check(r, b);
       // Any caller may put a task on hold during a live execution, without
       // proof, when the write changes nothing else; the execution is
@@ -1003,36 +1036,20 @@ function write(e, isAgent) {
             {},
           );
         if (!d.assigned_agent) bad("Agent required");
-        // A live claim by anyone wins; the loser learns who holds it.
-        if (webhooks.claimState(r) === "live") {
-          refusal = claimRefusal(
-            r,
-            "already_claimed",
-            "Task is already claimed by " +
-              r.getString("claimed_by") +
-              " until " +
-              r.getString("claim_until"),
-          );
-          return;
-        }
         const assignee = r.getString("assigned_agent");
         if (assignee) {
           // The assigned agent claims its own task: Ready and To do, or
           // In progress with an empty or expired claim.
           if (resolveAgent(app, d.assigned_agent) !== assignee)
             throw new ApiError(409, "Task is already assigned", {});
-          const status = r.getString("status");
-          if (!(
-            (r.getString("readiness") === "ready" && status === "todo") ||
-            status === "in_progress"
-          ))
+          if (!webhooks.eligible(oldTask))
             throw new ApiError(
               409,
-              "Only a Ready To do task, or an In progress task without a live claim, can be claimed",
+              "Only Ready tasks that are To do or In progress and have no pending review can be claimed",
               {
                 reason: new ValidationError(
                   "not_claimable",
-                  "Only a Ready To do task, or an In progress task without a live claim, can be claimed",
+                  "Only Ready tasks that are To do or In progress and have no pending review can be claimed",
                 ),
               },
             );
@@ -1043,18 +1060,19 @@ function write(e, isAgent) {
             claim_until: claimUntil(),
           };
         } else {
-          // Unassigned: assign and start, as before; record the claim under
-          // the reported name, or the agent's name when none was reported.
           const id = resolveAgent(app, d.assigned_agent);
-          values = {
-            assigned_agent: d.assigned_agent,
-            claimed_at: new Date().toISOString(),
-            status: "in_progress",
-            claimed_by:
-              (b.reported_agent || "").trim() ||
-              (id ? get(app, "agents", id).getString("name") : ""),
-            claim_until: claimUntil(),
-          };
+          values = { assigned_agent: id, status: "in_progress" };
+          // Fenced triage assigns work to the next webhook generation. All
+          // other claims start a manual lease under the reported name.
+          if (!triageClaim) {
+            values.claimed_by = (b.reported_agent || "").trim() || get(app, "agents", id).getString("name");
+            values.claimed_at = new Date().toISOString();
+            values.claim_until = claimUntil();
+          } else {
+            values.claimed_by = "";
+            values.claimed_at = "";
+            values.claim_until = "";
+          }
         }
       } else if (op === "claim_renew") {
         only(d, []);

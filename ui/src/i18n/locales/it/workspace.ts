@@ -1,6 +1,13 @@
 // Italian strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const it: Record<string, string> = {
+  "Loading assigned tasks…": "Caricamento delle attività assegnate…",
+  "Copy task choice": "Copia la scelta dell’attività",
+  "Paste this choice into your Crew-connected chat.": "Incolla questa scelta nella chat collegata a Crew.",
+  "I choose task {id}. Read its current state and claim it before starting.": "Scelgo l’attività {id}. Leggi lo stato attuale e prendila in carico prima di iniziare.",
+  "Choose {title}": "Scegli {title}",
+  "No assigned tasks": "Nessuna attività assegnata",
+  "Assigned tasks": "Attività assegnate",
   // Tables translated where they render: page names, eyebrows, sorts, hold
   // filters, statuses (crewApi.ts) and agent kinds (projectAgents.ts).
   Home: "Home",

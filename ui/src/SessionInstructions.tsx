@@ -128,6 +128,15 @@ export default function SessionInstructions({
     if (next === "edit") setText((draft) => draft ?? session.body);
     setMode(next);
   };
+  if (session.agent.kind === "bot") {
+    return (
+      <div className="crew-dialog-body crew-session-dialog">
+        <div className="crew-session-view crew-session-view-read">
+          <Markdown>{session.instructions}</Markdown>
+        </div>
+      </div>
+    );
+  }
   const draft = text ?? session.body;
   return (
     <div className="crew-dialog-body crew-session-dialog">

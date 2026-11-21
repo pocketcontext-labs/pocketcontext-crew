@@ -81,6 +81,28 @@ func webhookFixture(t *testing.T) (*testApp, *core.Record, *core.Record, *core.R
 	return a, config, tr, delivery
 }
 
+func TestAgentChatStartReflectsRouting(t *testing.T) {
+	a, config, task, _ := webhookFixture(t)
+	mapped := task.GetString("assigned_agent")
+	checkStart := func(id any, expected string) {
+		t.Helper()
+		result := crewPost(t, a, "/api/crew/read", map[string]any{
+			"collection": "agents", "id": id, "fields": []string{"chat_start"},
+		}, 200)
+		items := crewItems(t, result)
+		if len(items) != 1 || items[0]["chat_start"] != expected {
+			t.Fatalf("chat_start for %v: got %v, want %q", id, items, expected)
+		}
+	}
+	checkStart(mapped, "webhook")
+	for kind, expected := range map[string]string{"bot": "manual", "external": "manual", "human": ""} {
+		agent := crewOp(t, a, "agent.create", nil, map[string]any{"name": "Synthetic " + kind, "kind": kind})
+		checkStart(agent["id"], expected)
+	}
+	webhookOperation(t, a, "webhook.disable", config.Id, config.GetInt("revision"), map[string]any{}, "")
+	checkStart(mapped, "manual")
+}
+
 func TestWebhookDestinationSecurity(t *testing.T) {
 	for _, s := range []string{"127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.100.100.200", "0.0.0.0", "224.0.0.1", "240.1.1.1", "192.0.2.1", "198.18.1.1", "::1", "::ffff:127.0.0.1", "fe80::1", "fc00::1", "64:ff9b::a00:1", "2002:7f00:1::"} {
 		if webhookPublicIP(netip.MustParseAddr(s)) {

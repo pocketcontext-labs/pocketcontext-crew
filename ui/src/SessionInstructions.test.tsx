@@ -66,3 +66,10 @@ it("keeps the same view buttons in every view and the draft across views", async
   fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   expect(screen.getByLabelText(/Session instructions/)).toHaveValue("Synthetic body");
 });
+
+it("shows a webhook agent's instructions read-only", () => {
+  const bot = { ...session, agent: { ...session.agent, kind: "bot" } };
+  render(<SessionInstructions session={bot} onChange={() => undefined} Markdown={Markdown} />);
+  expect(screen.getByText(session.instructions)).toBeVisible();
+  expect(screen.queryByRole("button")).toBeNull();
+});

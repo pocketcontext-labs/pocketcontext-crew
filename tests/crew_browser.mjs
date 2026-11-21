@@ -1143,11 +1143,11 @@ try {
  await dialog().getByRole('button',{name:'Save agent'}).click();await saved();
  const pageOverflows=()=>page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1);
  // One click copies; a toast confirms, and View opens the instructions.
- const startButton=page.getByRole('button',{name:'Copy prompt for a coding agent as synthetic-repo'});
+ const startButton=page.getByRole('button',{name:'Copy instructions for synthetic-repo'});
  const toast=page.locator('.crew-toast');
  const showInstructions={click:async()=>{
   await startButton.click();
-  await toast.getByText('Copied the session prompt for synthetic-repo.').waitFor();
+  await toast.getByText('Instructions copied').waitFor();
   await toast.getByRole('button',{name:'View'}).click();
   await toast.waitFor({state:'hidden'});
  }};
@@ -1160,9 +1160,9 @@ try {
  const otherTile=page.locator('.crew-agent-tile').filter({has:networkCard});
  assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),await otherTile.evaluate(e=>e.getBoundingClientRect().height),'agent cards in a row keep equal height');
  await startButton.click();
- await toast.getByText('Copied the session prompt for synthetic-repo. Paste it into a new session in your coding agent.').waitFor();
- const guide=page.getByRole('dialog',{name:'Start a coding session as synthetic-repo'});
- await guide.getByText('Open your coding agent.').waitFor();
+ await toast.getByText('Instructions copied').waitFor();
+ const guide=page.getByRole('dialog',{name:'Use synthetic-repo in a chat'});
+ await guide.getByText(/Open a chat connected to Crew/).waitFor();
  assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),before,'the guide never changes the card');
  assert.equal(await guide.locator('textarea').count(),0,'no text area in the guide');
  const promptBox=guide.getByLabel('Session prompt for synthetic-repo',{exact:true});
@@ -1171,7 +1171,8 @@ try {
  assert.equal(await guide.evaluate(d=>{const b=d.getBoundingClientRect();return d.contains(document.elementFromPoint(b.left+b.width/2,b.top+20));}),true,'the guide is on top');
  await snapView('crew-session-guide-1280');
  await page.keyboard.press('Escape');await guide.waitFor({state:'hidden'});
- await tile.getByRole('button',{name:'How to start a session as synthetic-repo'}).click();
+ await tile.getByRole('button',{name:'More for synthetic-repo'}).click();
+ await page.getByRole('dialog',{name:'synthetic-repo',exact:true}).getByRole('button',{name:'How to continue in a chat'}).click();
  await guide.getByRole('button',{name:'Close'}).click();await guide.waitFor({state:'hidden'});
  await startButton.click();await guide.waitFor();
  await guide.getByRole('checkbox',{name:"Don't show this again"}).check();
@@ -1179,7 +1180,7 @@ try {
  assert.ok(writeActions.includes('settings.update'),'the guide preference is saved on the server');
  await guide.getByRole('button',{name:'Got it'}).click();
  await guide.waitFor({state:'hidden'});
- assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Copy prompt for a coding agent as synthetic-repo','focus returns to the button');
+ assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Copy instructions for synthetic-repo','focus returns to the button');
  // The six-second toast may have expired while the guide was open.
  // The next Start creates a fresh toast for the Dismiss check below.
  // Saved on the server, not in this browser.
@@ -1187,17 +1188,18 @@ try {
  await page.reload();await startButton.waitFor();
  await page.waitForTimeout(300);
  await startButton.click();
- await toast.getByText('Copied the session prompt for synthetic-repo.').waitFor();
+ await toast.getByText('Instructions copied').waitFor();
  assert.equal(await guide.count(),0,'the guide stays off after a reload');
- assert.equal(await tile.evaluate(e=>e.getBoundingClientRect().height),before,'nothing stays on the card after Start a session');
+ await tile.getByText('Start in a chat',{exact:true}).waitFor();
  assert.equal(await tile.getByText(/Codex|Claude Code|Show full instructions/).count(),0,'no tool names or extra links on the card');
  await toast.getByRole('button',{name:'Dismiss'}).click();await toast.waitFor({state:'hidden'});}
  for(const width of [390,1024,1280,1440]){
   await page.setViewportSize({width,height:900});
-  // The card footer keeps Copy coding prompt and its ? on one centred row (after the short "Copied").
-  await page.waitForFunction(()=>document.querySelector('.crew-agent-tile .crew-session-copy .crew-copy-labels [data-shown]')?.textContent==='Copy coding prompt');
-  {const footer=await page.locator('.crew-agent-tile .crew-session-row').first().evaluate(r=>{const b=r.querySelector('.crew-session-copy').getBoundingClientRect();const h=r.querySelector('.crew-help-button').getBoundingClientRect();return {label:r.querySelector('.crew-session-copy .crew-copy-labels [data-shown]').textContent,centred:Math.abs((b.top+b.bottom)/2-(h.top+h.bottom)/2)<=2,beside:h.left>=b.right};});
-  assert.deepEqual(footer,{label:'Copy coding prompt',centred:true,beside:true},`button and ? share a row at ${width}`);}
+  const footer=await startButton.evaluate(button=>{
+   const box=button.getBoundingClientRect(),row=button.closest('.crew-session-row'),title=row.querySelector('strong').getBoundingClientRect();
+   return {label:row.querySelector('strong').textContent,touch:box.width>=44 && box.height>=44,beside:box.left>=title.right};
+  });
+  assert.deepEqual(footer,{label:'Start in a chat',touch:true,beside:true},`copy target stays beside the label at ${width}`);
   if(width===390) continue;
   const networkHeight=await networkCard.evaluate(e=>e.getBoundingClientRect().height);
   assert.equal(await pageOverflows(),false,`Agents horizontal overflow at ${width}`);
@@ -1215,7 +1217,7 @@ try {
   await instructions.getByRole('button',{name:'Close dialog'}).click();
   await instructions.waitFor({state:'hidden'});
   assert.equal(await networkCard.evaluate(e=>e.getBoundingClientRect().height),networkHeight,`other cards keep their height at ${width}`);
-  assert.equal(await page.getByRole('button',{name:'Copy prompt for a coding agent as synthetic-repo'}).evaluate(b=>!!b.closest('.crew-agent-tile')),true,'Start a session stays in its tile');
+  assert.equal(await page.getByRole('button',{name:'Copy instructions for synthetic-repo'}).evaluate(b=>!!b.closest('.crew-agent-tile')),true,'Start a session stays in its tile');
  }
  // Session instructions are saved in Crew: edit by hand, restore from history,
  // restore the default and copy prompts. The clipboard is captured in the page.
@@ -1290,7 +1292,7 @@ try {
   await box.waitFor({state:'hidden'});
   assert.ok(writeActions.filter(a=>a==='session.update').length===3,'three session.update writes: '+writeActions.join(','));
  }
- // Home (0.34.0): a coding agent's ⋯ copies its prompt and opens the guide; bots' ⋯ have neither. On a phone too.
+ // The Home menus keep copy and help available on desktop and phone.
  for(const width of [1280,390]){
   await page.setViewportSize({width,height:844});
   await page.getByRole(width<700?'banner':'navigation').waitFor().catch(()=>{});
@@ -1300,12 +1302,12 @@ try {
   assert.equal(await page.locator('.crew-home .crew-session-copy').count(),0,'no loose Copy prompt on Home');
   const openMenu=async name=>{await agents.getByRole('button',{name:'More for '+name,exact:true}).click();const m=page.getByRole('dialog',{name,exact:true});await m.waitFor();return m;};
   const botMenu=await openMenu('Network');
-  assert.deepEqual(await botMenu.getByRole('button').allInnerTexts(),['Open agent','Show tasks'],'a bot has no session actions');
+  assert.deepEqual(await botMenu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Start in a chat','How to continue in a chat']);
   await page.keyboard.press('Escape');await botMenu.waitFor({state:'hidden'});
   let menu=await openMenu('synthetic-repo');
-  assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Copy prompt for coding agent','How coding sessions work']);
-  await menu.getByRole('button',{name:'How coding sessions work',exact:true}).click();
-  const homeGuide=page.getByRole('dialog',{name:'Start a coding session as synthetic-repo'});
+  assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Start in a chat','How to continue in a chat']);
+  await menu.getByRole('button',{name:'How to continue in a chat',exact:true}).click();
+  const homeGuide=page.getByRole('dialog',{name:'Use synthetic-repo in a chat'});
   await homeGuide.waitFor();
   if(width===390){
    const box=await homeGuide.boundingBox();
@@ -1318,8 +1320,8 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false,`Home overflow at ${width}`);
   menu=await openMenu('synthetic-repo');
   if(width===390) await snapView('crew-home-agent-menu-390');
-  await menu.getByRole('button',{name:'Copy prompt for coding agent',exact:true}).click();
-  await page.locator('.crew-toast').getByText('Copied the session prompt for synthetic-repo.').waitFor();
+  await menu.getByRole('button',{name:'Start in a chat',exact:true}).click();
+  await page.locator('.crew-toast').getByText('Instructions copied').waitFor();
   await page.locator('.crew-toast').getByRole('button',{name:'Dismiss'}).click();
  }
  // Settings (0.36.0): from More on a phone (More stays selected) and the sidebar
@@ -1442,11 +1444,11 @@ try {
    await page.waitForURL(u=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(u.hash));
    await page.goBack();await agents.waitFor();
    const menu=await (async()=>{await agents.getByRole('button',{name:'More for Network',exact:true}).click();const m=page.getByRole('dialog',{name:'Network',exact:true});await m.waitFor();return m;})();
-   assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks'],'⋯ keeps the full menu');
+   assert.deepEqual(await menu.getByRole('button').allInnerTexts(),['Open agent','Show tasks','Start in a chat','How to continue in a chat'],'⋯ keeps the full menu');
    await page.keyboard.press('Escape');await menu.waitFor({state:'hidden'});
    await agents.locator('.crew-home-agent').filter({hasText:'synthetic-repo'}).click();
-   await page.locator('.crew-toast').getByText('Copied the session prompt for synthetic-repo.').waitFor();
-   const guide=page.getByRole('dialog',{name:'Start a coding session as synthetic-repo'});
+   await page.locator('.crew-toast').getByText('Instructions copied').waitFor();
+   const guide=page.getByRole('dialog',{name:'Use synthetic-repo in a chat'});
    if(await guide.isVisible()){await page.keyboard.press('Escape');await guide.waitFor({state:'hidden'});}
    await page.locator('.crew-toast').getByRole('button',{name:'Dismiss'}).click();
    assert.equal(await page.evaluate(()=>location.hash),'#/','copying stays on Home');

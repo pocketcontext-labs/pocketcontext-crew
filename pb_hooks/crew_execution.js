@@ -69,6 +69,8 @@ function current(app, delivery, expected) {
     fail("Event epoch or generation mismatch");
   const task = wh.get(app, "tasks", delivery.getString("task")),
     target = wh.route(app, task);
+  if (wh.claimState(task) === "live")
+    fail("Task is claimed by " + task.getString("claimed_by") + " until " + task.getString("claim_until"), "already_claimed");
   if (
     !target ||
     target.config.id !== delivery.getString("config") ||
@@ -150,6 +152,32 @@ function invalidateStale(app, task, b, actor) {
   }
 }
 const ACTIVE = "(state='dispatching' || state='handed_off' || state='running')";
+// A chat start must respect even an overdue, unresolved handoff: recovery
+// is an explicit owner decision. Reads check eligibility without reconciling.
+function chatHolder(app, task) {
+  const candidates = rows(app, "task={:task} && generation={:gen} && " + ACTIVE, {
+    task: task.id, gen: task.getInt("wake_generation"),
+  });
+  for (const r of candidates) {
+    let info;
+    try {
+      info = current(app, deliveryFor(app, r));
+    } catch (_) {
+      continue;
+    }
+    const agent = r.getString("state") === "dispatching"
+      ? info.target.config.getString("agent")
+      : info.target.agent;
+    return { name: wh.get(app, "agents", agent).getString("name"), execution: r };
+  }
+  return null;
+}
+function guardChatClaim(app, task) {
+  const holder = chatHolder(app, task);
+  if (holder)
+    fail("Webhook agent " + holder.name + " holds this task: " + holderSummary(holder.execution) +
+      ". Wait for completion or reconcile the execution.", "execution_required");
+}
 // review.request with the holder's proof is the normal last step of governed
 // work: it completes that execution instead of letting the review transition
 // invalidate it. The record keeps its worker and fence so the holder's final
@@ -578,6 +606,13 @@ function handle(app, b, actor) {
     },
     true,
   );
+  // Legacy acquire replies carry a work lease. A cached success may be
+  // replayed after execution completion and a subsequent manual claim.
+  if (b.action === "execution.acquire" && !applied) {
+    const latest = wh.get(app, "webhook_executions", result.id);
+    proof(app, latest, { worker_id: d.worker_id, fence: result.fence });
+    return exported(latest);
+  }
   if (b.action === "execution.begin" && !applied) {
     const latest = wh.get(app, "webhook_executions", result.id);
     return Object.assign(exported(latest), {
@@ -678,6 +713,8 @@ module.exports = {
   exported,
   handle,
   guardTaskWrite,
+  guardChatClaim,
+  chatHolder,
   invalidateStale,
   completeForReview,
   cancelForHold,

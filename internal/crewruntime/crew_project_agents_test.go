@@ -276,9 +276,11 @@ func TestSessionInstructionsRead(t *testing.T) {
 	for _, ref := range []any{"synthetic-repo", agent["id"]} {
 		raw, _ := json.Marshal(map[string]any{"collection": "session", "agent": ref})
 		got := a.request(t, "POST", "/api/crew/read", a.token, string(raw), 200)
-		want := "You are synthetic-repo in PocketContext Crew.\nRead your session instructions with crew_read collection \"session\" agent \"synthetic-repo\" and follow them."
-		if got["prompt"] != want {
-			t.Fatalf("prompt %q", got["prompt"])
+		prompt := got["prompt"].(string)
+		for _, want := range []string{"You are synthetic-repo in PocketContext Crew.", "authenticated Crew connection", "sign in, then stop", `"collection":"session","agent":"synthetic-repo"`, "relevant notes", "last_saved_step", "ready task by title", "task.claim", "save the outcome and next step"} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("session prompt lacks %q: %s", want, prompt)
+			}
 		}
 		if got["lease_hours"] != float64(2) || dig(got, "agent", "id") != agent["id"] || dig(got, "agent", "name") != "synthetic-repo" || dig(got, "agent", "kind") != "external" {
 			t.Fatal("session agent", got)
