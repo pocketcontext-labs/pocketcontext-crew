@@ -1009,6 +1009,17 @@ a.crew-logo:hover .product-brand span {
   margin-top: 14px;
 }
 .crew-home-start li .crew-onboarding-actions a { margin: 0; }
+@media (max-width: 680px) {
+  .crew-prompt-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .crew-app .crew-prompt-actions > button {
+    min-height: 44px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
 .crew-home-endpoint {
   display: flex;
   flex-wrap: wrap;
