@@ -279,6 +279,8 @@ def rehearse(target, previous, root):
             instructions, subscriptions, enabled, managed_hash = current.execute(
                 "SELECT instructions, subscriptions, enabled, managed_hash FROM crew_webhook_configs WHERE scope='global'").fetchone()
             assert 'id:"execution"' in instructions and 'capabilities_digest' in instructions and not enabled
+            assert 'agent_context.brief' in instructions and 'execution_guidance' in instructions
+            assert current.execute("SELECT count(*) FROM _migrations WHERE file='1802500000_crew_agent_context_instructions.js'").fetchone() == (1,)
             assert managed_hash == hashlib.sha256(instructions.encode('utf-8')).hexdigest()
             assert 'comment' not in json.loads(subscriptions or '[]')
             assert current.execute("SELECT max_bot_handoffs FROM crew_webhook_routing").fetchall() == [(4,)]

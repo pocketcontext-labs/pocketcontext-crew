@@ -4,6 +4,10 @@
 // delivery states, history labels, link states, help topics); they are listed
 // here too.
 const it: Record<string, string> = {
+  "First setup: start each Grok bot in a chat": "Prima configurazione: avvia ogni bot Grok in una chat",
+  "Open Agents and copy the prompt beside “Start in a chat” on the matching Crew agent. If automatic startup is already on, use “Use in another chat”. Paste the prompt into that bot’s own Grok chat so it reads its Crew name, brief and saved instructions.": "Apri Agenti e copia il prompt accanto ad «Avvia in una chat» per l’agente Crew corrispondente. Se l’avvio automatico è già attivo, usa «Usa in un’altra chat». Incolla il prompt nella chat Grok di quel bot perché legga il proprio nome in Crew, il brief e le istruzioni salvate.",
+  "Open Agents": "Apri Agenti",
+  "Do this once per bot, including the dispatcher. Then return here to configure routing and authorize the bots. Each new task wake loads the latest saved instructions.": "Fallo una volta per ogni bot, incluso il dispatcher. Poi torna qui per configurare l’instradamento e autorizzare i bot. A ogni nuovo avvio per un’attività vengono caricate le ultime istruzioni salvate.",
   "Create an agent and name it after the project. You can start it in a connected chat.": "Crea un agente con il nome del progetto. Puoi avviarlo in una chat collegata.",
   "Start an agent in a connected chat by copying its instructions. To wake it automatically for ready tasks, connect an integration and enable automatic startup for that agent.": "Copia le istruzioni in una chat collegata per avviare un agente. Per avviarlo automaticamente quando le attività sono pronte, collega un’integrazione e attiva l’avvio automatico per quell’agente.",
   "Open the agent to see its instructions and startup settings.": "Apri l’agente per vedere le istruzioni e le impostazioni di avvio.",

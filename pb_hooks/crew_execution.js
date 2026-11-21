@@ -620,7 +620,14 @@ function handle(app, b, actor) {
       next_step: "reconcile",
     });
   }
-  // Added after the idempotent step so the stored result stays free of links.
+  // Fetch the current recipient role only for the worker that just acquired
+  // execution. Keeping this after idempotency also keeps private role text
+  // out of stored operation results, handoffs and replay responses.
+  if (b.action === "execution.begin" && ["work", "self_work"].includes(result.next_step))
+    result.agent_context = require(`${__hooks}/crew_session.js`).executionContext(
+      app, result.recipient_agent_id,
+    );
+  // Links also belong only in the response.
   if (b.action === "execution.begin" && result.task_context)
     wh.withLinks(
       app,

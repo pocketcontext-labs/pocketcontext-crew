@@ -220,13 +220,31 @@ function rewritePrompt(name, revision) {
   );
 }
 
+function activeWorkflow(row) {
+  return !row || row.getBool("is_default") ? shortDefault : row.getString("instructions");
+}
+
+// Work is already acquired before this context is requested. Chat bootstrap
+// instructions in either the default or an owner-edited body are for the
+// manual entry point only.
+function executionContext(app, recipientId) {
+  const agent = app.findRecordById("crew_agents", recipientId);
+  const row = latest(app, agent.id);
+  return {
+    agent_id: agent.id,
+    name: agent.getString("name"),
+    brief: agent.getString("brief"),
+    workflow: activeWorkflow(row),
+    revision: row ? row.getInt("revision") : 0,
+    execution_guidance: "This webhook execution already owns the selected task. Follow the recipient brief and saved workflow for the work itself. The execution protocol takes precedence for task selection, ownership, renewal and completion. Skip manual chat startup, task selection, task.claim, task.claim_renew and task.release. Use the returned execution proof, execution.renew and the prescribed completion or review step. Keep the owner’s approval requirements; a wake grants no permission for external actions.",
+  };
+}
+
 function describe(app, ref) {
   const agent = findAgent(app, ref);
   const name = agent.getString("name");
   const row = latest(app, agent.id);
-  const body = !row || row.getBool("is_default")
-    ? shortDefault
-    : row.getString("instructions");
+  const body = activeWorkflow(row);
   const revision = row ? row.getInt("revision") : 0;
   return {
     agent: {
@@ -353,6 +371,7 @@ function update(app, b, actor, event) {
 
 module.exports = {
   describe,
+  executionContext,
   update,
   exportRevision,
   findAgent,

@@ -1339,7 +1339,16 @@ function document() {
       recipient_bot_ref: str,
       dispatcher_agent_id: str,
       task_context: definitions.tasks,
+      agent_context: object(
+        { agent_id: str, name: str, brief: str, workflow: str, revision: num, execution_guidance: str },
+        ["agent_id", "name", "brief", "workflow", "revision", "execution_guidance"],
+      ),
     },
+    required: ["next_step"],
+    if: { properties: { next_step: { enum: ["work", "self_work"] } } },
+    then: { required: ["agent_context"] },
+    else: { not: { required: ["agent_context"] } },
+    description: "Fresh work and self_work include the recipient's current role brief, active session workflow and its revision (0 for the unsaved default). execution_guidance takes precedence over manual chat claim and session steps. Handoff and replay omit agent_context.",
     additionalProperties: true,
   };
   operations["webhook.catch_up"].result_schema = {
@@ -1437,7 +1446,7 @@ function execution(doc) {
     operations[name] = op;
   }
   operations["execution.begin"].returns =
-    "Execution record with next_step self_work|handoff|work|reconcile, execution proof {id,worker_id,fence}, task_context, recipient_agent_id, recipient_bot_ref, dispatcher_agent_id; replays return reconcile without proof.";
+    "Execution record with next_step self_work|handoff|work|reconcile, execution proof {id,worker_id,fence}, task_context, recipient_agent_id, recipient_bot_ref, dispatcher_agent_id. Fresh work/self_work include agent_context {agent_id,name,brief,workflow,revision,execution_guidance}. Follow execution_guidance over manual claim instructions. Handoff and reconcile omit agent_context; replays return reconcile without proof.";
   for (const action of ["prepare", "parent", "sent", "ack"])
     operations["webhook.bridge." + action].returns =
       "Bridge record (id, revision, stages) with next_step wake_parent|dispatch_task|test_complete|send_test|stop|reconcile.";

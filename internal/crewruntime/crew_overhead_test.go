@@ -291,7 +291,7 @@ func TestWakePayloadCarriesProtocolAndDigest(t *testing.T) {
 		if p["protocol_version"] != float64(3) || p["capabilities_digest"] != digest {
 			t.Fatal("payload lacks protocol/digest", p)
 		}
-		for _, prose := range []string{"title", "description", "draft", "body"} {
+		for _, prose := range []string{"title", "description", "draft", "body", "agent_context", "brief", "workflow", "execution_guidance"} {
 			if _, ok := p[prose]; ok {
 				t.Fatal("payload carries prose", prose)
 			}
@@ -302,7 +302,7 @@ func TestWakePayloadCarriesProtocolAndDigest(t *testing.T) {
 func TestCompactManagedBlockKeepsRules(t *testing.T) {
 	a := newTestApp(t)
 	block := jsStringConstant(t, "../../pb_hooks/crew_setup.js", "DEFAULT_INSTRUCTIONS")
-	if migrated := jsStringConstant(t, "../../pb_migrations/1800900000_crew_authorization_instructions.js", "canonical"); migrated != block {
+	if migrated := jsStringConstant(t, "../../pb_migrations/1802500000_crew_agent_context_instructions.js", "canonical"); migrated != block {
 		t.Fatal("migration and setup blocks differ")
 	}
 	config, err := a.app.FindFirstRecordByFilter("crew_webhook_configs", "scope='global'")
@@ -326,6 +326,8 @@ func TestCompactManagedBlockKeepsRules(t *testing.T) {
 		"automatic:true", "never from a later human-triggered turn", "No task work, bot replies",
 		"execution.begin", `role:"dispatcher"`, "self_work", "handoff", "never dispatched", "execution.dispatched",
 		"original dispatcher worker_id/fence", "never authorize work", `role:"recipient"`, "before any task mutation",
+		"Only on fresh work/self_work", "skip recipient begin", "agent_context.brief and agent_context.workflow", "Missing agent_context: stop",
+		"execution_guidance overrides chat session naming, task.claim, task.claim_renew and task.release", "Never forward agent_context",
 		"task_context and proof", "Proof on task writes and review requests", "stable keys on fenced comments",
 		"Renew long work", "execution.complete", "mark_done:true with task_revision", "comment_event_id",
 		"Stop on stale, expired, duplicate or conflicting work",
@@ -343,8 +345,32 @@ func TestCompactManagedBlockKeepsRules(t *testing.T) {
 }
 
 func TestCompactInstructionMigrationPreservesBindingAndPauses(t *testing.T) {
-	for _, migration := range []string{"1800700000_crew_compact_instructions.js", "1800800000_crew_retrieval_instructions.js", "1800900000_crew_authorization_instructions.js"} {
+	for _, migration := range []string{"1800700000_crew_compact_instructions.js", "1800800000_crew_retrieval_instructions.js", "1800900000_crew_authorization_instructions.js", "1802500000_crew_agent_context_instructions.js"} {
 		t.Run(migration, func(t *testing.T) { checkInstructionMigration(t, migration) })
+	}
+}
+
+func TestAgentContextInstructionMigrationKeepsManualClaims(t *testing.T) {
+	a, config, _, _ := webhookFixture(t)
+	agent := crewOp(t, a, "agent.create", nil, map[string]any{"name": "Manual agent", "kind": "external"})
+	task := crewOp(t, a, "task.create", nil, map[string]any{"title": "Manual assignment", "assigned_agent": agent["id"], "readiness": "ready"})
+	claim := crewOp(t, a, "task.claim", task, map[string]any{"assigned_agent": agent["id"]})
+	config.Set("role_instructions", "Synthetic dispatcher role")
+	config.Set("reporting_instructions", "Synthetic reporting steps")
+	if err := a.app.Save(config); err != nil {
+		t.Fatal(err)
+	}
+	if err := runFixtureMigration(t, a.app, "../../pb_migrations/1802500000_crew_agent_context_instructions.js"); err != nil {
+		t.Fatal(err)
+	}
+	record := apiWebhookRecord(t, a, "tasks", task["id"].(string))
+	if record.GetInt("revision") != int(claim["revision"].(float64)) || record.GetString("claimed_by") != claim["claimed_by"] ||
+		record.GetString("claim_until") != claim["claim_until"] || record.GetString("status") != "in_progress" {
+		t.Fatal("migration modified an unrelated manual claim")
+	}
+	config = apiWebhookRecord(t, a, "webhook_configs", config.Id)
+	if config.GetString("role_instructions") != "Synthetic dispatcher role" || config.GetString("reporting_instructions") != "Synthetic reporting steps" {
+		t.Fatal("migration changed owner-authored role or reporting text")
 	}
 }
 

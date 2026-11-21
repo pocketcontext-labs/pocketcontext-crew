@@ -14,6 +14,21 @@ templates in revision history. All agents now start with the same short
 instructions. Explicitly saved bodies are preserved. Restoring a historical
 version uses its recorded text, and Restore default selects the short workflow. Use the same complete backup for rollback.
 
+Migration `1802500000_crew_agent_context_instructions.js` updates the dispatcher
+block for protocol 3. It saves the previous block and preserves role and reporting
+text, mappings, mode and credentials. Delivery pauses, queued and in-flight
+attempts are cancelled, and ready tasks with a wake in their current generation
+advance to a new generation. Before upgrading, finish or pause active webhook
+work and include the private webhook key in the verified pre-upgrade backup.
+
+After upgrading paired clients and refreshing MCP schemas, apply the new managed
+block to the dispatcher routine, synchronize it, run the connection test and
+re-enable delivery. Review outstanding work before explicitly waking a task
+again. Enabling delivery alone does not send a backlog. Fresh workers receive
+the recipient’s active workflow and brief from `execution.begin`; handoffs
+continue to carry protocol references only. Rollback uses the complete
+pre-upgrade backup and its matching binary or image.
+
 ## Crew 0.39.1 to 0.40.0
 
 Replace the binary or image (`CREW_REPLACE_VERSION=0.39.1` for the installer)

@@ -840,6 +840,8 @@ it("keeps the setup-collapsed button for an unconfigured install", async () => {
   fireEvent.click(
     await screen.findByRole("button", { name: "Set up automatic wake-ups" }),
   );
+  expect(screen.getByText(/copy the prompt beside “Start in a chat”/)).toBeVisible();
+  expect(screen.getByRole("link", { name: "Open Agents" })).toHaveAttribute("href", "#/agents");
   expect(screen.getByRole("heading", { name: "Grok setup" })).toBeVisible();
 });
 it("expands only the first incomplete step and reopens finished ones", async () => {

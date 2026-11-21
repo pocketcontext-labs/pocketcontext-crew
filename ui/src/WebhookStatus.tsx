@@ -944,6 +944,12 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
           )}
           {showSteps && (
           <div className="crew-setup-list">
+            <div className="crew-callout">
+              <h3>{t("First setup: start each Grok bot in a chat")}</h3>
+              <p>{t("Open Agents and copy the prompt beside “Start in a chat” on the matching Crew agent. If automatic startup is already on, use “Use in another chat”. Paste the prompt into that bot’s own Grok chat so it reads its Crew name, brief and saved instructions.")}</p>
+              <a className="crew-button-link" href="#/agents">{t("Open Agents")}</a>
+              <p>{t("Do this once per bot, including the dispatcher. Then return here to configure routing and authorize the bots. Each new task wake loads the latest saved instructions.")}</p>
+            </div>
             <Step {...stepProps(1)} title={t("Choose your dispatcher")}>
               <p>
                 {t(

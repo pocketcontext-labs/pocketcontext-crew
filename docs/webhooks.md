@@ -404,10 +404,14 @@ tasks for another agent wake as usual, and later transitions apply normally.
 `reported_agent` is unverified attribution, so this is a noise filter and not a
 security control: a caller that names the assignee only avoids its own wake.
 
+For first setup, open **Agents** and copy **Start in a chat** (or **Use in another chat** when automatic startup is enabled) for each Crew agent, including the dispatcher. Paste each prompt in the matching Grok bot’s own chat. Then configure its mapping and obtain the owner’s authorization in Grok. Subsequent task wakes read the recipient’s current instructions when the task is acquired.
+
 `execution.begin` validates current epoch, generation, destination, mapping,
 assignment, readiness and review state and acquires coordination in one transaction.
 Its result includes the execution record, `execution` proof, authoritative
 `task_context`, explicit recipient identifiers and `next_step`:
+
+Fresh `work` and `self_work` results include `agent_context` with the recipient’s name, brief, saved workflow, revision and execution guidance. Use the execution proof for this task, including renewal and completion. Keep this context out of handoff messages.
 
 - `self_work`: the dispatcher is the recipient and can work immediately.
 - `handoff`: the dispatcher has prepared recipient acquisition; send one short
