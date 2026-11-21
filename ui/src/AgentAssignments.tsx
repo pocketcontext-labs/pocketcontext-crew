@@ -6,6 +6,8 @@ import { itemPath, itemTabPath } from "./itemLink";
 import { followLink } from "./trail";
 import { t } from "./i18n";
 
+import { isClosed } from "./closedTasks";
+
 const fields = [
   "title",
   "status",
@@ -32,7 +34,7 @@ export default function AgentAssignments({ agent }: { agent: Row }) {
     crewApi.read("tasks", { assigned_agent: agent.id, fields }).then(
       (rows) => {
         if (current) {
-          setTasks(rows);
+          setTasks([...rows].sort((a, b) => Number(isClosed(a)) - Number(isClosed(b))));
           setLoaded(true);
         }
       },
@@ -77,12 +79,12 @@ export default function AgentAssignments({ agent }: { agent: Row }) {
               {val(task, "title")}
             </a>
             <small>
-              {t(statuses.find(([key]) => key === task.status)?.[1] ?? "Task")}{" "}
-              · {ready ? t("Ready") : t("On hold")}
+              <span className="crew-assignment-status">{t(statuses.find(([key]) => key === task.status)?.[1] ?? "Task")}</span>
+              {!isClosed(task) && (ready ? t("Ready") : t("On hold"))}
               {holder && " · " + t("Claimed by {by}", { by: holder })}
             </small>
             {task.last_saved_step ? (
-              <p>{val(task, "last_saved_step")}</p>
+              <p className="crew-assignment-preview">{val(task, "last_saved_step")}</p>
             ) : null}
             {available && (
               <label>

@@ -4832,11 +4832,26 @@ a.crew-logo:hover .product-brand span {
   }
 }
 
+.crew-agent-assignments { display: grid; gap: 8px; }
+.crew-agent-assignments article > a { font-weight: 600; overflow-wrap: anywhere; }
+.crew-agent-assignments article small { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--muted); }
+.crew-assignment-status { background: #edf2e9; color: #34513f; padding: 2px 8px; border-radius: 12px; }
+.crew-agent-assignments article .crew-assignment-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
 .crew-agent-assignments article {
   display: grid;
   gap: .35rem;
-  padding-block: .65rem;
-  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--block-bg);
 }
 .crew-agent-assignments p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .crew-agent-assignments label { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
