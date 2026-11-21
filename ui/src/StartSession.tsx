@@ -363,7 +363,7 @@ export function SessionToast({
   }, [autoHide, paused, leaving, close]);
   return (
     <div
-      className={`crew-toast${autoHide ? "" : " crew-toast-alert"}${leaving ? " crew-toast-leaving" : ""}${paused ? " crew-toast-paused" : ""}`}
+      className={`crew-toast crew-startup-toast${autoHide ? "" : " crew-toast-alert"}${leaving ? " crew-toast-leaving" : ""}${paused ? " crew-toast-paused" : ""}`}
       role={autoHide ? "status" : "alert"}
       aria-live={autoHide ? "polite" : "assertive"}
       onMouseEnter={() => setHovered(true)}
