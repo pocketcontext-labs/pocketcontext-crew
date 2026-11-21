@@ -1,5 +1,9 @@
 # Crew upgrades and rollback
 
+## Crew 0.41.0 to 0.42.0
+
+Back up the workspace, update the server and paired clients, and refresh the agent’s startup prompt. Check that its MCP URL matches the connection configured in your chat. This release adds no database migration. To roll back to 0.41.0, use the previous binary or image.
+
 ## Crew 0.40.0 to 0.41.0
 
 Before replacing the binary or image, take a complete backup of the database,
