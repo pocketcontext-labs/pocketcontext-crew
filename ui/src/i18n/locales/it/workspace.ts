@@ -1,6 +1,11 @@
 // Italian strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const it: Record<string, string> = {
+  "Describe the agent’s role, the work it owns, and who it serves.": "Descrivi il ruolo dell’agente, le sue responsabilità e a chi si rivolge.",
+  "For example, Sell handles outreach to founders. Put repeatable steps in Session instructions.": "Per esempio, Sell cura i contatti con i fondatori. Inserisci i passaggi ricorrenti nelle istruzioni di sessione.",
+  "What belongs in session instructions?": "Cosa va nelle istruzioni di sessione?",
+  "Describe the steps the agent follows each time it works.": "Descrivi i passaggi che l’agente segue ogni volta che lavora.",
+  "For example, read the assigned task, draft two options, and request approval. Define the agent’s role in Agent brief.": "Per esempio, leggere il compito assegnato, preparare due proposte e chiedere l’approvazione. Definisci il ruolo nel brief dell’agente.",
   "Research": "Ricerca",
   "Draft for approval": "Bozza da approvare",
   "Dispatcher": "Smistamento attività",

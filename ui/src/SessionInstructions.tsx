@@ -1,3 +1,4 @@
+import Help from "./Help";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { NamedCopyAction } from "./CopyFeedback";
 import {
@@ -250,9 +251,11 @@ export default function SessionInstructions({
               if (draft.trim()) void save({ instructions: draft }, "Edited by hand");
             }}
           >
-            <label htmlFor={editorId}>
-              {t("Session instructions")} <small>{t("Markdown supported")}</small>
-            </label>
+            <div className="crew-md-label">
+              <label htmlFor={editorId}>{t("Session instructions")}</label>
+              <Help topic="session-instructions" />
+              <small>{t("Markdown supported")}</small>
+            </div>
             <textarea
               id={editorId}
               ref={editor}

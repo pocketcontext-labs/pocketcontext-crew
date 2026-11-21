@@ -311,12 +311,14 @@ function glossaryEntries() {
     brief: {
       name: t("Brief"),
       question: t("What is a brief?"),
-      what: t(
-        "The instructions for this agent: what it works on, which bucket is its own, when to hand off and what to save.",
-      ),
-      action: t(
-        "Write it here, then paste it into the agent that will use it. Crew doesn't send it there for you.",
-      ),
+      what: t("Describe the agent’s role, the work it owns, and who it serves."),
+      action: t("For example, Sell handles outreach to founders. Put repeatable steps in Session instructions."),
+    },
+    "session-instructions": {
+      name: t("Session instructions"),
+      question: t("What belongs in session instructions?"),
+      what: t("Describe the steps the agent follows each time it works."),
+      action: t("For example, read the assigned task, draft two options, and request approval. Define the agent’s role in Agent brief."),
     },
     "agent-start": {
       name: t("How an agent is started"),
