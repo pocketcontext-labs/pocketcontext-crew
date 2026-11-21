@@ -4055,7 +4055,7 @@ a.crew-logo:hover .product-brand span {
    inside one frame, so cards in the grid keep equal height. */
 .crew-agent-tile:has(> .crew-session) {
   --agent-action-inset: 23px;
-  --agent-action-column: 44px;
+  --agent-action-column: 38px;
   gap: 0;
   position: relative;
   border: 1px solid #dce2d8;
@@ -4077,6 +4077,12 @@ a.crew-logo:hover .product-brand span {
   align-items: start;
   gap: 12px;
   width: 100%;
+}
+.crew-app .crew-agent-tile button.crew-session-copy {
+  width: var(--agent-action-column);
+  height: var(--agent-action-column);
+  min-width: var(--agent-action-column);
+  min-height: var(--agent-action-column);
 }
 .crew-agent-tile .crew-session-row strong {
   display: block;
