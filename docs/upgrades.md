@@ -1,6 +1,6 @@
 # Crew upgrades and rollback
 
-## Upcoming per-agent automatic startup
+## Crew 0.40.0 to 0.41.0
 
 Before replacing the binary or image, take a complete backup of the database,
 configuration and storage. The migration `1802300000_crew_agent_startup.js`
