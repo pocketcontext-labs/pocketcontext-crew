@@ -4089,33 +4089,9 @@ a.crew-logo:hover .product-brand span {
 .crew-agent-tile .crew-session {
   --icon-ink: #2f3a2f;
 }
-.crew-app .crew-card-more {
+.crew-app .crew-agent-tile .crew-card-more {
   position: absolute;
-  top: 18px;
-  right: 12px;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-}
-.crew-app .crew-card-more:hover,
-.crew-app .crew-card-more[aria-expanded="true"] {
-  background: transparent;
-  color: var(--icon-ink);
-}
-.crew-card-more svg {
-  box-sizing: content-box;
-  width: 18px;
-  height: 18px;
-  padding: 5px;
-  border-radius: 6px;
-}
-.crew-card-more:is(:hover, :focus-visible, [aria-expanded="true"]) svg {
-  background: var(--surface-muted, #eef1e9);
+  inset: 21px 16px auto auto;
 }
 /* Download beside Remove under an image, and under review files. */
 .crew-attachment-actions {

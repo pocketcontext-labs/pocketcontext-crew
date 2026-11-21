@@ -144,7 +144,7 @@ export default function StartSession({ agent, onStart }: {
   const copy = () => void run(session.start);
   return (
     <div className="crew-session">
-      <button type="button" className="crew-card-more"
+      <button type="button" className="crew-card-more crew-micon"
         aria-label={t("More for {name}", { name })} aria-haspopup="dialog"
         aria-expanded={!!menu} onClick={(event) => setMenu(event.currentTarget)}>
         {icons.more}

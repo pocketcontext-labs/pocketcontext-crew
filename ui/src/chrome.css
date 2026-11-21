@@ -53,7 +53,7 @@
   align-items: center;
   gap: 6px;
 }
-:is(.crew-phone, .crew-home-agents) .crew-micon,
+:is(.crew-phone, .crew-home-agents, .crew-agent-tile) .crew-micon,
 .crew-phone .crew-mtopbar .crew-search-toggle {
   position: relative;
   inset: auto;
@@ -72,12 +72,12 @@
     transform 80ms ease,
     background-color 80ms ease;
 }
-:is(.crew-phone, .crew-home-agents) .crew-micon:active:not(:disabled),
+:is(.crew-phone, .crew-home-agents, .crew-agent-tile) .crew-micon:active:not(:disabled),
 .crew-phone .crew-mtopbar .crew-search-toggle:active {
   background: #dfe8d8;
   transform: scale(0.92);
 }
-:is(.crew-phone, .crew-home-agents) .crew-micon.is-active {
+:is(.crew-phone, .crew-home-agents, .crew-agent-tile) .crew-micon.is-active {
   border-color: #9db590;
   background: #edf2e9;
 }
