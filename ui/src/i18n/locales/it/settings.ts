@@ -2,7 +2,7 @@
 const it: Record<string, string> = {
   "How do I change what tapping an agent does?": "Come cambio cosa succede quando tocco un agente?",
   "Tapping an agent can open its profile or show its tasks.": "Toccando un agente puoi aprire il suo profilo o vedere le sue attività.",
-  "In Settings → Tapping an agent, choose All agents to set the default, or choose an agent by name to give it a different action.": "In Impostazioni → Toccando un agente, scegli Tutti gli agenti per impostare l’azione predefinita, oppure seleziona un agente per assegnargli un’azione diversa.",
+  "In Settings → Tapping an agent, choose All agents to set the default, or choose an agent by name to give it a different action.": "In Impostazioni → Tocco su un agente, scegli Tutti gli agenti per impostare l’azione predefinita, oppure seleziona un agente per assegnargli un’azione diversa.",
   "Start in a chat": "Avvia in una chat",
   "Use in another chat": "Usa in un’altra chat",
   "Use {name} in a chat": "Usa {name} in una chat",
