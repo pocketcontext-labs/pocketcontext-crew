@@ -23,7 +23,8 @@ export async function editTaskOptions(page, base, write) {
     return response.json();
   };
 
-  await page.goto(taskUrl);
+  // Start a fresh workspace so it includes the review created through the API.
+  await page.goto(base + '/?fixture=draft-options#/tasks/' + task.id);
   await heading('Main release plan').waitFor();
   await heading('Joint announcement').waitFor();
   assert.equal(await heading('Main release plan').count(), 1, 'the task presents the draft repeated by option A only once');

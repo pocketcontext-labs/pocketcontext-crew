@@ -176,7 +176,7 @@ try {
  await page.locator('.crew-archive-row').filter({hasText:'Synthetic launch voice'}).getByRole('button',{name:'Restore Synthetic launch voice'}).click();
  await page.getByText('Restored. Prior approvals were not reactivated.').waitFor();
  await go('Tasks');
- await page.getByRole('button',{name:'New task'}).click();
+ await page.getByRole('region',{name:'No tasks yet'}).getByRole('button',{name:'Create your first task',exact:true}).click();
  await dialog().getByLabel('Title',{exact:true}).fill('Synthetic launch post');
  await dialog().getByLabel('Description',{exact:true}).fill('Introduce our product in our voice.');
  await dialog().getByLabel('Assigned agent',{exact:true}).selectOption({label:'Network'});
@@ -2280,9 +2280,9 @@ try {
  await page.setViewportSize({width:1440,height:1000});
  await headerOneRow('stepping review 1440');
  {const at=hash(),cluster=await header.locator('.crew-list-nav').boundingBox();
- await page.keyboard.press(firstAt+1<n?'k':'j');
+ await (firstAt+1<n?prev:next).press(firstAt+1<n?'k':'j');
  await page.waitForFunction(h=>location.hash!==h,at);
- await page.keyboard.press(firstAt+1<n?'j':'k');
+ await neighbour.press(firstAt+1<n?'j':'k');
  await page.waitForFunction(h=>location.hash===h,at);
  assert.deepEqual(await header.locator('.crew-list-nav').boundingBox(),cluster,'the previous/next capsule stays put');}
  await snapView('crew-step-review-1440');
@@ -2375,7 +2375,8 @@ try {
  await page.goto(base+'/#/tasks');await page.reload();
  // Leave nothing pending for later sections: Reject from the More menu.
  for(const title of ['Synthetic step first','Synthetic step second']){
-  await page.goto(base+'/#/approvals');await page.reload();
+  // Change the document URL to load the approvals list with current server state.
+  await page.goto(base+'/?cleanup='+encodeURIComponent(title)+'#/approvals');
   await page.getByRole('button',{name:'Review draft: '+title}).click();
   await dialog().getByRole('button',{name:'More actions'}).click();
   await dialog().getByRole('menuitem',{name:'Reject'}).click();await saved();
@@ -2891,7 +2892,7 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  await boardWrite('artifact.create',{title:'Listnav page two',body:'Two.'});
  for(const width of [390,1440]){
   await page.setViewportSize({width,height:width===390?844:1000});
-  await page.goto(base+'/#/shared?show=drafts');await page.reload();
+  await page.goto(base+'/?viewport='+width+'#/shared?show=drafts');
   const titles=page.locator('.crew-artifact h3 a');
   await page.getByRole('link',{name:'Listnav page two'}).waitFor();
   // Shared reads active and archived artifacts separately: let both land so the
