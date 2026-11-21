@@ -2,6 +2,7 @@
 const de: Record<string, string> = {
   "How do I change what tapping an agent does?": "Wie ändere ich die Aktion beim Antippen eines Agenten?",
   "Tapping an agent can open its profile or show its tasks.": "Beim Antippen eines Agenten kannst du sein Profil oder seine Aufgaben öffnen.",
+  "Choose All agents to set the default, or choose an agent to set its own action.": "Wähle „Alle Agenten“ für die Standardaktion oder einen einzelnen Agenten für dessen eigene Aktion.",
   "In Settings → Tapping an agent, choose All agents to set the default, or choose an agent by name to give it a different action.": "Wähle in den Einstellungen unter „Beim Tippen auf einen Agenten“ den Eintrag „Alle Agenten“, um die Standardaktion festzulegen. Wähle einen einzelnen Agenten, um ihm eine andere Aktion zuzuweisen.",
   "Start in a chat": "In einem Chat starten",
   "Use in another chat": "In einem anderen Chat verwenden",

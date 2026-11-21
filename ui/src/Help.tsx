@@ -1,3 +1,4 @@
+import { agentTapSettingsHash } from "./itemLink";
 import {
   cloneElement,
   createContext,
@@ -118,7 +119,14 @@ export default function Help({ topic }: { topic: HelpTopic }) {
           aria-label={entry.name}
         >
           <div>{textFor(entry.what, mode)}</div>
-          <div>{textFor(entry.action, mode)}</div>
+          {topic === "tapping-an-agent" ? (
+            <div>
+              <a href={agentTapSettingsHash} onClick={() => setOpen(false)}>
+                {t("Settings")} → {t("Tapping an agent")}
+              </a>
+              <div>{t("Choose All agents to set the default, or choose an agent to set its own action.")}</div>
+            </div>
+          ) : <div>{textFor(entry.action, mode)}</div>}
           <a
             href={guideHash(topic)}
             onClick={() => setOpen(false)}

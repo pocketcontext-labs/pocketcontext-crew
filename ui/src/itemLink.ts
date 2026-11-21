@@ -6,6 +6,8 @@ import {
   searchTextFromHash,
 } from "./searchApi";
 
+export const agentTapSettingsHash = "#/settings?section=agent-tap";
+
 /**
  * Records with their own dialog address. Buckets and agents (0.29.0) open their
  * Edit dialog over Notes and Agents; their addresses come from the references
@@ -80,6 +82,7 @@ export function viewFromHash(hash: string): View {
   if (/^#\/tasks\?/.test(hash)) return "board";
   if (/^#\/notes\?/.test(hash)) return "memory";
   if (/^#\/connect\?/.test(hash)) return "connect";
+  if (hash === agentTapSettingsHash) return "settings";
   if (reviewLinkPattern.test(hash)) return "reviews";
   if (/^#\/shared\/[a-z0-9]{15}$/.test(hash)) return "shared";
   if (/^#\/shared\?/.test(hash)) return "shared";

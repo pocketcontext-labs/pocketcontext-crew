@@ -1,3 +1,4 @@
+import { agentTapSettingsHash } from "./itemLink";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { languages, t, useLanguage, setLanguage, type Language } from "./i18n";
 import { localIdentity, pb } from "./api";
@@ -46,6 +47,10 @@ export default function Settings({
   const [picker, setPicker] = useState<Picker | null>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(0);
+  const tapHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (location.hash === agentTapSettingsHash) tapHeading.current?.focus();
+  }, []);
   const tap = prefs.agentTap;
   const save = (patch: Parameters<typeof saveSettings>[0]) => {
     setError("");
@@ -158,7 +163,7 @@ export default function Settings({
       </ul>
 
       <section aria-labelledby="crew-settings-tap">
-        <h2 id="crew-settings-tap">{t("Tapping an agent")}</h2>
+        <h2 id="crew-settings-tap" ref={tapHeading} tabIndex={-1}>{t("Tapping an agent")}</h2>
         <p className="crew-settings-hint">
           {t(
             "What happens when you tap an agent on Home. A single agent can use a different action.",
