@@ -135,11 +135,11 @@ describe("Settings", () => {
     fireEvent.click(tabs().getByRole("button", { name: "More" }));
     const more = within(screen.getByRole("dialog", { name: "More" }));
     expect(more.getAllByRole("link").map((a) => a.textContent)).toEqual([
-      "Shared",
       "Agents",
+      "Connect an agent",
+      "Shared",
       "Archive",
       "Settings",
-      "Connect an agent",
       "Guide",
     ]);
     expect(more.queryByRole("button", { name: "Sign out" })).toBeNull();
