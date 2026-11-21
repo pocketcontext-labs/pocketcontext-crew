@@ -152,13 +152,28 @@ a.crew-logo:hover .product-brand span {
   font-size: 10px;
   color: #6b7866;
 }
-.crew-sidebar-bottom button {
-  display: block;
+.crew-sidebar-account {
+  border-top: 1px solid #dce2d8;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+.crew-sidebar-account button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
   border: 0;
   background: transparent;
   padding: 8px 13px;
-  margin-top: 6px;
-  font-size: 12px;
+  font-size: 13px;
+}
+.crew-sidebar-account .crew-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .crew-sidebar-bottom > span {
   display: inline-block;

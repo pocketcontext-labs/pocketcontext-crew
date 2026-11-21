@@ -2493,7 +2493,12 @@ export default function CrewWorkspace() {
           >
             {t("Settings")}
           </a>
-          <button onClick={() => api.logout()}>{t("Sign out")}</button>
+          <div className="crew-sidebar-account">
+            <button type="button" onClick={() => api.logout()}>
+              <Icon name="signOut" />
+              {t("Sign out")}
+            </button>
+          </div>
         </div>
       </aside>
       )}

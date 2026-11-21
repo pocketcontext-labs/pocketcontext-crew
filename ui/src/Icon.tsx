@@ -11,6 +11,7 @@ const paths = {
   copy: "M9 9h10v10H9zM5 15V5h10",
   check: "M5 12.5l4.5 4.5L19 7.5",
   history: "M4 12a8 8 0 1 0 2.34-5.66L4 8.5M4 4v4.5h4.5M12 8v4.5l3 2",
+  signOut: "M10 4H5v16h5M10 12h11m-5-5 5 5-5 5",
   archive: "M4 5h16v4H4zM6 9v10h12V9M10 13h4",
   person: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 20a7 7 0 0 1 14 0",
   note: "M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z",
