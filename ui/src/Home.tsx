@@ -391,8 +391,10 @@ function PromptHandoff({ agent, task, notify, confirm }: {
   const session = useSessionStart(agent, notify);
   return <>
     <p>{t("Copy the prompt for {name}, paste it into a chat connected to Crew, and send it. Then ask the agent to work on “{task}”.", { name: val(agent, "name"), task: val(task, "title") })}</p>
-    <button className="crew-primary" disabled={session.loading} onClick={() => void session.start()}>{t("Copy instructions for {name}", { name: val(agent, "name") })}</button>
-    <button onClick={confirm}>{t("I've pasted and sent the prompt")}</button>
+    <div className="crew-onboarding-actions">
+      <button className="crew-primary" disabled={session.loading} onClick={() => void session.start()}>{t("Copy instructions for {name}", { name: val(agent, "name") })}</button>
+      <button onClick={confirm}>{t("I've pasted and sent the prompt")}</button>
+    </div>
     {session.guide}
   </>;
 }
