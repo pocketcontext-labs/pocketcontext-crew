@@ -1028,6 +1028,7 @@ export default function CrewWorkspace() {
     ) : null;
   const [dialog, setDialog] = useState<{
       kind: Kind;
+      firstTask?: boolean;
       row?: Row;
       /** A task tab asked for by the address, with a counter to repeat it. */
       tab?: TaskTab;
@@ -2772,7 +2773,7 @@ export default function CrewWorkspace() {
               ready={ready}
               busy={busy}
               seed={() => void seed()}
-              newTask={() => setDialog({ kind: "task" })}
+              newTask={() => setDialog({ kind: "task", firstTask: true })}
               openItem={openItem}
               openReview={(row) => openReviewCard(row, "home:approvals")}
               invalidAssignment={invalidAssignment}
@@ -3572,6 +3573,7 @@ type InstructionsView = {
   initialMode?: "read" | "history";
 };
 type EditorProps = {
+  firstTask?: boolean;
   kind: Kind;
   row?: Row;
   /** The task tab the address asked for, and a counter to switch again. */
@@ -3698,6 +3700,7 @@ function ChatInstructions({ agent, open }: { agent: Row; open: (view: Instructio
 }
 
 function Editor({
+  firstTask = false,
   kind,
   row,
   tab: askedTab,
@@ -4418,7 +4421,8 @@ function Editor({
               >
                 <select
                   value={selection}
-                  required={kind === "note"}
+                  required={kind === "note" || firstTask}
+                  ref={(el) => { el?.setCustomValidity(firstTask && !data.agents.some(agent => agent.id === selection && canStartChat(agent)) ? t("Assign the first task to an active agent.") : ""); }}
                   onChange={(e) => setSelection(e.target.value)}
                 >
                   <option value="">
@@ -4446,7 +4450,7 @@ function Editor({
                           ),
                     )
                     .map((x) => (
-                      <option key={x.id} value={x.id} disabled={!!x.archived}>
+                      <option key={x.id} value={x.id} disabled={!!x.archived || (firstTask && !canStartChat(x))}>
                         {val(x, "name")}
                         {x.archived ? ` ${t("(inactive)")}` : ""}
                       </option>
@@ -4541,6 +4545,7 @@ function Editor({
                   <Field label={t("Hold")} help={help("readiness")}>
                     <select
                       value={readiness === "ready" ? "ready" : "waiting"}
+                      ref={(el) => { el?.setCustomValidity(firstTask && readiness !== "ready" ? t("Set the first task to Ready.") : ""); }}
                       onChange={(e) => setReadiness(e.target.value)}
                     >
                       <option value="waiting">{t("On hold")}</option>
