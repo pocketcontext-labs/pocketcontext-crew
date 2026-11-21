@@ -301,9 +301,10 @@ it("takes the brand link to Home", async () => {
     "page",
   );
 });
-it("guides a new owner one step at a time", async () => {
+it("guides a new owner from step one even with a previous workspace confirmation", async () => {
   fixtures = { agents: [], buckets: [], tasks: [], reviews: [], notes: [] };
   localStorage.clear();
+  localStorage.setItem("pocketcontext.crew.agent_connected", "1");
   history.replaceState(null, "", "/");
   render(<CrewWorkspace />);
   await screen.findByRole("heading", { name: "Get started" });
@@ -361,7 +362,7 @@ it("advances past a manually confirmed connection and remembers it", async () =>
   render(<CrewWorkspace />);
   fireEvent.click(await screen.findByRole("button", { name: "I've connected it" }));
   expect(await screen.findByRole("button", { name: "＋ New task" })).toBeTruthy();
-  expect(localStorage.getItem("pocketcontext.crew.agent_connected")).toBe("1");
+  expect(localStorage.getItem("pocketcontext.crew.agent_connected." + agent.id)).toBe("1");
   localStorage.clear();
 });
 it("counts agent activity as connected and lists what needs the owner", async () => {

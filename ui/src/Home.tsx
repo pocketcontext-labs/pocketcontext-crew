@@ -90,12 +90,16 @@ export default function Home({
   onStartSession: (start: SessionStart) => void;
 }) {
   const guideRow = useHelpShown(helpIds.homeGuideRow);
-  const [connected, setConnected] = useState(() => stored(connectedKey));
+  const [confirmedAgents, setConfirmedAgents] = useState<string[]>([]);
   const getStarted = useHelpShown(helpIds.homeGetStarted);
   const { agentTap } = useReaderSettings();
   if (!ready) return null;
 
   const allTasks = [...data.tasks, ...archived.tasks];
+  const activeAgents = data.agents.filter(canStartChat);
+  const connected = activeAgents.some(({ id }) =>
+    confirmedAgents.includes(id) || stored(connectedKey + "." + id),
+  );
   const agentSeen =
     allTasks.some((x) => val(x, "created_by_agent")) || data.reviews.length > 0;
   const steps: { title: string; done: boolean; body: ReactNode }[] = [
@@ -117,7 +121,7 @@ export default function Home({
     },
     {
       title: t("Connect your first agent"),
-      done: connected || agentSeen,
+      done: activeAgents.length > 0 && (connected || agentSeen),
       body: (
         <>
           <ConnectionPending connection={connection} />
@@ -150,8 +154,9 @@ export default function Home({
             <button
               className="crew-primary"
               onClick={() => {
-                remember(connectedKey);
-                setConnected(true);
+                const ids = activeAgents.map(({ id }) => id);
+                ids.forEach((id) => remember(connectedKey + "." + id));
+                setConfirmedAgents(ids);
               }}
             >
               {t("I've connected it")}
