@@ -11,7 +11,8 @@ import { CopyControl, CopyGlyph, useCopyFeedback } from "./CopyFeedback";
 import { createPortal } from "react-dom";
 import { crewApi, val, type AgentSession, type Row } from "./crewApi";
 import { copyText, chatActionLabel } from "./projectAgents";
-import { icons, PopoverMenu } from "./MobileChrome";
+import { icons, PopoverMenu, type MenuItem } from "./MobileChrome";
+import { boardAgentHash } from "./itemLink";
 import { useSessionGuideOff } from "./sessionGuide";
 import HideHelp, { helpIds } from "./HideHelp";
 import { t } from "./i18n";
@@ -131,9 +132,25 @@ export function useSessionStart(
   };
 }
 
+export function agentMenuItems(open: () => void, showTasks: () => void, chat: MenuItem[]) {
+  return [
+    { label: t("Open agent"), icon: icons.agent, onSelect: open },
+    { label: t("Show tasks"), icon: icons.tasks, onSelect: showTasks },
+    ...chat,
+  ];
+}
+
+export function chatMenuItems(agent: Row, loading: boolean, icon: MenuItem["icon"], copy: () => void, guide: () => void): MenuItem[] {
+  return [
+    { label: loading ? t("Preparing the prompt…") : chatActionLabel(agent), icon, disabled: loading, onSelect: copy },
+    { label: t("How to continue in a chat"), icon: icons.notes, onSelect: guide },
+  ];
+}
+
 /** The same one-tap copy action for manual and webhook-started agents. */
-export default function StartSession({ agent, onStart }: {
+export default function StartSession({ agent, onStart, openAgent }: {
   agent: Row;
+  openAgent: () => void;
   onStart: (start: SessionStart) => void;
 }) {
   const name = val(agent, "name");
@@ -164,10 +181,8 @@ export default function StartSession({ agent, onStart }: {
         </span>
       </button>
       {menu && <PopoverMenu label={name} anchor={menu} onClose={() => setMenu(null)}
-        items={[
-          { label, icon: <CopyGlyph state={state} />, disabled: session.loading, onSelect: copy },
-          { label: t("How to continue in a chat"), icon: icons.notes, onSelect: session.openGuide },
-        ]} />}
+        items={agentMenuItems(openAgent, () => { location.hash = boardAgentHash(agent.id); },
+          chatMenuItems(agent, session.loading, <CopyGlyph state={state} />, copy, session.openGuide))} />}
       {session.guide}
     </div>
   );

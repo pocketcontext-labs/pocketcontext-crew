@@ -3358,6 +3358,7 @@ export default function CrewWorkspace() {
                     </button>
                     {canStartChat(x) && (
                       <StartSession
+                        openAgent={() => openItem("agent", x)}
                         agent={x}
                         onStart={setSessionStart}
                       />

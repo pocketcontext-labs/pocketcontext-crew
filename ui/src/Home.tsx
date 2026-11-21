@@ -12,7 +12,7 @@ import {
   type AgentTap,
 } from "./agentTap";
 import { val, type ConnectionState, type Row } from "./crewApi";
-import { canStartChat, chatActionLabel } from "./projectAgents";
+import { canStartChat } from "./projectAgents";
 import { isClosed } from "./closedTasks";
 import {
   homeAgents,
@@ -22,6 +22,8 @@ import {
 } from "./listSource";
 import {
   agentInitials,
+  agentMenuItems,
+  chatMenuItems,
   useSessionStart,
   type SessionStart,
 } from "./StartSession";
@@ -416,17 +418,8 @@ function SessionAgentRow(props: AgentRowProps) {
       copyPrompt={() => void rowCopy.run(session.start)}
       copyIcon={<CopyGlyph state={rowCopy.state} />}
       moreIcon={<CopyGlyph state={menuCopy.state} idle="more" />}
-      extra={[
-        {
-          label: session.loading
-            ? t("Preparing the prompt…")
-            : chatActionLabel(props.agent),
-          disabled: session.loading,
-          icon: <CopyGlyph state={menuCopy.state} />,
-          onSelect: () => void menuCopy.run(session.start),
-        },
-        { label: t("How to continue in a chat"), icon: icons.notes, onSelect: session.openGuide },
-      ]}
+      extra={chatMenuItems(props.agent, session.loading, <CopyGlyph state={menuCopy.state} />,
+        () => void menuCopy.run(session.start), session.openGuide)}
     >
       {session.guide}
     </AgentRowView>
@@ -527,11 +520,7 @@ function AgentRowView({
           label={name}
           anchor={menu}
           onClose={() => setMenu(null)}
-          items={[
-            { label: t("Open agent"), icon: icons.agent, onSelect: open },
-            { label: t("Show tasks"), icon: icons.tasks, onSelect: showTasks },
-            ...extra,
-          ]}
+          items={agentMenuItems(open, showTasks, extra)}
         />
       )}
       {children}
