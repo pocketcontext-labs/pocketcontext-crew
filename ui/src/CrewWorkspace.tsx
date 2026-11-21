@@ -231,6 +231,7 @@ const viewHelp: Partial<Record<View, HelpTopic>> = {
   board: "board",
   memory: "memory",
   reviews: "approvals",
+  shared: "shared",
   agents: "agents",
   archive: "archive",
   connect: "connect",

@@ -489,6 +489,9 @@ const it: Record<string, string> = {
   "Add a note for a decision, preference or finding worth keeping. Changing a note keeps its earlier versions. Select a bucket to show only its notes, use its Edit button to change it, and find notes with the search box at the top.":
     "Aggiungi una nota per una decisione, una preferenza o una scoperta da conservare. Modificare una nota ne mantiene le versioni precedenti. Seleziona un bucket per vedere solo le sue note, usa il suo pulsante Modifica per cambiarlo e trova le note con la casella di ricerca in alto.",
   Approvals: "Approvazioni",
+  "What is the Shared page?": "A cosa serve la pagina Condivisi?",
+  "Shared holds drafts and published pages. Anyone with the link can read a published page.": "Qui trovi bozze e pagine pubblicate. Chiunque abbia il link può leggere una pagina pubblicata.",
+  "Create a draft or open an existing one. Review it before publishing, then copy its link.": "Crea una bozza o aprine una esistente. Rileggila prima di pubblicarla, poi copia il link.",
   "What are approvals?": "Cosa sono le approvazioni?",
   "Drafts waiting for your decision, and your past decisions. Approving never sends or publishes anything.":
     "Bozze in attesa della tua decisione e le tue decisioni passate. Approvare non invia né pubblica mai nulla.",

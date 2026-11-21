@@ -19,6 +19,7 @@ const pageViews: Record<HelpPageTopic, View> = {
   board: "board",
   memory: "memory",
   approvals: "reviews",
+  shared: "shared",
   agents: "agents",
   archive: "archive",
   connect: "connect",

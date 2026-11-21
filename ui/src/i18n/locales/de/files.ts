@@ -490,6 +490,9 @@ const de: Record<string, string> = {
   "Add a note for a decision, preference or finding worth keeping. Changing a note keeps its earlier versions. Select a bucket to show only its notes, use its Edit button to change it, and find notes with the search box at the top.":
     "Füge eine Notiz für eine Entscheidung, Vorliebe oder Erkenntnis hinzu, die es wert ist. Beim Ändern einer Notiz bleiben frühere Versionen erhalten. Wähle einen Bucket, um nur seine Notizen zu sehen, ändere ihn mit seinem Bearbeiten-Button und finde Notizen über das Suchfeld oben.",
   Approvals: "Freigaben",
+  "What is the Shared page?": "Was ist die Seite „Geteilt“?",
+  "Shared holds drafts and published pages. Anyone with the link can read a published page.": "Hier findest du Entwürfe und veröffentlichte Seiten. Wer den Link hat, kann die veröffentlichte Seite lesen.",
+  "Create a draft or open an existing one. Review it before publishing, then copy its link.": "Erstelle oder öffne einen Entwurf. Prüfe ihn vor der Veröffentlichung und kopiere anschließend den Link.",
   "What are approvals?": "Was sind Freigaben?",
   "Drafts waiting for your decision, and your past decisions. Approving never sends or publishes anything.":
     "Entwürfe, die auf deine Entscheidung warten, und deine bisherigen Entscheidungen. Freigeben sendet oder veröffentlicht nie etwas.",

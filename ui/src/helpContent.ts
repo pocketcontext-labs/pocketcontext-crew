@@ -67,6 +67,12 @@ function pageEntries() {
         "Open a draft, then Approve, Request changes or Reject it. Whatever you decide, the task goes back to In progress. Request changes also makes it Ready, so its bot picks the work up again.",
       ),
     },
+    shared: {
+      name: t("Shared"),
+      question: t("What is the Shared page?"),
+      what: t("Shared holds drafts and published pages. Anyone with the link can read a published page."),
+      action: t("Create a draft or open an existing one. Review it before publishing, then copy its link."),
+    },
     agents: {
       name: t("Agents"),
       question: t("What are agents?"),
