@@ -93,9 +93,16 @@ export default function Login({
       .then((value) => {
         if (active) setMode(value);
       })
-      .catch(() => {
-        if (active)
-          setError(t("Unable to load sign-in options. Please try again."));
+      .catch((error) => {
+        if (!active) return;
+        if (error?.status === 401 && import.meta.env.DEV &&
+            import.meta.env.VITE_CREW_GROK_SIMULATOR === "1" &&
+            window.localStorage.getItem("pocketcontext.rehearsal.gateway") === "1") {
+          rememberLoginReturn(window.location.hash);
+          window.location.replace("/_gateway/login");
+          return;
+        }
+        setError(t("Unable to load sign-in options. Please try again."));
       });
     return () => {
       active = false;
