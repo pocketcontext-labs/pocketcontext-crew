@@ -502,7 +502,7 @@ function AgentRowView({
       {copyPrompt && (
         <button
           type="button"
-          className="crew-micon crew-madd"
+          className="crew-copy-control crew-copy-icon"
           aria-label={t("Copy instructions for {name}", { name })}
           title={t("Copy instructions for {name}", { name })}
           disabled={preparing}

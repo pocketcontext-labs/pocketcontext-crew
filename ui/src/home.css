@@ -168,10 +168,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.crew-home-agents .crew-madd {
-  --icon-ink: white;
-  flex: none;
-}
 .crew-home-agent-more {
   flex: none;
   margin-inline: 6px 10px;

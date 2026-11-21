@@ -81,15 +81,15 @@
   border-color: #9db590;
   background: #edf2e9;
 }
-:is(.crew-phone, .crew-home-agents) .crew-madd {
+.crew-phone .crew-madd {
   border-color: #2c4b36;
   background: #2c4b36;
   color: #fff;
 }
-:is(.crew-phone, .crew-home-agents) .crew-madd:hover {
+.crew-phone .crew-madd:hover {
   background: #3b6244;
 }
-:is(.crew-phone, .crew-home-agents) .crew-madd:active:not(:disabled) {
+.crew-phone .crew-madd:active:not(:disabled) {
   background: #1f3828;
 }
 .crew-micon-svg {
