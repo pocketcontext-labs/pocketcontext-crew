@@ -17,6 +17,8 @@ Use `--mode coding-agent` with a signed-in Codex CLI to run model-backed turns i
 
 Keep the launcher running. It creates a local development instance on port 57990, a simulator on 57991 and a Vite reader on 57992. Ctrl-C stops the rehearsal. Restart with the same state directory to resume. The launcher prints the URLs. To sign back into the local reader, use `bin/pocketcontext-crew --db .private/grok-rehearsal/project/pocketcontext.db open`.
 
+For mobile testing, use the dedicated two-host profile in [the development guide](../../docs/development.md#rehearse-crew-and-the-grok-simulator-from-a-phone). Open either HTTPS site and enter the owner email code. Open the other site in the same browser for single sign-on. Use the simulator’s displayed loopback webhook URL in the Crew form. Crew sends the requests from the Mac.
+
 ## Rehearse the wizard
 
 1. In Crew, open **Connect an agent → Set up automatic wake-ups**. Choose **Local dispatcher** and select the **parent conversation** dispatch path. Open **Agents** and copy each participant's **Start in a chat** prompt into its own simulator chat.

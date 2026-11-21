@@ -200,6 +200,32 @@ func TestWebhookSimulatorOnlyInOptedInLocalUIDev(t *testing.T) {
 	}
 }
 
+func TestHostedRehearsalWebhook(t *testing.T) {
+	a := newTestApp(t)
+	t.Setenv("POCKETCONTEXT_CREW_DEV_WEBHOOK_SIMULATOR", "hosted-rehearsal")
+	opts := appserver.ServeOptions{Hosted: true, PublicUIDev: true, HTTPSDomain: "crew.example.test", UIDev: "http://127.0.0.1:58002", DevHTTPAddress: "127.0.0.1:58000"}
+	const receiver = "http://127.0.0.1:58001/webhook"
+	for _, tc := range []struct{ path, field string }{
+		{receiver, ""}, {webhookSimulatorURL, ""}, {receiver + "?debug", ""}, {receiver, "no-vite"}, {receiver, "wrong-listener"}, {receiver, "production"},
+	} {
+		testOpts := opts
+		switch tc.field {
+		case "no-vite":
+			testOpts.UIDev = ""
+		case "wrong-listener":
+			testOpts.DevHTTPAddress = "127.0.0.1:57990"
+		case "production":
+			testOpts.PublicUIDev = false
+		}
+		if err := Hooks().PreRegister(a.app, &Project{Cache: t.TempDir()}, testOpts); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := webhookValidateEndpoint(a.app, tc.path) == nil, tc.field == "" && tc.path == receiver; got != want {
+			t.Fatalf("%s (%s): allowed=%v, want %v", tc.path, tc.field, got, want)
+		}
+	}
+}
+
 func TestWebhookDestinationSecurity(t *testing.T) {
 	a := newTestApp(t)
 	for _, s := range []string{"127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.100.100.200", "0.0.0.0", "224.0.0.1", "240.1.1.1", "192.0.2.1", "198.18.1.1", "::1", "::ffff:127.0.0.1", "fe80::1", "fc00::1", "64:ff9b::a00:1", "2002:7f00:1::"} {

@@ -89,6 +89,15 @@ func TestMCPPublicHostedLoopbackListener(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	// The simulator's work CLI uses this same private control socket while
+	// the phone reader authenticates through the separate hosted listener.
+	local, err := New(p)
+	if err != nil {
+		t.Fatal("local CLI sign-in to hosted development runtime", err)
+	}
+	if _, err := local.Must("POST", "/api/crew/read", map[string]any{"collection": "agents"}); err != nil {
+		t.Fatal("local CLI read from hosted development runtime", err)
+	}
 	owner, err := appserver.LocalCall(p, "/api/bundle/token", nil)
 	if err != nil {
 		t.Fatal(err)

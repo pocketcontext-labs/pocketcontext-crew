@@ -223,6 +223,14 @@ export async function refreshSession(force = false): Promise<void> {
 export function logout(): void {
   cancelLogin();
   pb.authStore.clear();
+  if (import.meta.env.DEV && import.meta.env.VITE_CREW_GROK_SIMULATOR === "1" &&
+      window.localStorage.getItem("pocketcontext.rehearsal.gateway") === "1") {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = "/_gateway/logout";
+    document.body.appendChild(form);
+    form.submit();
+  }
 }
 
 export const api = {

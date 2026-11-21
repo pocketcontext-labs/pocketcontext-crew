@@ -34,7 +34,18 @@ func Hooks() appserver.Hooks {
 		},
 		PreRegister: func(app core.App, p *Project, opts appserver.ServeOptions) error {
 			configureWebhookRuntime(app, p, opts.HTTPSDomain)
-			app.Store().Set(webhookSimulatorStore, opts.UIDev != "" && !opts.Hosted && !opts.PublicUIDev && opts.HTTPSDomain == "" && os.Getenv("POCKETCONTEXT_CREW_DEV_WEBHOOK_SIMULATOR") == "1")
+			endpoint := ""
+			switch os.Getenv("POCKETCONTEXT_CREW_DEV_WEBHOOK_SIMULATOR") {
+			case "1":
+				if opts.UIDev != "" && !opts.Hosted && !opts.PublicUIDev && opts.HTTPSDomain == "" {
+					endpoint = webhookSimulatorURL
+				}
+			case "hosted-rehearsal":
+				if opts.Hosted && opts.PublicUIDev && opts.HTTPSDomain != "" && opts.UIDev == "http://127.0.0.1:58002" && opts.DevHTTPAddress == "127.0.0.1:58000" {
+					endpoint = "http://127.0.0.1:58001/webhook"
+				}
+			}
+			app.Store().Set(webhookSimulatorStore, endpoint)
 			return nil
 		},
 		Register: func(app core.App, _ appserver.RegisterContext) error {

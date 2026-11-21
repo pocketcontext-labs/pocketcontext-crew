@@ -39,7 +39,7 @@ const webhookSimulatorStore = "crew.webhook.dev-simulator"
 const webhookSimulatorURL = "http://127.0.0.1:57991/webhook"
 
 func isWebhookSimulator(app core.App, raw string) bool {
-	return raw == webhookSimulatorURL && app.Store().Get(webhookSimulatorStore) == true
+	return raw != "" && app.Store().Get(webhookSimulatorStore) == raw
 }
 
 var webhookKeyMu sync.Mutex

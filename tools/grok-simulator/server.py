@@ -98,9 +98,12 @@ class Simulator:
                     self.transcript[entry["role"]].append(entry)
         self.pending = 0
         self.queue = Queue(maxsize=128)
+        self.receiver_url = os.environ.get("CREW_SIMULATOR_RECEIVER_URL")
+        if self.receiver_url and self.receiver_url != f"http://127.0.0.1:{args.port}/webhook":
+            raise ValueError("The receiver URL must match this simulator's loopback webhook")
         self.protocol = Protocol(args.binary, args.db, args.dispatcher, args.specialist,
                                  model=Codex(directory, self.names) if self.mode == "coding-agent" else None,
-                                 state_dir=directory)
+                                 state_dir=directory, crew_origin=os.environ.get("CREW_SIMULATOR_CREW_ORIGIN"))
         Thread(target=self.process, daemon=True).start()
 
     def record(self, role, text, source="agent"):
@@ -155,7 +158,7 @@ class Simulator:
     def state(self, origin):
         with self.lock:
             return dict(mode=self.mode, busy=bool(self.pending), participants=self.names,
-                        credentials=dict(url=origin + "/webhook", secret=self.secret),
+                        credentials=dict(url=self.receiver_url or origin + "/webhook", secret=self.secret),
                         chats={role: list(entries) for role, entries in self.transcript.items()})
 
 

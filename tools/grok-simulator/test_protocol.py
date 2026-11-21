@@ -31,7 +31,7 @@ class ProtocolTests(unittest.TestCase):
 
     def test_authorization_belongs_to_one_local_participant_and_instance(self):
         for target in ["http://127.0.0.1:8273", "https://crew.example.com", "http://user@127.0.0.1:8123"]:
-            with self.assertRaisesRegex(ValueError, "local Crew instance"):
+            with self.assertRaisesRegex(ValueError, "rehearsal Crew instance"):
                 self.sim.handle_chat("dispatcher", f"I authorize this bot to use my Crew instance at {target}",
                                      self.send, self.log)
         self.sim.handle_chat("dispatcher", "I authorize this bot to use my Crew instance at http://127.0.0.1:8123",
@@ -40,6 +40,20 @@ class ProtocolTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "specialist chat"):
             self.sim.handle_message("specialist", {"kind": "task", "wake": self.event}, self.send, self.log)
         self.sim._write.assert_not_called()
+
+    def test_hosted_authorization_is_bound_to_exact_rehearsal_mcp_endpoint(self):
+        for model in (None, Mock(return_value="Joined")):
+            sim = Protocol(__file__, self.path / "pocketcontext.db", "First", "Second",
+                           state_dir=self.path, model=model, crew_origin="https://crew-dev.example.com")
+            sim.state["joined"] = {"dispatcher": "d", "specialist": "s"}
+            prefix = "I authorize this bot to use my Crew instance at "
+            for target in ("https://crew-dev.example.com", "https://prod.example.com/mcp",
+                           "https://crew-dev.example.com/mcp/extra", self.sim.origin):
+                with self.assertRaisesRegex(ValueError, "rehearsal Crew instance"):
+                    sim.handle_chat("dispatcher", prefix + target, self.send, self.log)
+            sim.handle_chat("dispatcher", prefix + "https://crew-dev.example.com/mcp through our shared MCP connection",
+                            self.send, self.log)
+            self.assertEqual(sim.state["authorized"], {"dispatcher": "d"})
 
     def test_unrelated_task_is_never_acknowledged_or_acquired(self):
         self.sim.state["authorized"] = self.sim.state["joined"].copy()

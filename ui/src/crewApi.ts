@@ -61,7 +61,7 @@ export type ConnectedApp = { id: string; name: string; created: number };
 async function connectionsRequest<T>(body?: { id: string }): Promise<T> {
   const response = await fetch("/oauth/connections", {
     method: body ? "POST" : "GET",
-    credentials: "omit",
+    credentials: "same-origin",
     redirect: "error",
     headers: {
       Authorization: `Bearer ${pb.authStore.token}`,
@@ -89,7 +89,7 @@ export const crewApi = {
   async connection(): Promise<Connection> {
     const response = await fetch("/.well-known/oauth-protected-resource", {
       cache: "no-store",
-      credentials: "omit",
+      credentials: "same-origin",
     });
     if (response.status === 404) return { kind: "local" };
     if (!response.ok) throw new Error("Connection details unavailable");

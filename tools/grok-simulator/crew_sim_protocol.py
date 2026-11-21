@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import subprocess
+from urllib.parse import urlsplit
 
 LABEL = "grok-simulator"
 ROLES = ("dispatcher", "specialist")
@@ -9,18 +10,27 @@ REFS = {role: f"local-simulator-{role}" for role in ROLES}
 
 
 class Protocol:
-    def __init__(self, binary, db, dispatcher, specialist, *, state_dir, model=None):
+    def __init__(self, binary, db, dispatcher, specialist, *, state_dir, model=None, crew_origin=None):
         if dispatcher == specialist:
             raise ValueError("Choose two distinct agents")
         self.binary = str(Path(binary).resolve(strict=True))
         self.db = str(Path(db).resolve(strict=True))
         config = json.loads(Path(db).with_name("pocketcontext.json").read_text(encoding="utf-8"))
         self.origin = f"http://127.0.0.1:{config.get('port') or 8099}"
+        self.authorization_target = self.origin
+        if crew_origin:
+            parsed = urlsplit(crew_origin)
+            if (parsed.scheme != "https" or not parsed.hostname
+                    or crew_origin != "https://" + parsed.hostname):
+                raise ValueError("Configure a bare HTTPS rehearsal origin")
+            self.authorization_target = crew_origin + "/mcp"
         self.names = dict(zip(ROLES, (dispatcher, specialist)))
         self.model = model
         self.file = Path(state_dir) / "routine.json"
         self.file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         binding = {"database": self.db, "instance": config["instance"], "names": self.names}
+        if crew_origin:
+            binding["authorization_target"] = self.authorization_target
         self.state = {"binding": binding, "joined": {}, "authorized": {}}
         if self.file.exists():
             self.state = json.loads(self.file.read_text(encoding="utf-8"))
@@ -107,8 +117,8 @@ class Protocol:
         if text.startswith(("I authorize this bot to use my Crew instance at ",
                             "I authorize every bot in this group chat to use my Crew instance at ")):
             target = text.split("instance at ", 1)[1].split()[0]
-            if target != self.origin:
-                raise ValueError("Use authorization for the local Crew instance")
+            if target != self.authorization_target:
+                raise ValueError("Use authorization for this rehearsal Crew instance")
             self.state["authorized"][role] = self._id(role)
             self._save()
             log(role, "Owner authorized this participant for diagnostics and assigned simulation tasks.")

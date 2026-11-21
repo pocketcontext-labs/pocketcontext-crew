@@ -199,3 +199,47 @@ Nix toolchain; the scripts also accept an explicitly supplied browser executable
 Before shipping application changes, rebuild and run the Go, name and end-to-end
 checks in the README. Tests must use temporary projects and synthetic data, never
 the running development or production database.
+
+### Rehearse Crew and the Grok simulator from a phone
+
+Use two dedicated HTTPS hostnames in your own zone, for example
+`crew-dev.bigconfig.space` and `sim-dev.bigconfig.space`. Configure the
+development owner's email and development SMTP settings as described in
+[hosting](hosting.md). Resend needs a verified sender and a sending key. Keep
+those settings in the private environment of the mobile launcher.
+
+Start the mobile profile from the checkout with a separate empty state directory:
+
+```sh
+uv run --project tools/grok-simulator tools/grok-simulator/dev.py \
+  --state .private/mobile-rehearsal --mode scripted \
+  --public-domain crew-dev.bigconfig.space --sim-host sim-dev.bigconfig.space
+```
+
+The local-only rehearsal can run alongside it. Sign in on either site with the
+owner email and code. The simulator obtains a separate host-only session after
+Crew verifies your identity. Follow the six steps in the simulator skill.
+
+On the Mac, authorize the zone with `cloudflared tunnel login`, then create a
+named tunnel with `cloudflared tunnel create crew-mobile-dev`. Keep its generated
+credentials file private. Configure both exact hostnames to use the same gateway:
+
+```yaml
+tunnel: <tunnel-uuid>
+credentials-file: /absolute/private/path/<tunnel-uuid>.json
+ingress:
+  - hostname: crew-dev.bigconfig.space
+    service: http://127.0.0.1:57993
+  - hostname: sim-dev.bigconfig.space
+    service: http://127.0.0.1:57993
+  - service: http_status:404
+```
+
+Keep the original host header. The gateway uses it to select the application.
+Create each DNS record with `cloudflared tunnel route dns crew-mobile-dev HOSTNAME`.
+After the gateway is ready, start the connector with
+`cloudflared tunnel --config /absolute/private/path/config.yml run crew-mobile-dev`.
+The Mac must stay awake with the launcher and connector running. The simulator
+receives webhook deliveries directly on loopback. The phone only needs the two
+HTTPS sites. Use a private browser window to check the login gate before trying
+the wizard over cellular data.

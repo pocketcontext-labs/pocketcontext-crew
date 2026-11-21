@@ -33,6 +33,7 @@ const labels = {
 async function refresh() {
   const response = await fetch("/api/state");
   if (!response.ok) throw new Error("Could not load the simulator.");
+  document.querySelector("#gateway-logout").hidden = response.headers.get("X-Crew-Rehearsal-Gateway") !== "1";
   const state = await response.json();
   if (!switching) {
     mode.value = state.mode;
