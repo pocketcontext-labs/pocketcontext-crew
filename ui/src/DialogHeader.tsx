@@ -434,10 +434,10 @@ export default function DialogHeader({
       {nav ?? <NavCluster />}
       <h2 title={title}>{title}</h2>
       {listNav}
-      <div className="crew-head-pill" role="toolbar" aria-label={t("Actions")}>
+      {(actions || !hideEmptyMenu || menu.length > 0) && <div className="crew-head-pill" role="toolbar" aria-label={t("Actions")}>
         {actions}
         {(!hideEmptyMenu || menu.length > 0) && <MoreMenu items={menu} />}
-      </div>
+      </div>}
       <HeadButton
         icon="close"
         label={t("Close dialog")}

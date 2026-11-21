@@ -3405,10 +3405,12 @@ export default function CrewWorkspace() {
       {/* After the session toast, so its Undo stays on top for its few seconds. */}
       {!dialog && actionToast}
       {promptPreview && (
-        <Modal hideEmptyMenu title={t("Startup prompt for {name}", { name: promptPreview.name })}
+        <Modal hideEmptyMenu nav={false} title={t("Startup prompt for {name}", { name: promptPreview.name })}
           close={() => setPromptPreview(null)} onEdit={() => undefined}>
           <div className="crew-dialog-body crew-startup-preview">
-            <pre>{promptPreview.prompt}</pre>
+            <pre>{promptPreview.prompt.split("\n").map((line, index) => (
+              <span key={index}>{index > 0 ? "\n" : ""}{line}</span>
+            ))}</pre>
             <div className="crew-actions">
               <NamedCopyAction label={t("Copy again")} successLabel={t("Copied")}
                 copy={() => copyText(promptPreview.prompt)} />

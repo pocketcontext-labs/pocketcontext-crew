@@ -4079,7 +4079,35 @@ a.crew-logo:hover .product-brand span {
   position: relative;
   margin: 0 18px;
 }
-.crew-startup-preview pre,
+.crew-dialog-body.crew-startup-preview {
+  gap: 16px;
+  padding-block: 16px 20px;
+}
+.crew-startup-preview pre {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--button-surface);
+  font: inherit;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.crew-startup-preview pre span { display: inline; }
+.crew-startup-preview pre span + span::before {
+  content: "";
+  display: block;
+  height: 0.35em;
+
+}
+@media (max-width: 680px) {
+  .crew-startup-preview .crew-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .crew-session-guide-prompt pre {
   margin: 0;
   padding: 10px 54px 10px 12px;
