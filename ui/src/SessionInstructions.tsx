@@ -133,9 +133,27 @@ export default function SessionInstructions({
     setMode(next);
   };
   const draft = text ?? session.body;
+  const general = session.general_template ?? (session.is_default ? session.body : undefined);
   const templates = [
-    { label: t("General workflow"), body: session.general_template ?? (session.is_default ? session.body : undefined) },
+    { label: t("General workflow"), body: general },
     { label: t("Coding workflow template"), body: session.coding_template },
+    ...[
+      {
+        label: t("Research"),
+        instructions: "Identify the question the owner needs answered. Check existing notes, then gather evidence from relevant sources. Link each material finding to its source and flag uncertainty. Save reusable findings in a note and submit the summary for owner review.",
+      },
+      {
+        label: t("Draft for approval"),
+        instructions: "Confirm the audience, channel and goal. Save the proposed copy in Draft for review. When the owner wants to choose one alternative, save each as a separate draft option with single selection. Wrap paste-ready copy in a :::variant block for its channel, such as :::variant{channel=linkedin}, with blank lines around the copy and a closing ::: line. Request review with review.request. Leave publication and completion to the owner.",
+      },
+      {
+        label: t("Dispatcher"),
+        instructions: "Check the assigned work and each specialist’s brief. For a handoff, identify the specialist and check for an existing assignment before creating one. Include the deliverable, relevant notes and acceptance criteria. Record the handoff on the originating task and leave completion to the owner.",
+      },
+    ].map(({ label, instructions }) => ({
+      label,
+      body: general ? [general, instructions].join("\n\n") : undefined,
+    })),
   ];
   return (
     <div className="crew-dialog-body crew-session-dialog">

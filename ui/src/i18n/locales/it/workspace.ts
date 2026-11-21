@@ -1,6 +1,9 @@
 // Italian strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const it: Record<string, string> = {
+  "Research": "Ricerca",
+  "Draft for approval": "Bozza da approvare",
+  "Dispatcher": "Smistamento attività",
   "Templates": "Modelli",
   "General workflow": "Flusso di lavoro generale",
   "Coding workflow template": "Modello per attività di sviluppo",
