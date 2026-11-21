@@ -4054,6 +4054,8 @@ a.crew-logo:hover .product-brand span {
 /* An agent card with Start a session: the controls are the card's footer,
    inside one frame, so cards in the grid keep equal height. */
 .crew-agent-tile:has(> .crew-session) {
+  --agent-action-inset: 23px;
+  --agent-action-column: 44px;
   gap: 0;
   position: relative;
   border: 1px solid #dce2d8;
@@ -4066,12 +4068,12 @@ a.crew-logo:hover .product-brand span {
   border-radius: 0;
 }
 .crew-agent-tile > .crew-session {
-  padding: 12px 23px;
+  padding: 12px var(--agent-action-inset);
   border-top: 1px solid #edf0e7;
 }
 .crew-agent-tile .crew-session-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
+  grid-template-columns: minmax(0, 1fr) var(--agent-action-column);
   align-items: start;
   gap: 12px;
   width: 100%;
@@ -4091,7 +4093,8 @@ a.crew-logo:hover .product-brand span {
 }
 .crew-app .crew-agent-tile .crew-card-more {
   position: absolute;
-  inset: 21px 16px auto auto;
+  inset: 21px calc(var(--agent-action-inset) + var(--agent-action-column) / 2) auto auto;
+  translate: 50% 0;
 }
 /* Download beside Remove under an image, and under review files. */
 .crew-attachment-actions {
