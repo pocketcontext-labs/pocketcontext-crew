@@ -7,6 +7,7 @@ RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
     npm install --global pnpm@10.33.2 && pnpm install --frozen-lockfile
 COPY ui/ ./
+COPY pb_hooks/session_templates.json /pb_hooks/session_templates.json
 # Shared review markup fixtures the reader tests load from ../tests.
 COPY tests/fixtures/ /tests/fixtures/
 RUN pnpm typecheck && pnpm test && pnpm build

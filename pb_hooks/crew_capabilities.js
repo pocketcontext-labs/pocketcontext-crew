@@ -228,6 +228,8 @@ function document() {
     properties: {
       agent: object({ id: str, name: str, kind: str }, ["id", "name", "kind"]),
       prompt: str,
+      general_template: str,
+      workflow_additions: { type: "object", additionalProperties: str, description: "Append one named workflow to general_template to use it as a session template." },
       coding_template: { type: "string", description: "Optional editable coding workflow. Use session.update to save it as the active body after owner approval." },
       instructions: {
         type: "string",

@@ -108,3 +108,23 @@ it("previews the coding workflow without changing the draft and saves only on ex
   await waitFor(() => expect(changed).toHaveBeenCalledWith(expect.objectContaining({ revision: 5 })));
   expect(update).toHaveBeenCalledExactlyOnceWith(source.agent.id, 4, { instructions: template }, "Edited by hand");
 });
+
+it.each(["external", "bot"])("offers all five templates for a customized %s agent on older servers", (kind) => {
+  const custom = { ...session, agent: { ...session.agent, kind }, is_default: false, body: "Custom workflow" };
+  render(<SessionInstructions session={custom} initialMode="edit" onChange={() => undefined} Markdown={Markdown} />);
+  const list = screen.getByRole("region", { name: "Templates" });
+  expect([...list.querySelectorAll("summary")].map(row => row.textContent)).toEqual([
+    "General workflow", "Coding workflow template", "Research", "Draft for approval", "Dispatcher",
+  ]);
+  expect(screen.getByLabelText(/Session instructions/)).toHaveValue("Custom workflow");
+});
+
+it("keeps revision information at the bottom of every view", async () => {
+  vi.spyOn(crewApi, "read").mockResolvedValue([]);
+  const { container } = render(<SessionInstructions session={session} onChange={() => undefined} Markdown={Markdown} />);
+  for (const mode of ["Read", "Edit", "History"]) {
+    fireEvent.click(screen.getByRole("button", { name: mode }));
+    expect(container.querySelector(".crew-session-dialog")?.lastElementChild).toHaveClass("crew-session-revision");
+  }
+  await screen.findByText("No saved revisions yet: these are the built-in instructions.");
+});

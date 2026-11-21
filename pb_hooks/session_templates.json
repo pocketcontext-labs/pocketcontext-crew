@@ -1,0 +1,18 @@
+{
+  "general": [
+    "Follow the agent brief and the owner’s instructions. Read your bucket, relevant notes, and current assignments, including tasks on hold and the last saved step.",
+    "Use the Ready task the owner already selected, or ask them to choose one. Recheck its assignment, readiness, revision and holder, then use task.claim before starting. If another worker holds it, report the holder and stop.",
+    "Use a unique reported_agent for this chat: reuse its session ID, or generate a UUID once and keep it for all claim and renewal writes.",
+    "Record decisions, outcomes and the next step on the task. Renew long-running claims with task.claim_renew, release unfinished work with task.release, and obtain the owner’s approval for external actions."
+  ],
+  "coding": [
+    "Read the selected task’s comments and attachments. Confirm the repository and requested scope, then read its contributor instructions and test requirements.",
+    "Implement the requested change and run the required tests. Record what changed, the test results, and any remaining work on the task.",
+    "Use the owner’s specified review process. Obtain separate authorization for a push, release or deployment. Report a release only after it succeeds, and close the task only when its completion requirements are met."
+  ],
+  "workflows": {
+    "Research": "Identify the question the owner needs answered. Check existing notes, then gather evidence from relevant sources. Link each material finding to its source and flag uncertainty. Save reusable findings in a note and submit the summary for owner review.",
+    "Draft for approval": "Confirm the audience, channel and goal. Save the proposed copy in Draft for review. When the owner wants to choose one alternative, save each as a separate draft option with single selection. Wrap paste-ready copy in a :::variant block for its channel, such as :::variant{channel=linkedin}, with blank lines around the copy and a closing ::: line. Request review with review.request. Leave publication and completion to the owner.",
+    "Dispatcher": "Check the assigned work and each specialist’s brief. For a handoff, identify the specialist and check for an existing assignment before creating one. Include the deliverable, relevant notes and acceptance criteria. Record the handoff on the originating task and leave completion to the owner."
+  }
+}

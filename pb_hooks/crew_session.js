@@ -9,14 +9,8 @@
 const LEASE_HOURS = 2;
 const LEASE_MS = LEASE_HOURS * 3600 * 1000;
 
-const sessionIdentity = "Use a unique reported_agent for this chat: reuse its session ID, or generate a UUID once and keep it for all claim and renewal writes.";
-
-const shortDefault = [
-  "Follow the agent brief and the owner’s instructions. Read your bucket, relevant notes, and current assignments, including tasks on hold and the last saved step.",
-  "Use the Ready task the owner already selected, or ask them to choose one. Recheck its assignment, readiness, revision and holder, then use task.claim before starting. If another worker holds it, report the holder and stop.",
-  sessionIdentity,
-  "Record decisions, outcomes and the next step on the task. Renew long-running claims with task.claim_renew, release unfinished work with task.release, and obtain the owner’s approval for external actions.",
-].join("\n\n");
+const presets = require("./session_templates.json");
+const shortDefault = presets.general.join("\n\n");
 
 function prompt(name) {
   return [
@@ -24,19 +18,13 @@ function prompt(name) {
     "Use my authenticated Crew MCP connection (crew_read/crew_write) or paired pocketcontext-crew CLI (read/write). If neither is available, explain how to connect Crew in this chat or pair the CLI and stop.",
     'Read the session with {"collection":"session","agent":' + JSON.stringify(name) + '}. Follow its instructions and brief. Read your bucket, relevant notes and assignments with title, status, readiness, last_saved_step, claim_state, claimed_by and webhook_holder.',
     "If I already selected a Ready task by ID or title, recheck and claim that task. Otherwise show the assignments and wait for my choice. Opening the chat only reads context. Use task.claim before work; report any existing holder.",
-    sessionIdentity,
+    "Use a unique reported_agent for this chat: reuse its session ID, or generate a UUID once and keep it for all claim and renewal writes.",
     "Before leaving, save the outcome and next step if they changed.",
   ].join("\n");
 }
 
 function codingTemplate(name) {
-  return [
-    "# Coding workflow for " + name,
-    shortDefault,
-    "Read the selected task’s comments and attachments. Confirm the repository and requested scope, then read its contributor instructions and test requirements.",
-    "Implement the requested change and run the required tests. Record what changed, the test results, and any remaining work on the task.",
-    "Use the owner’s specified review process. Obtain separate authorization for a push, release or deployment. Report a release only after it succeeds, and close the task only when its completion requirements are met.",
-  ].join("\n\n");
+  return ["# Coding workflow for " + name, shortDefault].concat(presets.coding).join("\n\n");
 }
 
 // Single-quote a value for a POSIX shell argument.
@@ -254,6 +242,7 @@ function describe(app, ref) {
     },
     prompt: prompt(name),
     general_template: shortDefault,
+    workflow_additions: presets.workflows,
     coding_template: codingTemplate(name),
     instructions: compose(body, agent.getString("brief")),
     lease_hours: LEASE_HOURS,
