@@ -1,6 +1,9 @@
 // Italian strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const it: Record<string, string> = {
+  "Copy startup prompt": "Copia il prompt di avvio",
+  "Startup prompt copied. Paste it into your agent chat.": "Prompt di avvio copiato. Incollalo nella chat del tuo agente.",
+  "Read session instructions": "Leggi le istruzioni di sessione",
   "Assign the first task to an active agent.": "Assegna la prima attività a un agente attivo.",
   "Set the first task to Ready.": "Imposta la prima attività su Pronta.",
   "Create a task or open an existing one. Assign it to an agent, set readiness to Ready, and save.": "Crea un’attività o aprine una esistente. Assegnala a un agente, impostala come pronta e salva.",

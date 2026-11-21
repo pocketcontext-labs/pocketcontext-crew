@@ -64,10 +64,10 @@ it("pauses on hover and focus and resumes with the time left", () => {
   expect(toast).not.toHaveClass("crew-toast-leaving");
   fireEvent.mouseLeave(toast);
   // Focus inside pauses too, until focus leaves the toast.
-  act(() => screen.getByRole("button", { name: "View" }).focus());
+  act(() => screen.getByRole("button", { name: "Read session instructions" }).focus());
   act(() => void vi.advanceTimersByTime(60_000));
   expect(toast).not.toHaveClass("crew-toast-leaving");
-  act(() => screen.getByRole("button", { name: "View" }).blur());
+  act(() => screen.getByRole("button", { name: "Read session instructions" }).blur());
   act(() => void vi.advanceTimersByTime(1999));
   expect(toast).not.toHaveClass("crew-toast-leaving");
   act(() => void vi.advanceTimersByTime(1));
@@ -84,10 +84,10 @@ it("dismisses at once from the × icon, which is named and has a tooltip", () =>
   expect(close).toHaveTextContent("×");
   fireEvent.click(close);
   expect(dismiss).toHaveBeenCalledTimes(1);
-  // View stays the only text button.
+  // Reading the instructions is the only text action.
   expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
     "×",
-    "View",
+    "Read session instructions",
   ]);
 });
 

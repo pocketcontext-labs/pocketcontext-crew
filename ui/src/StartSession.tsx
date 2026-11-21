@@ -385,7 +385,7 @@ export function SessionToast({
       </button>
       {start.state === "copied" && (
         <p>
-          {t("Instructions copied")}
+          {t("Startup prompt copied. Paste it into your agent chat.")}
         </p>
       )}
       {start.state === "manual" && (
@@ -416,7 +416,7 @@ export function SessionToast({
       {start.session && (
         <div className="crew-toast-actions">
           <button type="button" aria-haspopup="dialog" onClick={view}>
-            {t("View")}
+            {t("Read session instructions")}
           </button>
         </div>
       )}

@@ -395,7 +395,7 @@ describe("Home agent rows", () => {
     fireEvent.click(again.getByRole("button", { name: /^Implement/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(session.prompt));
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Instructions copied",
+      "Startup prompt copied. Paste it into your agent chat.",
     );
   });
 

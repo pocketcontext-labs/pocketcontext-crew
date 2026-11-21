@@ -3616,9 +3616,9 @@ describe("project agents and coding sessions", () => {
     const bot = await tile("Network");
     expect(bot.getByText("Started automatically · webhook")).toBeVisible();
     expect(bot.getByText("Use in another chat")).toBeVisible();
-    expect(bot.getByRole("button", { name: "Copy instructions for Network" })).toHaveClass("crew-copy-icon");
+    expect(bot.getByRole("button", { name: "Copy instructions for Network" })).toHaveClass("crew-session-row");
     expect(manual.getByText("Start in a chat")).toBeVisible();
-    expect(manual.getByRole("button", { name: "Copy instructions for synthetic-repo" })).toHaveClass("crew-copy-icon");
+    expect(manual.getByRole("button", { name: "Copy instructions for synthetic-repo" })).toHaveClass("crew-session-row");
     fireEvent.click(bot.getByRole("button", { name: "Copy instructions for Network" }));
     await waitFor(() => expect(clipboard).toHaveBeenCalledWith("Synthetic instructions for " + agent.id));
     expect(crewApi.write).not.toHaveBeenCalled();
@@ -3648,7 +3648,7 @@ describe("project agents and coding sessions", () => {
     expect(writeText).toHaveBeenCalledWith(session.prompt);
     const toast = await screen.findByRole("status");
     expect(toast).toHaveTextContent(
-      "Instructions copied",
+      "Startup prompt copied. Paste it into your agent chat.",
     );
     expect(within(toast).queryByRole("button", { name: /Undo/ })).toBeNull();
     // The first start opens the guide dialog with the prompt in full (no
@@ -3691,7 +3691,7 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(menu.getByRole("button", { name: "How to continue in a chat" }));
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(within(toast).getByRole("button", { name: "View" }));
+    fireEvent.click(within(toast).getByRole("button", { name: "Read session instructions" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Session instructions for synthetic-repo",
     });
@@ -3755,7 +3755,7 @@ describe("project agents and coding sessions", () => {
     fireEvent.click(menu.getByRole("button", { name: "Start in a chat" }));
     expect(writeText).toHaveBeenCalledWith(session.prompt);
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Instructions copied",
+      "Startup prompt copied. Paste it into your agent chat.",
     );
     expect(screen.queryByRole("dialog", { name: "synthetic-repo" })).toBeNull();
     // An unmapped bot uses the manual start wording.
@@ -3812,7 +3812,7 @@ describe("project agents and coding sessions", () => {
       await screen.findByRole("button", { name: "Copy instructions for synthetic-repo" }),
     );
     fireEvent.click(
-      within(await screen.findByRole("status")).getByRole("button", { name: "View" }),
+      within(await screen.findByRole("status")).getByRole("button", { name: "Read session instructions" }),
     );
     const dialog = within(
       await screen.findByRole("dialog", { name: "Session instructions for synthetic-repo" }),
@@ -3868,7 +3868,7 @@ describe("project agents and coding sessions", () => {
       await screen.findByRole("button", { name: "Copy instructions for synthetic-repo" }),
     );
     fireEvent.click(
-      within(await screen.findByRole("status")).getByRole("button", { name: "View" }),
+      within(await screen.findByRole("status")).getByRole("button", { name: "Read session instructions" }),
     );
     const dialog = within(
       await screen.findByRole("dialog", { name: "Session instructions for synthetic-repo" }),
