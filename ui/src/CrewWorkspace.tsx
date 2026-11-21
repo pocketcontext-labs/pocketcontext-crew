@@ -3809,7 +3809,18 @@ function Editor({
     setMenu(items);
     return () => setMenu([]);
   }, [setMenu, row, kind, readOnly, busy, pendingReviewId]);
-  const [start] = useState(() => formValues(kind, row, data));
+  const [start] = useState(() => {
+    const values = formValues(kind, row, data);
+    if (!firstTask || row || kind !== "task") return values;
+    const agents = data.agents.filter(canStartChat);
+    return {
+      ...values,
+      title: t("Draft a welcome message for the crew"),
+      body: t("Write a two-sentence welcome message for a new teammate explaining how to give the crew its first task. Save the message in Draft for review and use review.request to submit it for my approval. Leave the task in Needs review and wait for my decision."),
+      readiness: "ready",
+      selection: agents.length === 1 ? agents[0].id : "",
+    };
+  });
   const [title, setTitle] = useState(start.title),
     [body, setBody] = useState(start.body),
     [reason, setReason] = useState(""),

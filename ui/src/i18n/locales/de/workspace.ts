@@ -1,6 +1,8 @@
 // German strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const de: Record<string, string> = {
+  "Draft a welcome message for the crew": "Eine Willkommensnachricht für die Crew entwerfen",
+  "Write a two-sentence welcome message for a new teammate explaining how to give the crew its first task. Save the message in Draft for review and use review.request to submit it for my approval. Leave the task in Needs review and wait for my decision.": "Begrüße ein neues Teammitglied in zwei Sätzen und erkläre, wie es der Crew die erste Aufgabe gibt. Speichere die Nachricht als Entwurf zur Prüfung und fordere mit review.request meine Freigabe an. Lass die Aufgabe zur Prüfung offen und warte auf meine Entscheidung.",
   "Show startup prompt": "Startprompt anzeigen",
   "Startup prompt for {name}": "Startprompt für {name}",
   "Copy again": "Erneut kopieren",

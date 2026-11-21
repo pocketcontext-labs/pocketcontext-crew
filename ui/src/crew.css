@@ -1627,7 +1627,7 @@ a.crew-logo:hover .product-brand span {
 @media (hover: hover) {
   .crew-connect-address:hover { background: #edf2e9; }
 }
-.crew-connect-address > code {
+.crew-app .crew-connect-address > code {
   overflow-wrap: anywhere;
   margin: 0;
   padding: 0;

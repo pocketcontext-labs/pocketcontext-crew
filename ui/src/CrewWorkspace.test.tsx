@@ -375,6 +375,19 @@ it("counts agent activity as connected and lists what needs the owner", async ()
   fireEvent.click(screen.getByText("Draft waiting for your approval"));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
 });
+it("prefills the onboarding task with an editable request for human approval", async () => {
+  localStorage.setItem("pocketcontext.crew.agent_connected." + agent.id, "1");
+  fixtures.tasks = [];
+  fixtures.reviews = [];
+  history.replaceState(null, "", "/");
+  render(<CrewWorkspace />);
+  fireEvent.click(await screen.findByRole("button", { name: "＋ New task" }));
+  const dialog = within(screen.getByRole("dialog"));
+  expect(dialog.getByLabelText("Title")).toHaveValue("Draft a welcome message for the crew");
+  expect(dialog.getByLabelText("Assigned agent")).toHaveValue(agent.id);
+  expect(dialog.getByLabelText("Hold")).toHaveValue("ready");
+  expect(dialog.getByText(/Save the message in Draft for review/, { selector: "p" })).toHaveTextContent("review.request");
+});
 it("requires a Ready assignment and a separate prompt handoff before review", async () => {
   localStorage.clear();
   localStorage.setItem("pocketcontext.crew.agent_connected." + agent.id, "1");
