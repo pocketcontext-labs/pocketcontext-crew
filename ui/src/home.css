@@ -135,8 +135,8 @@
   text-align: left;
   touch-action: manipulation;
 }
-.crew-app .crew-home-agent:hover,
-.crew-app .crew-home-agent:active {
+.crew-home-agents > li:focus-within,
+.crew-home-agents > li:active {
   background: #f3f5ef;
 }
 .crew-home-agent .crew-avatar {
@@ -210,6 +210,20 @@
   background: #edf0eb;
   color: #4b5e4d;
 }
+@media (hover: hover) {
+  .crew-home-agents > li:hover { background: #f3f5ef; }
+  .crew-app button.crew-home-agent:hover { background: transparent; }
+}
+@media (min-width: 760px) {
+  .crew-home-agent-text {
+    flex: 1;
+    grid-template-columns: minmax(8rem, 1fr) minmax(12rem, 1fr);
+    align-items: center;
+    gap: 12px;
+  }
+  .crew-home-agent-meta { gap: 8px; }
+}
+
 /* Recent and the Needs you items: rows in one card, like the agents. */
 .crew-home-section .crew-home-list {
   gap: 0;
