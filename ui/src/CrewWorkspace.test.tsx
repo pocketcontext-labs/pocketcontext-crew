@@ -3680,7 +3680,7 @@ describe("project agents and coding sessions", () => {
     render(<CrewWorkspace />);
     await waitFor(() => expect(session$).toHaveBeenCalled());
     fireEvent.click(
-      screen.getByRole("button", { name: "Copy instructions for synthetic-repo" }),
+      within(screen.getByRole("button", { name: "Copy instructions for synthetic-repo" })).getByText("Start in a chat"),
     );
     const toast = await screen.findByRole("status");
     fireEvent.click(within(toast).getByRole("button", { name: "Dismiss" }));

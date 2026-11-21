@@ -149,20 +149,20 @@ export default function StartSession({ agent, onStart }: {
         aria-expanded={!!menu} onClick={(event) => setMenu(event.currentTarget)}>
         {icons.more}
       </button>
-      <div className="crew-session-row">
-        <div>
+      <button type="button" className="crew-session-row"
+        aria-label={t("Copy instructions for {name}", { name })}
+        title={t("Copy instructions for {name}", { name })}
+        data-state={state || undefined} disabled={session.loading} onClick={copy}>
+        <span>
           <strong>{label}</strong>
-          {!session.guideOff && <p>{agent.chat_start === "webhook"
+          {!session.guideOff && <span className="crew-session-hint">{agent.chat_start === "webhook"
             ? t("Crew starts {name} automatically. To use it in a chat too, copy and paste its instructions.", { name })
-            : t("Copy the instructions and paste them into a chat connected to Crew to start {name}.", { name })}</p>}
-        </div>
-        <button type="button" className="crew-copy-control crew-copy-icon crew-session-copy"
-          aria-label={t("Copy instructions for {name}", { name })}
-          title={t("Copy instructions for {name}", { name })}
-          data-state={state || undefined} disabled={session.loading} onClick={copy}>
+            : t("Copy the instructions, then paste them into a chat to start {name}.", { name })}</span>}
+        </span>
+        <span className="crew-session-copy" aria-hidden="true">
           <CopyGlyph state={state} />
-        </button>
-      </div>
+        </span>
+      </button>
       {menu && <PopoverMenu label={name} anchor={menu} onClose={() => setMenu(null)}
         items={[
           { label, icon: <CopyGlyph state={state} />, disabled: session.loading, onSelect: copy },

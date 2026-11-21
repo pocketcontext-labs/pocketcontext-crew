@@ -4068,17 +4068,28 @@ a.crew-logo:hover .product-brand span {
   border-radius: 0;
 }
 .crew-agent-tile > .crew-session {
-  padding: 12px var(--agent-action-inset);
   border-top: 1px solid #edf0e7;
 }
-.crew-agent-tile .crew-session-row {
+.crew-agent-tile button.crew-session-row {
+  padding: 12px var(--agent-action-inset);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  text-align: start;
+  color: inherit;
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--agent-action-column);
   align-items: start;
   gap: 12px;
   width: 100%;
 }
-.crew-app .crew-agent-tile button.crew-session-copy {
+.crew-agent-tile .crew-session-copy {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 1px solid var(--icon-line);
+  border-radius: 50%;
+  background: var(--icon-fill);
   width: var(--agent-action-column);
   height: var(--agent-action-column);
   min-width: var(--agent-action-column);
@@ -4089,7 +4100,8 @@ a.crew-logo:hover .product-brand span {
   padding-top: 10px;
   font-size: 15px;
 }
-.crew-agent-tile .crew-session-row p {
+.crew-agent-tile .crew-session-hint {
+  display: block;
   margin: 5px 0 0;
   line-height: 1.5;
   color: #58664f;

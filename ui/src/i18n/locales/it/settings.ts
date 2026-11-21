@@ -8,7 +8,7 @@ const it: Record<string, string> = {
   "Started automatically · webhook": "Avvio automatico · webhook",
   "Instructions copied": "Istruzioni copiate",
   "Crew starts {name} automatically. To use it in a chat too, copy and paste its instructions.": "Crew avvia {name} automaticamente. Per usarlo anche in una chat, copia e incolla le sue istruzioni.",
-  "Copy the instructions and paste them into a chat connected to Crew to start {name}.": "Per avviare {name}, copia le istruzioni e incollale in una chat collegata a Crew.",
+  "Copy the instructions, then paste them into a chat to start {name}.": "Per avviare {name}, copia le istruzioni e incollale in una chat collegata a Crew.",
   "Before leaving your old chat, save any new decisions and the next step on the task.": "Prima di lasciare la chat precedente, salva nel task le nuove decisioni e il prossimo passo.",
   "Open a chat connected to Crew and paste the instructions below. You can use another subscription. If Crew is missing, connect it first.": "Apri una chat collegata a Crew e incolla le istruzioni qui sotto. Puoi usare un altro abbonamento. Se Crew non è disponibile, collegalo prima.",
   "Read the saved tasks and notes, then choose a ready task by title. Crew checks who is working on it before the new chat starts work.": "Leggi i task e le note salvate, poi scegli un task pronto indicando il titolo. Prima che la nuova chat inizi a lavorare, Crew verifica chi se ne sta occupando.",
