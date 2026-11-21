@@ -4083,6 +4083,11 @@ a.crew-logo:hover .product-brand span {
   gap: 12px;
   width: 100%;
 }
+@media (hover: hover) {
+  .crew-agent-tile button.crew-session-row:hover:enabled {
+    background: #edf2e9;
+  }
+}
 .crew-agent-tile .crew-session-copy {
   display: grid;
   place-items: center;
