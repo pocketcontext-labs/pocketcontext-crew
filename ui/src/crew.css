@@ -1015,6 +1015,7 @@ a.crew-logo:hover .product-brand span {
     grid-template-columns: minmax(0, 1fr);
   }
   .crew-app .crew-prompt-actions > button {
+    width: 100%;
     min-height: 44px;
     white-space: normal;
     overflow-wrap: anywhere;
