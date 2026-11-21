@@ -3478,8 +3478,11 @@ describe("project agents and coding sessions", () => {
     fireEvent.click((await screen.findByRole("heading", { name: "synthetic-repo" })).closest("button")!);
     const dialog = within(screen.getByRole("dialog"));
     fireEvent.change(dialog.getByLabelText("Name"), { target: { value: "Renamed" } });
+    const startup = await dialog.findByRole("switch", { name: "Automatic startup" });
+    await waitFor(() => expect(startup).toBeEnabled());
+    fireEvent.click(startup);
     fireEvent.change(await dialog.findByRole("textbox", { name: /Recipient reference/ }), { target: { value: "synthetic" } });
-    fireEvent.click(dialog.getByRole("button", { name: "Turn on automatic startup" }));
+    fireEvent.click(dialog.getByRole("button", { name: "Confirm destination" }));
     await waitFor(() => expect(crewApi.write).toHaveBeenCalledWith("webhook.startup.update",
       expect.objectContaining({ enabled: true }), expect.objectContaining({ revision: project.revision })));
     expect(dialog.getByLabelText("Name")).toHaveValue("Renamed");
