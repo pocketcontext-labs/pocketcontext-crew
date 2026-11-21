@@ -490,13 +490,13 @@ function AgentRowView({
           {agentInitials(name, agents)}
         </span>
         <span className="crew-home-agent-text">
-          <span className="crew-home-agent-line">
-            <strong>{name}</strong>
+          <strong>{name}</strong>
+          <span className="crew-home-agent-meta">
             <span className="crew-home-startup-badge" data-start={startup}>
               {startup === "person" ? t("Person") : startup === "webhook" ? t("Automatic startup") : t("Manual start")}
             </span>
+            <small>{status}</small>
           </span>
-          <small>{status}</small>
         </span>
       </button>
       {copyPrompt && (

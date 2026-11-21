@@ -127,7 +127,7 @@
   align-items: center;
   gap: 12px;
   min-height: 60px;
-  padding: 6px 4px 6px 14px;
+  padding: 10px 4px 10px 14px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -149,6 +149,7 @@
 }
 .crew-home-agent-text {
   display: grid;
+  gap: 4px;
   line-height: 1.25;
   min-width: 0;
 }
@@ -193,16 +194,14 @@
 }
 
 /* Keep the agent name and its startup mode readable on narrow screens. */
-.crew-home-agent-line {
+.crew-home-agent-meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 2px 8px;
   min-width: 0;
 }
-.crew-home-agent-line strong {
-  min-width: 0;
-}
+
 .crew-home-startup-badge {
   flex: none;
   padding: 2px 8px;
@@ -220,10 +219,13 @@
   background: #edf0eb;
   color: #4b5e4d;
 }
-.crew-app .crew-home-agent-copy {
-  flex: none;
-  width: 44px;
-  height: 44px;
+.crew-app button.crew-home-agent-copy.crew-copy-icon {
+  border: 0;
+  background: transparent;
+  border-radius: 14px;
+}
+.crew-app button.crew-home-agent-copy:hover {
+  background: #edf1e9;
 }
 
 /* Recent and the Needs you items: rows in one card, like the agents. */
