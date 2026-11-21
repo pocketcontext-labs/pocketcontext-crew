@@ -3366,7 +3366,7 @@ export default function CrewWorkspace() {
                   </div>
                 ))}
               </div>
-              <a className="crew-agents-connect" href={viewHashes.connect}>
+              <a className="crew-agents-connect crew-button-link crew-primary" href={viewHashes.connect}>
                 {t("Connect these agents to your platform →")}
               </a>
             </>

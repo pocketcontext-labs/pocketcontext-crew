@@ -1576,7 +1576,10 @@ a.crew-logo:hover .product-brand span {
   color: #708065;
 }
 .crew-agents-connect {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  text-decoration: none;
   margin-top: 24px;
 }
 .crew-sidebar-link {
