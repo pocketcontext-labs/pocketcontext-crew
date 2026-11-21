@@ -1407,7 +1407,9 @@ a.crew-logo:hover .product-brand span {
 .crew-session-rewrite {
   display: grid;
   gap: 4px;
-  flex: 1 1 260px;
+  flex: none;
+  padding: 10px 0;
+  border-top: 1px solid #e4e7dc;
   justify-items: start;
 }
 .crew-session-rewrite small {
@@ -4900,3 +4902,10 @@ a.crew-logo:hover .product-brand span {
   gap: 8px;
 }
 .crew-dialog .crew-instruction-actions button { min-height: 44px; }
+
+
+.crew-dialog:has(.crew-session-dialog) .crew-dialog-head h2 {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}

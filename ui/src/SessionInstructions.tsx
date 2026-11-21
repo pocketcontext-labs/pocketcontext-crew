@@ -136,30 +136,10 @@ export default function SessionInstructions({
   const codingTemplate = session.coding_template;
   return (
     <div className="crew-dialog-body crew-session-dialog">
-      <p className="crew-session-hint">
-        {t(
-          "These instructions are saved in Crew, not in the code. Edit them by hand, or ask an agent to rewrite them.",
-        )}
-      </p>
       <p className="crew-footnote crew-session-revision">
         <SessionRevisionLine session={session} />
       </p>
       <div className="crew-session-toolbar">
-        <div className="crew-session-rewrite">
-          <NamedCopyAction
-            key={session.revision}
-            disabled={!session.rewrite_prompt}
-            copy={() => copyText(session.rewrite_prompt)}
-            label={t("Rewrite with an agent")}
-            successLabel={t("Rewrite prompt copied")}
-            onResult={(ok) => setFailedRevision(ok ? null : session.revision)}
-          />
-          <small>
-            {t(
-              "Recommended. Copies a prompt for an agent conversation: the agent reads the current text, asks what to change, shows you the new version and saves it only after you approve.",
-            )}
-          </small>
-        </div>
         <div
           className="crew-session-views"
           role="group"
@@ -189,7 +169,7 @@ export default function SessionInstructions({
             {t("History")}
           </button>
         </div>
-        <button
+        {mode !== "read" && <button
           type="button"
           disabled={busy || session.is_default}
           title={
@@ -202,7 +182,7 @@ export default function SessionInstructions({
           }
         >
           {t("Restore default")}
-        </button>
+        </button>}
       </div>
       {/* Only this area changes between Read, Edit and History; the
           dialog, the hint and the toolbar above keep their size and place. */}
@@ -353,6 +333,16 @@ export default function SessionInstructions({
           </div>
         )}
       </div>
+        <div className="crew-session-rewrite">
+          <NamedCopyAction
+            key={session.revision}
+            disabled={!session.rewrite_prompt}
+            copy={() => copyText(session.rewrite_prompt)}
+            label={t("Rewrite with an agent")}
+            successLabel={t("Rewrite prompt copied")}
+            onResult={(ok) => setFailedRevision(ok ? null : session.revision)}
+          />
+        </div>
     </div>
   );
 }

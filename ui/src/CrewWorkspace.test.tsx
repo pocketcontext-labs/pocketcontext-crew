@@ -3785,11 +3785,8 @@ describe("project agents and coding sessions", () => {
     const dialog = within(
       await screen.findByRole("dialog", { name: "Session instructions for synthetic-repo" }),
     );
-    dialog.getByText(
-      "These instructions are saved in Crew, not in the code. Edit them by hand, or ask an agent to rewrite them.",
-    );
     dialog.getByText("Built-in default · not edited yet");
-    expect(dialog.getByRole("button", { name: "Restore default" })).toBeDisabled();
+    expect(dialog.queryByRole("button", { name: "Restore default" })).toBeNull();
     // The recommended path copies a prompt for an agent conversation.
     expect(vi.mocked(crewApi.session).mock.calls.filter(([id]) => id === project.id)).toHaveLength(2);
     fireEvent.click(dialog.getByRole("button", { name: "Rewrite with an agent" }));
@@ -3809,7 +3806,6 @@ describe("project agents and coding sessions", () => {
       "Edited by hand",
     );
     expect(dialog.getByText("edited").tagName).toBe("STRONG");
-    expect(dialog.getByRole("button", { name: "Restore default" })).toBeEnabled();
     // History lists revisions; the current one has no Restore.
     fireEvent.click(dialog.getByRole("button", { name: "History" }));
     await dialog.findByText(fullText(/^Revision 1 · owner · \S.* · current$/));
