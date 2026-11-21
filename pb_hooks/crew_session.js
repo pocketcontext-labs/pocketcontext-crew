@@ -2,7 +2,7 @@
 // per project, run by coding sessions (Codex, Claude Code) that the owner
 // starts by hand. The reader copies the short prompt; the session reads the
 // full instructions with crew_read {collection:"session", agent}. Since 0.21.0
-// the instructions body is editable per external agent (session.update) with
+// the instructions body is editable per active nonhuman agent (session.update) with
 // immutable revisions in crew_session_revisions; the template here is the
 // built-in default, used while no revision is saved and after Restore default.
 // The agent's brief carries the project-specific part and is always appended.
@@ -169,10 +169,21 @@ function editedBy(row) {
   return actor;
 }
 
-function bodyOf(row, name) {
-  return !row || row.getBool("is_default")
-    ? defaultBody(name)
-    : row.getString("instructions");
+// Revision rows written before bot histories were supported always referred
+// to the external agent's project-coding template.
+function templateKind(row, agent) {
+  return row ? row.getString("template_kind") || "external" :
+    (agent.getString("kind") || "bot") === "bot" ? "bot" : "external";
+}
+
+function template(kind, name) {
+  if (kind === "external") return defaultBody(name);
+  return [
+    "Use the agent brief below to continue the role in this chat.",
+    "Read the current assignments and their latest comments. Ask the owner to select a Ready task, then use task.claim with its revision, the assigned agent and a unique session name as reported_agent.",
+    "Wait for the claim to succeed before working. If Crew reports an existing claim or webhook execution, tell the owner who holds the task.",
+    "Keep the owner’s approval authority. Before ending a session, record the outcome and next step, and release unfinished work with task.release.",
+  ].join("\n\n");
 }
 
 // The prompt the reader copies for "Rewrite with an agent".
@@ -198,14 +209,9 @@ function describe(app, ref) {
   const agent = findAgent(app, ref);
   const name = agent.getString("name");
   const row = latest(app, agent.id);
-  const body = !row && (agent.getString("kind") || "bot") === "bot"
-    ? [
-        "Use the agent brief below to continue the role in this chat.",
-        "Read the current assignments and their latest comments. Ask the owner to select a Ready task, then use task.claim with its revision, the assigned agent and a unique session name as reported_agent.",
-        "Wait for the claim to succeed before working. If Crew reports an existing claim or webhook execution, tell the owner who holds the task.",
-        "Keep the owner’s approval authority. Before ending a session, record the outcome and next step, and release unfinished work with task.release.",
-      ].join("\n\n")
-    : bodyOf(row, name);
+  const body = !row || row.getBool("is_default")
+    ? template(templateKind(row, agent), name)
+    : row.getString("instructions");
   const revision = row ? row.getInt("revision") : 0;
   return {
     agent: {
@@ -238,7 +244,7 @@ function exportRevision(app, row) {
         .findRecordById("crew_agents", row.getString("agent"))
         .getString("name");
     } catch (_) {}
-    out.instructions = defaultBody(name);
+    out.instructions = template(templateKind(row), name);
   }
   return out;
 }
@@ -246,7 +252,7 @@ function exportRevision(app, row) {
 // session.update: data {agent, instructions | restore_revision |
 // restore_default}, expected_revision = the current revision (0 while no
 // revision was saved). Appends one immutable revision and one agent event.
-// External agents and automatically started agents with saved chat instructions can edit them.
+// Both bots and manually started agents can edit their chat instructions.
 function update(app, b, actor, event) {
   const d = b.data || {};
   for (const k of Object.keys(d))
@@ -258,11 +264,8 @@ function update(app, b, actor, event) {
       throw new BadRequestError("Unsupported field: " + k);
   if (b.id) throw new BadRequestError("Name the agent in data.agent, not id");
   const agent = findAgent(app, d.agent);
-  if (agent.getString("kind") !== "external" &&
-      !((agent.getString("kind") || "bot") === "bot" && latest(app, agent.id)))
-    throw new BadRequestError(
-      "Session instructions are only for agents you start yourself (kind external)",
-    );
+  if (agent.getString("kind") === "human")
+    throw new BadRequestError("People do not have editable chat instructions");
   if (agent.getBool("archived"))
     throw new BadRequestError("Restore the agent first");
   const modes = ["instructions", "restore_revision", "restore_default"].filter(
@@ -280,6 +283,7 @@ function update(app, b, actor, event) {
   const revision = current ? current.getInt("revision") : 0;
   if (b.expected_revision !== revision)
     throw new ApiError(409, "Revision conflict; reread and reassess", {});
+  let family = templateKind(current, agent);
   let text = "",
     isDefault = false;
   const changes = { revision: revision + 1 };
@@ -305,6 +309,7 @@ function update(app, b, actor, event) {
       { agent: agent.id, revision: d.restore_revision },
     );
     if (!rows.length) throw new NotFoundError("Revision not found");
+    family = templateKind(rows[0]);
     isDefault = rows[0].getBool("is_default");
     text = isDefault ? "" : rows[0].getString("instructions");
     changes.mode = "restore";
@@ -320,6 +325,7 @@ function update(app, b, actor, event) {
   r.set("agent", agent.id);
   r.set("instructions", text);
   r.set("is_default", isDefault);
+  r.set("template_kind", family);
   r.set("actor", actor);
   r.set("reported_agent", b.reported_agent || "");
   r.set("reason", b.reason || "");
@@ -329,8 +335,20 @@ function update(app, b, actor, event) {
   return describe(app, agent.id);
 }
 
+// Record the current default before switching startup kinds. Existing saved
+// instructions already carry their template through the change.
+function preserveDefault(app, agent, b, actor, event) {
+  if (latest(app, agent.id)) return;
+  update(app, {
+    expected_revision: 0, reported_agent: b.reported_agent,
+    reason: "Preserve chat instructions when changing agent kind",
+    data: { agent: agent.id, restore_default: true },
+  }, actor, event);
+}
+
 module.exports = {
   describe,
+  preserveDefault,
   update,
   exportRevision,
   findAgent,

@@ -4793,3 +4793,11 @@ a.crew-logo:hover .product-brand span {
   outline-offset: 4px;
   border-radius: 4px;
 }
+
+.crew-instruction-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.crew-dialog .crew-instruction-actions button { min-height: 44px; }

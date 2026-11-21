@@ -1034,11 +1034,7 @@ export default function CrewWorkspace() {
       /** The Home section it was opened from, whose list previous/next walk. */
       source?: ListSource;
     } | null>(null),
-    // An external agent's full session instructions, read by Start a session.
-    [instructions, setInstructions] = useState<{
-      name: string;
-      session: AgentSession;
-    } | null>(null),
+    [instructions, setInstructions] = useState<InstructionsView | null>(null),
     // The toast after Start a session (0.24.0).
     [sessionStart, setSessionStart] = useState<SessionStart | null>(null),
     // The toast after an action that asks no confirmation (0.40.0: Archive
@@ -3408,6 +3404,7 @@ export default function CrewWorkspace() {
               saved revision; edits here replace the shown session. */}
           <SessionInstructions
             session={instructions.session}
+            initialMode={instructions.initialMode}
             onChange={(session) =>
               setInstructions((open) => (open ? { ...open, session } : open))
             }
@@ -3520,6 +3517,7 @@ export default function CrewWorkspace() {
               void archiveFromApproval(review, task)
             }
             close={closeDialog}
+            openInstructions={setInstructions}
             onAgentConfigured={(updated) => {
               setDialog((open) => open?.kind === "agent" && open.row?.id === updated.id
                 ? { ...open, row: updated } : open);
@@ -3547,6 +3545,11 @@ const archiveLabel = (kind: Kind) =>
       : kind === "note"
         ? t("Archive note")
         : t("Archive bucket");
+type InstructionsView = {
+  name: string;
+  session: AgentSession;
+  initialMode?: "edit" | "history";
+};
 type EditorProps = {
   kind: Kind;
   row?: Row;
@@ -3574,6 +3577,7 @@ type EditorProps = {
   /** Archive task from a pending review's More menu (0.40.0). */
   archiveReviewTask?: (review: Row, task: Row) => void;
   close: () => void;
+  openInstructions: (view: InstructionsView) => void;
   onAgentConfigured: (agent: Row) => void;
   /** Background reload after a file change (card thumbnails, task status). */
   refresh?: () => void;
@@ -3616,11 +3620,32 @@ function formValues(kind: Kind, row: Row | undefined, data: Data) {
     agentKind: row ? agentKind(row) : "external",
   };
 }
-function ChatInstructions({ agent }: { agent: Row }) {
+function ChatInstructions({ agent, open }: { agent: Row; open: (view: InstructionsView) => void }) {
+  const [request, setRequest] = useState<"edit" | "history" | null>(null);
+  const [readError, setReadError] = useState(false);
+  const name = val(agent, "name");
+  useEffect(() => {
+    if (!request) return;
+    let active = true;
+    setReadError(false);
+    void crewApi.session(agent.id).then(
+      (session) => {
+        if (!active) return;
+        setRequest(null);
+        open({ name, session, initialMode: request });
+      },
+      () => {
+        if (!active) return;
+        setRequest(null);
+        setReadError(true);
+      },
+    );
+    return () => { active = false; };
+  }, [agent.id, name, open, request]);
+
   const [result, setResult] = useState<SessionStart>();
   const session = useSessionStart(agent, setResult);
   const { state, run } = useCopyFeedback();
-  const name = val(agent, "name");
   return (
     <section className="crew-chat-instructions">
       <div>
@@ -3634,6 +3659,15 @@ function ChatInstructions({ agent }: { agent: Row }) {
       {result?.state === "manual" && <textarea aria-label={t("Session prompt for {name}", { name })}
         readOnly value={result.prompt} onFocus={(e) => e.currentTarget.select()} />}
       {result?.state === "failed" && <p role="alert">{t("Could not prepare the session prompt for {name}. Check your connection and try again.", { name })}</p>}
+      <div className="crew-instruction-actions">
+        <button type="button" aria-haspopup="dialog" disabled={!!request} onClick={() => setRequest("edit")}>
+          {t("Edit instructions")}
+        </button>
+        <button type="button" aria-haspopup="dialog" disabled={!!request} onClick={() => setRequest("history")}>
+          {t("Revision history")}
+        </button>
+      </div>
+      {readError && <p role="alert">{t("Could not prepare the session prompt for {name}. Check your connection and try again.", { name })}</p>}
       {session.guide}
     </section>
   );
@@ -3660,6 +3694,7 @@ function Editor({
   onWithdrawn,
   refreshRow,
   onAgentConfigured,
+  openInstructions,
 }: EditorProps) {
   const readOnly = !!archiveNotice;
   const root = useRef<HTMLDivElement>(null);
@@ -4190,7 +4225,7 @@ function Editor({
         </form>
         {row && !readOnly && canStartChat(row) && (
           <div className="crew-agent-startup" onChange={(event) => event.stopPropagation()}>
-            <ChatInstructions agent={row} />
+            <ChatInstructions agent={row} open={openInstructions} />
             <AgentStartupSettings agent={row} onConfigured={onAgentConfigured} />
           </div>
         )}

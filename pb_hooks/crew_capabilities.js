@@ -352,7 +352,7 @@ function document() {
     {
       agent: {
         type: "string",
-        description: "The external agent's ID or exact name",
+        description: "The active bot or external agent's ID or exact name",
       },
       instructions: {
         type: "string",
@@ -377,7 +377,7 @@ function document() {
       revision: "session",
       result: sessionResult,
       description:
-        "Saves an external agent's session instructions as a new immutable revision. Send exactly one of instructions, restore_revision or restore_default. expected_revision (top level) is required and must equal the current revision from crew_read session (0 while the built-in default was never changed); otherwise HTTP 409: reread and reassess. Only for agents of kind external. Appends a session.update event on the agent. Rewrite instructions only when the owner asks, show the owner the new text and save it after the owner approves. Returns the session object.",
+        "Saves an active bot or external agent's session instructions as a new immutable revision. Send exactly one of instructions, restore_revision or restore_default. expected_revision (top level) is required and must equal the current revision from crew_read session (0 while the built-in default was never changed); otherwise HTTP 409: reread and reassess. Appends a session.update event on the agent. Rewrite instructions only when the owner asks, show the owner the new text and save it after the owner approves. Returns the session object.",
     },
   );
   op("task.comment", { body: str }, ["body"], {

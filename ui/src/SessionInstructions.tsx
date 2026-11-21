@@ -51,16 +51,18 @@ function failure(e: unknown) {
  */
 export default function SessionInstructions({
   session,
+  initialMode = "read",
   onChange,
   Markdown,
 }: {
   session: AgentSession;
+  initialMode?: "read" | "edit" | "history";
   /** The latest saved session, after a save or reload. */
   onChange: (session: AgentSession) => void;
   /** Renders Markdown the way the rest of the reader does. */
   Markdown: (props: { children: string }) => ReactNode;
 }) {
-  const [mode, setMode] = useState<"read" | "edit" | "history">("read");
+  const [mode, setMode] = useState<"read" | "edit" | "history">(initialMode);
   // An unsaved hand edit, kept while switching views; null when none.
   const [text, setText] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -128,15 +130,6 @@ export default function SessionInstructions({
     if (next === "edit") setText((draft) => draft ?? session.body);
     setMode(next);
   };
-  if (session.agent.kind === "bot" && session.revision === 0) {
-    return (
-      <div className="crew-dialog-body crew-session-dialog">
-        <div className="crew-session-view crew-session-view-read">
-          <Markdown>{session.instructions}</Markdown>
-        </div>
-      </div>
-    );
-  }
   const draft = text ?? session.body;
   return (
     <div className="crew-dialog-body crew-session-dialog">

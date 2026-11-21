@@ -1091,7 +1091,7 @@ and `approved_by` (the owner's name if known, else `owner`); set Won't do
 with a hold reason when stopping early. An unknown agent is HTTP 404.
 
 **Editable session instructions (0.21.0).** Session instructions are saved in
-Crew, not in the code, per external agent, with immutable revisions in
+Crew per agent, for both manual and automatic startup, with immutable revisions in
 `crew_session_revisions` (agent, revision, instructions, is_default, actor,
 reported_agent, reason). Only the body is stored: the agent brief stays on the
 agent and is appended when the session reads its instructions, so editing the
@@ -1106,8 +1106,7 @@ not owner-only) takes data `{agent: <ID or exact name>, instructions: TEXT}`, or
 `{agent, restore_revision: N}` (copies revision N into a new revision), or
 `{agent, restore_default: true}`; exactly one of the three. Top-level
 `expected_revision` is required and must equal the current revision (0 for the
-built-in default); otherwise HTTP 409. Only agents of kind `external` that are not
-archived; text is non-empty Markdown up to 100,000 characters. Each change appends
+built-in default); otherwise HTTP 409. Available for active agents of kind `external` or `bot`; text is non-empty Markdown up to 100,000 characters. Each change appends
 one revision and one `session.update` event on the agent (changes: revision, mode
 edit/restore/default, restored_from, is_default; reported_agent and reason as
 sent) and returns the new session object. History:
@@ -1117,7 +1116,7 @@ for reader writes or `a connected agent`). The skill and MCP instructions say to
 rewrite instructions only when the owner asks and to save only after the owner
 approves the new text.
 
-In the reader, the Session instructions dialog says "These instructions are saved
+Open the session instructions from **Manual start** in the agent editor. The dialog says "These instructions are saved
 in Crew, not in the code. Edit them by hand, or ask an agent to rewrite them.",
 shows `Revision N · edited by X, date`, and offers **Rewrite with an agent**
 (recommended: copies `rewrite_prompt`, which tells an agent to read the current

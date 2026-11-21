@@ -30,7 +30,7 @@ Agents have a `kind`: `bot` (default; Grok bots woken by webhook), `external`
 carry an advisory claim: `claimed_by` (reported session name, attribution only),
 `claimed_at` (start) and `claim_until` (ISO UTC lease end), empty without a claim.
 Responses add a
-derived `claim_state`. External agents' session instructions are immutable
+derived `claim_state`. Agents' manual-start session instructions are immutable
 `crew_session_revisions` rows (agent, revision, instructions body, is_default,
 actor, reported_agent, reason; unique per agent and revision). The latest row is
 current; without rows, or when the latest is a default revision (empty text,

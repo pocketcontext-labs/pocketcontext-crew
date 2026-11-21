@@ -739,7 +739,9 @@ def cli_session_instructions_scenario(cli, write, project, session):
     events = cli('read', {'collection': 'events', 'parent': project['id'], 'fields': ['action', 'reported_agent']})['items']
     assert [e['action'] for e in events].count('session.update') == 3 and all(e['reported_agent'] == who for e in events if e['action'] == 'session.update'), events
     bot = write('agent.create', {'name': 'synthetic-cli-bot-kind'})
-    assert 'HTTP 400' in write('session.update', {'agent': bot['id'], 'instructions': 'x'}, expect=1, expected_revision=0)
+    original = cli('read', {'collection': 'session', 'agent': bot['id']})
+    assert write('session.update', {'agent': bot['id'], 'instructions': 'Synthetic bot instructions'}, expected_revision=0)['revision'] == 1
+    assert write('session.update', {'agent': bot['id'], 'restore_default': True}, expected_revision=1)['body'] == original['body']
     # Leave the built-in default for the steps that follow.
     update(3, {'restore_default': True})
 

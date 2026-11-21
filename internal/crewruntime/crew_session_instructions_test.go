@@ -124,9 +124,9 @@ func TestSessionInstructionsRevisions(t *testing.T) {
 		t.Fatal("sql", sql)
 	}
 
-	// Only external agents, and not while archived.
-	bot := crewWrite(t, a, false, "agent.create", "", 0, map[string]any{"name": "synthetic-bot-agent"}, 200)
-	sessionUpdate(t, a, true, 0, map[string]any{"agent": bot["id"], "instructions": "x"}, "", 400)
+	// People and archived agents cannot edit session instructions.
+	person := crewWrite(t, a, false, "agent.create", "", 0, map[string]any{"name": "synthetic-person", "kind": "human"}, 200)
+	sessionUpdate(t, a, true, 0, map[string]any{"agent": person["id"], "instructions": "x"}, "", 400)
 	current := apiWebhookRecord(t, a, "agents", id)
 	crewWrite(t, a, false, "agent.update", id, current.GetInt("revision"), map[string]any{"archived": true}, 200)
 	sessionUpdate(t, a, true, 6, map[string]any{"agent": id, "instructions": "x"}, "", 400)
@@ -137,5 +137,64 @@ func TestSessionInstructionsRevisions(t *testing.T) {
 	crewWrite(t, a, false, "agent.update", other["id"].(string), int(other["revision"].(float64)), map[string]any{"brief": "New synthetic brief"}, 200)
 	if got := readSession(t, a, "synthetic-other"); got["body"] != "Synthetic other" || got["revision"] != float64(1) || got["instructions"] != "Synthetic other\n\n## Agent brief\n\nNew synthetic brief" {
 		t.Fatal("brief change", got)
+	}
+}
+
+func TestBotSessionHistoryKeepsItsDefaultAcrossConversion(t *testing.T) {
+	a := newTestApp(t)
+	bot := crewWrite(t, a, false, "agent.create", "", 0, map[string]any{"name": "Synthetic reporter"}, 200)
+	id := bot["id"].(string)
+	initial := readSession(t, a, id)["body"].(string)
+	if strings.Contains(initial, "## 1. Session name") {
+		t.Fatal("fresh bot selected the project template")
+	}
+	sessionUpdate(t, a, true, 0, map[string]any{"agent": id, "instructions": "Synthetic edited bot instructions"}, "", 200)
+	crewWrite(t, a, false, "agent.update", id, int(bot["revision"].(float64)), map[string]any{"kind": "external"}, 200)
+	saved := sessionUpdate(t, a, false, 1, map[string]any{"agent": id, "restore_default": true}, "Synthetic session", 200)
+	if saved["body"] != initial {
+		t.Fatal("conversion changed the default template")
+	}
+	history := crewItems(t, crewPost(t, a, "/api/crew/read", map[string]any{"collection": "session_revisions", "parent": id}, 200))
+	if history[0]["instructions"] != initial || history[0]["is_default"] != true {
+		t.Fatal("default history mismatch", history[0])
+	}
+	restored := sessionUpdate(t, a, true, 2, map[string]any{"agent": id, "restore_revision": 1}, "", 200)
+	if restored["body"] != "Synthetic edited bot instructions" {
+		t.Fatal(restored)
+	}
+	again := sessionUpdate(t, a, true, 3, map[string]any{"agent": id, "restore_revision": 2}, "", 200)
+	if again["body"] != initial || again["is_default"] != true {
+		t.Fatal(again)
+	}
+	sessionUpdate(t, a, false, 3, map[string]any{"agent": id, "instructions": "stale"}, "", 409)
+}
+
+func TestLegacySessionRevisionKeepsProjectTemplate(t *testing.T) {
+	a := newTestApp(t)
+	agent := crewWrite(t, a, false, "agent.create", "", 0, map[string]any{"name": "Synthetic project", "kind": "external"}, 200)
+	id := agent["id"].(string)
+	before := readSession(t, a, id)["body"]
+	sessionUpdate(t, a, true, 0, map[string]any{"agent": id, "restore_default": true}, "", 200)
+	// Upgraded pre-template rows have no marker, including agents that were
+	// already converted to webhook startup.
+	row, err := a.app.FindFirstRecordByFilter("crew_session_revisions", "agent={:agent}", map[string]any{"agent": id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row.Set("template_kind", "")
+	if err := a.app.Save(row); err != nil {
+		t.Fatal(err)
+	}
+	crewWrite(t, a, false, "agent.update", id, int(agent["revision"].(float64)), map[string]any{"kind": "bot"}, 200)
+	if got := readSession(t, a, id); got["body"] != before || got["revision"] != float64(1) {
+		t.Fatal(got)
+	}
+	history := crewItems(t, crewPost(t, a, "/api/crew/read", map[string]any{"collection": "session_revisions", "parent": id}, 200))
+	if history[0]["instructions"] != before {
+		t.Fatal(history)
+	}
+	sessionUpdate(t, a, true, 1, map[string]any{"agent": id, "instructions": "Custom text"}, "", 200)
+	if saved := sessionUpdate(t, a, true, 2, map[string]any{"agent": id, "restore_default": true}, "", 200); saved["body"] != before {
+		t.Fatal(saved)
 	}
 }

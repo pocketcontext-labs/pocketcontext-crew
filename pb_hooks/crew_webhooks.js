@@ -784,14 +784,8 @@ function updateStartup(app, b, actor, isAgent) {
   }
   if (d.enabled && kind === "external") {
     const sessions = require(`${__hooks}/crew_session.js`);
-    // Keep even an unsaved external default when a role starts automatically.
-    if (!sessions.describe(app, agent.id).revision)
-      sessions.update(app, {
-        expected_revision: 0, reported_agent: b.reported_agent,
-        reason: "Preserve the existing chat instructions when enabling automatic startup",
-        data: { agent: agent.id, restore_default: true },
-      }, actor, (db, row, action, envelope, by, changes) =>
-        audit(db, row, { ...envelope, action }, by, changes));
+    sessions.preserveDefault(app, agent, b, actor, (db, row, action, envelope, by, changes) =>
+      audit(db, row, { ...envelope, action }, by, changes));
     agent.set("kind", "bot");
   }
   agent.set("startup_disabled", !d.enabled);

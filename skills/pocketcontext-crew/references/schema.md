@@ -56,7 +56,7 @@ or anyone after expiry; optional readiness and waiting_reason) ends it and sets
 In progress back to To do. Done or Won't do ends it. The session collection
 (`{"collection":"session","agent":NAME}`) returns `{agent, prompt, instructions,
 lease_hours, body, revision, is_default, edited_by, edited_at, rewrite_prompt}`:
-instructions is body plus the agent brief. Only external agents have editable
+instructions is body plus the agent brief. Active bot and external agents have editable
 instructions: `session.update` data {agent, instructions | restore_revision |
 restore_default:true} with top-level expected_revision = revision (0 for the
 built-in default) appends an immutable revision and a session.update event on the

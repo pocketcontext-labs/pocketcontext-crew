@@ -3474,6 +3474,35 @@ describe("project agents and coding sessions", () => {
       ),
     );
   });
+  it("opens a fresh bot's instruction editor and revision history without discarding profile edits", async () => {
+    const botSession = { ...session, agent: { id: agent.id, name: "Network", kind: "bot" } };
+    vi.spyOn(crewApi, "session").mockResolvedValue(botSession);
+    const update = vi.spyOn(crewApi, "updateSession").mockResolvedValue({
+      ...botSession, body: "Updated chat instructions", instructions: "Updated chat instructions", revision: 1,
+    });
+    history.replaceState(null, "", "/#/agents");
+    render(<CrewWorkspace />);
+    fireEvent.click((await screen.findByRole("heading", { name: "Network" })).closest("button")!);
+    const profile = within(screen.getByRole("dialog", { name: "Edit agent" }));
+    fireEvent.change(profile.getByLabelText("Name"), { target: { value: "Unsaved name" } });
+    fireEvent.click(profile.getByRole("button", { name: "Edit instructions" }));
+    let instructions = within(await screen.findByRole("dialog", { name: "Session instructions for Network" }));
+    fireEvent.change(instructions.getByRole("textbox", { name: /Session instructions/ }), {
+      target: { value: "Updated chat instructions" },
+    });
+    fireEvent.click(instructions.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(agent.id, 0,
+      { instructions: "Updated chat instructions" }, "Edited by hand"));
+    fireEvent.click(instructions.getByRole("button", { name: "Close dialog" }));
+    expect(profile.getByLabelText("Name")).toHaveValue("Unsaved name");
+    fireEvent.click(profile.getByRole("button", { name: "Revision history" }));
+    instructions = within(await screen.findByRole("dialog", { name: "Session instructions for Network" }));
+    expect(instructions.getByRole("button", { name: "History" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(crewApi.read).toHaveBeenCalledWith("session_revisions", { parent: agent.id }));
+    fireEvent.click(instructions.getByRole("button", { name: "Close dialog" }));
+    expect(profile.getByLabelText("Name")).toHaveValue("Unsaved name");
+    expect(crewApi.write).not.toHaveBeenCalled();
+  });
   it("keeps unsaved profile edits and saves against the revision returned by startup settings", async () => {
     fixtures.webhook_configs = [{ id: "config", revision: 3, scope: "global", enabled: true, receiver_host: "runtime.example" }];
     fixtures.webhook_mappings = [];
