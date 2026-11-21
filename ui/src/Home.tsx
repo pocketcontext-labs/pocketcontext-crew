@@ -98,7 +98,7 @@ export default function Home({
   const steps: { title: string; done: boolean; body: ReactNode }[] = [
     {
       title: t("Create your crew"),
-      done: data.agents.length + archived.agents.length > 0,
+      done: data.agents.length > 0,
       body: (
         <>
           <p>

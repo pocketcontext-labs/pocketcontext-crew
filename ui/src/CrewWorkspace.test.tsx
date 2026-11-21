@@ -302,6 +302,15 @@ it("guides a new owner one step at a time", async () => {
     screen.getByRole("link", { name: "0 tasks on hold, show on the Tasks board" }),
   ).toHaveAttribute("href", "#/tasks?hold=on_hold");
 });
+it("reopens crew setup when all agents are deactivated", async () => {
+  fixtures = { agents: [], buckets: [], tasks: [], reviews: [], notes: [] };
+  serveArchived({ agents: [{ ...agent, archived: true }] });
+  localStorage.clear();
+  history.replaceState(null, "", "/");
+  render(<CrewWorkspace />);
+  expect(await screen.findByRole("button", { name: "Set up starter crew" })).toBeVisible();
+  expect(screen.getByText("0 of 4 done")).toBeVisible();
+});
 it("advances past a manually confirmed connection and remembers it", async () => {
   fixtures.tasks = [];
   fixtures.reviews = [];
