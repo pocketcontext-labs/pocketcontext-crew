@@ -25,17 +25,15 @@ function shellQuote(value) {
 }
 
 // One POSIX shell command that prints the session name: $CREW_SESSION when
-// set, else "<agent> · <tool> · <zellij session>/<pane> · <session id 8>",
+// set, else "<agent> · <tool> · <session id 8>",
 // leaving out the parts that are missing.
 function sessionCommand(name) {
   const script = [
     'if [ -n "$CREW_SESSION" ]; then printf "%s\\n" "$CREW_SESSION"; exit 0; fi',
     't=""; i=""',
     'if [ -n "$CLAUDE_CODE_SESSION_ID" ]; then t="Claude Code"; i="$CLAUDE_CODE_SESSION_ID"; elif [ -n "$CODEX_SESSION_ID" ]; then t="Codex"; i="$CODEX_SESSION_ID"; fi',
-    'z="$ZELLIJ_SESSION_NAME"',
-    'if [ -n "$z" ] && [ -n "$ZELLIJ_PANE_ID" ]; then z="$z/$ZELLIJ_PANE_ID"; elif [ -n "$ZELLIJ_PANE_ID" ]; then z="pane $ZELLIJ_PANE_ID"; fi',
     's="$1"',
-    'for p in "$t" "$z" "$(printf "%s" "$i" | cut -c1-8)"; do if [ -n "$p" ]; then s="$s · $p"; fi; done',
+    'for p in "$t" "$(printf "%s" "$i" | cut -c1-8)"; do if [ -n "$p" ]; then s="$s · $p"; fi; done',
     'printf "%s\\n" "$s"',
   ].join("; ");
   return "sh -c " + shellQuote(script) + " sh " + shellQuote(name);
@@ -59,9 +57,9 @@ function defaultBody(name) {
     sessionCommand(name),
     "```",
     "",
-    "It prints $CREW_SESSION when the pane sets it; otherwise " +
+    "It prints $CREW_SESSION when it is set; otherwise " +
       name +
-      " · <tool> · <Zellij session>/<pane> · <first 8 characters of the session id>, with the tool and session id from CLAUDE_CODE_SESSION_ID (Claude Code) or CODEX_SESSION_ID (Codex) and the pane from ZELLIJ_SESSION_NAME and ZELLIJ_PANE_ID, leaving out the parts that are missing. Without a POSIX shell, build the same name by hand. If you are unsure of it after context compaction, run the command again. The session name is attribution for the audit trail, not identity; never use another session's name.",
+      " · <tool> · <first 8 characters of the session id>, with the tool and session id from CLAUDE_CODE_SESSION_ID (Claude Code) or CODEX_SESSION_ID (Codex), leaving out the parts that are missing. Without a POSIX shell, build the same name by hand. If you are unsure of it after context compaction, run the command again. The session name is attribution for the audit trail, not identity; never use another session's name.",
     "",
     "## 2. Find work",
     "",

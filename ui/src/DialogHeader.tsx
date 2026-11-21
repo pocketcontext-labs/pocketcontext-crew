@@ -411,6 +411,7 @@ export default function DialogHeader({
   nav,
   listNav,
   actions,
+  hideEmptyMenu = false,
   menu,
   close,
   alert,
@@ -422,6 +423,7 @@ export default function DialogHeader({
   listNav?: ReactNode;
   /** Icon buttons in the pill, before More. */
   actions?: ReactNode;
+  hideEmptyMenu?: boolean;
   menu: MenuItem[];
   close: () => void;
   /** A message under the header, such as a failed copy. */
@@ -434,7 +436,7 @@ export default function DialogHeader({
       {listNav}
       <div className="crew-head-pill" role="toolbar" aria-label={t("Actions")}>
         {actions}
-        <MoreMenu items={menu} />
+        {(!hideEmptyMenu || menu.length > 0) && <MoreMenu items={menu} />}
       </div>
       <HeadButton
         icon="close"

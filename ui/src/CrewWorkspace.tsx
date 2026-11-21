@@ -786,6 +786,7 @@ function Modal({
   listNav,
   actions,
   menu = [],
+  hideEmptyMenu = false,
   record = false,
   toast,
   children,
@@ -808,6 +809,7 @@ function Modal({
   actions?: ReactNode;
   /** The More menu's own items; the body can add more through context. */
   menu?: MenuItem[];
+  hideEmptyMenu?: boolean;
   children: ReactNode;
   close: () => void;
   onEdit: () => void;
@@ -938,6 +940,7 @@ function Modal({
         }
         actions={actions}
         menu={[...menu, ...bodyMenu]}
+        hideEmptyMenu={hideEmptyMenu}
         close={close}
       />
       <DialogMenuContext.Provider value={setBodyMenu}>
@@ -3398,6 +3401,7 @@ export default function CrewWorkspace() {
       {!dialog && actionToast}
       {instructions && (
         <Modal
+          hideEmptyMenu
           title={t("Session instructions for {name}", { name: instructions.name })}
           nav={<NavCluster />}
           actions={

@@ -286,7 +286,10 @@ func TestSessionInstructionsRead(t *testing.T) {
 			t.Fatal("session agent", got)
 		}
 		instructions, _ := got["instructions"].(string)
-		for _, part := range []string{"## Agent brief\n\nSynthetic brief: run the synthetic tests.", "CREW_SESSION", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "ZELLIJ_SESSION_NAME", "ZELLIJ_PANE_ID", "task.claim_renew", "task.release", "already_claimed", "Released in <version>", "never force-push", "Never set Done without the owner's explicit approval"} {
+		if strings.Contains(strings.ToLower(instructions), "zellij") {
+			t.Fatal("session instructions include terminal pane metadata")
+		}
+		for _, part := range []string{"## Agent brief\n\nSynthetic brief: run the synthetic tests.", "CREW_SESSION", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "task.claim_renew", "task.release", "already_claimed", "Released in <version>", "never force-push", "Never set Done without the owner's explicit approval"} {
 			if !strings.Contains(instructions, part) {
 				t.Fatalf("instructions lack %q", part)
 			}

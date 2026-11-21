@@ -1079,8 +1079,8 @@ chat to read current context using the owner's authenticated Crew connection.
 (`pb_hooks/crew_session.js`) while none is saved or after Restore default. The
 default tells the session to build a session
 name once with one shell command (`$CREW_SESSION`, else
-`<name> · <tool> · <Zellij session>/<pane> · <session id 8>` from
-`CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID` and `ZELLIJ_SESSION_NAME`/`ZELLIJ_PANE_ID`)
+`<name> · <tool> · <session id 8>` from
+`CLAUDE_CODE_SESSION_ID` or `CODEX_SESSION_ID`)
 and use it as reported_agent; list the agent's Ready To do tasks; claim one only when
 the owner picks it; plan and wait for the owner's approval in the session (that
 approval is the review); implement and release per the repository's AGENTS.md;
