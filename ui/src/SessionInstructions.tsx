@@ -136,9 +136,9 @@ export default function SessionInstructions({
   const codingTemplate = session.coding_template;
   return (
     <div className="crew-dialog-body crew-session-dialog">
-      <p className="crew-footnote crew-session-revision">
+      {mode !== "edit" && <p className="crew-footnote crew-session-revision">
         <SessionRevisionLine session={session} />
-      </p>
+      </p>}
       <div className="crew-session-toolbar">
         <div
           className="crew-session-views"
@@ -169,7 +169,7 @@ export default function SessionInstructions({
             {t("History")}
           </button>
         </div>
-        {mode !== "read" && <button
+        {mode === "history" && <button
           type="button"
           disabled={busy || session.is_default}
           title={
@@ -229,18 +229,6 @@ export default function SessionInstructions({
               if (draft.trim()) void save({ instructions: draft }, "Edited by hand");
             }}
           >
-            {codingTemplate && (
-              <details ref={templatePreview} className="crew-coding-template">
-                <summary>{t("Coding workflow template")}</summary>
-                <p>{t("Use this template to replace the text in the editor. Save creates a new revision.")}</p>
-                <button type="button" disabled={busy || draft === codingTemplate} onClick={() => {
-                  setText(codingTemplate);
-                  if (templatePreview.current) templatePreview.current.open = false;
-                  editor.current?.focus();
-                }}>{t("Use template in editor")}</button>
-                <div className="crew-coding-preview"><Markdown>{codingTemplate}</Markdown></div>
-              </details>
-            )}
             <label htmlFor={editorId}>
               {t("Session instructions")} <small>{t("Markdown supported")}</small>
             </label>
@@ -251,11 +239,6 @@ export default function SessionInstructions({
               required
               onChange={(e) => setText(e.target.value)}
             />
-            <p className="crew-footnote">
-              {t(
-                "The agent brief is added after these instructions; edit it on the agent card.",
-              )}
-            </p>
             <div className="crew-session-actions">
               <button
                 type="submit"
@@ -276,6 +259,18 @@ export default function SessionInstructions({
                 {t("Cancel")}
               </button>
             </div>
+            {codingTemplate && (
+              <details ref={templatePreview} className="crew-coding-template">
+                <summary>{t("Coding workflow template")}</summary>
+                <p>{t("Use this template to replace the text in the editor. Save creates a new revision.")}</p>
+                <button type="button" disabled={busy || draft === codingTemplate} onClick={() => {
+                  setText(codingTemplate);
+                  if (templatePreview.current) templatePreview.current.open = false;
+                  editor.current?.focus();
+                }}>{t("Use template in editor")}</button>
+                <div className="crew-coding-preview"><Markdown>{codingTemplate}</Markdown></div>
+              </details>
+            )}
           </form>
         )}
         {mode === "history" && (
@@ -333,7 +328,7 @@ export default function SessionInstructions({
           </div>
         )}
       </div>
-        <div className="crew-session-rewrite">
+        {mode === "read" && <div className="crew-session-rewrite">
           <NamedCopyAction
             key={session.revision}
             disabled={!session.rewrite_prompt}
@@ -342,7 +337,7 @@ export default function SessionInstructions({
             successLabel={t("Rewrite prompt copied")}
             onResult={(ok) => setFailedRevision(ok ? null : session.revision)}
           />
-        </div>
+        </div>}
     </div>
   );
 }
