@@ -135,10 +135,10 @@ export default function Home({
             <>
               <p>
                 {t(
-                  "Crew doesn't run agents itself. Add this address to your agent platform and approve the connection with your account.",
+                  "Copy this MCP server address into your agent platform, then approve the connection in Crew.",
                 )}
               </p>
-              <div className="crew-home-endpoint">
+              <div className="crew-connect-address">
                 <code>{connection.url}</code>
                 {copyEndpoint}
               </div>
@@ -156,19 +156,21 @@ export default function Home({
               </div>
             </>
           )}
-          {(connection.kind === "mcp" || connection.kind === "local") && (
-            <button
-              className="crew-primary"
-              onClick={() => {
-                const ids = activeAgents.map(({ id }) => id);
-                ids.forEach((id) => remember(connectedKey + "." + id));
-                setConfirmedAgents(ids);
-              }}
-            >
-              {t("I've connected it")}
-            </button>
-          )}
-          <a href={viewHashes.connect}>{t("See full setup")}</a>
+          <div className="crew-onboarding-actions">
+            {(connection.kind === "mcp" || connection.kind === "local") && (
+              <button
+                className="crew-primary"
+                onClick={() => {
+                  const ids = activeAgents.map(({ id }) => id);
+                  ids.forEach((id) => remember(connectedKey + "." + id));
+                  setConfirmedAgents(ids);
+                }}
+              >
+                {t("I've connected it")}
+              </button>
+            )}
+            <a href={viewHashes.connect}>{t("See full setup")}</a>
+          </div>
         </>
       ),
     },

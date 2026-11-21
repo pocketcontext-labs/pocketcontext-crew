@@ -56,8 +56,8 @@ const de: Record<string, string> = {
     "Agenten sind die KI-Mitarbeiter in deinem Team. Jeder bekommt ein Briefing und einen Ort für das, was er lernt. Starte mit fünf fertigen Rollen und passe sie später an.",
   "Set up starter crew": "Start-Crew einrichten",
   "Connect your first agent": "Verbinde deinen ersten Agenten",
-  "Crew doesn't run agents itself. Add this address to your agent platform and approve the connection with your account.":
-    "Crew führt selbst keine Agenten aus. Füge diese Adresse in deiner Agenten-Plattform hinzu und bestätige die Verbindung mit deinem Konto.",
+  "Copy this MCP server address into your agent platform, then approve the connection in Crew.":
+    "Kopiere diese MCP-Serveradresse in deine Agentenplattform und bestätige anschließend die Verbindung in Crew.",
   "Crew doesn't run agents itself. Your coding agent uses Crew through a skill. Run this once in your Crew folder.":
     "Crew führt selbst keine Agenten aus. Dein Coding-Agent nutzt Crew über einen Skill. Führe das einmal in deinem Crew-Ordner aus.",
   "I've connected it": "Ich habe ihn verbunden",

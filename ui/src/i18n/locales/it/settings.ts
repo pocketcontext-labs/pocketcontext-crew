@@ -56,8 +56,8 @@ const it: Record<string, string> = {
     "Gli agenti sono i collaboratori IA del tuo team. Ognuno ha un brief e un posto dove conservare ciò che impara. Inizia con cinque ruoli pronti e modificali in seguito.",
   "Set up starter crew": "Configura la crew iniziale",
   "Connect your first agent": "Collega il tuo primo agente",
-  "Crew doesn't run agents itself. Add this address to your agent platform and approve the connection with your account.":
-    "Crew non esegue gli agenti da sé. Aggiungi questo indirizzo alla tua piattaforma di agenti e approva la connessione con il tuo account.",
+  "Copy this MCP server address into your agent platform, then approve the connection in Crew.":
+    "Copia questo indirizzo del server MCP nella piattaforma del tuo agente, poi approva la connessione in Crew.",
   "Crew doesn't run agents itself. Your coding agent uses Crew through a skill. Run this once in your Crew folder.":
     "Crew non esegue gli agenti da sé. Il tuo agente di coding usa Crew tramite una skill. Eseguilo una volta nella cartella di Crew.",
   "I've connected it": "L'ho collegato",

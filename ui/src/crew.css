@@ -1000,6 +1000,15 @@ a.crew-logo:hover .product-brand span {
   margin-left: 0;
   font-weight: 600;
 }
+.crew-home-start .crew-connect-address { max-width: 40rem; }
+.crew-onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 14px;
+}
+.crew-home-start li .crew-onboarding-actions a { margin: 0; }
 .crew-home-endpoint {
   display: flex;
   flex-wrap: wrap;
@@ -1606,7 +1615,8 @@ a.crew-logo:hover .product-brand span {
 @media (hover: hover) {
   .crew-connect-address:hover { background: #edf2e9; }
 }
-.crew-connect .crew-connect-address code {
+.crew-connect-address > code {
+  overflow-wrap: anywhere;
   margin: 0;
   padding: 0;
   background: transparent;
