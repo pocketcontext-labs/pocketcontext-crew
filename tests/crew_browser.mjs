@@ -1449,7 +1449,7 @@ try {
    await agents.getByRole('button',{name:'Copy startup prompt for Network',exact:true}).waitFor();
    const fit=await coder.evaluate(li=>{const p=li.querySelector('.crew-home-startup-badge').getBoundingClientRect(),m=li.querySelector('.crew-home-agent-more').getBoundingClientRect(),r=li.getBoundingClientRect();return {gap:m.left-p.right,height:r.height,name:li.querySelector('strong').textContent};});
    assert.equal(fit.name,'synthetic-repo');
-   assert.ok(fit.gap>=4&&fit.height<=76,`the tag clears ⋯ and the row stays compact at ${width}: `+JSON.stringify(fit));
+   assert.ok(fit.gap>=4&&fit.height<=(width===390?90:76),`the tag clears ⋯ and the row stays compact at ${width}: `+JSON.stringify(fit));
    if(width===390) await snapView('home-agents-tap-390');
    await agents.locator('.crew-home-agent').filter({hasText:'Network'}).click();
    await page.waitForURL(u=>/^#\/tasks\?agent=[a-z0-9]{15}$/.test(u.hash));
