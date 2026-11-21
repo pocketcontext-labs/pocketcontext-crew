@@ -8,7 +8,6 @@ import { t, tn } from "./i18n";
 import { useReaderSettings } from "./sessionGuide";
 import HideHelp, { helpIds, useHelpShown } from "./HideHelp";
 import {
-  isCodingAgent,
   resolveAgentTap,
   type AgentTap,
 } from "./agentTap";
@@ -404,17 +403,16 @@ type AgentRowProps = {
 };
 
 /**
- * A coding agent (started manually; Crew builds its session prompt): a
- * Coding agent tag, and its ⋯ also copies the prompt, which a tap can run.
+ * Nonhuman agents share session instructions across manual and automatic startup.
  */
-function CodingAgentRow(props: AgentRowProps) {
+function SessionAgentRow(props: AgentRowProps) {
   const session = useSessionStart(props.agent, props.onStartSession);
   const rowCopy = useCopyFeedback();
   const menuCopy = useCopyFeedback();
   return (
     <AgentRowView
       {...props}
-      coding={isCodingAgent(props.agent)}
+      preparing={session.loading}
       copyPrompt={() => void rowCopy.run(session.start)}
       copyIcon={<CopyGlyph state={rowCopy.state} />}
       moreIcon={<CopyGlyph state={menuCopy.state} idle="more" />}
@@ -437,7 +435,7 @@ function CodingAgentRow(props: AgentRowProps) {
 
 function AgentRow(props: AgentRowProps) {
   return canStartChat(props.agent) ? (
-    <CodingAgentRow {...props} />
+    <SessionAgentRow {...props} />
   ) : (
     <AgentRowView {...props} extra={[]} />
   );
@@ -446,8 +444,7 @@ function AgentRow(props: AgentRowProps) {
 /**
  * An agent on Home (0.34.0): initials, name and status. Since 0.36.0 a tap
  * anywhere on the row but ⋯ runs the action chosen in Settings > Tapping an
- * agent (Open agent by default); its ⋯ opens the agent, shows its tasks and,
- * for coding agents, copies the prompt.
+ * agent (Open agent by default). A separate button copies a nonhuman agent's instructions.
  */
 function AgentRowView({
   agent,
@@ -455,14 +452,14 @@ function AgentRowView({
   status,
   tap,
   openItem,
-  coding = false,
+  preparing = false,
   copyPrompt,
   copyIcon,
   moreIcon,
   extra,
   children,
 }: AgentRowProps & {
-  coding?: boolean;
+  preparing?: boolean;
   copyPrompt?: () => void;
   copyIcon?: ReactNode;
   moreIcon?: ReactNode;
@@ -475,6 +472,7 @@ function AgentRowView({
   const showTasks = () => {
     location.hash = boardAgentHash(agent.id);
   };
+  const startup = copyPrompt ? (agent.chat_start === "webhook" ? "webhook" : "manual") : "person";
   const action = resolveAgentTap(tap, agent);
   const run = () => {
     if (action === "copy_prompt" && copyPrompt) copyPrompt();
@@ -494,14 +492,25 @@ function AgentRowView({
         <span className="crew-home-agent-text">
           <span className="crew-home-agent-line">
             <strong>{name}</strong>
-            {coding && (
-              <span className="crew-coding-pill">{t("Coding agent")}</span>
-            )}
+            <span className="crew-home-startup-badge" data-start={startup}>
+              {startup === "person" ? t("Person") : startup === "webhook" ? t("Automatic startup") : t("Manual start")}
+            </span>
           </span>
           <small>{status}</small>
         </span>
-        {action === "copy_prompt" && copyIcon}
       </button>
+      {copyPrompt && (
+        <button
+          type="button"
+          className="crew-home-agent-copy crew-copy-control crew-copy-icon"
+          aria-label={t("Copy instructions for {name}", { name })}
+          title={t("Copy instructions for {name}", { name })}
+          disabled={preparing}
+          onClick={copyPrompt}
+        >
+          {copyIcon}
+        </button>
+      )}
       <button
         type="button"
         className="crew-home-agent-more"

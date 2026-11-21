@@ -742,7 +742,7 @@ function document() {
         type: ["object", "null"],
         additionalProperties: false,
         properties: {
-          all: { enum: ["open_agent", "show_tasks"] },
+          all: tapAction,
           agents: {
             type: "object",
             maxProperties: 200,
@@ -760,7 +760,7 @@ function document() {
     {
       revision: "settings",
       description:
-        "Reader preferences; send at least one. session_guide_off hides the Start a session guide (the owner's \"Don't show this again\"). language is the reader's language (\"\" follows the browser). agent_tap is what tapping an agent on Home does: all (open_agent or show_tasks) and agents (agent id to open_agent, show_tasks or copy_prompt; ids must exist); it replaces the whole value, null clears it. hidden_help lists the help panels the owner hid with \"Don't show this again\" (ids such as page.home; replaces the whole list, [] or null shows all help again). Change them only when the owner asks.",
+        "Reader preferences; send at least one. session_guide_off hides the Start a session guide (the owner's \"Don't show this again\"). language is the reader's language (\"\" follows the browser). agent_tap is what tapping an agent on Home does: all (open_agent, show_tasks or copy_prompt) and agents (agent id to open_agent, show_tasks or copy_prompt; ids must exist); it replaces the whole value, null clears it. hidden_help lists the help panels the owner hid with \"Don't show this again\" (ids such as page.home; replaces the whole list, [] or null shows all help again). Change them only when the owner asks.",
     },
   );
   op("execution.validate", event, ["event_id", "epoch", "generation"], {

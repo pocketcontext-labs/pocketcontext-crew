@@ -261,13 +261,19 @@ describe("Settings", () => {
     expect(
       screen.getByRole("button", { name: /^All agents/ }),
     ).toHaveTextContent("Open agent");
-    // All agents offers only the actions every agent has.
     fireEvent.click(screen.getByRole("button", { name: /^All agents/ }));
     let list = within(screen.getByRole("radiogroup", { name: "All agents" }));
     expect(list.getAllByRole("radio").map((r) => r.textContent)).toEqual([
       "Open agent",
       "Show tasks",
+      "Copy prompt",
     ]);
+    fireEvent.click(list.getByRole("radio", { name: "Copy prompt" }));
+    await waitFor(() =>
+      expect(settingsWrites().at(-1)?.[1]).toEqual({
+        agent_tap: { all: "copy_prompt" },
+      }),
+    );
     fireEvent.click(list.getByRole("radio", { name: "Show tasks" }));
     await waitFor(() =>
       expect(settingsWrites().at(-1)?.[1]).toEqual({
@@ -284,28 +290,27 @@ describe("Settings", () => {
       expect(
         screen.getByRole("button", { name: new RegExp(`^${name}`) }),
       ).toHaveTextContent("Show tasks");
-    // A bot's picker: Open agent and Show tasks.
     fireEvent.click(screen.getByRole("button", { name: /^Bauen/ }));
     list = within(screen.getByRole("radiogroup", { name: "Bauen" }));
     expect(list.getAllByRole("radio").map((r) => r.textContent)).toEqual([
       "Open agent",
       "Show tasks",
+      "Copy prompt",
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Back to Settings" }));
-    // The coding agent's picker adds Copy prompt for coding agent.
     fireEvent.click(screen.getByRole("button", { name: /^Implement/ }));
     list = within(screen.getByRole("radiogroup", { name: "Implement" }));
     expect(list.getAllByRole("radio").map((r) => r.textContent)).toEqual([
       "Open agent",
       "Show tasks",
-      "Copy prompt for coding agent",
+      "Copy prompt",
     ]);
     expect(list.getByRole("radio", { name: "Show tasks" })).toHaveAttribute(
       "aria-checked",
       "true",
     );
     fireEvent.click(
-      list.getByRole("radio", { name: "Copy prompt for coding agent" }),
+      list.getByRole("radio", { name: "Copy prompt" }),
     );
     await waitFor(() =>
       expect(settingsWrites().at(-1)?.[1]).toEqual({
@@ -345,6 +350,22 @@ describe("Home agent rows", () => {
     await waitFor(() => expect(location.hash).toBe(`#/agents/${bot.id}`));
   });
 
+  it("copies an automatic agent's prompt on tap with the saved global action", async () => {
+    fixtures.agents = [{ ...bot, chat_start: "webhook" }];
+    fixtures.settings[0].agent_tap = { all: "copy_prompt" };
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    vi.mocked(crewApi.session).mockResolvedValue({
+      ...session, agent: { id: bot.id, name: "Bauen", kind: "bot" }, prompt: "Act as Bauen in Crew.",
+    });
+    render(<Root />);
+    const agents = await agentsRegion();
+    await waitFor(() => expect(crewApi.session).toHaveBeenCalledWith(bot.id));
+    fireEvent.click(agents.getByRole("button", { name: /^Bauen/ }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("Act as Bauen in Crew."));
+    expect(location.hash).toBe("#/");
+  });
+
   it("runs Show tasks from All agents and an override for the coding agent", async () => {
     fixtures.settings = [
       {
@@ -378,13 +399,28 @@ describe("Home agent rows", () => {
     );
   });
 
-  it("labels only coding agents and has one Copy prompt for coding agent in ⋯", async () => {
+  it("shows effective startup, a separate copy button and each agent’s menu", async () => {
+    fixtures.agents = [
+      { ...bot, chat_start: "webhook" },
+      other,
+      coder,
+      { id: "human00000000001", revision: 1, name: "Reviewer", kind: "human" },
+    ];
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
     render(<Root />);
     const agents = await agentsRegion();
-    expect(agents.getAllByText("Coding agent")).toHaveLength(1);
-    expect(
-      agents.getByText("Coding agent").closest(".crew-home-agent"),
-    ).toHaveTextContent("Implement");
+    expect(agents.getByRole("button", { name: /^Bauen/ })).toHaveTextContent("Automatic startup");
+    expect(agents.getByRole("button", { name: /^Lernen/ })).toHaveTextContent("Manual start");
+    expect(agents.getByRole("button", { name: /^Implement/ })).toHaveTextContent("Manual start");
+    expect(agents.getByRole("button", { name: /^Reviewer/ })).toHaveTextContent("Person");
+    expect(agents.queryByRole("button", { name: "Copy instructions for Reviewer" })).toBeNull();
+    expect(agents.getAllByRole("button", { name: /^Copy instructions for / })).toHaveLength(3);
+    const copy = agents.getByRole("button", { name: "Copy instructions for Bauen" });
+    await waitFor(() => expect(copy).toBeEnabled());
+    fireEvent.click(copy);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(session.prompt));
+    expect(location.hash).toBe("#/");
     fireEvent.click(agents.getByRole("button", { name: "More for Implement" }));
     const menu = within(screen.getByRole("dialog", { name: "Implement" }));
     expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([

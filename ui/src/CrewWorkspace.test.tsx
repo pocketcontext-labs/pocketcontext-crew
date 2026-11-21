@@ -2980,9 +2980,8 @@ describe("board agent filter", () => {
       "1 in progress",
       "1 on hold",
     ]);
-    // No Agent tag and no loose Copy prompt on Home.
     expect(agents.queryByText("Agent")).toBeNull();
-    expect(agents.queryByRole("button", { name: /Copy prompt/ })).toBeNull();
+    expect(agents.getAllByRole("button", { name: /^Copy instructions for / })).toHaveLength(2);
     fireEvent.click(agents.getByRole("button", { name: "More for Network" }));
     const menu = within(screen.getByRole("dialog", { name: "Network" }));
     expect(menu.getAllByRole("button").map((b) => b.textContent)).toEqual([
@@ -3706,7 +3705,7 @@ describe("project agents and coding sessions", () => {
     const agents = within(await screen.findByRole("region", { name: "Agents" }));
     expect(agents.queryByText("old-repo")).toBeNull();
     expect(screen.queryByRole("region", { name: "Start a session" })).toBeNull();
-    // On Home, instructions and help are in the row menu.
+    // The row menu also includes instructions and help.
     expect(agents.queryByRole("button", { name: /Copy prompt|How to start/ })).toBeNull();
     await waitFor(() => expect(session$).toHaveBeenCalledWith(project.id));
     fireEvent.click(agents.getByRole("button", { name: "More for synthetic-repo" }));

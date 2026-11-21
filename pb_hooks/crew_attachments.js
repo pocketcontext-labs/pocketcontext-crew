@@ -62,9 +62,8 @@ const SETTINGS_FIELDS = [
 ];
 const LANGUAGES = ["", "en", "de", "it"];
 // What tapping an agent row on Home runs (0.36.0): one default for all agents
-// (only actions every agent has) and per-agent overrides keyed by agent id.
+// and per-agent overrides keyed by agent id.
 // The reader falls back when a stored action is no longer in an agent's menu.
-const TAP_ALL = ["open_agent", "show_tasks"];
 const TAP_AGENT = ["open_agent", "show_tasks", "copy_prompt"];
 const MAX_TAP_AGENTS = 200;
 function agentTap(app, value) {
@@ -74,8 +73,8 @@ function agentTap(app, value) {
   only(value, ["all", "agents"]);
   const out = {};
   if (value.all !== undefined) {
-    if (!TAP_ALL.includes(value.all))
-      bad("agent_tap.all must be open_agent or show_tasks");
+    if (!TAP_AGENT.includes(value.all))
+      bad("agent_tap.all must be open_agent, show_tasks or copy_prompt");
     out.all = value.all;
   }
   if (value.agents !== undefined) {

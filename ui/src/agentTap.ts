@@ -1,48 +1,36 @@
 import { t } from "./i18n";
 import { type Row } from "./crewApi";
-import { agentKind } from "./projectAgents";
+import { canStartChat } from "./projectAgents";
 
 /**
  * What tapping an agent row on Home runs (0.36.0), chosen in Settings >
  * Tapping an agent and kept on the server (`crew_settings.agent_tap`).
  *
- * The actions are the ones already in the agent's ⋯ menu on Home: Open agent
- * and Show tasks for every agent, plus Copy prompt for coding agent for a
- * coding agent (one started manually, whose session prompt Crew builds). The
- * stored value is `{all, agents: {agentId: action}}`; a missing `all` is the
- * product default, Open agent.
+ * A global action applies unless the agent has an override. People and
+ * archived agents fall back to Open agent when the action requires a prompt.
  */
 export type TapAction = "open_agent" | "show_tasks" | "copy_prompt";
-export type AllAgentsAction = Exclude<TapAction, "copy_prompt">;
 export type AgentTap = {
-  all?: AllAgentsAction;
+  all?: TapAction;
   agents?: Record<string, TapAction>;
 };
 
-export const productDefault: AllAgentsAction = "open_agent";
-/** The All agents picker: only the actions every agent has. */
-export const allAgentsActions: AllAgentsAction[] = ["open_agent", "show_tasks"];
-const tapActions: TapAction[] = ["open_agent", "show_tasks", "copy_prompt"];
+export const productDefault: TapAction = "open_agent";
+const navigationActions: TapAction[] = ["open_agent", "show_tasks"];
+export const allAgentsActions: TapAction[] = [...navigationActions, "copy_prompt"];
 
-/** A coding agent with a prompt: the reader can copy its session prompt. */
-export const isCodingAgent = (agent: Row | undefined) =>
-  agentKind(agent) === "external";
-
-/** The actions in this agent's ⋯ menu that a tap can run, in menu order. */
 export const agentActions = (agent: Row | undefined): TapAction[] =>
-  isCodingAgent(agent) ? tapActions : allAgentsActions;
+  canStartChat(agent) ? allAgentsActions : navigationActions;
 
-const isAllAction = (value: unknown): value is AllAgentsAction =>
-  allAgentsActions.includes(value as AllAgentsAction);
 const isAction = (value: unknown): value is TapAction =>
-  tapActions.includes(value as TapAction);
+  allAgentsActions.includes(value as TapAction);
 
 /** The stored value as the reader trusts it: unknown parts are dropped. */
 export function parseAgentTap(raw: unknown): AgentTap {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const value = raw as { all?: unknown; agents?: unknown };
   const out: AgentTap = {};
-  if (isAllAction(value.all)) out.all = value.all;
+  if (isAction(value.all)) out.all = value.all;
   if (
     value.agents &&
     typeof value.agents === "object" &&
@@ -57,8 +45,8 @@ export function parseAgentTap(raw: unknown): AgentTap {
 }
 
 /** The All agents value: the owner's choice, else Open agent. */
-export const allAgentsAction = (tap: AgentTap): AllAgentsAction =>
-  isAllAction(tap.all) ? tap.all : productDefault;
+export const allAgentsAction = (tap: AgentTap): TapAction =>
+  isAction(tap.all) ? tap.all : productDefault;
 
 /**
  * The action a tap on this agent runs: its override, else All agents, else
@@ -81,7 +69,7 @@ export const hasOverride = (tap: AgentTap, agent: Row) => {
 /** Sets All agents; per-agent overrides stay. */
 export const withAllAgents = (
   tap: AgentTap,
-  action: AllAgentsAction,
+  action: TapAction,
 ): AgentTap => ({ ...tap, all: action });
 
 /**
@@ -110,6 +98,6 @@ export function tapActionLabel(action: TapAction): string {
     case "show_tasks":
       return t("Show tasks");
     case "copy_prompt":
-      return t("Copy prompt for coding agent");
+      return t("Copy prompt");
   }
 }

@@ -25,7 +25,7 @@ func TestReaderPreferencesSetting(t *testing.T) {
 		{"language": 1},
 		{"agent_tap": "open_agent"},
 		{"agent_tap": []any{}},
-		{"agent_tap": map[string]any{"all": "copy_prompt"}},
+		{"agent_tap": map[string]any{"all": "unknown"}},
 		{"agent_tap": map[string]any{"all": "open_agent", "extra": true}},
 		{"agent_tap": map[string]any{"agents": map[string]any{agent: "run_wild"}}},
 		{"agent_tap": map[string]any{"agents": map[string]any{"zzzzzzzzzzzzzzz": "show_tasks"}}},
@@ -40,7 +40,7 @@ func TestReaderPreferencesSetting(t *testing.T) {
 	}
 	crewWrite(t, a, false, "settings.update", id, rev, map[string]any{"agent_tap": map[string]any{"agents": many}}, 400)
 
-	tap := map[string]any{"all": "show_tasks", "agents": map[string]any{agent: "copy_prompt"}}
+	tap := map[string]any{"all": "copy_prompt", "agents": map[string]any{agent: "show_tasks"}}
 	updated := crewWrite(t, a, false, "settings.update", id, rev, map[string]any{"language": "de", "agent_tap": tap}, 200)
 	if updated["language"] != "de" || updated["revision"] != float64(rev+1) || updated["session_guide_off"] != false {
 		t.Fatal("settings.update", updated)

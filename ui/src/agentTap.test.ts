@@ -43,7 +43,8 @@ describe("agent tap", () => {
   });
 
   it("offers only the actions in each agent's ⋯ menu", () => {
-    expect(agentActions(bot)).toEqual(["open_agent", "show_tasks"]);
+    expect(agentActions(bot)).toEqual(["open_agent", "show_tasks", "copy_prompt"]);
+    expect(agentActions({ ...bot, archived: true })).toEqual(["open_agent", "show_tasks"]);
     expect(agentActions(person)).toEqual(["open_agent", "show_tasks"]);
     expect(agentActions(coder)).toEqual([
       "open_agent",
@@ -81,8 +82,8 @@ describe("agent tap", () => {
       all: "show_tasks",
       agents: { [coder.id]: "copy_prompt" },
     });
-    // The coding agent became a bot: no prompt to copy any more.
-    const former = { ...coder, kind: "bot" };
+    // An agent converted to a person no longer has a session prompt.
+    const former = { ...coder, kind: "human" };
     expect(resolveAgentTap(tap, former)).toBe("show_tasks");
     expect(hasOverride(tap, former)).toBe(false);
     expect(
@@ -90,10 +91,18 @@ describe("agent tap", () => {
     ).toBe("open_agent");
   });
 
+  it("resolves a saved global copy action for eligible agents and respects overrides", () => {
+    const tap = parseAgentTap({ all: "copy_prompt", agents: { [coder.id]: "show_tasks" } });
+    expect(resolveAgentTap(tap, bot)).toBe("copy_prompt");
+    expect(resolveAgentTap(tap, coder)).toBe("show_tasks");
+    expect(resolveAgentTap(tap, person)).toBe("open_agent");
+    expect(resolveAgentTap(tap, { ...bot, archived: true })).toBe("open_agent");
+  });
+
   it("drops unknown stored values", () => {
     expect(
       parseAgentTap({
-        all: "copy_prompt",
+        all: "launch",
         agents: { [bot.id]: "launch", [coder.id]: "show_tasks" },
         extra: 1,
       }),
@@ -103,7 +112,7 @@ describe("agent tap", () => {
   });
 
   it("labels actions in the reader's language", () => {
-    expect(tapActionLabel("copy_prompt")).toBe("Copy prompt for coding agent");
+    expect(tapActionLabel("copy_prompt")).toBe("Copy prompt");
     setLanguage("de");
     expect(tapActionLabel("show_tasks")).toBe("Aufgaben anzeigen");
     setLanguage("it");

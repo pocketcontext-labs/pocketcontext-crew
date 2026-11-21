@@ -1406,10 +1406,10 @@ try {
   await page.waitForFunction(()=>document.documentElement.lang==='en');
   assert.deepEqual(await tabLabels(),['Home','Tasks','Notes','Approvals','More'],'English again');
   await back('Back to Settings');
-  // Tapping an agent: All agents offers Open agent and Show tasks; the coding agent adds its copy action.
+  // Global and individual tap preferences offer the same three actions for chat agents.
   await page.getByRole('button',{name:/^All agents/}).click();
   let picks=page.getByRole('radiogroup',{name:'All agents'});
-  assert.deepEqual(await picks.getByRole('radio').allInnerTexts(),['Open agent','Show tasks']);
+  assert.deepEqual(await picks.getByRole('radio').allInnerTexts(),['Open agent','Show tasks','Copy prompt']);
   await picks.getByRole('radio',{name:'Show tasks'}).click();
   await page.waitForFunction(()=>document.querySelector('[role=radio][aria-checked=true]')?.textContent==='Show tasks');
   await snapView('settings-all-agents-390');
@@ -1417,25 +1417,27 @@ try {
   await page.getByRole('button',{name:/^Network/}).filter({hasText:'Show tasks'}).waitFor();
   await page.getByRole('button',{name:/^synthetic-repo/}).click();
   picks=page.getByRole('radiogroup',{name:'synthetic-repo'});
-  assert.deepEqual(await picks.getByRole('radio').allInnerTexts(),['Open agent','Show tasks','Copy prompt for coding agent']);
+  assert.deepEqual(await picks.getByRole('radio').allInnerTexts(),['Open agent','Show tasks','Copy prompt']);
   assert.equal(await picks.getByRole('radio',{name:'Show tasks'}).getAttribute('aria-checked'),'true','follows All agents');
-  await picks.getByRole('radio',{name:'Copy prompt for coding agent'}).click();
-  await page.waitForFunction(()=>document.querySelector('[role=radio][aria-checked=true]')?.textContent==='Copy prompt for coding agent');
+  await picks.getByRole('radio',{name:'Copy prompt'}).click();
+  await page.waitForFunction(()=>document.querySelector('[role=radio][aria-checked=true]')?.textContent==='Copy prompt');
   await snapView('settings-agent-picker-390');
   await back('Back to Settings');
-  await page.getByRole('button',{name:/^synthetic-repo/}).filter({hasText:'Copy prompt for coding agent'}).waitFor();
+  await page.getByRole('button',{name:/^synthetic-repo/}).filter({hasText:'Copy prompt'}).waitFor();
   await rowsFit('settings tap 390');
   await snap('settings-tap-390');
-  // Home: a tap on a row runs that action; ⋯ still opens the full menu; only the coding agent has the tag.
+  // Home: a tap on a row runs that action; ⋯ still opens the full menu; each row shows its startup mode.
   for(const width of [390,1280]){
    await page.setViewportSize({width,height:844});
    await page.goto(base+'/#/');await page.reload();
    const agents=page.getByRole('region',{name:'Agents',exact:true});
    await agents.waitFor();
-   const pills=agents.locator('.crew-coding-pill');
-   assert.equal(await pills.count(),1,`one Coding agent tag at ${width}`);
-   assert.equal(await pills.first().innerText(),'Coding agent');
-   const fit=await agents.locator('li',{has:page.locator('.crew-coding-pill')}).evaluate(li=>{const p=li.querySelector('.crew-coding-pill').getBoundingClientRect(),m=li.querySelector('.crew-home-agent-more').getBoundingClientRect(),r=li.getBoundingClientRect();return {gap:m.left-p.right,height:r.height,name:li.querySelector('strong').textContent};});
+   const pills=agents.locator('.crew-home-startup-badge');
+   assert.equal(await pills.count(),await agents.locator('li').count(),`every agent has a status at ${width}`);
+   const coder=agents.locator('li').filter({has:page.getByRole('button',{name:'More for synthetic-repo',exact:true})});
+   assert.equal(await coder.locator('.crew-home-startup-badge').innerText(),'Manual start');
+   await agents.getByRole('button',{name:'Copy instructions for Network',exact:true}).waitFor();
+   const fit=await coder.evaluate(li=>{const p=li.querySelector('.crew-home-startup-badge').getBoundingClientRect(),m=li.querySelector('.crew-home-agent-more').getBoundingClientRect(),r=li.getBoundingClientRect();return {gap:m.left-p.right,height:r.height,name:li.querySelector('strong').textContent};});
    assert.equal(fit.name,'synthetic-repo');
    assert.ok(fit.gap>=4&&fit.height<=76,`the tag clears ⋯ and the row stays compact at ${width}: `+JSON.stringify(fit));
    if(width===390) await snapView('home-agents-tap-390');

@@ -100,7 +100,7 @@ export default function Settings({
               save({
                 agent_tap: withAllAgents(
                   tap,
-                  value as "open_agent" | "show_tasks",
+                  value as TapAction,
                 ),
               })
             }
