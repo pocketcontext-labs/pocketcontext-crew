@@ -2777,7 +2777,8 @@ Promise.all([fetch('/api/crew/read',{method:'POST',body:'{}'}).then(()=>'apiFetc
  await visitorPage.reload();await visitorPage.getByText('Plans start at').waitFor();
  assert.equal(await visitorPage.getByText('Changed after sharing').count(),0,'source edits never change the page');
  await artifactCard.getByRole('button',{name:'Edit draft'}).click();
- await artifactCard.getByRole('textbox',{name:'Artifact page',exact:true}).fill('Plans start at 12.');
+ await artifactCard.getByRole('tab',{name:'Edit',exact:true}).click();
+ await artifactCard.getByRole('textbox',{name:'Page',exact:true}).fill('Plans start at 12.');
  await artifactCard.getByRole('button',{name:'Save draft'}).click();
  await artifactCard.getByText('Changes not live').waitFor();
  await visitorPage.reload();await visitorPage.getByText('Plans start at 10.').waitFor();

@@ -3512,8 +3512,10 @@ describe("project agents and coding sessions", () => {
     fireEvent.click((await screen.findByRole("heading", { name: "Network" })).closest("button")!);
     const profile = within(screen.getByRole("dialog", { name: "Edit agent" }));
     fireEvent.change(profile.getByLabelText("Name"), { target: { value: "Unsaved name" } });
-    fireEvent.click(profile.getByRole("button", { name: "Edit instructions" }));
+    fireEvent.click(profile.getByRole("button", { name: "Read instructions" }));
     let instructions = within(await screen.findByRole("dialog", { name: "Session instructions for Network" }));
+    expect(instructions.getByRole("button", { name: "Read" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(instructions.getByRole("button", { name: "Edit" }));
     fireEvent.change(instructions.getByRole("textbox", { name: /Session instructions/ }), {
       target: { value: "Updated chat instructions" },
     });

@@ -206,8 +206,8 @@ export default function Connect({
 }) {
   const local = connection.kind === "local";
   useEffect(() => {
-    if (!section) return;
-    const target = document.getElementById(section === "files" ? fileSettingsId : "crew-integration-settings");
+    if (section !== "files") return;
+    const target = document.getElementById(fileSettingsId);
     if (!target) return;
     const reduce =
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -227,7 +227,7 @@ export default function Connect({
         )}
         {local && <LocalSteps />}
       </section>
-      <div id="crew-integration-settings" tabIndex={-1} className="crew-title-row crew-connect-optional">
+      <div className="crew-title-row crew-connect-optional">
         <h2>{t("Optional: wake agents automatically")}</h2>
         <Help topic="wake-ups" />
       </div>
@@ -244,7 +244,8 @@ export default function Connect({
         agents={agents}
         tasks={tasks}
         collapsible
-        reveal={section === "integration"}
+        focusSetup={section === "integration"}
+        onSetupFocused={onSectionShown}
         mcpUrl={connection.kind === "mcp" ? connection.url : null}
       />
       <FileSettings tasks={tasks} notes={notes} />

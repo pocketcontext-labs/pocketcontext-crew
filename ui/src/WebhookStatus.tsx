@@ -307,21 +307,20 @@ export default function WebhookStatus({
   agents,
   tasks = [],
   collapsible = false,
-  reveal = false,
+  focusSetup = false,
+  onSetupFocused,
   mcpUrl = `${window.location.origin}/mcp`,
 }: {
   agents: Row[];
   /** Current and archived tasks, used only to tell live warnings from old ones. */
   tasks?: Row[];
   collapsible?: boolean;
-  reveal?: boolean;
+  focusSetup?: boolean;
+  onSetupFocused?: () => void;
   /** null when this install has no MCP endpoint to authorize bots against. */
   mcpUrl?: string | null;
 }) {
-  const [open, setOpen] = useState(!collapsible || reveal);
-  useEffect(() => {
-    if (reveal) setOpen(true);
-  }, [reveal]);
+  const [open, setOpen] = useState(!collapsible);
   const [config, setConfig] = useState<Row>();
   const [mappings, setMappings] = useState<Row[]>([]);
   const [routing, setRouting] = useState<Row>();
@@ -331,6 +330,16 @@ export default function WebhookStatus({
   const [bridges, setBridges] = useState<Row[]>([]);
   const [legacyCount, setLegacyCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const setupTarget = useRef<HTMLButtonElement>(null);
+  const setupHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!focusSetup || loading) return;
+    const target = setupTarget.current ?? setupHeading.current;
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView?.({ block: "center" });
+    onSetupFocused?.();
+  }, [focusSetup, loading, open, onSetupFocused]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -866,14 +875,14 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
   }
   if (!open)
     return loading ? null : (
-      <button type="button" onClick={() => setOpen(true)}>
+      <button ref={setupTarget} className="crew-integration-target" type="button" onClick={() => setOpen(true)}>
         {t("Set up automatic wake-ups")}
       </button>
     );
   return (
     <section className="crew-webhooks" aria-label={t("Grok Bot integration")}>
       <div className="crew-section-title">
-        <h2>{t("Grok setup")}</h2>
+        <h2 ref={setupHeading} tabIndex={-1} className="crew-integration-target">{t("Grok setup")}</h2>
       </div>
       {!setupComplete && (
         <p>
@@ -909,6 +918,8 @@ For a setup diagnostic, verify the connected instance, use Crew's current capabi
               </p>
               <button
                 type="button"
+                ref={setupTarget}
+                className="crew-integration-target"
                 aria-expanded={showSteps}
                 onClick={() => (showSteps ? resetSteps() : setReviewing(true))}
               >

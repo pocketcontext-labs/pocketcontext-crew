@@ -113,9 +113,14 @@ describe("Shared", () => {
     render(
       <Shared notes={[]} tasks={[]} focus="art000000000002" Prose={Prose} />,
     );
-    expect(await screen.findByLabelText("Artifact page")).toHaveValue("");
+    expect(await screen.findByLabelText("Page", { exact: true })).toHaveValue("");
+    fireEvent.change(screen.getByRole("textbox", { name: "Page" }), { target: { value: "## Draft heading" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Read" }));
+    expect(screen.getByRole("heading", { name: "Draft heading" })).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "Edit" }));
+    expect(screen.getByRole("textbox", { name: "Page" })).toHaveValue("## Draft heading");
     // Only the focused new draft opens its editor.
-    expect(screen.getAllByLabelText("Artifact page")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Page", { exact: true })).toHaveLength(1);
     expect(screen.getByLabelText("Artifact title")).toHaveValue("Fresh page");
   });
 

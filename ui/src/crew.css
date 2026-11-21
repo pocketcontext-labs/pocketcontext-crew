@@ -1885,7 +1885,7 @@ a.crew-logo:hover .product-brand span {
   background: #f0f3e7;
   border-bottom: 1px solid #dfe5d6;
 }
-.crew-dialog .crew-md-tabs button {
+:is(.crew-dialog, .crew-artifact-edit) .crew-md-tabs button {
   border: 0;
   border-radius: 6px 6px 0 0;
   background: transparent;
@@ -1894,7 +1894,7 @@ a.crew-logo:hover .product-brand span {
   color: #567257;
   border-bottom: 2px solid transparent;
 }
-.crew-dialog .crew-md-tabs button[aria-selected="true"] {
+:is(.crew-dialog, .crew-artifact-edit) .crew-md-tabs button[aria-selected="true"] {
   background: #fffefa;
   color: #293e2c;
   font-weight: 650;
@@ -1913,7 +1913,7 @@ a.crew-logo:hover .product-brand span {
   background: transparent;
   min-height: 120px;
 }
-.crew-dialog .crew-md-box textarea:focus {
+:is(.crew-dialog, .crew-artifact-edit) .crew-md-box textarea:focus {
   outline: none;
   box-shadow: none;
 }
@@ -4798,8 +4798,8 @@ a.crew-logo:hover .product-brand span {
 .crew-chat-instructions small, .crew-chat-instructions textarea, .crew-chat-instructions > p { grid-column: 1 / -1; }
 .crew-agent-no-tasks { margin: 0; font-size: 14px; }
 
-#crew-integration-settings { scroll-margin-top: 5rem; }
-#crew-integration-settings:focus {
+
+.crew-app .crew-integration-target:focus {
   outline: 2px solid currentColor;
   outline-offset: 4px;
   border-radius: 4px;

@@ -3562,7 +3562,7 @@ const archiveLabel = (kind: Kind) =>
 type InstructionsView = {
   name: string;
   session: AgentSession;
-  initialMode?: "edit" | "history";
+  initialMode?: "read" | "history";
 };
 type EditorProps = {
   kind: Kind;
@@ -3635,7 +3635,7 @@ function formValues(kind: Kind, row: Row | undefined, data: Data) {
   };
 }
 function ChatInstructions({ agent, open }: { agent: Row; open: (view: InstructionsView) => void }) {
-  const [request, setRequest] = useState<"edit" | "history" | null>(null);
+  const [request, setRequest] = useState<"read" | "history" | null>(null);
   const [readError, setReadError] = useState(false);
   const name = val(agent, "name");
   useEffect(() => {
@@ -3674,8 +3674,8 @@ function ChatInstructions({ agent, open }: { agent: Row; open: (view: Instructio
         readOnly value={result.prompt} onFocus={(e) => e.currentTarget.select()} />}
       {result?.state === "failed" && <p role="alert">{t("Could not prepare the session prompt for {name}. Check your connection and try again.", { name })}</p>}
       <div className="crew-instruction-actions">
-        <button type="button" aria-haspopup="dialog" disabled={!!request} onClick={() => setRequest("edit")}>
-          {t("Edit instructions")}
+        <button type="button" aria-haspopup="dialog" disabled={!!request} onClick={() => setRequest("read")}>
+          {t("Read instructions")}
         </button>
         <button type="button" aria-haspopup="dialog" disabled={!!request} onClick={() => setRequest("history")}>
           {t("Revision history")}

@@ -1,7 +1,7 @@
 // German strings of the workspace (CrewWorkspace.tsx): navigation, board,
 // notes, approvals, agents and the record dialogs.
 const de: Record<string, string> = {
-  "Edit instructions": "Anweisungen bearbeiten",
+  "Read instructions": "Anweisungen lesen",
   "Who will receive assignments?": "Wer erhält die Aufgaben?",
   "Role description": "Rollenbeschreibung",
   "Save person": "Person speichern",

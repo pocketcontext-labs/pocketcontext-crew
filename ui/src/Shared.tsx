@@ -16,6 +16,7 @@ import {
   sharedHash,
   type SharedFilter,
 } from "./itemLink";
+import MarkdownField from "./MarkdownField";
 import NewSharedPage from "./NewSharedPage";
 import { icons } from "./MobileChrome";
 import ColumnSwitcher from "./ColumnSwitcher";
@@ -587,15 +588,7 @@ function ArtifactCard({
               onValue={setTitle}
             />
           </label>
-          <label>
-            {t("Page")}
-            <textarea
-              aria-label={t("Artifact page")}
-              value={body}
-              rows={12}
-              onChange={(e) => setBody(e.target.value)}
-            />
-          </label>
+          <MarkdownField label={t("Page")} value={body} onChange={setBody} />
           <div className="crew-artifact-actions">
             <button type="submit" className="crew-primary" disabled={busy}>
               {t("Save draft")}

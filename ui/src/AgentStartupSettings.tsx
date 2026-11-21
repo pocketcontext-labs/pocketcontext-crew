@@ -81,7 +81,7 @@ export default function AgentStartupSettings({ agent, onConfigured }: {
       {state && <>
         {available && <p>{t("Integration: {host}", { host })}</p>}
         {mapped && <p>{t("Recipient: {reference}", { reference: mapped })}</p>}
-        {!available && <p>{state.paused ? t("Delivery is paused.") : t("Connect and enable an integration to start agents automatically.")}{" "}<a href={connectSectionHash("integration")}>{t("Open integration settings")}</a></p>}
+        {!available && <div><p>{state.paused ? t("Delivery is paused.") : t("Connect and enable an integration to start agents automatically.")}</p><a className="crew-button-link crew-primary" href={connectSectionHash("integration")}>{t("Open integration settings")}</a></div>}
         {choosing && available && !mapped && <div className="crew-startup-destination">
           <label className="crew-field">
             <span>{t("Recipient reference")}</span>
