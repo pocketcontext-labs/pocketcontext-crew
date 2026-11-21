@@ -118,7 +118,8 @@ describe("empty Tasks board", () => {
       render(<CrewWorkspace />);
       const empty = await screen.findByRole("region", { name: "No tasks yet" });
       expect(screen.queryByRole("searchbox", { name: "Search tasks" })).toBeNull();
-      expect(screen.queryByRole("button", { name: /Filters|New task|Set up starter crew/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Filters|New task/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "Set up starter crew" })).toBeVisible();
       expect(screen.queryByRole("heading", { name: /^To do/ })).toBeNull();
       fireEvent.click(within(empty).getByRole("button", { name: "Create your first task" }));
       expect(within(await screen.findByRole("dialog")).getByLabelText("Hold")).toHaveValue("waiting");

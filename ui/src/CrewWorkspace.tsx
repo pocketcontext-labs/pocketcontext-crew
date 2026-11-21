@@ -2593,7 +2593,7 @@ export default function CrewWorkspace() {
           {loading && view !== "guide" && (
             <p role="status">{t("Loading your workspace…")}</p>
           )}
-          {!loading && !emptyBoard && !emptyMemory && view !== "reviews" &&
+          {!loading &&
             !data.agents.length &&
             !data.buckets.length &&
             view !== "archive" &&
