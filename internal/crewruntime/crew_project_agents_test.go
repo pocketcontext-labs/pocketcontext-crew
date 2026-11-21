@@ -272,12 +272,13 @@ func TestClaimRenewedByAttachment(t *testing.T) {
 
 func TestSessionInstructionsRead(t *testing.T) {
 	a := newTestApp(t)
+	a.app.Settings().Meta.AppURL = "https://crew-dev.example.test"
 	agent := crewWrite(t, a, false, "agent.create", "", 0, map[string]any{"name": "synthetic-repo", "brief": "Synthetic brief: run the synthetic tests.", "kind": "external"}, 200)
 	for _, ref := range []any{"synthetic-repo", agent["id"]} {
 		raw, _ := json.Marshal(map[string]any{"collection": "session", "agent": ref})
 		got := a.request(t, "POST", "/api/crew/read", a.token, string(raw), 200)
 		prompt := got["prompt"].(string)
-		for _, want := range []string{"You are synthetic-repo in PocketContext Crew.", "authenticated Crew MCP connection", "paired pocketcontext-crew CLI", "pair the CLI and stop", `"collection":"session","agent":"synthetic-repo"`, "relevant notes", "last_saved_step", "already selected a Ready task by ID or title", "task.claim", "generate a UUID once", "save the outcome and next step"} {
+		for _, want := range []string{"You are synthetic-repo in PocketContext Crew.", "only the authenticated Crew MCP connection configured for https://crew-dev.example.test/mcp", "Before any Crew read or write", "stop and ask me", `"collection":"session","agent":"synthetic-repo"`, "relevant notes", "last_saved_step", "already selected a Ready task by ID or title", "task.claim", "generate a UUID once", "save the outcome and next step"} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("session prompt lacks %q: %s", want, prompt)
 			}

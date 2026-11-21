@@ -12,10 +12,12 @@ const LEASE_MS = LEASE_HOURS * 3600 * 1000;
 const presets = require("./session_templates.json");
 const shortDefault = presets.general.join("\n\n");
 
-function prompt(name) {
+function prompt(name, workspaceURL) {
   return [
     "You are " + name + " in PocketContext Crew.",
-    "Use my authenticated Crew MCP connection (crew_read/crew_write) or paired pocketcontext-crew CLI (read/write). If neither is available, explain how to connect Crew in this chat or pair the CLI and stop.",
+    /^https:\/\//.test(workspaceURL)
+      ? "Use only the authenticated Crew MCP connection configured for " + workspaceURL.replace(/\/+$/, "") + "/mcp. Before any Crew read or write, verify the selected connection’s exact endpoint in the client configuration. A server name or matching agent name is insufficient. If you cannot verify or use that endpoint, stop and ask me to connect it."
+      : "Use only the pocketcontext-crew CLI paired to this local workspace. Before any Crew read or write, ask me to confirm the database path and verify the CLI targets it. If you cannot verify it, stop.",
     'Read the session with {"collection":"session","agent":' + JSON.stringify(name) + '}. Follow its instructions and brief. Read your bucket, relevant notes and assignments with title, status, readiness, last_saved_step, claim_state, claimed_by and webhook_holder.',
     "If I already selected a Ready task by ID or title, recheck and claim that task. Otherwise show the assignments and wait for my choice. Opening the chat only reads context. Use task.claim before work; report any existing holder.",
     "Use a unique reported_agent for this chat: reuse its session ID, or generate a UUID once and keep it for all claim and renewal writes.",
@@ -240,7 +242,7 @@ function describe(app, ref) {
       name,
       kind: agent.getString("kind") || "bot",
     },
-    prompt: prompt(name),
+    prompt: prompt(name, app.settings().meta.appURL),
     general_template: shortDefault,
     workflow_additions: presets.workflows,
     coding_template: codingTemplate(name),
