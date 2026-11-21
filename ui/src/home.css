@@ -168,11 +168,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.crew-app .crew-home-agents button.crew-copy-icon {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  min-height: 38px;
+.crew-app .crew-home-agents button.crew-home-agent-more {
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
 }
 .crew-home-agent-more {
   flex: none;
