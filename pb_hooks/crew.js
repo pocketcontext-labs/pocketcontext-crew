@@ -376,7 +376,7 @@ const derivedFields = {
   ],
   webhook_executions: ["waiting_overdue", "lease_expired"],
   webhook_bridges: ["overdue"],
-  tasks: ["path", "url", "claim_state", "last_saved_step", "webhook_holder"],
+  tasks: ["path", "url", "claim_state", "last_saved_step", "webhook_holder", "delegation_reply"],
   notes: ["path", "url"],
   reviews: ["path", "url"],
   session_revisions: ["edited_by"],
@@ -454,10 +454,18 @@ function actionableOverdue(app, r) {
   }
   return true;
 }
-// Fetch handoff context only on explicit projection. The prompt stays stable
-// while a second chat sees the most recently saved comment at read time.
+function delegationReply(app, task) {
+  if (!task.getString("delegation_parent")) return null;
+  const rows = app.findRecordsByFilter("crew_events", "parent={:id} && action='task.reply'", "-created", 1, 0, {id: task.id});
+  if (!rows.length) return null;
+  const ev = rows[0];
+  return {event_id: ev.id, body: ev.getString("body"), agent: JSON.parse(ev.getString("changes")).agent,
+    reported_agent: ev.getString("reported_agent"), created: ev.getString("created")};
+}
+// Fetch handoff context only on explicit projection.
 function addChatContext(app, task, value, fields) {
   if (!fields) return;
+  if (fields.includes("delegation_reply")) value.delegation_reply = delegationReply(app, task);
   if (fields.includes("webhook_holder")) {
     const holder = execution.chatHolder(app, task);
     value.webhook_holder = holder ? holder.name : "";
@@ -607,7 +615,7 @@ function read(e) {
   }
   if (b.parent) {
     const key =
-      col === "notes"
+      col === "tasks" ? "delegation_parent" : col === "notes"
         ? "bucket"
         : col === "note_revisions"
           ? "note"
@@ -624,6 +632,7 @@ function read(e) {
                     : "parent";
     if (
       ![
+        "tasks",
         "notes",
         "note_revisions",
         "session_revisions",
@@ -639,6 +648,7 @@ function read(e) {
     )
       bad("Invalid parent filter");
     clauses.push(key + "={:parent}");
+    if (col === "tasks") sql.push("[[delegation_parent]]={:parent}");
     // Session revisions take the agent by ID or exact name, like session.
     params.parent =
       col === "session_revisions"
@@ -820,7 +830,8 @@ function write(e, isAgent) {
   const files = attachments.collect(e, b);
   const actor = (isAgent ? "mcp:" : "owner:") + e.auth.id;
   let result, refusal;
-  e.app.runInTransaction((app) => {
+  const apply = (app, b, delegationParent) => {
+    const d = b.data || {};
     if (attachments.ACTIONS.includes(b.action)) {
       result = attachments.handle(app, e, b, actor, isAgent, files, helpers);
       renewAfterAttachment(app, b);
@@ -1177,6 +1188,10 @@ function write(e, isAgent) {
         if (kind === "task") {
           r.set("status", "todo");
           r.set("readiness", "waiting");
+          if (delegationParent) {
+            r.set("delegation_parent", delegationParent.id);
+            r.set("bot_handoffs", delegationParent.getInt("bot_handoffs"));
+          }
           r.set("draft_options", []);
           r.set("draft_selection", "any");
           r.set("created_by_agent", b.reported_agent || "");
@@ -1616,6 +1631,39 @@ function write(e, isAgent) {
       return;
     }
     bad("Unknown action");
+  };
+  e.app.runInTransaction((app) => {
+    if (!["task.delegate", "task.reply"].includes(b.action)) return apply(app, b);
+    const task = get(app, "tasks", b.id);
+    const reporter = claimer(b);
+    execution.guardTaskWrite(app, task, b, isAgent);
+    const delegate = b.action === "task.delegate";
+    only(d, delegate ? ["assigned_agent", "title", "description", "labels"] : ["body"]);
+    const receipt = webhooks.idempotent(app, {...b, data: {...d, reporter}}, () => {
+      check(task, b);
+      if (task.getBool("archived") || webhooks.terminal(task.getString("status")) ||
+          task.getString("readiness") !== "ready") bad("An active Ready task is required");
+      if (!(isAgent && b.execution) &&
+          (webhooks.claimState(task) !== "live" || task.getString("claimed_by") !== reporter)) {
+        const holder = task.getString("claimed_by");
+        throw new ApiError(409, "Claim this task before delegating or replying" + (holder ? ". Current or last holder: " + holder : ""), {});
+      }
+      if (delegate) {
+        if (task.getString("delegation_parent")) bad("Delegate from the coordinating task");
+        if (!d.assigned_agent || !d.title) bad("assigned_agent and title are required");
+        apply(app, {...b, action: "task.create", id: "", data: {...d, readiness: "ready", links: [task.id]}}, task);
+        event(app, task, b.action, b, actor, {child: result.id, assigned_agent: result.assigned_agent});
+        if (renewByClaimer(task, b)) app.save(task);
+        return {id: result.id};
+      }
+      if (!task.getString("delegation_parent")) bad("Reply to a delegated task");
+      if (typeof d.body !== "string" || !d.body.trim() || d.body.length > 20000) bad("A reply of 1–20000 characters is required");
+      if (delegationReply(app, task)) throw new ApiError(409, "This delegation already has a reply", {});
+      event(app, task, b.action, b, actor, {agent: task.getString("assigned_agent")});
+      if (renewByClaimer(task, b)) app.save(task);
+      return {id: task.id};
+    }, true);
+    result = delegate ? webhooks.linkedExport(app, "tasks", get(app, "tasks", receipt.id)) : delegationReply(app, task);
   });
   if (refusal) return e.json(409, refusal);
   return e.json(200, result);

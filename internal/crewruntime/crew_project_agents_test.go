@@ -279,7 +279,7 @@ func TestSessionInstructionsRead(t *testing.T) {
 		raw, _ := json.Marshal(map[string]any{"collection": "session", "agent": ref})
 		got := a.request(t, "POST", "/api/crew/read", a.token, string(raw), 200)
 		prompt := got["prompt"].(string)
-		for _, want := range []string{"You are synthetic-repo in PocketContext Crew.", "only the authenticated Crew MCP connection configured for https://crew-dev.example.test/mcp", "Before any Crew read or write", "stop and ask me", `"collection":"session","agent":"synthetic-repo"`, "relevant notes", "last_saved_step", "already selected a Ready task by ID or title", "task.claim", "generate a UUID once", "save the outcome and next step"} {
+		for _, want := range []string{"You are synthetic-repo in PocketContext Crew.", "only the authenticated Crew MCP connection configured for https://crew-dev.example.test/mcp", "Before any Crew read or write", "stop and ask me", `"collection":"session","agent":"synthetic-repo"`, "relevant notes", "last_saved_step", "already selected a Ready task by ID or title", "task.claim", "UUID", "Reuse the exact holder", "save the outcome and next step"} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("session prompt lacks %q: %s", want, prompt)
 			}

@@ -20,7 +20,7 @@ function prompt(name, workspaceURL) {
       : "Use only the pocketcontext-crew CLI paired to this local workspace. Before any Crew read or write, ask me to confirm the database path and verify the CLI targets it. If you cannot verify it, stop.",
     'Read the session with {"collection":"session","agent":' + JSON.stringify(name) + '}. Follow its instructions and brief. Read your bucket, relevant notes and assignments with title, status, readiness, last_saved_step, claim_state, claimed_by and webhook_holder.',
     "If I already selected a Ready task by ID or title, recheck and claim that task. Otherwise show the assignments and wait for my choice. Opening the chat only reads context. Use task.claim before work; report any existing holder.",
-    "Use a unique reported_agent for this chat: reuse its session ID, or generate a UUID once and keep it for all claim and renewal writes.",
+    presets.general[2],
     "Before leaving, save the outcome and next step if they changed.",
   ].join("\n");
 }
@@ -243,6 +243,9 @@ function describe(app, ref) {
       kind: agent.getString("kind") || "bot",
     },
     prompt: prompt(name, app.settings().meta.appURL),
+    role_available: agent.getString("kind") !== "human" && !agent.getBool("archived"),
+    chat_guidance: presets.chat_guidance,
+    broadcast_guidance: presets.broadcast_guidance,
     general_template: shortDefault,
     workflow_additions: presets.workflows,
     coding_template: codingTemplate(name),

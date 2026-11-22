@@ -49,6 +49,7 @@ const it: Record<string, string> = {
   "I choose task {id}. Read its current state and claim it before starting.": "Scelgo l’attività {id}. Leggi lo stato attuale e prendila in carico prima di iniziare.",
   "Choose {title}": "Scegli {title}",
   "No assigned tasks": "Nessuna attività assegnata",
+  "Other assigned tasks": "Altre attività assegnate",
   "Assigned tasks": "Attività assegnate",
   // Tables translated where they render: page names, eyebrows, sorts, hold
   // filters, statuses (crewApi.ts) and agent kinds (projectAgents.ts).

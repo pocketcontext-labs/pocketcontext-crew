@@ -150,6 +150,8 @@ function document() {
     properties: { id: str, revision: num },
     additionalProperties: true,
   };
+  const reply = object({ event_id: str, body: str, agent: str, reported_agent: str, created: str },
+    ["event_id", "body", "agent", "reported_agent", "created"]);
   const agent = {
     name: str,
     brief: str,
@@ -315,6 +317,12 @@ function document() {
   });
   op("note.restore", { revision_id: str }, ["revision_id"], {
     revision: "record",
+  });
+  op("task.delegate", {assigned_agent: str, title: str, description: str, labels: task.labels}, ["assigned_agent", "title"], {
+    revision: "record", key: true, description: "Use the claimed coordinating task as id. Creates a linked child for one recipient. Supply one stable key per recipient and request. Read tasks with parent to list their individual replies.",
+  });
+  op("task.reply", {body: str}, ["body"], {
+    revision: "record", key: true, result: reply, description: "The child task holder records one attributed reply. Retry with the original key. The owner retains completion authority.",
   });
   op("task.create", task, ["title"], { warnings: markupWarningsNote });
   op("task.update", task, [], {
@@ -879,6 +887,7 @@ function document() {
   ])
     collections[name] = { result_schema: record };
   for (const [name, parent] of Object.entries({
+    tasks: "delegating task",
     notes: "bucket",
     note_revisions: "note",
     session_revisions: "agent (ID or exact name)",
@@ -954,6 +963,8 @@ function document() {
         description: "Claim lease end (ISO UTC); empty without a claim",
       },
       webhook_holder: { type: "string", description: "Request in fields: the agent holding an unresolved webhook execution, or an empty string." },
+      delegation_parent: str,
+      delegation_reply: {anyOf: [reply, { type: "null" }], description: "Request in fields for the recipient’s saved reply and reporting session."},
       last_saved_step: { type: "string", description: "Request in fields: the most recent saved task comment, or an empty string." },
       claim_state: {
         enum: ["", "live", "expired"],

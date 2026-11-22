@@ -351,6 +351,8 @@ All run on `POST /api/crew/write` (reader) and `POST /api/crew/agent-write`
 | `attachment.archive` | attachment id, its revision | `{}` | attachment record plus `review_withdrawn` |
 | `attachment.restore` | attachment id, its revision | `{}` | attachment record plus `review_withdrawn` |
 | `task.create`, `note.create` | none | usual fields, optional files | task/note record plus `attachments: [record…]` |
+| `task.delegate` | claimed parent task id, its revision, stable idempotency key | `assigned_agent`, `title`, optional `description` and `labels` | linked child task |
+| `task.reply` | claimed child task id, its revision, stable idempotency key | `body` | recorded reply with agent and session |
 | `task.comment` | task id, its revision | `body`, optional files | task record; with files also `attachments: [record…]` and `review_withdrawn` |
 | `upload_link.create` | none | `task` or `note`, `expires_in_minutes` (1–1440, default 15), `max_files` (1–20, default 10) | link record plus `token`, `path` (`#/upload/<token>`) and `url` (with a domain); reader route only |
 | `upload_link.revoke` | link id, its revision | `{}` | link record |
@@ -1055,6 +1057,51 @@ repositories: label each task with its repository and filter the board by assign
 and label. Its brief tells sessions to work only on the repository the owner picks.
 One agent per repository remains supported. Keep one session per repository unless
 the owner requests parallel work.
+
+### Working as a role in a connected chat
+
+The owner can ask to start or switch roles in natural language, including
+“Work as Learn”, “Lavora come Learn” and “Arbeite als Learn”. Agent names
+are the owner's configured names in every language. The chat reads the selected
+instance’s session by ID or exact name before applying the role. If selection
+fails, keep the previous role. Switching retains the conversation and leaves
+existing task claims with their original holders. Use an explicit handoff when
+another session should take over a task. Fresh chats and explicit refreshes
+load the latest saved instructions. An open chat keeps the version it loaded.
+
+The agent’s instructions can specify the chat language and the language of
+saved Crew records independently of the reader locale. For example, Learn can
+answer a voice or text question in Italian and save its note in English.
+The client interprets the owner's language and produces the response. Crew
+supplies the same saved role context to each client.
+
+Give each chat a stable unique session identifier. Include a readable device
+name and optional label scope in its reported name to distinguish concurrent
+work on the same role. List the role's tasks with the corresponding label
+filter. Filters organize work; the revision-checked claim decides which
+session acquired a particular task.
+
+### Delegation and group conversations
+
+A coordinator such as Assess keeps the original task and assigns a linked
+child task to each specialist. Read the children with `crew_read` on
+`tasks` with `parent` set to the original task ID. Child creation records
+the assignment. A claim or webhook acquisition records pickup. A specialist
+records its reply on its own child. A client with subagents can start a
+separate worker with the recipient's saved role. Otherwise use the configured
+webhook dispatcher or let a manual specialist open a chat and claim the task.
+The coordinator can revisit the parent after reopening a chat to collect replies.
+
+For instruction broadcasts from any role, resolve the requested recipients
+and preview the wording and affected instructions for each one. Preserve
+unrelated rules in their saved bodies and briefs. After owner confirmation,
+apply each change at the previewed revision. Show individual successes and
+conflicts. Reread a conflict and obtain approval for revised wording before
+overwriting it. A saved instruction is available to new chats and explicit
+refreshes. To collect acknowledgments or answers, delegate a question to each
+recipient and report the actual replies alongside outstanding requests.
+The host client delivers updates in chat when it can; a later status request
+can always reread the durable task records.
 
 **Agent kinds.** `crew_agents.kind` is `bot` (a Grok bot woken by webhook, the
 default, and every agent created before 0.18.0), `external` (a coder session the

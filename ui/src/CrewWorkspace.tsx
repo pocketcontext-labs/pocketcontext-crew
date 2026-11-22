@@ -457,6 +457,12 @@ function ClaimChip({ task }: { task: Row }) {
     </span>
   );
 }
+function CardClaimHolder({ task }: { task: Row }) {
+  const claim = claimOf(task, useNow().getTime());
+  return claim.state === "live" && claim.by
+    ? <small className="crew-card-claim-holder">{t("Claimed by {by}", { by: claim.by })}</small>
+    : null;
+}
 const wakeMissingTitle = () =>
   t("Crew woke the assigned bot but it never confirmed receiving the wake. Check the bot's conversation, then set the task On hold and Ready again if it should run.");
 function WakeMissingChip() {
@@ -2960,6 +2966,7 @@ export default function CrewWorkspace() {
                           {name(val(x, "assigned_agent"))}
                         </>
                       )}
+                      {val(x, "claimed_by") && <CardClaimHolder task={x} />}
                     </footer>
                   </div>
                 );
@@ -4300,7 +4307,7 @@ function Editor({
           </div>
         )}
         {row && !readOnly && <div onChange={(event) => event.stopPropagation()}>
-          <AgentAssignments agent={row} />
+          <AgentAssignments key={row.id} agent={row} workspaceTasks={data.tasks} />
         </div>}
         {more}
         {bar(!readOnly && <button className="crew-primary" type="submit" form={formId}

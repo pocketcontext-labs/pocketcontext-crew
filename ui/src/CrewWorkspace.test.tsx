@@ -3976,10 +3976,12 @@ describe("project agents and coding sessions", () => {
     it("marks a live claim with its end time on hover and an expired one with the previous claimer", async () => {
       render(<CrewWorkspace />);
       const live = await screen.findByRole("button", { name: /Claimed work/ });
+      expect(within(live).getByText("Claimed by codex-session-1")).toBeVisible();
       const chip = within(live).getByText(/^Session · /);
       expect(chip).toHaveClass("crew-claim-chip");
       expect(chip.getAttribute("title")).toContain("Claimed by codex-session-1");
       const stale = screen.getByRole("button", { name: /Stale work/ });
+      expect(within(stale).queryByText("Claimed by claude-session-2")).toBeNull();
       const badge = within(stale).getByText(/^Claim expired/);
       expect(badge).toHaveClass("crew-claim-expired");
       expect(badge.getAttribute("title")).toContain("Claimed by claude-session-2");

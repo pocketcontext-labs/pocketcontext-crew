@@ -35,7 +35,7 @@ func TestSessionInstructionsRevisions(t *testing.T) {
 	id := agent["id"].(string)
 	initial := readSession(t, a, "synthetic-repo")
 	defaultBody, _ := initial["body"].(string)
-	if initial["revision"] != float64(0) || initial["is_default"] != true || initial["edited_by"] != "" || !strings.Contains(defaultBody, "generate a UUID once") || strings.Contains(defaultBody, "## Agent brief") {
+	if initial["revision"] != float64(0) || initial["is_default"] != true || initial["edited_by"] != "" || !strings.Contains(defaultBody, "UUID") || !strings.Contains(defaultBody, "Reuse the exact holder") || strings.Contains(defaultBody, "## Agent brief") {
 		t.Fatal("default session", initial)
 	}
 	if initial["instructions"] != defaultBody+"\n\n## Agent brief\n\nSynthetic brief." {

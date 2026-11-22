@@ -1,5 +1,12 @@
 # Crew upgrades and rollback
 
+## After Crew 0.43.0
+
+Back up the complete project before upgrading. The additive migration records
+parent tasks for new delegations. Existing tasks remain independent. Refresh
+the MCP tool descriptions and reinstall any local Crew skill. For rollback,
+restore the pre-upgrade project and its matching binary.
+
 ## Crew 0.42.1 to 0.43.0
 
 Back up the project before upgrading. The additive migration gives existing

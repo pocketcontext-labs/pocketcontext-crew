@@ -714,7 +714,7 @@ def cli_session_instructions_scenario(cli, write, project, session):
     """0.21.0: an agent reads and rewrites session instructions with expected_revision."""
     assert session['revision'] == 0 and session['is_default'] is True and session['edited_by'] == '', session
     default = session['body']
-    assert 'generate a UUID once' in default and '## Agent brief' not in default
+    assert 'UUID' in default and 'Reuse the exact holder' in default and '## Agent brief' not in default
     assert 'Coding workflow' in session['coding_template'] and session['coding_template'] != default
     assert session['instructions'] == default + '\n\n## Agent brief\n\nSynthetic project brief.'
     assert '(revision 0)' in session['rewrite_prompt'] and 'session.update' in session['rewrite_prompt']

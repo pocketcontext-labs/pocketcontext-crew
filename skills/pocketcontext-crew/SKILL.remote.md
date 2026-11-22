@@ -41,7 +41,7 @@ overrides them in the conversation:
 5. Outbound gate (unchanged): anything that would post, send, publish,
    invite, pay or ship needs the owner's authorization in this conversation.
    A Crew review approval never executes that action.
-6. Set reported_agent to your own agent name. Do not use another agent's
+6. Set reported_agent to your own stable role-chat holder or webhook worker name. Do not use another agent's
    name. Attribution is for audit; the server does not use it to block.
 
 ## Work with Crew
@@ -91,7 +91,7 @@ Reported agent names are attribution, not authenticated identity.
 Read collection capabilities once (`read`, crew_read) for versioned operation
 schemas (wake runs use the compact execution subset below). If a cached
 connector omits execution/idempotency_key, use data._crew as documented there;
-never fall back to unfenced writes. Other read collections: session (one coder session's prompt and instructions; requires agent), agents, buckets, notes, note_revisions, session_revisions (parent: agent), tasks, events, reviews,
+never fall back to unfenced writes. Other read collections: session (one role’s current instructions, brief and group guidance; requires agent), agents, buckets, notes, note_revisions, session_revisions (parent: agent), tasks, events, reviews,
 attachments (file metadata; parent = task or note), settings (storage limit and usage),
 webhook_configs, webhook_deliveries, webhook_attempts, webhook_routing, webhook_mappings,
 webhook_bridges and webhook_executions.
@@ -135,16 +135,35 @@ unless debugging. Wake payloads are title-free and carry no readable links, so r
 Read [schema](references/schema.md) and [examples](references/examples.md) when
 constructing operations. Administration commands are separate from agent work.
 
-## Project coder sessions
+## Role chats
 
-One Crew agent per project (kind `external`, named like the repository) runs in
-coding sessions the owner starts by hand; it has no bot mapping and is never
-woken. Only `bot` agents (the default kind) are woken, mapped or chosen as
-dispatcher or triage. When the owner starts you with a Crew session prompt, read
-`{"collection":"session","agent":"<name>"}` (crew_read or `read`) and follow its
-instructions: build your session name once and use it as reported_agent, list the
-agent's Ready To do tasks without changing anything, and claim one
-(`task.claim` with `data.assigned_agent` = the agent) only when the owner picks it.
+Start directly from a connected chat in any language, for example “Work as
+Learn”, “Lavora come Learn” or “Arbeite als Learn”. On start, switch or explicit
+refresh read `{"collection":"session","agent":"Learn"}` with the chosen agent's
+exact name or ID. An ambiguous name requires a choice. Adopt the role only on
+a successful read of an active nonhuman agent. Follow its `chat_guidance`,
+`instructions` and brief, including separate language rules for owner chat
+and saved Crew content. Keep the loaded version until refresh or switch.
+Reading another role for a preview leaves your active role in place.
+
+Read the responsible buckets, relevant notes and assigned tasks, including
+`title,status,readiness,last_saved_step,claim_state,claimed_by,webhook_holder`.
+Filter by the owner's exact work label if supplied. Start, switch and refresh
+only read context. Recheck the selected Ready task, label, holder and revision,
+then use `task.claim` with `data.assigned_agent` before work. Use the same
+unique holder for each role in this chat, as described in `chat_guidance`.
+Switching retains the transcript and prior claims with their original holder.
+
+Any role can coordinate a group. Follow the session’s `broadcast_guidance`
+to resolve recipients, preview per-agent edits and save approved changes by
+revision. An instruction save and a worker’s acknowledgement are distinct.
+Use `task.delegate` on the parent with `data.assigned_agent`, `title` and
+optional `description` and `labels`; each real worker loads the recipient’s
+session and uses `task.reply` with `data.body` on its child. Both operations
+take the task’s current revision and a stable idempotency key per logical
+operation. Read tasks with `parent` and request `delegation_reply` to report
+actual replies and outstanding work. An external agent needs a client worker.
+
 A claim sets In progress with a 2-hour lease; your updates, comments and
 attachments renew it, `task.claim_renew` extends it, and `task.release` (optional
 readiness and waiting_reason) ends it. HTTP 409 `already_claimed` names
@@ -152,7 +171,7 @@ readiness and waiting_reason) ends it. HTTP 409 `already_claimed` names
 Done or Won't do (`wont_do`) ends the claim. Save the draft and submit it with review.request. Only the owner marks tasks Done in the reader. Tasks have no release field since 0.23.0: a
 release is the label `release-<version>`. If the owner decides not to do a task, comment why and set `wont_do`.
 
-Session instructions are saved in Crew per external agent, with immutable
+Session instructions are saved in Crew per active nonhuman agent, with immutable
 revisions; the session read returns `body` (the editable part; the agent brief is
 appended separately), `revision` (0 while the built-in default was never
 changed) and `is_default`. When the owner asks you to rewrite them, read the

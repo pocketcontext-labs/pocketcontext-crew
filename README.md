@@ -183,7 +183,11 @@ a bot when a task assigned to it is Ready; it carries no work and performs nothi
 <details>
 <summary><strong>How does a CLI agent join?</strong></summary>
 
-Copy the instructions under **Start in a chat** into a Crew-connected session.
+In a Crew-connected chat, ask to work as an agent by its configured name, for
+example “Work as Learn”, “Lavora come Learn” or “Arbeite als Learn”. The client
+reads the current role instructions and brief. You can switch roles in the same
+chat, or explicitly refresh the current role. The reader also offers a copyable
+prompt under **Start in a chat**.
 A configured webhook agent also offers **Use in another chat**. Save your last decision
 and next step on the task before switching. The new session reads them from Crew.
 With a domain it connects to `https://YOUR_HOST/mcp`; without one it uses the

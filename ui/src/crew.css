@@ -461,7 +461,9 @@ a.crew-logo:hover .product-brand span {
   margin: 0 0 16px;
   overflow-wrap: anywhere;
 }
+.crew-card-claim-holder { flex-basis: 100%; overflow-wrap: anywhere; font-size: 12px; }
 .crew-task-card footer {
+  flex-wrap: wrap;
   border-top: 1px solid #edf0e6;
   padding-top: 11px;
   display: flex;
@@ -4921,6 +4923,8 @@ html:has(.crew-dialog:modal) {
   }
 }
 
+.crew-assignment-group { display: grid; gap: 8px; min-width: 0; }
+.crew-assignment-group h4 { margin: 4px 0 0; overflow-wrap: anywhere; }
 .crew-agent-assignments { display: grid; gap: 8px; }
 .crew-agent-assignments article > a { font-weight: 600; overflow-wrap: anywhere; }
 .crew-agent-assignments article small { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--muted); }
