@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.43.0](docs/releases/0.43.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.43.0) · Choose a shared instance color for the reader and keep public development pages open across reconnects.
 - **[0.42.1](docs/releases/0.42.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.42.1) · Start agents in the right workspace, guide a first task through approval, and choose session templates for any agent.
 - **[0.41.0](docs/releases/0.41.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.41.0) · Continue an agent in another chat, restore earlier session instructions, and load current instructions on each work wake.
 - **[0.40.0](docs/releases/0.40.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.40.0) · Archive a task from its pending approval and undo the archive to reopen the same review.

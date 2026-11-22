@@ -1,12 +1,12 @@
 # Crew upgrades and rollback
 
-## Instance appearance settings
+## Crew 0.42.1 to 0.43.0
 
 Back up the project before upgrading. The additive migration gives existing
 instances a hidden 3 px reader line with amber as its initial color. In the
 signed-in reader, Settings → Appearance saves visibility and color for the
-whole instance. Reload another device to see the saved changes.
-
+whole instance. Reload another device to see the saved changes. For rollback, restore the
+complete pre-upgrade project with its matching binary.
 
 ## Crew 0.41.0 to 0.42.1
 
