@@ -1,6 +1,6 @@
 # Crew upgrades and rollback
 
-## After Crew 0.43.0
+## Crew 0.43.0 to 0.44.0
 
 Back up the complete project before upgrading. The additive migration records
 parent tasks for new delegations. Existing tasks remain independent. Refresh
