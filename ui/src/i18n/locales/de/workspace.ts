@@ -371,8 +371,8 @@ const de: Record<string, string> = {
   Description: "Beschreibung",
   "Agent brief": "Agenten-Briefing",
   Purpose: "Zweck",
-  "Needs review: a draft is waiting for your decision in Approvals.":
-    "Wartet auf Freigabe: Ein Entwurf wartet in Freigaben auf deine Entscheidung.",
+  "A draft is waiting for your decision in Approvals, even if this task is Done.":
+    "Ein Entwurf wartet unter Freigaben auf deine Entscheidung, auch wenn die Aufgabe erledigt ist.",
   "Needs review is set by requesting approval for a saved draft, not by hand.":
     "Wartet auf Freigabe entsteht, wenn du für einen gespeicherten Entwurf eine Freigabe anfragst, nicht von Hand.",
   Hold: "Pause",

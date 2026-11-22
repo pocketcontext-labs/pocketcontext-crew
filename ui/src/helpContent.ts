@@ -189,7 +189,7 @@ function glossaryEntries() {
         "Finished work, plus tasks set to Won't do, most recently changed first; the last 7 days show unless you pick a label or Show older. Approval doesn't put a task here: you or an agent marks it Done. A coding session that you approve in the terminal adds a release label (for example release-0.23.0) and records \"Approved in session\".",
       ),
       action: t(
-        "Set the status to Done once everything is finished, including anything outside Crew, or Won't do when you decide against it. Tasks from the last 7 days show first; Show older reveals the rest.",
+        "Mark a task Done when its work in Crew is finished. A pending draft stays in Approvals until you decide.",
       ),
     },
     status: {
@@ -199,7 +199,7 @@ function glossaryEntries() {
         "To do: not started. In progress: being worked on. Needs review: a saved draft is waiting for your decision in Approvals. Done: finished. Won't do: decided against.",
       ),
       action: t(
-        "Pick any status except Needs review: Crew sets that one itself when you or an agent requests approval for the saved draft, so there is always a snapshot to decide on. Your decision, withdrawing the request or editing the draft moves the task back to In progress.",
+        "Crew sets Needs review when you or an agent requests approval for a saved draft. You can mark the task Done while the draft awaits your decision. Requesting changes reopens the task.",
       ),
     },
     readiness: {

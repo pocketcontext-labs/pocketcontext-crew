@@ -4531,15 +4531,7 @@ function Editor({
                 {row && claim.state && (
                   <ClaimBanner
                     claim={claim}
-                    agent={claimAgent(
-                      claim,
-                      val(
-                        data.agents.find(
-                          (x) => x.id === val(row, "assigned_agent"),
-                        ),
-                        "name",
-                      ),
-                    )}
+                    agent={claimAgent(claim)}
                     readOnly={readOnly}
                     busy={busy}
                     onRelease={() => void releaseClaim()}
@@ -4571,7 +4563,7 @@ function Editor({
                       className={reviewPending ? "crew-status-hint is-pending" : "crew-status-hint"}
                     >
                       {reviewPending
-                        ? t("Needs review: a draft is waiting for your decision in Approvals.")
+                        ? t("A draft is waiting for your decision in Approvals, even if this task is Done.")
                         : t("Needs review is set by requesting approval for a saved draft, not by hand.")}
                     </p>
                   </div>

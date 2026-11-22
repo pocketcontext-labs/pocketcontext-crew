@@ -26,7 +26,7 @@ export default function ClaimBanner({
   onRelease,
 }: {
   claim: Claim;
-  /** The agent's name only, never the session's. */
+  /** Short name reported by the claim holder. */
   agent: string;
   readOnly?: boolean;
   busy?: boolean;

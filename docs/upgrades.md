@@ -1,5 +1,14 @@
 # Crew upgrades and rollback
 
+## Crew 0.44.0 to 0.45.0
+
+Back up the complete project before upgrading. Refresh MCP tool descriptions
+and reinstall the local Crew skill. Review any owner-written role instructions
+that require owner sign-off for internal task completion. Configured dispatchers keep
+their applied instructions and queued work. To update a configured routine after its
+queue drains, follow the [dispatcher instructions](webhooks.md). To roll back, restore
+the complete pre-upgrade project with its matching binary.
+
 ## Crew 0.43.0 to 0.44.0
 
 Back up the complete project before upgrading. The additive migration records

@@ -95,7 +95,7 @@ function legacyCodingBody(name) {
     "",
     "## 6. Close",
     "",
-    "Record the outcome, save deliverables in Draft for review using labeled :::copy blocks, and request owner review. Only the owner marks the task Done.",
+    "Record the outcome. On delegated tasks, use task.reply before marking finished work Done with task.update. For deliverables requiring approval, save a labeled :::copy block in Draft and request owner review.",
     "",
     "If the owner decides not to do a task, comment on it why and set it Won't do (task.update with status wont_do), which also ends the claim.",
     "",

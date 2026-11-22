@@ -33,7 +33,7 @@ LATER_MIGRATIONS = {'1800900000_crew_authorization_instructions.js', '1801000000
                     '1802300000_crew_agent_startup.js', '1802400000_crew_session_templates.js',
                     '1802500000_crew_agent_context_instructions.js', '1802600000_crew_owner_completion.js',
                     '1802700000_crew_instance_line.js',
-                    '1802800000_crew_task_delegation.js'}
+                    '1802800000_crew_task_delegation.js', '1802900000_crew_internal_completion.js'}
 
 
 def settled(operation, *args):

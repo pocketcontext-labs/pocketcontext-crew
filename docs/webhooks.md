@@ -277,7 +277,7 @@ Rule mapping from the protocol 3 block to the compact block:
 | dispatched only after real send, original worker/fence, sent:true, message_ref if returned    | TASK DISPATCH "Only after a real accepted send …"                          |
 | Disabled delivery, stale generation or changed assignment never authorize work                | TASK DISPATCH last sentence                                                |
 | Recipient begins before any mutation; uses task_context and proof                             | TASK RECIPIENT sentence 1                                                  |
-| Proof on writes/reviews; stable keys on fenced comments; renew; submit the draft with review.request       | TASK RECIPIENT sentences 2–4                                               |
+| Proof on writes/reviews; stable keys on fenced comments; renew; request review or complete internal work       | TASK RECIPIENT sentences 2–4                                               |
 | Stop on stale/expired/duplicate/conflict; no review decisions, repeated effects or ack loops  | TASK RECIPIENT closing sentences                                           |
 | Transport, parent receipt, acquisition, completion are separate; no exactly-once              | TASK RECIPIENT final sentence                                              |
 
@@ -298,7 +298,18 @@ block says plainly that it never decides reviews. The protocol is unchanged, but
 like every instruction revision it pauses delivery until the dispatcher re-syncs
 the managed block and passes setup again.
 
-Changing instructions pauses delivery and invalidates prior setup evidence.
+The internal-completion upgrade updates the standard block for an unbound dispatcher.
+A configured routine keeps its verified instructions and can finish queued and running
+work after the server restarts. Manual chats can use `task.update` to mark internal
+work Done immediately. To opt a configured dispatcher into the new wording, wait
+until its workers and pending deliveries have finished. In the existing managed
+block, replace “Save each draft in a labeled :::copy block ending :::. Finish with
+fenced review.request. Only the owner marks tasks Done.” with “Drafts: labeled
+:::copy … :::. Use fenced review.request or execution.complete(mark_done:true,task_revision).”
+Save the edited block with `webhook.integration.update`, apply it to the routine,
+report synchronization, then test and re-enable delivery through Grok setup.
+
+Changing instructions through integration settings pauses delivery and invalidates prior setup evidence.
 Any integration or credential update, including a subscription-only change such as
 opting in to `comment`, invalidates the configuration: delivery pauses, Ready tasks
 move to a new wake generation and in-flight work for the old generation is refused
@@ -376,7 +387,7 @@ wake generation (pending deliveries are cancelled) and releases governance. Any
 other unproved write during a live execution is still refused. An on-hold task
 never wakes, whatever changes; see [Crew](crew.md#ready-tasks-and-global-dispatcher-integration).
 
-`review.request` is the normal last step of governed work. Sent by the worker
+`review.request` finishes governed work that needs an owner decision. Sent by the worker
 holding the running execution, with its proof, it completes that execution in
 the same transaction: state `completed`, `outcome_code` `review_requested`,
 `completed_at` set, lease cleared. The review result carries
@@ -386,7 +397,7 @@ fenced `task.comment` from the same worker and fence afterwards is still
 accepted while no other execution is live, and a later `execution.complete`
 from that worker (outcome `completed` or `failed`, without `mark_done`) returns
 the record with `already_completed: true` and changes nothing (it skips the
-revision check). `mark_done` is refused because the task is in review. A review
+revision check). A completed execution cannot change the task on replay. A review
 request by anyone else (the reader, or a work client without that proof)
 still invalidates the live execution with `work_no_longer_eligible`.
 Reader writes remain authoritative and never need proof. These rules keep a stale
@@ -431,7 +442,7 @@ A recipient may start before this report; the late report must not replace its l
 
 Renew during long work. Include proof on task writes and review requests. Use a
 stable key for proof-bearing comments so a lost response cannot create a second
-pong. Save the result in the task draft and submit a fenced `review.request` to finish the execution (outcome `review_requested`). Only the owner marks the task Done.
+pong. For completed internal work, finish the running execution with fenced `execution.complete`, outcome `completed`, `mark_done:true` and the current `task_revision`. For a deliverable requiring approval, save it in Draft and submit a fenced `review.request` (outcome `review_requested`).
 Other review, on-hold and reassignment changes invalidate previous authority
 (a hold records outcome `put_on_hold`); later eligible work uses a new generation.
 

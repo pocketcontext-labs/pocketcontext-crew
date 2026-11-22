@@ -71,12 +71,9 @@ export const claimTool = (claim: Claim) =>
     .split(" · ")
     .find((part) => /^(Codex|Claude Code|Antigravity)$/i.test(part.trim()))
     ?.trim() || "";
-/**
- * The agent a claim belongs to: the task's assigned agent when known (only
- * its sessions can claim), else the first part of `claimed_by`.
- */
-export const claimAgent = (claim: Claim, assigned = "") =>
-  assigned.trim() || claim.by.split(" · ")[0].trim() || t("a session");
+/** Reassignment does not transfer a claim. Show the holder's reported name. */
+export const claimAgent = (claim: Claim) =>
+  claim.by.split(" · ")[0].trim() || t("a session");
 /**
  * The claim with exact local times, for a tooltip and Copy details:
  * "Claimed by … · Started Nov 17, 2026, 1:18 PM · Until … · Claim expired".

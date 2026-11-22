@@ -167,7 +167,7 @@ func TestExecutionGovernanceFencesOnlyLiveExecutions(t *testing.T) {
 	}
 	// A live execution fences other writers.
 	write("task.comment", map[string]any{"body": "must not bypass the live run"}, 409)
-	write("task.update", map[string]any{"status": "done"}, 403)
+	write("task.update", map[string]any{"status": "done"}, 409)
 	write("review.request", map[string]any{}, 409)
 	proof := map[string]any{"id": run["id"], "worker_id": "self-worker", "fence": run["fence"]}
 	current, _ := a.app.FindRecordById("crew_tasks", task.Id)

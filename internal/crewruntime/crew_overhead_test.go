@@ -302,7 +302,7 @@ func TestWakePayloadCarriesProtocolAndDigest(t *testing.T) {
 func TestCompactManagedBlockKeepsRules(t *testing.T) {
 	a := newTestApp(t)
 	block := jsStringConstant(t, "../../pb_hooks/crew_setup.js", "DEFAULT_INSTRUCTIONS")
-	if migrated := jsStringConstant(t, "../../pb_migrations/1802600000_crew_owner_completion.js", "canonical"); migrated != block {
+	if migrated := jsStringConstant(t, "../../pb_migrations/1802900000_crew_internal_completion.js", "canonical"); migrated != block {
 		t.Fatal("migration and setup blocks differ")
 	}
 	config, err := a.app.FindFirstRecordByFilter("crew_webhook_configs", "scope='global'")
@@ -329,7 +329,7 @@ func TestCompactManagedBlockKeepsRules(t *testing.T) {
 		"Only on fresh work/self_work", "skip recipient begin", "agent_context.brief and agent_context.workflow", "Missing agent_context: stop",
 		"execution_guidance overrides chat session naming, task.claim, task.claim_renew and task.release", "Never forward agent_context",
 		"task_context and proof", "Proof on task writes and review requests", "stable keys on fenced comments",
-		"Renew long work", "fenced review.request", "Only the owner marks tasks Done", "comment_event_id",
+		"Renew long work", "fenced review.request", "execution.complete(mark_done:true,task_revision)", "comment_event_id",
 		"Stop on stale, expired, duplicate or conflicting work",
 		"Never decide reviews", "repeat uncertain external effects", "acknowledgment loops", "not exactly-once",
 		"Protocol steps never use crew_search/schema/query", "Read compactly (crew_search, fields, small limit)",
@@ -347,6 +347,52 @@ func TestCompactManagedBlockKeepsRules(t *testing.T) {
 func TestCompactInstructionMigrationPreservesBindingAndPauses(t *testing.T) {
 	for _, migration := range []string{"1800700000_crew_compact_instructions.js", "1800800000_crew_retrieval_instructions.js", "1800900000_crew_authorization_instructions.js", "1802500000_crew_agent_context_instructions.js", "1802600000_crew_owner_completion.js"} {
 		t.Run(migration, func(t *testing.T) { checkInstructionMigration(t, migration) })
+	}
+}
+
+func TestInternalCompletionMigrationPreservesConfiguredDispatcher(t *testing.T) {
+	a, config, task, delivery := webhookFixture(t)
+	old := jsStringConstant(t, "../../pb_migrations/1802600000_crew_owner_completion.js", "canonical")
+	config.Set("instructions", old)
+	config.Set("managed_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(old))))
+	config.Set("role_instructions", "Synthetic custom role")
+	if err := a.app.Save(config); err != nil {
+		t.Fatal(err)
+	}
+	const migration = "../../pb_migrations/1802900000_crew_internal_completion.js"
+	if err := runFixtureMigration(t, a.app, migration); err != nil {
+		t.Fatal(err)
+	}
+	current := apiWebhookRecord(t, a, "webhook_configs", config.Id)
+	if current.GetInt("revision") != config.GetInt("revision") || current.GetString("instructions") != old ||
+		current.GetString("role_instructions") != "Synthetic custom role" || current.GetBool("enabled") != config.GetBool("enabled") {
+		t.Fatal("configured dispatcher's instructions or delivery changed")
+	}
+	if apiWebhookRecord(t, a, "webhook_deliveries", delivery.Id).GetString("state") != delivery.GetString("state") ||
+		apiWebhookRecord(t, a, "tasks", task.Id).GetInt("wake_generation") != task.GetInt("wake_generation") {
+		t.Fatal("migration interrupted a pending wake")
+	}
+}
+
+func TestInternalCompletionMigrationPreservesCustomAndCurrentDefaults(t *testing.T) {
+	a := newTestApp(t)
+	config, err := a.app.FindFirstRecordByFilter("crew_webhook_configs", "scope='global'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, block := range []string{config.GetString("instructions"), "<!-- crew-dispatch:begin -->Owner workflow<!-- crew-dispatch:end -->"} {
+		config.Set("instructions", block)
+		if err := a.app.Save(config); err != nil {
+			t.Fatal(err)
+		}
+		rev := config.GetInt("revision")
+		if err := runFixtureMigration(t, a.app, "../../pb_migrations/1802900000_crew_internal_completion.js"); err != nil {
+			t.Fatal(err)
+		}
+		config = apiWebhookRecord(t, a, "webhook_configs", config.Id)
+		if config.GetInt("revision") != rev || config.GetString("instructions") != block {
+			t.Fatal("migration replaced custom or already current instructions")
+		}
 	}
 }
 

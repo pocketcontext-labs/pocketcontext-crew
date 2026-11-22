@@ -78,7 +78,6 @@ it("names the claim's agent and tool and shows exact times in the title", () => 
     now,
   );
   expect(claimAgent(claim)).toBe("Implement");
-  expect(claimAgent(claim, "Builder")).toBe("Builder");
   expect(claimAgent(claimOf(row({ claim_state: "live" }), now))).toBe("a session");
   expect(claimTool(claim)).toBe("Claude Code");
   expect(claimLabel(claim, now)).toBe("Claude Code · 1 h 45 m left");

@@ -68,7 +68,7 @@ func TestReviewRequestCompletesHoldersExecution(t *testing.T) {
 	}
 	complete["mark_done"] = true
 	complete["task_revision"] = current.GetInt("revision")
-	executionOperation(t, a, "execution.complete", stored.Id, stored.GetInt("revision"), complete, "late-done", false, 403)
+	executionOperation(t, a, "execution.complete", stored.Id, stored.GetInt("revision"), complete, "late-done", false, 400)
 	complete = map[string]any{"worker_id": "synthetic-other", "fence": proof["fence"], "outcome": "completed"}
 	executionOperation(t, a, "execution.complete", stored.Id, stored.GetInt("revision"), complete, "other-complete", false, 409)
 	if apiWebhookRecord(t, a, "tasks", task.Id).GetString("status") != "needs_review" {

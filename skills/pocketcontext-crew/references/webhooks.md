@@ -316,7 +316,7 @@ task's unfinished executions (outcome `put_on_hold`, task event
 `execution.cancel`), advances the wake generation and releases governance. An
 on-hold task never wakes, whatever changes; only Ready tasks wake.
 
-`review.request` is the last step of governed work. With your proof it completes
+`review.request` finishes governed work that needs an owner decision. With your proof it completes
 your execution (outcome `review_requested`; the result carries
 `execution_completed`). Post comments first. Afterwards your fenced comment is
 still accepted while nobody else holds the task, and `execution.complete`
@@ -360,7 +360,7 @@ A recipient may start before this report; the late report must not replace its l
 
 Renew during long work. Include proof on task writes and review requests. Use a
 stable key for proof-bearing comments so a lost response cannot create a second
-pong. Submit the finished draft with a fenced `review.request`. Only the owner marks the task Done. The holder's own review request completes the execution instead; other review, on-hold and reassignment
+pong. Finish completed internal work with fenced `execution.complete`, outcome `completed`, `mark_done:true` and the current `task_revision`. For a deliverable requiring approval, submit its draft with fenced `review.request`. The holder's own review request completes the execution instead; other review, on-hold and reassignment
 changes invalidate previous authority; later eligible work uses a new generation.
 
 ## Reader comment wakes

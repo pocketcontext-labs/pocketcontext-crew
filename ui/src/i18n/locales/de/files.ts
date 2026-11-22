@@ -570,14 +570,14 @@ const de: Record<string, string> = {
   "What does Done mean?": "Was bedeutet Erledigt?",
   "Finished work, plus tasks set to Won't do, most recently changed first; the last 7 days show unless you pick a label or Show older. Approval doesn't put a task here: you or an agent marks it Done. A coding session that you approve in the terminal adds a release label (for example release-0.23.0) and records \"Approved in session\".":
     'Abgeschlossene Arbeit und Aufgaben mit Wird nicht gemacht, zuletzt geänderte zuerst; angezeigt werden die letzten 7 Tage, außer du wählst ein Label oder Ältere anzeigen. Eine Freigabe bringt eine Aufgabe nicht hierher: Du oder ein Agent markiert sie als Erledigt. Eine Coding-Sitzung, die du im Terminal freigibst, fügt ein Release-Label hinzu (zum Beispiel release-0.23.0) und vermerkt "In der Sitzung freigegeben".',
-  "Set the status to Done once everything is finished, including anything outside Crew, or Won't do when you decide against it. Tasks from the last 7 days show first; Show older reveals the rest.":
-    "Setze den Status auf Erledigt, sobald alles fertig ist, auch außerhalb von Crew, oder auf Wird nicht gemacht, wenn du dich dagegen entscheidest. Aufgaben der letzten 7 Tage stehen zuerst; Ältere anzeigen zeigt den Rest.",
+  "Mark a task Done when its work in Crew is finished. A pending draft stays in Approvals until you decide.":
+    "Setze die Aufgabe auf Erledigt, wenn die Arbeit in Crew abgeschlossen ist. Ein ausstehender Entwurf bleibt bis zu deiner Entscheidung unter Freigaben.",
   Status: "Status",
   "What do the statuses mean?": "Was bedeuten die Status?",
   "To do: not started. In progress: being worked on. Needs review: a saved draft is waiting for your decision in Approvals. Done: finished. Won't do: decided against.":
     "Zu erledigen: nicht begonnen. In Arbeit: wird bearbeitet. Wartet auf Freigabe: ein gespeicherter Entwurf wartet unter Freigaben auf deine Entscheidung. Erledigt: fertig. Wird nicht gemacht: dagegen entschieden.",
-  "Pick any status except Needs review: Crew sets that one itself when you or an agent requests approval for the saved draft, so there is always a snapshot to decide on. Your decision, withdrawing the request or editing the draft moves the task back to In progress.":
-    "Wähle jeden Status außer Wartet auf Freigabe: Den setzt Crew selbst, wenn du oder ein Agent die Freigabe für den gespeicherten Entwurf anfragt, damit es immer einen Schnappschuss zum Entscheiden gibt. Deine Entscheidung, das Zurückziehen der Anfrage oder das Bearbeiten des Entwurfs setzt die Aufgabe zurück auf In Arbeit.",
+  "Crew sets Needs review when you or an agent requests approval for a saved draft. You can mark the task Done while the draft awaits your decision. Requesting changes reopens the task.":
+    "Crew setzt den Status auf Wartet auf Freigabe, sobald du oder ein Agent die Freigabe für einen gespeicherten Entwurf anfragt. Du kannst die Aufgabe auf Erledigt setzen, während der Entwurf auf deine Entscheidung wartet. Wenn du Änderungen anforderst, wird die Aufgabe wieder geöffnet.",
   "Hold (On hold or Ready)": "Bereitschaft (Angehalten oder Bereit)",
   "What do On hold and Ready mean?": "Was bedeuten Angehalten und Bereit?",
   "Whether a task can start. On hold is the default: nobody is woken and a person decides. Ready means the assigned bot may act, and Crew can wake it if automatic wake-ups are on. Crew puts a task on hold by itself when its draft is edited, its review is withdrawn or the handoff limit is reached, and says why.":

@@ -340,7 +340,7 @@ try {
  await dialog().getByRole('tablist',{name:'Record views'}).getByRole('tab',{name:'Edit',exact:true}).click();
  // Status has the standard help, which explains why Needs review can't be picked; focus shows the hint.
  await dialog().getByRole('button',{name:'What do the statuses mean?',exact:true}).click();
- assert.match(await dialog().locator('.crew-help-popover').innerText(),/Pick any status except Needs review/);
+ assert.match(await dialog().locator('.crew-help-popover').innerText(),/Crew sets Needs review when you or an agent requests approval/);
  await page.keyboard.press('Escape');await dialog().locator('.crew-help-popover').waitFor({state:'hidden'});
  assert.equal(await dialog().count(),1,'Escape closes the help, not the task');
  await dialog().getByLabel('Status',{exact:true}).focus();
@@ -1980,7 +1980,7 @@ try {
   await claimCard.click();await dialog().waitFor();
   await page.setViewportSize({width,height:844});
   const banner=dialog().getByRole('region',{name:'Claim'});await banner.waitFor();await banner.scrollIntoViewIfNeeded();
-  assert.equal(await banner.locator('.crew-claim-banner-title').innerText(),'Claimed · Synthetic-board-agent',`claim title names the agent at ${width}`);
+  assert.equal(await banner.locator('.crew-claim-banner-title').innerText(),'Claimed · Synthetic',`claim title names the reported holder at ${width}`);
   const times=banner.locator('.crew-claim-banner-times');
   assert.match(await times.innerText(),/^Started (just now|\d min ago) · ends in (1 h 5\d m|2 h) · Details$/,`relative claim times at ${width}`);
   assert.match(await times.locator('time').first().getAttribute('title'),/20\d\d/,'exact start time on hover');

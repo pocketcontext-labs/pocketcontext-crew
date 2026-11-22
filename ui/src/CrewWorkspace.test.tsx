@@ -3992,9 +3992,9 @@ describe("project agents and coding sessions", () => {
       render(<CrewWorkspace />);
       fireEvent.click(await screen.findByRole("button", { name: /Claimed work/ }));
       const dialog = within(screen.getByRole("dialog"));
-      // One compact banner names the agent, not the session; actions are in ⋯.
+      // The banner names the reported claim holder; actions are in ⋯.
       const banner = within(dialog.getByRole("region", { name: "Claim" }));
-      expect(banner.getByText(`Claimed · ${String(project.name)}`)).toBeInTheDocument();
+      expect(banner.getByText("Claimed · codex-session-1")).toBeInTheDocument();
       expect(banner.getByText(/^ends in 1 h \d+ m$/)).toBeInTheDocument();
       expect(dialog.queryByRole("button", { name: /^Claim( task)?$/ })).toBeNull();
       expect(dialog.queryByRole("button", { name: "Release claim" })).toBeNull();
@@ -4025,7 +4025,7 @@ describe("project agents and coding sessions", () => {
       render(<CrewWorkspace />);
       fireEvent.click(await screen.findByRole("button", { name: /Stale work/ }));
       const dialog = within(screen.getByRole("dialog"));
-      expect(dialog.getByText(`Claim expired · ${String(project.name)}`)).toBeInTheDocument();
+      expect(dialog.getByText("Claim expired · claude-session-2")).toBeInTheDocument();
       expect(dialog.getAllByText(/Claim expired/)).toHaveLength(1);
       fireEvent.click(dialog.getByRole("button", { name: "Claim actions" }));
       fireEvent.click(dialog.getByRole("menuitem", { name: "Release claim" }));
@@ -4251,15 +4251,16 @@ it("explains the statuses and why Needs review can't be picked", async () => {
   );
   fireEvent.click(dialog.getByRole("button", { name: "What do the statuses mean?" }));
   expect(document.querySelector(".crew-help-popover")).toHaveTextContent(
-    /Pick any status except Needs review: Crew sets that one itself when you or an agent requests approval/,
+    /Crew sets Needs review when you or an agent requests approval/,
   );
 });
-it("says a pending review is why a task is in Needs review", async () => {
+it("shows the approval still pending on a completed task", async () => {
+  fixtures.tasks = [{ ...task, status: "done" }];
   render(<CrewWorkspace />);
   fireEvent.click(await screen.findByRole("button", { name: /Launch post/ }));
   const status = within(screen.getByRole("dialog")).getByRole("combobox", { name: "Status" });
   expect(status).toHaveAccessibleDescription(
-    "Needs review: a draft is waiting for your decision in Approvals.",
+    "A draft is waiting for your decision in Approvals, even if this task is Done.",
   );
 });
 it("filters the board in one click from the agent row, in sync with the select", async () => {

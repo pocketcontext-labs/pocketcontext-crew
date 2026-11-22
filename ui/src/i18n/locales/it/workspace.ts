@@ -368,8 +368,8 @@ const it: Record<string, string> = {
   Description: "Descrizione",
   "Agent brief": "Brief dell'agente",
   Purpose: "Scopo",
-  "Needs review: a draft is waiting for your decision in Approvals.":
-    "In revisione: una bozza attende la tua decisione in Approvazioni.",
+  "A draft is waiting for your decision in Approvals, even if this task is Done.":
+    "Una bozza attende la tua decisione in Approvazioni anche se il task è completato.",
   "Needs review is set by requesting approval for a saved draft, not by hand.":
     "In revisione si imposta richiedendo l'approvazione di una bozza salvata, non a mano.",
   Hold: "Pausa",

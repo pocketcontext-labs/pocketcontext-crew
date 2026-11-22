@@ -227,8 +227,7 @@ func TestProjectAgentClaims(t *testing.T) {
 	// Done clears the claim.
 	sessionWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"readiness": "ready"}, "", 200)
 	sessionWrite(t, a, false, "task.claim", id, taskRevision(t, a, id), map[string]any{"assigned_agent": agent["id"]}, "session-a", 200)
-	sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done"}, "session-a", 403)
-	done := sessionWrite(t, a, true, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done"}, "session-a", 200)
+	done := sessionWrite(t, a, false, "task.update", id, taskRevision(t, a, id), map[string]any{"status": "done"}, "session-b", 200)
 	if done["status"] != "done" || done["claimed_by"] != "" || done["claim_until"] != "" || done["claim_state"] != "" {
 		t.Fatal("done did not clear the claim", done)
 	}
@@ -254,6 +253,32 @@ func TestProjectAgentClaims(t *testing.T) {
 	}
 	if n, _ := a.app.CountRecords("crew_webhook_deliveries"); n != 0 {
 		t.Fatal("claims sent webhooks", n)
+	}
+}
+
+// An advisory claim identifies the current worker independently of assignment
+// and audit attribution, even when the editor changes the assignee.
+func TestTaskReassignmentPreservesClaimAndEditor(t *testing.T) {
+	a := newTestApp(t)
+	first := crewOp(t, a, "agent.create", nil, map[string]any{"name": "First", "kind": "external"})
+	second := crewOp(t, a, "agent.create", nil, map[string]any{"name": "Second", "kind": "external"})
+	id := newTask(t, a, map[string]any{"assigned_agent": first["id"], "readiness": "ready"})["id"].(string)
+	claimed := sessionWrite(t, a, false, "task.claim", id, taskRevision(t, a, id), map[string]any{"assigned_agent": first["id"]}, "claiming chat", 200)
+	for _, owner := range []bool{false, true} {
+		next := second["id"]
+		if owner {
+			next = first["id"]
+		}
+		rev := taskRevision(t, a, id)
+		updated := sessionWrite(t, a, owner, "task.update", id, rev, map[string]any{"assigned_agent": next, "title": "Reassigned"}, "editing chat", 200)
+		if updated["assigned_agent"] != next || updated["claimed_by"] != "claiming chat" || updated["claim_until"] != claimed["claim_until"] {
+			t.Fatal("reassignment changed claim", updated)
+		}
+		sessionWrite(t, a, owner, "task.update", id, rev, map[string]any{"status": "done"}, "editing chat", 409)
+		events, err := a.app.FindRecordsByFilter("crew_events", "parent={:id} && action='task.update'", "-@rowid", 1, 0, map[string]any{"id": id})
+		if err != nil || len(events) != 1 || events[0].GetString("reported_agent") != "editing chat" {
+			t.Fatal("missing reported editor", events, err)
+		}
 	}
 }
 

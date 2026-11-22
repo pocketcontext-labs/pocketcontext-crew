@@ -53,7 +53,7 @@ claim), with a 2-hour lease recorded under reported_agent. A live claim answers
 (claimer only, 409 `claim_expired` or `not_claimer`) extends it; the claimer's
 updates, comments and attachment writes renew it. `task.release` (claimer, owner,
 or anyone after expiry; optional readiness and waiting_reason) ends it and sets
-In progress back to To do. Done or Won't do ends it. The session collection
+In progress back to To do. A different role can edit or reassign the task under its own reported name while the current claim remains in place. Done or Won't do ends the claim. The session collection
 (`{"collection":"session","agent":NAME}`) returns `{agent, prompt, instructions,
 lease_hours, body, revision, is_default, edited_by, edited_at, rewrite_prompt, coding_template}`:
 instructions is body plus the agent brief. Active bot and external agents have editable

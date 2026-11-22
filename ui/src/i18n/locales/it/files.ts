@@ -568,14 +568,14 @@ const it: Record<string, string> = {
   "What does Done mean?": "Cosa significa Fatto?",
   "Finished work, plus tasks set to Won't do, most recently changed first; the last 7 days show unless you pick a label or Show older. Approval doesn't put a task here: you or an agent marks it Done. A coding session that you approve in the terminal adds a release label (for example release-0.23.0) and records \"Approved in session\".":
     "Lavoro concluso, più le attività impostate su Non si farà, dalle modificate più di recente; si vedono gli ultimi 7 giorni, a meno che tu non scelga un'etichetta o Mostra precedenti. L'approvazione non porta qui un'attività: sei tu o un agente a segnarla come Fatto. Una sessione di coding che approvi nel terminale aggiunge un'etichetta di release (per esempio release-0.23.0) e registra \"Approvata in sessione\".",
-  "Set the status to Done once everything is finished, including anything outside Crew, or Won't do when you decide against it. Tasks from the last 7 days show first; Show older reveals the rest.":
-    "Imposta lo stato su Fatto quando tutto è concluso, anche fuori da Crew, oppure su Non si farà se decidi di non farla. Le attività degli ultimi 7 giorni compaiono per prime; Mostra precedenti mostra le altre.",
+  "Mark a task Done when its work in Crew is finished. A pending draft stays in Approvals until you decide.":
+    "Imposta lo stato su Fatto quando il lavoro in Crew è concluso. Una bozza in attesa resta in Approvazioni fino alla tua decisione.",
   Status: "Stato",
   "What do the statuses mean?": "Cosa significano gli stati?",
   "To do: not started. In progress: being worked on. Needs review: a saved draft is waiting for your decision in Approvals. Done: finished. Won't do: decided against.":
     "Da fare: non iniziata. In corso: in lavorazione. In revisione: una bozza salvata aspetta la tua decisione in Approvazioni. Fatto: conclusa. Non si farà: si è deciso di non farla.",
-  "Pick any status except Needs review: Crew sets that one itself when you or an agent requests approval for the saved draft, so there is always a snapshot to decide on. Your decision, withdrawing the request or editing the draft moves the task back to In progress.":
-    "Scegli qualsiasi stato tranne In revisione: lo imposta Crew quando tu o un agente richiedete l'approvazione della bozza salvata, così c'è sempre un'istantanea su cui decidere. La tua decisione, il ritiro della richiesta o la modifica della bozza riportano l'attività In corso.",
+  "Crew sets Needs review when you or an agent requests approval for a saved draft. You can mark the task Done while the draft awaits your decision. Requesting changes reopens the task.":
+    "Crew imposta In revisione quando tu o un agente richiedete l'approvazione di una bozza salvata. Puoi segnare l'attività come Fatta mentre la bozza attende la tua decisione. Richiedere modifiche riapre l'attività.",
   "Hold (On hold or Ready)": "Disponibilità (In pausa o Pronta)",
   "What do On hold and Ready mean?": "Cosa significano In pausa e Pronta?",
   "Whether a task can start. On hold is the default: nobody is woken and a person decides. Ready means the assigned bot may act, and Crew can wake it if automatic wake-ups are on. Crew puts a task on hold by itself when its draft is edited, its review is withdrawn or the handoff limit is reached, and says why.":

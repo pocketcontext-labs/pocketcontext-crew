@@ -594,7 +594,7 @@ Needs review for In progress and goes on hold (`waiting`, hold reason
 `Review withdrawn`), its wake generation advances and nothing wakes. `review.decide` also refuses when the snapshot no longer
 matches, and so does `review.restore`. Approval therefore covers exactly the draft and files the owner saw.
 
-Every decision returns the task to In progress. Request changes also makes it
+A decision on an open task returns it to In progress. On a completed task, approval, rejection and withdrawal preserve Done. Request changes reopens the work, makes it
 Ready and clears any hold reason, so its bot assignee wakes with
 `review_outcome`; approval, rejection and withdrawal keep the readiness the
 task had (see docs/webhooks.md).
@@ -811,8 +811,7 @@ withdraws its pending review without a decision and without a wake, and
 requesting review with its own execution proof completes that execution
 (outcome `review_requested`); see [webhooks](webhooks.md#governed-tasks-and-atomic-execution). A
 decision (by the owner, or by a work client the owner explicitly delegated)
-requires a still-pending request and matching current draft. It moves
-the task to in_progress, never done. Closed decisions cannot be rewritten. New
+requires a still-pending request and matching current draft. A task can be marked Done while its draft awaits a decision. Approval and rejection preserve Done; requesting changes reopens the work. A new review request starts a fresh review cycle in Needs review. Closed decisions cannot be rewritten. New
 content requires a new review; historical approval never transfers to a new draft.
 
 ### Restoring a review after an archive (0.40.0)
@@ -847,7 +846,7 @@ It succeeds only when all of these hold:
    `review.withdraw` whose `changes.archived` is `true`. A review withdrawn with
    `review.withdraw`, by a draft edit or by an attachment change stays withdrawn;
 4. it is the task's newest review and the task has no pending review;
-5. the task is `in_progress` and its `draft`, `draft_options`, `draft_selection`
+5. the task has its expected post-archive status (In progress, or Done for a completed task) and its `draft`, `draft_options`, `draft_selection`
    and `draft_recipient` still equal the review's snapshot, as do its active
    attachments (the comparison `review.decide` makes).
 
@@ -856,10 +855,10 @@ It succeeds only when all of these hold:
 | | Effect |
 | --- | --- |
 | Review | `status` `pending`, revision + 1; snapshot, requester and creation time unchanged |
-| Task | `archived` false, `archived_at` and `archived_by` cleared, `status` `needs_review`, revision + 1; readiness and hold reason unchanged |
+| Task | `archived` false, `archived_at` and `archived_by` cleared, pre-archive status restored (Needs review or Done), revision + 1; readiness and hold reason unchanged |
 | Wakes | none. A task with a pending review is not eligible, so there is no `reopened` wake and no `review_outcome`; the wake generation advances once, as for `review.request` |
 | Hand-off count | reset by a reader restore, like every reader task write; kept by a work-client restore |
-| Events | `review.restore` on the review (`changes: {status: "pending"}`) and on the task (`changes: {archived: false, status: "needs_review", readiness, wake_generation}`) |
+| Events | `review.restore` on the review (`changes: {status: "pending"}`) and on the task (`changes: {archived: false, status: <restored status>, readiness, wake_generation}`) |
 | Result | the review as `review.request` returns it, with `path` and, with a domain, `url` |
 
 A stale `expected_revision` gets the usual HTTP 409 revision conflict, which has
@@ -1087,7 +1086,9 @@ A coordinator such as Assess keeps the original task and assigns a linked
 child task to each specialist. Read the children with `crew_read` on
 `tasks` with `parent` set to the original task ID. Child creation records
 the assignment. A claim or webhook acquisition records pickup. A specialist
-records its reply on its own child. A client with subagents can start a
+records its reply with `task.reply`, rereads the child for its current revision,
+and sets its status to `done` with `task.update`. The parent can read both
+`delegation_reply` and `status` from each child. A client with subagents can start a
 separate worker with the recipient's saved role. Otherwise use the configured
 webhook dispatcher or let a manual specialist open a chat and claim the task.
 The coordinator can revisit the parent after reopening a chat to collect replies.
@@ -1249,7 +1250,7 @@ chip) as one list, most recently updated first, showing tasks updated in the las
 - `task.release` (optional `readiness` and `waiting_reason`) clears the claim, sets
   an In progress task back to To do and applies the readiness. The claimer, the owner
   in the reader, or anyone after the claim expired may release; another work client
-  gets 409 `not_claimer`. Only the owner can mark a task Done. Done and Won’t do both clear the claim. Agents save the draft and submit it with review.request.
+  gets 409 `not_claimer`. Any role can edit or reassign a claimed task. The current holder keeps the claim on those edits; the event records the editor’s declared session name. Done and Won’t do both clear the claim. Closing internal work grants no approval to publish or send. Use review.request when the owner needs to decide on a deliverable.
 - Manual and webhook starts are mutually exclusive. A live chat claim blocks
   webhook acquisition. An unresolved current webhook execution blocks a chat claim.
   Owners can still edit the task. An expired claim

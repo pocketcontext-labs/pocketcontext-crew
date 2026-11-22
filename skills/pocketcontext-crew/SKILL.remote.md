@@ -168,7 +168,7 @@ A claim sets In progress with a 2-hour lease; your updates, comments and
 attachments renew it, `task.claim_renew` extends it, and `task.release` (optional
 readiness and waiting_reason) ends it. HTTP 409 `already_claimed` names
 `claimed_by` and `claim_until`: report the holder and pick another task. Setting
-Done or Won't do (`wont_do`) ends the claim. Save the draft and submit it with review.request. Only the owner marks tasks Done in the reader. Tasks have no release field since 0.23.0: a
+Done or Won't do (`wont_do`) ends the claim. For a delegated task, save the answer with task.reply, then use task.update at the current revision to mark the task Done. Request owner review when the deliverable requires approval. Done records internal completion and grants no approval to publish or send. Tasks have no release field since 0.23.0: a
 release is the label `release-<version>`. If the owner decides not to do a task, comment why and set `wont_do`.
 
 Session instructions are saved in Crew per active nonhuman agent, with immutable

@@ -9,6 +9,6 @@ after the authorized action has occurred. Preserve history through archive/resto
 A coder session started from a Crew session prompt reads
 `{"collection":"session","agent":NAME}` and follows those instructions: claim one
 approved task at a time, keep the lease live through writes or task.claim_renew,
-save the draft and request owner approval through review.request. Only the owner marks the task Done. You may set Won't do
+record a delegated answer with task.reply, then mark finished work Done with task.update. Request owner approval through review.request when needed. You may set Won't do
 (wont_do) with a comment when the owner drops a task, and task.release with a hold
 reason when stopping early.

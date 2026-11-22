@@ -322,10 +322,11 @@ function document() {
     revision: "record", key: true, description: "Use the claimed coordinating task as id. Creates a linked child for one recipient. Supply one stable key per recipient and request. Read tasks with parent to list their individual replies.",
   });
   op("task.reply", {body: str}, ["body"], {
-    revision: "record", key: true, result: reply, description: "The child task holder records one attributed reply. Retry with the original key. The owner retains completion authority.",
+    revision: "record", key: true, result: reply, description: "The child task holder records one attributed reply. Retry with the original key. After replying, mark finished work Done with task.update and the current task revision.",
   });
   op("task.create", task, ["title"], { warnings: markupWarningsNote });
   op("task.update", task, [], {
+    description: "Any declared role can edit, reassign and complete tasks in the authenticated workspace. Editing or reassigning a claimed task preserves its holder. Done ends the claim and records completion only.",
     revision: "record",
     warnings: markupWarningsNote,
     execution_proof:
@@ -434,7 +435,7 @@ function document() {
     execution_proof:
       "Required only while another execution is live on the task",
     description:
-      "Undo of an archive that withdrew a pending review (task.update archived:true). One transaction restores the task (archived false, archived_at and archived_by cleared, status needs_review; readiness and hold reason unchanged) and makes that same review pending again with its snapshot. Allowed only when all of these hold: the review is withdrawn; its task is archived; the review's last event is the review.withdraw that the archive recorded (changes.archived true), so a manual review.withdraw, a draft edit or an attachment change cannot be undone; it is the task's newest review and the task has no pending review; the task is in_progress and its draft, draft_options, draft_selection, draft_recipient and active attachments still equal the review's snapshot. Anything else answers HTTP 409 with data.reason.code review_not_restorable and a message naming the failed condition, and changes nothing; a stale expected_revision gets the usual revision conflict. Never wakes: no reopened wake and no review_outcome; the wake generation advances as for review.request. Appends a review.restore event to the review and to the task and returns the review. Use it only when the owner asks.",
+      "Undo of an archive that withdrew a pending review (task.update archived:true). One transaction restores the task (archived false, archived_at and archived_by cleared, pre-archive status restored; readiness and hold reason unchanged) and makes that same review pending again with its snapshot. Allowed only when all of these hold: the review is withdrawn; its task is archived; the review's last event is the review.withdraw that the archive recorded (changes.archived true), so a manual review.withdraw, a draft edit or an attachment change cannot be undone; it is the task's newest review and the task has no pending review; the task has the expected post-archive status and its draft, draft_options, draft_selection, draft_recipient and active attachments still equal the review's snapshot. Anything else answers HTTP 409 with data.reason.code review_not_restorable and a message naming the failed condition, and changes nothing; a stale expected_revision gets the usual revision conflict. Never wakes: no reopened wake and no review_outcome; the wake generation advances as for review.request. Appends a review.restore event to the review and to the task and returns the review. Use it only when the owner asks.",
   });
   op(
     "review.decide",
@@ -854,7 +855,7 @@ function document() {
       revision: "execution",
       key: true,
       description:
-        "Only the owner can mark tasks Done. Agents submit drafts with review.request. Ends running work. When your own review.request already completed this execution (outcome_code review_requested), the same worker/fence gets the record back with already_completed:true and no revision check; mark_done is refused.",
+        "Finishes the execution. To also close completed internal work, supply mark_done:true and the current task_revision. For owner review, use review.request. When your own review.request already completed this execution (outcome_code review_requested), the same worker/fence gets the record back with already_completed:true and no revision check; mark_done is refused.",
     },
   );
   op(

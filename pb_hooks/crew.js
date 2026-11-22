@@ -325,7 +325,11 @@ function withdraw(app, t, b, actor) {
     r.set("status", "withdrawn");
     r.set("revision", r.getInt("revision") + 1);
     app.save(r);
-    event(app, r, "review.withdraw", b, actor);
+    // Undo must restore a completed task with its review still pending.
+    const completedArchive = b.data && b.data.archived === true &&
+      (b.data.status || t.getString("status")) === "done";
+    const changes = completedArchive ? { ...b.data, task_was_done: true } : undefined;
+    event(app, r, "review.withdraw", b, actor, changes);
   }
 }
 // The record written last. rowid is insertion order and Crew never deletes
@@ -816,10 +820,6 @@ function write(e, isAgent) {
     bad("Invalid attribution");
   const d = b.data || {};
   if (typeof d !== "object" || Array.isArray(d)) bad("data must be an object");
-  if (isAgent && (
-    (["task.create", "task.update"].includes(b.action) && d.status === "done") ||
-    (b.action === "execution.complete" && d.mark_done === true)
-  )) throw new ForbiddenError("Only the owner can mark a task Done. Submit a draft for review.");
   // Owner-browser-only, like webhook credentials: refused before idempotency.
   if (isAgent && b.action === "upload_link.create")
     throw new ForbiddenError("Create upload links in the owner UI");
@@ -1218,9 +1218,9 @@ function write(e, isAgent) {
       const oldKind =
         kind === "agent" && op !== "create" ? r.getString("kind") || "bot" : "";
       if (kind === "task" && op !== "create") {
-        if (values.status !== undefined && pending(app, r.id).length)
+        if (values.status !== undefined && values.status !== "done" && pending(app, r.id).length)
           bad(
-            "Resolve or withdraw the pending review before changing task status",
+            "While a review is pending, the task can only be marked Done",
           );
         const draftEdited = reviewDraftChanged ||
           (values.draft !== undefined && values.draft !== r.getString("draft"));
@@ -1242,8 +1242,6 @@ function write(e, isAgent) {
           )
             r.set("status", "in_progress");
         }
-        if (webhooks.terminal(values.status) && pending(app, r.id).length)
-          bad("Resolve or withdraw the pending review before completion");
       }
       let hopStop = null;
       // Reader writes end a run of work-client handoffs. A work client may set
@@ -1529,7 +1527,12 @@ function write(e, isAgent) {
       r.set("revision", r.getInt("revision") + 1);
       app.save(r);
       if (!isAgent) ownerTouch(t);
-      t.set("status", "in_progress");
+      // Review the frozen draft independently of completed internal work.
+      // Only requested changes give a completed task more work to do.
+      if (t.getString("status") !== "done" || d.decision === "changes_requested") {
+        const transition = taskApproval(t, { status: "in_progress" }, "update");
+        for (const field of Object.keys(transition.values)) t.set(field, transition.values[field]);
+      }
       // Request changes hands the work back: the task is Ready (any earlier
       // hold reason is stale) so the assignee wakes with review_outcome. A
       // withdrawal, approval or rejection keeps the readiness it had, and a
@@ -1596,9 +1599,10 @@ function write(e, isAgent) {
       if (oldTask.review) notRestorable("its task has a pending review");
       // Archiving leaves a Needs review task In progress, and a decision on
       // the restored review must still match its snapshot.
-      if (t.getString("status") !== "in_progress")
+      const completedArchive = changes.task_was_done === true;
+      if (t.getString("status") !== (completedArchive ? "done" : "in_progress"))
         notRestorable(
-          "its task is no longer In progress (" + t.getString("status") + ")",
+          "its task is no longer " + (completedArchive ? "Done" : "In progress") + " (" + t.getString("status") + ")",
         );
       if (!draftMatches(t, r))
         notRestorable("the task draft changed after the review was requested");
@@ -1613,7 +1617,7 @@ function write(e, isAgent) {
       t.set("archived", false);
       t.set("archived_at", "");
       t.set("archived_by", "");
-      t.set("status", "needs_review");
+      if (!completedArchive) t.set("status", "needs_review");
       t.set("revision", t.getInt("revision") + 1);
       app.save(t);
       // The pending review makes the task ineligible, so this never wakes: it
@@ -1623,7 +1627,7 @@ function write(e, isAgent) {
       event(app, r, b.action, b, actor, { status: "pending" });
       event(app, t, b.action, b, actor, {
         archived: false,
-        status: "needs_review",
+        status: t.getString("status"),
         readiness: t.getString("readiness"),
         wake_generation: t.getInt("wake_generation"),
       });

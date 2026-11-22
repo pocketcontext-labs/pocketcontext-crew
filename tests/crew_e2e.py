@@ -466,25 +466,36 @@ def scenario(pc):
     assert review['draft'] == 'Draft one' and review['status'] == 'pending'
     task = current('tasks', task)
     assert task['status'] == 'needs_review'
-    write('task.update', {'status': 'done'}, task, expected=403)
     write('task.update', {'status': 'todo'}, task, expected=400)
-    write('task.update', {'draft': 'Attempted review bypass', 'status': 'done'}, task, expected=403)
-    assert current('tasks', task)['draft'] == 'Draft one'
-    assert current('reviews', review)['status'] == 'pending'
+    task = write('task.update', {'status': 'done'}, task)
+    assert task['status'] == 'done' and not task['approved_at']
+    snapshot = current('reviews', review)
+    assert snapshot['status'] == 'pending' and snapshot['draft'] == 'Draft one'
+    assert not snapshot['decided_at']
+    # Archiving and undoing the archive restores both the completed work and its draft.
+    write('task.update', {'archived': True}, task)
+    review = write('review.restore', record=current('reviews', review), agent=False)
+    task = current('tasks', task)
+    assert task['status'] == 'done' and review['status'] == 'pending'
     write('review.request', record=task, expected=409)
     task = write('task.update', {'draft': 'Draft two'}, task)
     assert current('reviews', review)['status'] == 'withdrawn'
     write('review.decide', {'decision': 'approved'}, current('reviews', review), agent=False, expected=400)
     review = write('review.request', record=task)
+    task = write('task.update', {'status': 'done'}, current('tasks', task), agent=False)
     # A decision the owner delegated, recorded by a work client.
     approved = write('review.decide', {'decision': 'approved', 'note': 'Owner reviewed it and asked me to record approval.'}, review)
     assert approved['draft'] == 'Draft two' and approved['status'] == 'approved'
     assert approved['decided_by'].startswith('mcp:') and approved['reported_agent'] == 'Network' and approved['decided_at']
-    assert current('tasks', task)['status'] != 'done', 'Approval must not complete external action'
+    assert current('tasks', task)['status'] == 'done', 'A decision must preserve completed internal work'
     write('review.decide', {'decision': 'rejected'}, approved, agent=False, expected=400)
     task = current('tasks', task)
-    task = write('task.update', {'status': 'done'}, task, agent=False)
-    assert task['status'] == 'done'
+    # Requested changes reopen completed work for the new draft.
+    revisions = write('review.request', record=task)
+    write('task.update', {'status': 'done'}, current('tasks', task))
+    write('review.decide', {'decision': 'changes_requested'}, revisions, agent=False)
+    task = current('tasks', task)
+    assert task['status'] == 'in_progress' and task['readiness'] == 'ready'
 
     # Archive closes a pending review and restoring does not revive it.
     task = write('task.update', {'draft': 'Draft three', 'status': 'in_progress'}, task)
@@ -756,13 +767,10 @@ def cli_release_scenario(cli, write, project):
     assert 'requires status done' in refused, refused
     refused = write('task.update', {'release': '0.19.0'}, claimed, expect=1, reported_agent=session)
     assert 'release_field_removed' in refused, refused
-    denied = write('task.update', {'status': 'done', 'review_mode': 'in_session'}, claimed, expect=1, reported_agent=session)
-    assert 'Only the owner' in denied, denied
-    draft = write('task.update', {'draft': 'Synthetic release summary', 'labels': ['release-0.19.0']}, claimed, reported_agent=session)
-    review = write('review.request', {}, draft, reported_agent=session)
-    assert review['status'] == 'pending' and review['draft'] == draft['draft'], review
+    done = write('task.update', {'status': 'done', 'review_mode': 'in_session', 'labels': ['release-0.19.0']}, claimed, reported_agent=session)
+    assert done['approved_at'] and done['review_mode'] == 'in_session' and done['claim_state'] == '', done
     shipped = cli('read', {'collection': 'tasks', 'label': 'release-0.19.0', 'fields': ['id', 'status']})['items']
-    assert [(t['id'], t['status']) for t in shipped] == [(ticket['id'], 'needs_review')], shipped
+    assert [(t['id'], t['status']) for t in shipped] == [(ticket['id'], 'done')], shipped
 
 
 def cli_attachment_scenario(pc):

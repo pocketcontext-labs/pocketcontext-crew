@@ -31,7 +31,10 @@ func TestDelegationRecipientReplies(t *testing.T) {
 	if retry := write("task.delegate", parent, "coordinator chat", "question", revision, question, 200); retry["id"] != id {
 		t.Fatal("duplicate child", retry)
 	}
-	second := write("task.delegate", parent, "coordinator chat", "other", revision, map[string]any{"assigned_agent": coordinator, "title": "Altra domanda"}, 200)
+	otherRecipient := makeAgent("Second synthetic recipient")
+	second := write("task.delegate", parent, "coordinator chat", "other", revision, map[string]any{"assigned_agent": otherRecipient, "title": "Altra domanda"}, 200)
+	secondID := second["id"].(string)
+	claim(secondID, otherRecipient, "second chat")
 	claim(id, recipient, "recipient chat")
 	rev := taskRevision(t, a, id)
 	answer := map[string]any{"body": "Sì, parlerò francese."}
@@ -44,7 +47,14 @@ func TestDelegationRecipientReplies(t *testing.T) {
 		t.Fatal("duplicate reply", replay)
 	}
 	write("task.reply", id, "recipient chat", "different", rev, answer, 409)
-	query, _ := json.Marshal(map[string]any{"collection": "tasks", "parent": parent, "fields": []string{"delegation_reply"}})
+	done := sessionWrite(t, a, false, "task.update", id, rev, map[string]any{"status": "done"}, "recipient chat", 200)
+	if done["claim_state"] != "" || done["approved_at"] != "" || done["approved_by"] != "" {
+		t.Fatal("internal completion left a live claim or recorded approval", done)
+	}
+	secondRev := taskRevision(t, a, secondID)
+	secondReply := write("task.reply", secondID, "second chat", "second answer", secondRev, map[string]any{"body": "Italiano."}, 200)
+	sessionWrite(t, a, false, "task.update", secondID, secondRev, map[string]any{"status": "done"}, "second chat", 200)
+	query, _ := json.Marshal(map[string]any{"collection": "tasks", "parent": parent, "fields": []string{"delegation_reply", "status"}})
 	items := a.request(t, "POST", "/api/crew/read", a.token, string(query), 200)["items"].([]any)
 	if len(items) != 2 {
 		t.Fatal("wrong recipients", items)
@@ -53,12 +63,12 @@ func TestDelegationRecipientReplies(t *testing.T) {
 		item := raw.(map[string]any)
 		switch item["id"] {
 		case id:
-			if item["delegation_reply"].(map[string]any)["event_id"] != reply["event_id"] {
+			if item["status"] != "done" || item["delegation_reply"].(map[string]any)["event_id"] != reply["event_id"] {
 				t.Fatal(item)
 			}
-		case second["id"]:
-			if item["delegation_reply"] != nil {
-				t.Fatal("invented reply", item)
+		case secondID:
+			if item["status"] != "done" || item["delegation_reply"].(map[string]any)["event_id"] != secondReply["event_id"] {
+				t.Fatal("missing second recipient result", item)
 			}
 		default:
 			t.Fatal("unrelated task", item)

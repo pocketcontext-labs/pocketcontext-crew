@@ -448,7 +448,7 @@ function handle(app, b, actor) {
           bad("outcome must be completed or failed");
         if (d.mark_done)
           bad(
-            "review.request already completed this execution; a task in review cannot be marked done",
+            "review.request already completed this execution; its completion cannot change the task",
           );
         return Object.assign(exported(r), { already_completed: true });
       }
