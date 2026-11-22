@@ -97,10 +97,10 @@ server, rebuilding with `make build`, and restarting it. Before testing the
 embedded/release reader, rebuild both UI and binary. Hot reload does not
 perform TypeScript checks.
 
-## Public development with MCP and HTTPS hot reload
+## Public development with MCP and an HTTPS reader
 
 Use this explicit mode on a separate development instance when an external agent
-needs MCP and a browser needs hot reload at the same HTTPS origin. It does not
+needs MCP and a browser needs the reader at the same HTTPS origin. It does not
 change production serving defaults. The public reader still requires owner email
 login and MCP still requires OAuth consent.
 
@@ -132,8 +132,8 @@ node scripts/dev.mjs \
 
 This starts the backend with `--headless --hosted --mcp --public-ui-dev`, the
 explicit domain, private HTTP address and loopback Vite upstream. Vite remains
-bound to loopback; its browser WebSocket uses
-`wss://walter.bigconfig.space/__ui_hmr` on port 443. The private HTTP address defaults
+bound to loopback. Public development disables live reload so reconnecting after
+switching mobile apps preserves the open page. Refresh manually after reader edits. The private HTTP address defaults
 to `127.0.0.1:18098` and the launcher accepts only that loopback IPv4 host with an
 unprivileged port. The ordinary local reader TCP listener is not enabled in this
 mode. Readiness checks use the local control path to verify the exact child PID
@@ -176,8 +176,7 @@ hostnames or anonymous MCP access.
 For a temporary tunnel, configure the explicit HTTPS hostname the same way and
 forward it to the private hosted HTTP listener. [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
 change hostname on restart and do not support Server-Sent Events; each new hostname
-requires matching server configuration and OAuth reconnection. Vite hot reload
-uses WebSockets. A stable Caddy hostname is preferable for repeated development.
+requires matching server configuration and OAuth reconnection. A stable Caddy hostname is preferable for repeated development.
 
 ## Validation
 

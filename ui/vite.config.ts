@@ -44,11 +44,10 @@ export default defineConfig({
     strictPort: true,
     cors: false,
     fs: { strict: true, allow: [fileURLToPath(new URL(".", import.meta.url))] },
-    ws: {
+    hmr: publicDomain ? false : undefined,
+    ws: publicDomain ? false : {
       path: "/__ui_hmr",
-      ...(publicDomain
-        ? { protocol: "wss" as const, host: publicDomain, clientPort: 443 }
-        : { clientPort: Number(process.env.POCKETCONTEXT_DEV_PORT || 8099) }),
+      clientPort: Number(process.env.POCKETCONTEXT_DEV_PORT || 8099),
     },
   },
   test: {
