@@ -46,6 +46,8 @@ export default function Settings({
   const prefs = useReaderSettings();
   const [picker, setPicker] = useState<Picker | null>(null);
   const [error, setError] = useState("");
+  const [savingLine, setSavingLine] = useState(false);
+  const lineColorInput = useRef<HTMLInputElement>(null);
   const [toast, setToast] = useState(0);
   const tapHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -54,12 +56,33 @@ export default function Settings({
   const tap = prefs.agentTap;
   const save = (patch: Parameters<typeof saveSettings>[0]) => {
     setError("");
-    saveSettings(patch).catch(() =>
+    return saveSettings(patch).catch(() =>
       setError(
         t("Couldn't save the setting. Check your connection and try again."),
       ),
     );
   };
+  const saveLine = async (
+    patch: { instance_line_visible: boolean } | { instance_line_color: string },
+  ) => {
+    setSavingLine(true);
+    await save(patch);
+    setSavingLine(false);
+  };
+  // The native change event commits a color once when the picker accepts it.
+  // React's onChange also fires for intermediate colors while dragging.
+  useEffect(() => {
+    const input = lineColorInput.current;
+    if (!input) return;
+    const commit = () => {
+      const color = input.value;
+      input.value = prefs.instanceLineColor;
+      void saveLine({ instance_line_color: color });
+    };
+    input.value = prefs.instanceLineColor;
+    input.addEventListener("change", commit);
+    return () => input.removeEventListener("change", commit);
+  }, [picker, prefs.instanceLineColor]);
   const chooseLanguage = (lang: Language) => {
     setLanguage(lang);
     save({ language: lang });
@@ -161,6 +184,38 @@ export default function Settings({
           />
         </li>
       </ul>
+
+      <section aria-labelledby="crew-settings-appearance">
+        <h2 id="crew-settings-appearance">{t("Appearance")}</h2>
+        <ul className="crew-settings-group">
+          <li>
+            <label className="crew-settings-row">
+              <span className="crew-settings-label">{t("Show instance line")}</span>
+              <input
+                type="checkbox"
+                role="switch"
+                disabled={savingLine || !prefs.loaded}
+                checked={prefs.instanceLineVisible}
+                onChange={(event) =>
+                  void saveLine({ instance_line_visible: event.target.checked })
+                }
+              />
+            </label>
+          </li>
+          <li>
+            <label className="crew-settings-row">
+              <span className="crew-settings-label">{t("Line color")}</span>
+              <input
+                type="color"
+                ref={lineColorInput}
+                disabled={savingLine || !prefs.loaded}
+                defaultValue={prefs.instanceLineColor}
+              />
+            </label>
+          </li>
+        </ul>
+        <p className="crew-settings-hint">{t("Applies to all devices on this instance.")}</p>
+      </section>
 
       <section aria-labelledby="crew-settings-tap">
         <h2 id="crew-settings-tap" ref={tapHeading} tabIndex={-1}>{t("Tapping an agent")}</h2>

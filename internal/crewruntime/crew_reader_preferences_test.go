@@ -21,6 +21,9 @@ func TestReaderPreferencesSetting(t *testing.T) {
 
 	for _, data := range []map[string]any{
 		{},
+		{"instance_line_visible": "true"},
+		{"instance_line_color": 123},
+		{"instance_line_color": "red"},
 		{"language": "fr"},
 		{"language": 1},
 		{"agent_tap": "open_agent"},
@@ -68,5 +71,26 @@ func TestReaderPreferencesSetting(t *testing.T) {
 	props := op["data_schema"].(map[string]any)["properties"].(map[string]any)
 	if props["language"] == nil || props["agent_tap"] == nil {
 		t.Fatal("settings.update schema", props)
+	}
+}
+
+func TestInstanceLineSettings(t *testing.T) {
+	a := newTestApp(t)
+	read := func() map[string]any {
+		return a.request(t, "POST", "/api/crew/read", a.token, `{"collection":"settings"}`, 200)["items"].([]any)[0].(map[string]any)
+	}
+	s := read()
+	if s["instance_line_visible"] != false || s["instance_line_color"] != "" {
+		t.Fatal("initial line settings", s)
+	}
+	id, rev := s["id"].(string), int(s["revision"].(float64))
+	crewWrite(t, a, false, "settings.update", id, rev, map[string]any{"instance_line_visible": true, "instance_line_color": "#ABCDEF"}, 200)
+	if got := read(); got["instance_line_visible"] != true || got["instance_line_color"] != "#abcdef" {
+		t.Fatal("persisted line settings", got)
+	}
+	crewWrite(t, a, false, "settings.update", id, rev, map[string]any{"instance_line_visible": false}, 409)
+	crewWrite(t, a, false, "settings.update", id, rev+1, map[string]any{"instance_line_visible": false}, 200)
+	if got := read(); got["instance_line_visible"] != false || got["instance_line_color"] != "#abcdef" {
+		t.Fatal("hiding must retain the selected color", got)
 	}
 }

@@ -738,6 +738,8 @@ function document() {
   op(
     "settings.update",
     {
+      instance_line_visible: bool,
+      instance_line_color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
       session_guide_off: bool,
       language: { enum: ["", "en", "de", "it"] },
       agent_tap: {
@@ -762,7 +764,7 @@ function document() {
     {
       revision: "settings",
       description:
-        "Reader preferences; send at least one. session_guide_off hides the Start a session guide (the owner's \"Don't show this again\"). language is the reader's language (\"\" follows the browser). agent_tap is what tapping an agent on Home does: all (open_agent, show_tasks or copy_prompt) and agents (agent id to open_agent, show_tasks or copy_prompt; ids must exist); it replaces the whole value, null clears it. hidden_help lists the help panels the owner hid with \"Don't show this again\" (ids such as page.home; replaces the whole list, [] or null shows all help again). Change them only when the owner asks.",
+        "Reader preferences; send at least one. instance_line_visible and instance_line_color control the 3 px line on every device. session_guide_off hides the Start a session guide (the owner's \"Don't show this again\"). language is the reader's language (\"\" follows the browser). agent_tap is what tapping an agent on Home does: all (open_agent, show_tasks or copy_prompt) and agents (agent id to open_agent, show_tasks or copy_prompt; ids must exist); it replaces the whole value, null clears it. hidden_help lists the help panels the owner hid with \"Don't show this again\" (ids such as page.home; replaces the whole list, [] or null shows all help again). Change them only when the owner asks.",
     },
   );
   op("execution.validate", event, ["event_id", "epoch", "generation"], {
@@ -1157,6 +1159,8 @@ function document() {
       singleton: str,
       storage_limit_bytes: num,
       storage_used_bytes: num,
+      instance_line_visible: bool,
+      instance_line_color: str,
       session_guide_off: bool,
       language: str,
       agent_tap: { type: ["object", "null"] },

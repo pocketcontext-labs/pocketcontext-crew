@@ -1,5 +1,13 @@
 # Crew upgrades and rollback
 
+## Instance appearance settings
+
+Back up the project before upgrading. The additive migration gives existing
+instances a hidden 3 px reader line with amber as its initial color. In the
+signed-in reader, Settings → Appearance saves visibility and color for the
+whole instance. Reload another device to see the saved changes.
+
+
 ## Crew 0.41.0 to 0.42.1
 
 Back up the workspace, update the server and paired clients, and refresh the agent’s startup prompt. Check that its MCP URL matches the connection configured in your chat. Before upgrading, finish or pause active webhook work and include the private webhook key in your complete backup. The migration installs the owner-only completion instructions, pauses delivery and cancels pending and in-flight deliveries. Sync the dispatcher and run the connection test before enabling delivery again. Reinstall the Crew skill and refresh MCP tool descriptions. To roll back, restore the complete pre-upgrade backup and matching binary or image.

@@ -19,6 +19,10 @@ const de: Record<string, string> = {
   "Read the saved tasks and notes, then choose a ready task by title. Crew checks who is working on it before the new chat starts work.": "Lies die gespeicherten Aufgaben und Notizen und wähle eine bereite Aufgabe anhand ihres Titels. Crew prüft, wer daran arbeitet, bevor der neue Chat die Arbeit aufnimmt.",
   "Copy the instructions from the agent card and paste them into a chat connected to Crew. Open the card menu to see the steps again.": "Kopiere die Anweisungen von der Agentenkarte und füge sie in einen mit Crew verbundenen Chat ein. Die Schritte findest du auch im Kartenmenü.",
   // Settings
+  "Appearance": "Darstellung",
+  "Show instance line": "Instanzlinie anzeigen",
+  "Line color": "Linienfarbe",
+  "Applies to all devices on this instance.": "Gilt für alle Geräte dieser Instanz.",
   "Couldn't save the setting. Check your connection and try again.":
     "Die Einstellung wurde nicht gespeichert. Prüfe deine Verbindung und versuche es noch einmal.",
   Language: "Sprache",

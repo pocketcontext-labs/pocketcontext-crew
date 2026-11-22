@@ -37,7 +37,7 @@ import Help, {
 import type { HelpTopic } from "./helpContent";
 import Home from "./Home";
 import Settings from "./Settings";
-import { loadReaderSettings } from "./sessionGuide";
+import { useReaderSettings } from "./sessionGuide";
 import LabelsInput from "./LabelsInput";
 import { markdownExcerpt, markdownText } from "./markdownText";
 import { taskBrief } from "./reviewMarkup";
@@ -1003,7 +1003,7 @@ export default function CrewWorkspace() {
   }, [notice]);
   const [serverVersion, setServerVersion] = useState<ServerVersion | null>();
   // The owner's reader settings (0.36.0: the language) apply on load.
-  useEffect(() => void loadReaderSettings(), []);
+  const { instanceLineVisible, instanceLineColor } = useReaderSettings();
   const [connection, setConnection] = useState<ConnectionState>({
     kind: "checking",
   });
@@ -2454,6 +2454,9 @@ export default function CrewWorkspace() {
   return (
     <HelpModeContext.Provider value={helpMode(connection)}>
     <div className={phone ? "crew-app crew-phone" : "crew-app"}>
+      {instanceLineVisible && (
+        <div className="crew-instance-line" aria-hidden="true" style={{ backgroundColor: instanceLineColor }} />
+      )}
       {phone ? (
         <MobileTabBar view={view} pending={pending.length} />
       ) : (

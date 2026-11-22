@@ -27,6 +27,8 @@ export const legacyHelpKeys: Record<string, string> = {
 
 export type ReaderSettings = {
   loaded: boolean;
+  instanceLineVisible: boolean;
+  instanceLineColor: string;
   off: boolean;
   language: Language | "";
   agentTap: AgentTap;
@@ -35,6 +37,8 @@ export type ReaderSettings = {
 };
 const initial: ReaderSettings = {
   loaded: false,
+  instanceLineVisible: false,
+  instanceLineColor: "#d49927",
   off: false,
   language: "",
   agentTap: {},
@@ -52,6 +56,8 @@ function publish(next: ReaderSettings) {
 
 const fromRow = (row: Row | null): ReaderSettings => ({
   loaded: true,
+  instanceLineVisible: row?.instance_line_visible === true,
+  instanceLineColor: String(row?.instance_line_color || initial.instanceLineColor),
   off: row?.session_guide_off === true,
   language: isLanguage(row?.language) ? row.language : "",
   agentTap: parseAgentTap(row?.agent_tap),
@@ -129,6 +135,8 @@ export function loadReaderSettings() {
 }
 
 type Patch = {
+  instance_line_visible?: boolean;
+  instance_line_color?: string;
   session_guide_off?: boolean;
   language?: Language | "";
   agent_tap?: AgentTap;
@@ -155,6 +163,10 @@ export async function saveSettings(patch: Patch) {
     }
     if (!settings) return;
     settings = await crewApi.write("settings.update", patch, settings);
+    if ("instance_line_visible" in patch || "instance_line_color" in patch) {
+      const { instanceLineVisible, instanceLineColor } = fromRow(settings);
+      publish({ ...state, instanceLineVisible, instanceLineColor });
+    }
   };
   try {
     await write();

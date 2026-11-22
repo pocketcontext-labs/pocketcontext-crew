@@ -171,3 +171,33 @@
 .crew-toast.crew-settings-toast p {
   margin: 0;
 }
+
+.crew-settings-row input[type="color"] {
+  width: 44px;
+  height: 32px;
+  padding: 3px;
+  cursor: pointer;
+}
+.crew-settings-row input[role="switch"] {
+  appearance: none;
+  width: 40px;
+  height: 24px;
+  padding: 2px;
+  border-radius: 12px;
+  background: #71806e;
+  cursor: pointer;
+}
+.crew-settings-row input[role="switch"]:checked {
+  background: #41664d;
+}
+.crew-settings-row input[role="switch"]::before {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+}
+.crew-settings-row input[role="switch"]:checked::before {
+  transform: translateX(16px);
+}

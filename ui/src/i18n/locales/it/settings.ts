@@ -19,6 +19,10 @@ const it: Record<string, string> = {
   "Read the saved tasks and notes, then choose a ready task by title. Crew checks who is working on it before the new chat starts work.": "Leggi i task e le note salvate, poi scegli un task pronto indicando il titolo. Prima che la nuova chat inizi a lavorare, Crew verifica chi se ne sta occupando.",
   "Copy the instructions from the agent card and paste them into a chat connected to Crew. Open the card menu to see the steps again.": "Copia le istruzioni dalla scheda agente e incollale in una chat collegata a Crew. Apri il menu della scheda per rivedere i passaggi.",
   // Settings
+  "Appearance": "Aspetto",
+  "Show instance line": "Mostra la linea dell’istanza",
+  "Line color": "Colore della linea",
+  "Applies to all devices on this instance.": "Si applica a tutti i dispositivi di questa istanza.",
   "Couldn't save the setting. Check your connection and try again.":
     "Impossibile salvare l'impostazione. Controlla la connessione e riprova.",
   Language: "Lingua",

@@ -127,6 +127,29 @@ const settingsWrites = () =>
     .mocked(crewApi.write)
     .mock.calls.filter(([action]) => action === "settings.update");
 
+it("saves the instance line and loads its color in a fresh reader", async () => {
+  const record = fixtures.settings[0];
+  vi.mocked(crewApi.write).mockImplementation(async (_action, patch) =>
+    Object.assign(record, patch, { revision: record.revision + 1 }),
+  );
+  const first = render(<Root />);
+  const toggle = await screen.findByRole("switch", { name: "Show instance line" });
+  await waitFor(() => expect(toggle).toBeEnabled());
+  fireEvent.click(toggle);
+  await waitFor(() => expect(first.container.querySelector(".crew-instance-line")).toBeInTheDocument());
+  fireEvent.change(screen.getByLabelText("Line color"), { target: { value: "#2255aa" } });
+  await waitFor(() => expect(record.instance_line_color).toBe("#2255aa"));
+  first.unmount();
+
+  resetReaderSettingsForTests();
+  phone = false;
+  const second = render(<Root />);
+  await waitFor(() => expect(second.container.querySelector(".crew-instance-line")).toHaveStyle({ backgroundColor: "#2255aa" }));
+  fireEvent.click(screen.getByRole("switch", { name: "Show instance line" }));
+  await waitFor(() => expect(second.container.querySelector(".crew-instance-line")).toBeNull());
+  expect(screen.getByLabelText("Line color")).toHaveValue("#2255aa");
+});
+
 describe("Settings", () => {
   it("is a row in More that keeps More selected, without Sign out in the sheet", async () => {
     history.replaceState(null, "", "/#/tasks");

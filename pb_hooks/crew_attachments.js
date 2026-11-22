@@ -59,6 +59,8 @@ const SETTINGS_FIELDS = [
   "language",
   "agent_tap",
   "hidden_help",
+  "instance_line_visible",
+  "instance_line_color",
 ];
 const LANGUAGES = ["", "en", "de", "it"];
 // What tapping an agent row on Home runs (0.36.0): one default for all agents
@@ -760,9 +762,14 @@ function handle(app, e, b, actor, isAgent, files, h) {
     only(d, SETTINGS_FIELDS);
     const s = get(app, "crew_settings", b.id);
     const keys = SETTINGS_FIELDS.filter((k) => k in (d || {}));
-    if (!keys.length) bad("Send session_guide_off, language, agent_tap or hidden_help");
+    if (!keys.length) bad("Send at least one reader preference");
     if ("session_guide_off" in d && typeof d.session_guide_off !== "boolean")
       bad("session_guide_off must be true or false");
+    if ("instance_line_visible" in d && typeof d.instance_line_visible !== "boolean")
+      bad("instance_line_visible must be true or false");
+    if ("instance_line_color" in d && (typeof d.instance_line_color !== "string" ||
+        !/^#[0-9a-fA-F]{6}$/.test(d.instance_line_color)))
+      bad("instance_line_color must be a six-digit hex color starting with #");
     if ("language" in d && !LANGUAGES.includes(d.language))
       bad('language must be "", "en", "de" or "it"');
     const tap = "agent_tap" in d ? agentTap(app, d.agent_tap) : null;
@@ -776,6 +783,15 @@ function handle(app, e, b, actor, isAgent, files, h) {
           new: d.session_guide_off,
         };
         s.set("session_guide_off", d.session_guide_off);
+      }
+      if ("instance_line_visible" in d) {
+        changes.instance_line_visible = { old: s.getBool("instance_line_visible"), new: d.instance_line_visible };
+        s.set("instance_line_visible", d.instance_line_visible);
+      }
+      if ("instance_line_color" in d) {
+        const color = d.instance_line_color.toLowerCase();
+        changes.instance_line_color = { old: s.getString("instance_line_color"), new: color };
+        s.set("instance_line_color", color);
       }
       if ("language" in d) {
         changes.language = { old: s.getString("language"), new: d.language };

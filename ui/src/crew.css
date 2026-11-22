@@ -1,3 +1,10 @@
+.crew-instance-line {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 3px;
+  z-index: 1000;
+  pointer-events: none;
+}
 .crew-app {
   min-height: 100dvh;
   display: flex;
