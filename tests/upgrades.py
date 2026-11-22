@@ -272,6 +272,9 @@ def rehearse(target, previous, root):
             # 0.37.0: the help panels the owner hid are a setting, empty by default.
             assert current.execute("SELECT count(*) FROM _migrations WHERE file='1802000000_crew_hidden_help.js'").fetchone() == (1,)
             settings_fields = {f['name']: f['type'] for f in json.loads(current.execute("SELECT fields FROM _collections WHERE name='crew_settings'").fetchone()[0])}
+            assert settings_fields.get('instance_line_visible') == 'bool', settings_fields
+            assert settings_fields.get('instance_line_color') == 'text', settings_fields
+            assert current.execute('SELECT instance_line_visible, instance_line_color FROM crew_settings').fetchall() == [(0, '')]
             assert settings_fields.get('hidden_help') == 'json', settings_fields
             assert current.execute("SELECT coalesce(hidden_help, 'null') FROM crew_settings").fetchall() in ([('null',)], [('',)]), current.execute('SELECT hidden_help FROM crew_settings').fetchall()
             assert current.execute("SELECT selection, recipient FROM crew_reviews").fetchall() == [('any', '')]
