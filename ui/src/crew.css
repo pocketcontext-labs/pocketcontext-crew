@@ -1,4 +1,10 @@
-.crew-instance-line {
+/* Modal dialogs paint above every z-index in the workspace. */
+dialog[open]::after {
+  content: "";
+  background-color: var(--crew-instance-line-color, transparent);
+}
+.crew-instance-line,
+dialog[open]::after {
   position: fixed;
   inset: 0 0 auto;
   height: 3px;

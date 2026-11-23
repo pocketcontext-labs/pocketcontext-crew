@@ -1010,6 +1010,13 @@ export default function CrewWorkspace() {
   const [serverVersion, setServerVersion] = useState<ServerVersion | null>();
   // The owner's reader settings (0.36.0: the language) apply on load.
   const { instanceLineVisible, instanceLineColor } = useReaderSettings();
+  useLayoutEffect(() => {
+    if (!instanceLineVisible) return;
+    // Preview dialogs can be portaled directly into document.body.
+    const root = document.documentElement.style;
+    root.setProperty("--crew-instance-line-color", instanceLineColor);
+    return () => { root.removeProperty("--crew-instance-line-color"); };
+  }, [instanceLineVisible, instanceLineColor]);
   const [connection, setConnection] = useState<ConnectionState>({
     kind: "checking",
   });

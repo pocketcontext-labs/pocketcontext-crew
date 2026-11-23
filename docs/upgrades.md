@@ -1,5 +1,9 @@
 # Crew upgrades and rollback
 
+## Crew 0.45.1 to 0.45.2
+
+Follow the usual backup and binary replacement steps, then reload the reader. Existing instance color settings carry forward.
+
 ## Crew 0.45.0 to 0.45.1
 
 Follow the usual backup and binary replacement steps. Existing drafts render with the updated parser on first view. This patch requires no data migration.

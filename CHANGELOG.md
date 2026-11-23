@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.45.2](docs/releases/0.45.2.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.45.2) · Keep the instance color visible in approval dialogs and previews.
 - **[0.45.1](docs/releases/0.45.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.45.1) · Copy titled email drafts separately from the surrounding reviewer notes.
 - **[0.45.0](docs/releases/0.45.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.45.0) · Complete internal tasks across Crew roles and track owner decisions on external drafts independently.
 - **[0.44.0](docs/releases/0.44.0.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.44.0) · Switch chat roles, delegate tasks, collect specialist replies and distinguish sessions sharing an agent.
