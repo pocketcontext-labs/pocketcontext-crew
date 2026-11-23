@@ -132,9 +132,8 @@ The Tasks board shows one column at a time under a sticky switcher
 (`‹ To do · 6 (1 of 4) ›`, previous and next disabled in place at the ends; the name
 opens a picker with every column's count); its search, scope, sort, agent chips and
 filters are in the filter sheet, and active filters show as removable chips under the
-top bar. Notes shows sticky bucket chips with counts (the selected chip's ⋯ has Edit
-bucket), then the notes as rows; search, sort, bucket and responsible agent are in
-its filter sheet. Desktop layouts are unchanged.
+top bar. Notes shows a bucket switcher with counts and an Edit action, then the notes as rows.
+Its filter sheet includes search, sort, and dropdowns for bucket and responsible agent. Desktop layouts are unchanged.
 
 **Home (0.34.0)** is the same sectioned page on every width. A first-run row, "New to
 Crew? Read how it works", at least 44 px tall, opens the Guide; its "Don't show this

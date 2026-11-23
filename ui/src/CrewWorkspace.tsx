@@ -2990,10 +2990,6 @@ export default function CrewWorkspace() {
                   total={data.notes.length}
                   selected={bucket}
                   onSelect={setBucket}
-                  onEdit={(row) => {
-                    setNotesSheet(false);
-                    openItem("bucket", row);
-                  }}
                 />
               )}
             </>

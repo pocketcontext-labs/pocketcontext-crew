@@ -5,6 +5,7 @@ release notes in [docs/releases/](docs/releases/); upgrade steps are in
 [docs/upgrades.md](docs/upgrades.md). Downloads are on the
 [GitHub releases page](https://github.com/pocketcontext-labs/pocketcontext-crew/releases).
 
+- **[0.45.4](docs/releases/0.45.4.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.45.4) · Mobile Notes uses a compact bucket selector with note counts.
 - **[0.45.3](docs/releases/0.45.3.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.45.3) · Restore archived tasks from Archive without an Undo prompt.
 - **[0.45.2](docs/releases/0.45.2.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.45.2) · Keep the instance color visible in approval dialogs and previews.
 - **[0.45.1](docs/releases/0.45.1.md)** · [release](https://github.com/pocketcontext-labs/pocketcontext-crew/releases/tag/v0.45.1) · Copy titled email drafts separately from the surrounding reviewer notes.

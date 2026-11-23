@@ -1,5 +1,9 @@
 # Crew upgrades and rollback
 
+## Crew 0.45.3 to 0.45.4
+
+Follow the usual backup and binary replacement steps and reload the reader. This reader update requires no migration.
+
 ## Crew 0.45.2 to 0.45.3
 
 Follow the usual backup and binary replacement steps and reload the reader. This reader update requires no migration.

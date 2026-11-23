@@ -781,7 +781,11 @@ try {
  const noteSheet=page.getByRole('dialog',{name:'Filter and sort'});
  await noteSheet.getByRole('searchbox',{name:'Search notes'}).waitFor();
  await noteSheet.getByRole('combobox',{name:'Filter by responsible agent'}).waitFor();
- assert.ok(await noteSheet.getByRole('button',{name:/^Bucket .* options$/}).count()>=5,'every bucket chip in the sheet has its ⋯');
+ const bucketFilter=noteSheet.getByRole('combobox',{name:'Filter by bucket'});
+ assert.ok(await bucketFilter.getByRole('option').count()>=6);
+ await bucketFilter.selectOption({label:await bucketFilter.getByRole('option',{name:/^NETWORK · /}).innerText()});
+ await page.waitForFunction(()=>location.hash.includes('bucket='));
+ await bucketFilter.selectOption('');
  await noteSheet.getByText('Name',{exact:true}).click();
  await page.waitForFunction(()=>location.hash==='#/notes?sort=title');
  await snapView('crew-notes-sheet-390');

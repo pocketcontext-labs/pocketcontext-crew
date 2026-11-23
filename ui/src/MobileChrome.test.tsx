@@ -701,12 +701,21 @@ describe("phone Notes", () => {
     fireEvent.change(filters.getByLabelText("Search notes"), {
       target: { value: "audience" },
     });
-    expect(
-      within(
-        filters.getByRole("group", { name: "Filter by bucket" }),
-      ).getAllByRole("button", { name: /options$/ }),
-    ).toHaveLength(2);
+    const bucket = filters.getByRole("combobox", { name: "Filter by bucket" });
+    const options = within(bucket).getAllByRole<HTMLOptionElement>("option");
+    expect(options).toHaveLength(3);
+    expect(options[0].textContent).toMatch(/^All buckets · /);
+    fireEvent.change(bucket, { target: { value: options[1].value } });
     fireEvent.click(filters.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Filter and sort/ }));
+    const reopened = sheet("Filter and sort").getByLabelText(
+      "Filter by bucket",
+    ) as HTMLSelectElement;
+    expect(reopened.value).toBe(options[1].value);
+    fireEvent.change(reopened, { target: { value: "" } });
+    fireEvent.click(
+      sheet("Filter and sort").getByRole("button", { name: "Done" }),
+    );
     expect(screen.getByText("Audience list")).toBeTruthy();
     expect(screen.queryByText("Launch voice")).toBeNull();
     expect(screen.queryByText("Release plan")).toBeNull();
