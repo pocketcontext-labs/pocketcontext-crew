@@ -161,6 +161,9 @@ function readAttributes(cs, i) {
 function opener(line) {
   const m = line.match(/^ {0,3}(:{3,})/);
   if (!m) return null;
+  const titledCopy = /^ {0,3}(:{3,})copy[ \t]+(.+)$/.exec(line);
+  if (titledCopy && titledCopy[2].trim())
+    return { size: titledCopy[1].length, name: "copy", label: null, attrs: [{ key: "label", value: titledCopy[2].trim() }] };
   const cs = Array.from(line);
   const start = Array.from(m[0]).length;
   const named = readName(cs, start);

@@ -207,6 +207,17 @@ export default function Prose({ children }: { children: string }) {
   // Review markup (0.38.0): a body without valid blocks renders exactly as
   // before, without the directive syntax at all.
   const blocks = useMemo(() => parseReviewMarkup(children).blocks, [children]);
+  const markdown = useMemo(() => {
+    if (!blocks.some((block) => block.kind === "copy")) return children;
+    const lines = children.split(/\r\n|\r|\n/);
+    for (const block of blocks) {
+      // remark-directive needs a bare or attributed opener. The block already
+      // carries its validated display label, including any punctuation.
+      if (block.kind === "copy")
+        lines[block.line - 1] = lines[block.line - 1].replace(/^( {0,3}:{3,}copy)[ \t]+.*$/, "$1");
+    }
+    return lines.join("\n");
+  }, [blocks, children]);
   const plugins = useMemo(
     () =>
       blocks.length
@@ -222,7 +233,7 @@ export default function Prose({ children }: { children: string }) {
           urlTransform={urlTransform}
           components={proseComponents}
         >
-          {children}
+          {markdown}
         </ReactMarkdown>
       </MarkupBlocksContext.Provider>
     </div>

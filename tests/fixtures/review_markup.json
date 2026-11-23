@@ -39,7 +39,7 @@
     },
     {
       "name": "copy blocks numbered",
-      "body": ":::copy{label=\"WhatsApp reply\"}\n\nHi!\n\n:::\n\n:::copy{label=\"Email subject\"}\n\nHello\n\n:::",
+      "body": ":::copy{label=\"WhatsApp reply\"}\n\nHi!\n\n:::\n\n:::copy Email subject\n\nHello\n\n:::",
       "valid": true,
       "errors": [],
       "blocks": [

@@ -1,5 +1,9 @@
 # Crew upgrades and rollback
 
+## Crew 0.45.0 to 0.45.1
+
+Follow the usual backup and binary replacement steps. Existing drafts render with the updated parser on first view. This patch requires no data migration.
+
 ## Crew 0.44.0 to 0.45.0
 
 Back up the complete project before upgrading. Refresh MCP tool descriptions

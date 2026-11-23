@@ -189,6 +189,9 @@ type Opener = { size: number; name: string; label: string | null; attrs: Attr[] 
 function opener(line: string): Opener | null {
   const m = /^ {0,3}(:{3,})/.exec(line);
   if (!m) return null;
+  const titledCopy = /^ {0,3}(:{3,})copy[ \t]+(.+)$/.exec(line);
+  if (titledCopy && titledCopy[2].trim())
+    return { size: titledCopy[1].length, name: "copy", label: null, attrs: [{ key: "label", value: titledCopy[2].trim() }] };
   const cs = Array.from(line);
   const named = readName(cs, Array.from(m[0]).length);
   if (!named) return null;

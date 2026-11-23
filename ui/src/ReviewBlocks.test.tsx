@@ -72,6 +72,16 @@ it("renders variants and notes as blocks, and the rest as before", () => {
   expect(container.querySelector(".crew-pick-comment")).toBeNull();
 });
 
+it("renders a plain-titled copy block separately from reviewer notes", () => {
+  const { container } = render(<Prose>{":::copy Intro email: Example\nHello team\n:::\n\nCheck recipient."}</Prose>);
+  const block = container.querySelector(".crew-block");
+  expect(block).toHaveTextContent("Intro email: Example");
+  expect(block).toHaveTextContent("Hello team");
+  expect(block).not.toHaveTextContent("Check recipient.");
+  expect(container).not.toHaveTextContent(":::copy");
+  expect(screen.getByText("Check recipient.")).toBeVisible();
+});
+
 it("counts channel-labelled copy blocks using channel defaults and keeps other labels unconstrained", () => {
   const { container } = render(
     <Prose>{':::copy{label="Text A LinkedIn"}\nHi\n:::\n\n:::copy{label="Text A X"}\nhttps://example.com/post\n:::\n\n:::copy{label="Notes on X"}\nHi\n:::'}</Prose>,
