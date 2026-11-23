@@ -1273,8 +1273,7 @@ a.crew-logo:hover .product-brand span {
     transition: none;
   }
 }
-/* The action toast (0.40.0, the approved mockup): a compact dark pill at the
-   bottom centre, "Task archived · Undo". Over the page it clears the phone's
+/* Archive error feedback appears at the bottom centre. It clears the phone's
    tab bar; in a dialog it hangs just above the review footer, so it never
    covers Approve and Request changes. */
 .crew-undo-toast {

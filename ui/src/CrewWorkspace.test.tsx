@@ -4942,8 +4942,7 @@ describe("previous/next from Home sections and natural lists (0.35.0)", () => {
   });
 });
 // 0.40.0: Archive task from the Approval detail's ⋯ menu. One write archives
-// the task and withdraws its pending review; a toast offers Undo
-// (review.restore) and the detail moves to the next approval.
+// the task and withdraws its pending review, then advances to the next approval.
 describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
   const item = (n: number, title: string, draft: string) => {
     const id = `task0000000000${n}`;
@@ -4961,14 +4960,6 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
     Object.assign(new Error("Revision conflict; reread and reassess"), {
       status: 409,
     });
-  const refusal = () =>
-    Object.assign(
-      new Error("This review cannot be restored (review_not_restorable)."),
-      {
-        status: 409,
-        response: { data: { reason: { code: "review_not_restorable" } } },
-      },
-    );
   const offline = () =>
     Object.assign(new TypeError("Failed to fetch"), { status: 0 });
   /** Archived rows on the synthetic server, and writes it refuses. */
@@ -4991,7 +4982,7 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
   });
   /**
    * A small synthetic server: revision-checked; archiving a task withdraws its
-   * pending review in the same write; review.restore undoes exactly that.
+   * pending review in the same write.
    */
   const seed = () => {
     fixtures.tasks = [one.task, two.task, three.task];
@@ -5028,22 +5019,6 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
         fixtures.tasks = [...fixtures.tasks, next];
         return next;
       }
-      if (action === "review.restore") {
-        const current = fixtures.reviews.find((x) => x.id === row?.id);
-        if (!current || current.revision !== row?.revision) throw conflict();
-        const archived = gone.tasks.find((x) => x.id === current.task);
-        if (current.status !== "withdrawn" || !archived) throw refusal();
-        const next = bump(current, { status: "pending" });
-        fixtures.reviews = fixtures.reviews.map((x) =>
-          x.id === next.id ? next : x,
-        );
-        gone.tasks = gone.tasks.filter((x) => x.id !== archived.id);
-        fixtures.tasks = [
-          ...fixtures.tasks,
-          bump(archived, { archived: false, status: "needs_review" }),
-        ];
-        return next;
-      }
       throw new Error(`Unexpected synthetic write ${action}`);
     });
   };
@@ -5064,19 +5039,6 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
     fireEvent.click(more);
     fireEvent.click(within(dialog).getByRole("menuitem", { name: row }));
   };
-  const toastOf = (text: string) =>
-    screen.getByText(text).closest<HTMLElement>(".crew-undo-toast")!;
-  /** Plan two (2 of 3) archived from the Approvals page: the detail shows Plan three. */
-  const archivedSecond = async () => {
-    history.replaceState(null, "", "/#/approvals");
-    render(<CrewWorkspace />);
-    const dialog = await openCard("Plan two");
-    await within(dialog).findByText("Second draft");
-    await archive(dialog);
-    await within(dialog).findByText("Third draft");
-    return dialog;
-  };
-
   it("adds Archive task under Open task as a normal row, above the divider and Reject", async () => {
     history.replaceState(null, "", "/#/approvals/review000000002");
     render(<CrewWorkspace />);
@@ -5108,7 +5070,7 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
     expect(crewApi.write).not.toHaveBeenCalled();
   });
 
-  it("archives with one write and no confirmation, then shows the next approval with Undo", async () => {
+  it("archives with one write and no confirmation, then shows the next approval without Undo", async () => {
     history.replaceState(null, "", "/#/approvals");
     const push = vi.spyOn(history, "pushState");
     const confirm = vi.spyOn(window, "confirm");
@@ -5142,17 +5104,7 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
     // The same dialog and the same header controls: nothing was remounted.
     expect(screen.getByRole("dialog")).toBe(dialog);
     expect(controls()).toEqual(before);
-    // The toast is inside the open dialog (a modal dialog makes the page
-    // inert), as the dialog's last child.
-    const toast = toastOf("Task archived");
-    expect(toast).toHaveAttribute("role", "status");
-    expect(toast).toHaveTextContent("Task archived·Undo×");
-    expect(toast.parentElement).toHaveClass("crew-dialog-toast");
-    expect(dialog.lastElementChild).toBe(toast.parentElement);
-    expect(within(toast).getByRole("button", { name: "Undo" })).toBeEnabled();
-    expect(within(toast).getByRole("button", { name: "Dismiss" })).toBeEnabled();
-    // Back goes to the list, never to the archived approval, and the list no
-    // longer shows it; the toast moves to the page.
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
     history.back();
     await waitFor(() => expect(location.hash).toBe("#/approvals"));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -5161,7 +5113,7 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
         .getAllByRole("button", { name: /^Review draft: / })
         .map((x) => x.getAttribute("aria-label")),
     ).toEqual(["Review draft: Plan one", "Review draft: Plan three"]);
-    expect(toastOf("Task archived").closest("dialog")).toBeNull();
+    expect(screen.queryByText("Task archived")).toBeNull();
     // Forward is the approval that took its place.
     history.forward();
     await waitFor(() =>
@@ -5185,10 +5137,7 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
     expect(writes()).toEqual([
       ["task.update", { archived: true }, three.task.id, 3],
     ]);
-    const toast = toastOf("Task archived");
-    expect(toast).toHaveAttribute("role", "status");
-    expect(toast.closest("dialog")).toBeNull();
-    expect(within(toast).getByRole("button", { name: "Undo" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
     expect(
       screen
         .getAllByRole("button", { name: /^Review draft: / })
@@ -5218,15 +5167,14 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
     await archive(dialog);
     await within(dialog).findByText("Third draft");
     expect(position(dialog)).toBe("1 of 1");
-    // One toast at a time: the second archive replaced the first one's.
-    expect(screen.getAllByText("Task archived")).toHaveLength(1);
+    expect(screen.queryByText("Task archived")).toBeNull();
     await archive(dialog);
     await waitFor(() => expect(location.hash).toBe("#/"));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(writes()).toEqual(
       [one, two, three].map((x) => ["task.update", { archived: true }, x.task.id, 3]),
     );
-    expect(screen.getAllByText("Task archived")).toHaveLength(1);
+    expect(screen.queryByText("Task archived")).toBeNull();
   });
 
   it("skips an approval that was decided elsewhere in the meantime", async () => {
@@ -5284,7 +5232,7 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
       ["task.update", { archived: true }, two.task.id, 3],
       ["task.update", { archived: true }, two.task.id, 8],
     ]);
-    expect(toastOf("Task archived")).toHaveAttribute("role", "status");
+    expect(screen.queryByText("Task archived")).toBeNull();
     expect(screen.queryByText("Couldn't archive the task. Try again.")).toBeNull();
     // Archiving never asks, even over a typed note.
     expect(confirm).not.toHaveBeenCalled();
@@ -5327,290 +5275,12 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
       ["task.update", { archived: true }, two.task.id, 3],
     ]);
     expect(position(dialog)).toBe("2 of 2");
-    expect(toastOf("Task archived")).toHaveAttribute("role", "status");
+    expect(screen.queryByText("Task archived")).toBeNull();
     expect(screen.queryByText("Couldn't archive the task. Try again.")).toBeNull();
-    expect(within(dialog).getByRole("button", { name: "Undo" })).toBeEnabled();
+    expect(within(dialog).queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
-  it("Undo restores the review with its fresh revision and reopens the approval where it was", async () => {
-    const push = vi.spyOn(history, "pushState");
-    const dialog = await archivedSecond();
-    expect(position(dialog)).toBe("2 of 2");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }));
-    await within(dialog).findByText("Second draft");
-    // The withdrawn review's current row: the archive raised its revision.
-    expect(crewApi.read).toHaveBeenCalledWith("reviews", { id: two.review.id });
-    expect(vi.mocked(crewApi.write).mock.calls).toEqual([
-      ["task.update", { archived: true }, two.task],
-      ["review.restore", {}, { ...two.review, status: "withdrawn", revision: 2 }],
-    ]);
-    // Its own address again, on the same history entry, in its old place.
-    expect(location.hash).toBe("#/approvals/review000000002");
-    expect(push).toHaveBeenCalledTimes(1);
-    expect(history.state).toEqual({ crewList: 1 });
-    expect(position(dialog)).toBe("2 of 3");
-    expect(screen.getByRole("dialog")).toBe(dialog);
-    expect(within(dialog).getByRole("button", { name: "Approve draft" })).toBeEnabled();
-    expect(within(dialog).getByText("pending")).toBeVisible();
-    // The toast is gone, and the task is active again.
-    expect(screen.queryByText("Task archived")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
-    expect(gone.tasks).toEqual([]);
-    // Closing returns to the list, which shows it again.
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
-    await waitFor(() => expect(location.hash).toBe("#/approvals"));
-    expect(
-      screen
-        .getAllByRole("button", { name: /^Review draft: / })
-        .map((x) => x.getAttribute("aria-label")),
-    ).toEqual([
-      "Review draft: Plan one",
-      "Review draft: Plan two",
-      "Review draft: Plan three",
-    ]);
-  });
-
-  it("Undo from the list opens the restored approval as a click on its card does", async () => {
-    history.replaceState(null, "", "/#/approvals");
-    render(<CrewWorkspace />);
-    const first = await openCard("Plan three");
-    await within(first).findByText("Third draft");
-    await archive(first);
-    await waitFor(() => expect(location.hash).toBe("#/approvals"));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    const push = vi.spyOn(history, "pushState");
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    const dialog = await screen.findByRole("dialog");
-    await within(dialog).findByText("Third draft");
-    expect(writes()).toEqual([
-      ["task.update", { archived: true }, three.task.id, 3],
-      ["review.restore", {}, three.review.id, 2],
-    ]);
-    // One entry over the list, like a card click; closing goes back to it.
-    expect(location.hash).toBe("#/approvals/review000000003");
-    expect(push).toHaveBeenCalledTimes(1);
-    expect(history.state).toEqual({ crewList: 1 });
-    expect(position(dialog)).toBe("3 of 3");
-    expect(within(dialog).getByRole("button", { name: "Approve draft" })).toBeEnabled();
-    expect(screen.queryByText("Task archived")).toBeNull();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close dialog" }));
-    await waitFor(() => expect(location.hash).toBe("#/approvals"));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  });
-
-  it("asks before Undo leaves a note typed on the approval that took its place", async () => {
-    const dialog = await archivedSecond();
-    const note = within(dialog).getByRole("textbox", { name: "Decision note" });
-    fireEvent.change(note, { target: { value: "For plan three" } });
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(screen.queryByText("Task archived")).toBeNull());
-    // The approval is restored either way; declining only stays here.
-    expect(writes().map((x) => x[0])).toEqual(["task.update", "review.restore"]);
-    expect(confirm).toHaveBeenCalledTimes(1);
-    expect(location.hash).toBe("#/approvals/review000000003");
-    expect(note).toHaveValue("For plan three");
-    await waitFor(() => expect(position(dialog)).toBe("3 of 3"));
-  });
-
-  it("restores the task alone and says so when the server refuses to restore the review", async () => {
-    const dialog = await archivedSecond();
-    reject["review.restore"] = refusal;
-    fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }));
-    const toast = (
-      await screen.findByText(
-        "Task restored. Its approval is no longer pending; request it again.",
-      )
-    ).closest<HTMLElement>(".crew-undo-toast")!;
-    expect(toast).toHaveAttribute("role", "status");
-    expect(within(toast).queryByRole("button", { name: "Undo" })).toBeNull();
-    expect(screen.queryByText("Task archived")).toBeNull();
-    // The fallback un-archives the task from its current (archived) row.
-    expect(writes()).toEqual([
-      ["task.update", { archived: true }, two.task.id, 3],
-      ["review.restore", {}, two.review.id, 2],
-      ["task.update", { archived: false }, two.task.id, 4],
-    ]);
-    expect(crewApi.read).toHaveBeenCalledWith("tasks", {
-      id: two.task.id,
-      archived: true,
-    });
-    // No navigation: still on the approval that followed.
-    expect(location.hash).toBe("#/approvals/review000000003");
-    expect(within(dialog).getByText("Third draft")).toBeVisible();
-    expect(position(dialog)).toBe("2 of 2");
-    // The task is active again and its review stays withdrawn.
-    expect(gone.tasks).toEqual([]);
-    expect(fixtures.tasks.map((x) => x.id)).toContain(two.task.id);
-    expect(fixtures.reviews.find((x) => x.id === two.review.id)).toMatchObject({
-      status: "withdrawn",
-    });
-  });
-
-  it("reads the review again, once, when Undo meets a plain revision conflict", async () => {
-    const dialog = await archivedSecond();
-    // A 409 with no reason code: the review changed since it was read.
-    reject["review.restore"] = () => {
-      reject["review.restore"] = undefined;
-      return conflict();
-    };
-    fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }));
-    await within(dialog).findByText("Second draft");
-    expect(writes()).toEqual([
-      ["task.update", { archived: true }, two.task.id, 3],
-      ["review.restore", {}, two.review.id, 2],
-      ["review.restore", {}, two.review.id, 2],
-    ]);
-    expect(
-      vi
-        .mocked(crewApi.read)
-        .mock.calls.filter(([c, f]) => c === "reviews" && f?.id === two.review.id),
-    ).toHaveLength(2);
-    expect(location.hash).toBe("#/approvals/review000000002");
-    expect(position(dialog)).toBe("2 of 3");
-    expect(screen.queryByText(/Task restored/)).toBeNull();
-  });
-
-  it("falls back to restoring the task alone when the conflict repeats", async () => {
-    const dialog = await archivedSecond();
-    reject["review.restore"] = conflict;
-    fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }));
-    await screen.findByText(
-      "Task restored. Its approval is no longer pending; request it again.",
-    );
-    expect(writes().map((x) => [x[0], x[1]])).toEqual([
-      ["task.update", { archived: true }],
-      ["review.restore", {}],
-      ["review.restore", {}],
-      ["task.update", { archived: false }],
-    ]);
-    expect(gone.tasks).toEqual([]);
-    expect(location.hash).toBe("#/approvals/review000000003");
-  });
-
-  it("leaves the task in Archive and says so when Undo cannot reach the server", async () => {
-    const dialog = await archivedSecond();
-    reject["review.restore"] = offline;
-    fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }));
-    const toast = (
-      await screen.findByText(
-        "Couldn't undo. The task is in Archive; restore it from there.",
-      )
-    ).closest<HTMLElement>(".crew-undo-toast")!;
-    expect(toast).toHaveAttribute("role", "alert");
-    expect(within(toast).queryByRole("button", { name: "Undo" })).toBeNull();
-    // Nothing was un-archived behind the owner's back.
-    expect(writes().map((x) => [x[0], x[1]])).toEqual([
-      ["task.update", { archived: true }],
-      ["review.restore", {}],
-    ]);
-    expect(gone.tasks.map((x) => x.id)).toEqual([two.task.id]);
-    expect(location.hash).toBe("#/approvals/review000000003");
-    expect(position(dialog)).toBe("2 of 2");
-  });
-
-  it("says the same when the fallback fails too", async () => {
-    const dialog = await archivedSecond();
-    reject["review.restore"] = refusal;
-    reject["task.update:false"] = conflict;
-    fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }));
-    expect(
-      (
-        await screen.findByText(
-          "Couldn't undo. The task is in Archive; restore it from there.",
-        )
-      ).closest('[role="alert"]'),
-    ).not.toBeNull();
-    expect(writes().map((x) => [x[0], x[1]])).toEqual([
-      ["task.update", { archived: true }],
-      ["review.restore", {}],
-      ["task.update", { archived: false }],
-    ]);
-    expect(gone.tasks.map((x) => x.id)).toEqual([two.task.id]);
-    expect(screen.queryByText(/Task restored/)).toBeNull();
-  });
-
-  it("runs one Undo at a time, however often it is tapped", async () => {
-    const dialog = await archivedSecond();
-    let release = () => {};
-    const held = new Promise<void>((resolve) => (release = resolve));
-    const server = vi.mocked(crewApi.write).getMockImplementation()!;
-    vi.mocked(crewApi.write).mockImplementation(async (...args) => {
-      if (args[0] === "review.restore") await held;
-      return server(...args);
-    });
-    const undo = within(dialog).getByRole("button", { name: "Undo" });
-    fireEvent.click(undo);
-    fireEvent.click(undo);
-    await waitFor(() => expect(undo).toBeDisabled());
-    // Nothing else can be decided while it runs.
-    expect(within(dialog).getByRole("button", { name: "Approve draft" })).toBeDisabled();
-    fireEvent.click(undo);
-    release();
-    await within(dialog).findByText("Second draft");
-    expect(writes().map((x) => x[0])).toEqual(["task.update", "review.restore"]);
-  });
-
-  it("lets the toast go by itself after about 5 seconds, leaving the task in Archive", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      const dialog = await archivedSecond();
-      expect(within(dialog).getByRole("button", { name: "Undo" })).toBeEnabled();
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3000);
-      });
-      expect(screen.getByText("Task archived")).toBeVisible();
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2100);
-      });
-      // Past five seconds it fades, then it is gone.
-      expect(toastOf("Task archived")).toHaveClass("crew-undo-toast-leaving");
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(300);
-      });
-      expect(screen.queryByText("Task archived")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
-      // The approval that followed is untouched, and nothing was restored.
-      expect(within(dialog).getByText("Third draft")).toBeVisible();
-      expect(crewApi.write).toHaveBeenCalledTimes(1);
-      expect(gone.tasks.map((x) => x.id)).toEqual([two.task.id]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("gives a toast that replaces another its own five seconds", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      history.replaceState(null, "", "/#/approvals");
-      render(<CrewWorkspace />);
-      const dialog = await openCard("Plan one");
-      await within(dialog).findByText("First draft");
-      await archive(dialog);
-      await within(dialog).findByText("Second draft");
-      // Three seconds into the first toast, the second archive replaces it.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3000);
-      });
-      await archive(dialog);
-      await within(dialog).findByText("Third draft");
-      expect(screen.getAllByText("Task archived")).toHaveLength(1);
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3000);
-      });
-      // The first toast's remaining two seconds do not apply to the second.
-      expect(toastOf("Task archived")).not.toHaveClass("crew-undo-toast-leaving");
-      // Its Undo restores the second archive, not the first.
-      fireEvent.click(within(dialog).getByRole("button", { name: "Undo" }));
-      await within(dialog).findByText("Second draft");
-      expect(writes().at(-1)).toEqual(["review.restore", {}, two.review.id, 2]);
-      expect(gone.tasks.map((x) => x.id)).toEqual([one.task.id]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("reads in German and Italian: the row, the failure and the toast with Undo", async () => {
+  it("reads in German and Italian: the row, the failure and the toast without Undo", async () => {
     for (const [lang, row, failed, done, undo] of [
       [
         "de",
@@ -5640,10 +5310,7 @@ describe("Archive task from the Approval ⋯ menu (0.40.0)", () => {
       await archive(dialog, row);
       // The task's own title and draft stay as written.
       await within(dialog).findByText("Third draft");
-      const toast = toastOf(done);
-      expect(within(toast).getByRole("button", { name: undo })).toBeEnabled();
-      fireEvent.click(within(toast).getByRole("button", { name: undo }));
-      await within(dialog).findByText("Second draft");
+      expect(screen.queryByRole("button", { name: undo })).toBeNull();
       expect(screen.queryByText(done)).toBeNull();
       view.unmount();
     }

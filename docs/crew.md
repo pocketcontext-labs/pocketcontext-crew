@@ -804,7 +804,7 @@ only way in (a status update to needs_review is refused). The reader's **Request
 approval** button is disabled with "Save a draft first." until a saved draft exists,
 and the Status field's help says why Needs review can't be picked by hand. Editing
 the draft (which puts the task on hold with hold reason `Draft edited`) or
-archiving the task withdraws its pending reviews atomically. Archiving a task
+archiving the task withdraws its pending reviews atomically. In the reader, restore archived tasks from **Archive**. Restoring a task there leaves its previous reviews withdrawn. Archiving a task
 withdraws its pending review without a decision and without a wake, and
 `review.restore` undoes exactly that; see
 [Restoring a review after an archive](#restoring-a-review-after-an-archive-0400). A work client

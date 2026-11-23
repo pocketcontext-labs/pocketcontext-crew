@@ -62,7 +62,7 @@ import StartSession, {
 import AgentAssignments from "./AgentAssignments";
 import AgentStartupSettings from "./AgentStartupSettings";
 import SessionInstructions from "./SessionInstructions";
-import UndoToast, { messageToastMs, undoToastMs } from "./UndoToast";
+import UndoToast, { messageToastMs } from "./UndoToast";
 import {
   clearedBoard,
   commitBoardSearch,
@@ -292,22 +292,6 @@ function approvalAfterArchive(
     if (next) return next;
   }
   return undefined;
-}
-/**
- * What a failed write says about itself: the HTTP status (0 when nothing came
- * back from the server) and the server's reason code, if it gave one.
- */
-function writeFailure(failure: unknown): { status: number; code: string } {
-  const f = failure as {
-    status?: unknown;
-    response?: { data?: { reason?: { code?: unknown } } };
-    data?: { reason?: { code?: unknown } };
-  } | null;
-  const code = f?.response?.data?.reason?.code ?? f?.data?.reason?.code;
-  return {
-    status: Number(f?.status) || 0,
-    code: typeof code === "string" ? code : "",
-  };
 }
 const noteSortLabels: Record<NoteSort, string> = {
   updated: "Sort: Last updated",
@@ -1057,18 +1041,13 @@ export default function CrewWorkspace() {
     // The toast after Start a session (0.24.0).
     [promptPreview, setPromptPreview] = useState<SessionStart | null>(null),
     [sessionStart, setSessionStart] = useState<SessionStart | null>(null),
-    // The toast after an action that asks no confirmation (0.40.0: Archive
-    // task from the Approval ⋯ menu). One at a time: a new one replaces it.
-    // `undo` names what its Undo restores. `left` is the time left on its
-    // countdown, kept with the toast because it is shown over the page or
-    // inside the open dialog and moves between them.
+    // Archive failures stay visible inside the current dialog.
     [toast, setToast] = useState<{
       id: number;
       tone: "status" | "alert";
       text: string;
       ms: number;
       left: { current: number };
-      undo?: { review: string; task: string };
     } | null>(null),
     // Set per hash navigation and consumed once, so data refreshes never open a dialog.
     [pendingLink, setPendingLink] = useState(() =>
@@ -1112,19 +1091,12 @@ export default function CrewWorkspace() {
     // The records of the last successful load, for code that continues right
     // after awaiting it (the state is still a render behind).
     loaded = useRef<Data | null>(null),
-    // The toast's id counter, and an Undo that is running.
-    toastSeq = useRef(0),
-    undoing = useRef(false);
+    toastSeq = useRef(0);
   const discardOk = () =>
     !edited.current || window.confirm(t("Discard your unsaved changes?"));
   // The open dialog, for the hashchange listener registered once below.
   const dialogRef = useRef(dialog);
   dialogRef.current = dialog;
-  // The page and the toast as they are now, for work that continues after a write.
-  const viewRef = useRef(view);
-  viewRef.current = view;
-  const toastRef = useRef(toast);
-  toastRef.current = toast;
   const showToast = (next: Omit<NonNullable<typeof toast>, "id" | "left">) =>
     setToast({ ...next, id: ++toastSeq.current, left: { current: next.ms } });
   const dismissToast = useCallback(() => setToast(null), []);
@@ -1904,8 +1876,7 @@ export default function CrewWorkspace() {
   // Archive task from the Approval detail's ⋯ menu (0.40.0): the work is no
   // longer needed, where Reject says the draft is not good. One write: the
   // server archives the task and withdraws its pending review together. No
-  // confirmation, no "Saved." and no inline error: a toast offers Undo, or
-  // says that nothing was archived.
+  // confirmation, no "Saved." and no inline error: a failed archive shows an alert.
   const archiveFromApproval = async (review: Row, task: Row) => {
     if (busyRef.current) return;
     // The list and the place in it, before the archive shortens the list.
@@ -1961,110 +1932,8 @@ export default function CrewWorkspace() {
           setDialog({ kind: "review", row: next, source });
         } else closeDialog();
       }
-      showToast({
-        tone: "status",
-        text: t("Task archived"),
-        ms: undoToastMs,
-        undo: { review: review.id, task: task.id },
-      });
-    } finally {
-      setBusy(false);
-      busyRef.current = false;
-    }
-  };
-  // Undo of that archive. review.restore un-archives the task and makes the
-  // same review pending again in one write, so no bot is woken in between;
-  // the restored approval then opens at its own address, in its old place.
-  // If the server refuses (the approval can no longer be restored safely),
-  // the task alone is restored and the owner is told. If nothing reached the
-  // server, the task stays in Archive, where it can be restored.
-  const undoArchive = async (
-    id: number,
-    archived: { review: string; task: string },
-  ) => {
-    // One Undo at a time, and none once its toast is gone or replaced.
-    if (undoing.current || busyRef.current || toastRef.current?.id !== id)
-      return;
-    undoing.current = true;
-    setBusy(true);
-    busyRef.current = true;
-    loadFailed.current = false;
-    setError("");
-    setNotice("");
-    const failed = () =>
-      showToast({
-        tone: "alert",
-        text: t("Couldn't undo. The task is in Archive; restore it from there."),
-        ms: messageToastMs,
-      });
-    // The archive changed the review's revision: restore its current row.
-    const restore = async () => {
-      const [current] = await crewApi.read("reviews", { id: archived.review });
-      return current
-        ? await crewApi.write("review.restore", {}, current)
-        : undefined;
-    };
-    try {
-      let restored: Row | undefined;
-      try {
-        try {
-          restored = await restore();
-        } catch (e) {
-          // A plain revision conflict (409 with no reason code) only means the
-          // review changed since it was read: read it again, once.
-          const { status, code } = writeFailure(e);
-          if (status !== 409 || code) throw e;
-          restored = await restore();
-        }
-      } catch (e) {
-        // Only an answer from the server (HTTP 4xx) is a refusal.
-        const { status } = writeFailure(e);
-        if (status < 400 || status > 499) return failed();
-      }
-      if (!restored) {
-        try {
-          const [task] = await crewApi.read("tasks", {
-            id: archived.task,
-            archived: true,
-          });
-          if (task) await crewApi.write("task.update", { archived: false }, task);
-        } catch {
-          return failed();
-        }
-        await load();
-        setSaves((n) => n + 1);
-        showToast({
-          tone: "status",
-          text: t(
-            "Task restored. Its approval is no longer pending; request it again.",
-          ),
-          ms: messageToastMs,
-        });
-        return;
-      }
-      // The reloaded row when there is one, else the server's answer.
-      const row =
-        ((await load()) === "ok" &&
-          loaded.current?.reviews.find((x) => x.id === restored.id)) ||
-        restored;
-      setSaves((n) => n + 1);
       setToast(null);
-      const open = dialogRef.current;
-      if (!open)
-        // From the list: as a click on its card opens it.
-        openReviewCard(
-          row,
-          viewRef.current === "home" ? "home:approvals" : undefined,
-        );
-      else if (open.kind === "review" && open.row?.id === row.id)
-        setDialog({ ...open, row });
-      else if (discardOk()) {
-        // The detail that took its place gives the address back.
-        setAddress(reviewHash(row.id));
-        setDialog({ kind: "review", row, source: open.source });
-      }
     } finally {
-      undoing.current = false;
       setBusy(false);
       busyRef.current = false;
     }
@@ -2443,12 +2312,6 @@ export default function CrewWorkspace() {
       ms={toast.ms}
       left={toast.left}
       busy={busy}
-      action={
-        toast.undo && {
-          label: t("Undo"),
-          run: () => void undoArchive(toast.id, toast.undo!),
-        }
-      }
       dismiss={dismissToast}
     />
   );
@@ -3428,7 +3291,6 @@ export default function CrewWorkspace() {
           }}
         />
       )}
-      {/* After the session toast, so its Undo stays on top for its few seconds. */}
       {!dialog && actionToast}
       {promptPreview && (
         <Modal hideEmptyMenu nav={false} title={t("Startup prompt for {name}", { name: promptPreview.name })}
